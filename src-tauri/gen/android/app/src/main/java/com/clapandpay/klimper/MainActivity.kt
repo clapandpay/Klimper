@@ -1,4 +1,4 @@
-package com.rigidnetwork.sage
+package com.clapandpay.klimper
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

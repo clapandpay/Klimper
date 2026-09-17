@@ -1,6 +1,6 @@
 name: sage-tauri
 options:
-  bundleIdPrefix: com.rigidnetwork.sage
+  bundleIdPrefix: com.clapandpay.klimper
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Sage
-      PRODUCT_BUNDLE_IDENTIFIER: com.rigidnetwork.sage
+      PRODUCT_BUNDLE_IDENTIFIER: com.clapandpay.klimper
       DEVELOPMENT_TEAM: NQJQRYZZG3
 targetTemplates:
   app:
