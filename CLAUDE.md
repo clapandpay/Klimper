@@ -11,3 +11,8 @@ are `../mempool-xch` (explorer, in-app app) and `../nodexch` (node provider).
 - Keep the diff against upstream small: flags, theme, branding, identifiers, `docs/`. Shared
   components are not edited; add hiding points upstream.
 - Licence mix: our files carry the AGPL-3.0-or-later header; Sage's Apache-2.0 notices stay.
+
+## Git workflow
+
+Never push to `main` in this repository, including with `--force`. Work on branches and land
+changes on `main` via pull request.
