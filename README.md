@@ -10,7 +10,7 @@ A minimal, fun, non-custodial Chia wallet for the phone, built on the
 everything else arrives as an app you install inside the wallet, with capabilities you grant.
 
 Status: groundwork (2026-09-17). The vision is in
-[clapandpay-wiki](https://github.com/maximedogawa/clapandpay-wiki) (`product/vision.md`); tasks in
+[clap-and-pay-wiki](https://github.com/maximedogawa/clap-and-pay-wiki) (`product/vision.md`); tasks in
 [clapandpay-backlog](https://github.com/maximedogawa/clapandpay-backlog). Milestone 1 turns this
 repository into the Sage core fork for iOS, shipped as Klimper.
 

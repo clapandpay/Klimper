@@ -2,7 +2,7 @@
 
 Klimper (product and App Store name; tagline "Clap and Pay"; repository clapandpay) is a fork of Sage (xch-dev/sage) reduced to the wallet core, with a minimalist
 interface and in-app apps as the growth path. Sibling repos: `../clapandpay-backlog` (tasks,
-Backlog.md CLI, run `backlog` there) and `../clapandpay-wiki` (documentation); the other layers
+Backlog.md CLI, run `backlog` there) and `../clapandpay-wiki` (documentation; GitHub name clap-and-pay-wiki); the other layers
 are `../mempool-xch` (explorer, in-app app) and `../nodexch` (node provider).
 
 - Read the wiki `product/vision.md` and `architecture/fork-strategy.md` first.
