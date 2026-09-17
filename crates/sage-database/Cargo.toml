@@ -1,0 +1,22 @@
+[package]
+name = "sage-database"
+version = "0.13.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "The SQLite database for Sage."
+authors = ["Rigidity <me@rigidnetwork.com>"]
+homepage = "https://github.com/rigidity/sage"
+repository = "https://github.com/rigidity/sage"
+readme = { workspace = true }
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+chia-wallet-sdk = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }

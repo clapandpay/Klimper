@@ -1,0 +1,13 @@
+Klimper
+Copyright 2026 the Klimper authors
+
+Klimper's own files are licensed under the GNU Affero General Public License, version 3 or
+later (see LICENSE), or under a commercial licence (see COMMERCIAL-LICENSE.md).
+
+This product is a fork of Sage Wallet (https://github.com/xch-dev/sage).
+Copyright 2024 Brandon Haggstrom and the Sage contributors.
+Sage is licensed under the Apache License, Version 2.0; a copy is in LICENSE-APACHE. All files
+that come from Sage remain under that licence. Files of Sage that Klimper changed are listed in
+docs/UPSTREAM.md, and every change is visible with `git diff <merged upstream tag>`.
+
+Klimper is not affiliated with, or endorsed by, the Sage project or Chia Network, Inc.
