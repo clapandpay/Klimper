@@ -126,5 +126,9 @@
     "typescript-eslint": "^8.54.0",
     "vite": "^7.3.1",
     "ws": "^8.18.0"
-  }
+  },
+  "workspaces": [
+    "packages/*",
+    "builtin-apps/src/system"
+  ]
 }
