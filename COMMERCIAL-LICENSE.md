@@ -1,6 +1,6 @@
 # Commercial licence
 
-Clap and Pay is licensed under the AGPL-3.0-or-later. Companies that want to embed or modify it
+Klimper (repository clapandpay) is licensed under the AGPL-3.0-or-later. Companies that want to embed or modify it
 in a product or service without the obligation to publish their changes can obtain a commercial
 licence from the copyright holder. Terms are agreed per case (scope, support, updates).
 
