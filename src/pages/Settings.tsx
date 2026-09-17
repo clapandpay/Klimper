@@ -47,7 +47,12 @@ import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
 import { useWalletConnect } from '@/hooks/useWalletConnect';
 import { getConsoleLogs } from '@/lib/consoleCapture';
 import { exportText, ExportType } from '@/lib/exportText';
-import { offersEnabled } from '@/lib/features';
+import {
+  offersEnabled,
+  rpcSettingsEnabled,
+  themeGalleryEnabled,
+  walletConnectEnabled,
+} from '@/lib/features';
 import {
   clearState,
   fetchState,
@@ -165,7 +170,7 @@ export default function Settings() {
             <div className='mt-4'>
               <TabsContent value='general'>
                 <div className='grid gap-4'>
-                  <WalletConnectSettings />
+                  {walletConnectEnabled && <WalletConnectSettings />}
                   <GlobalSettings />
                 </div>
               </TabsContent>
@@ -202,7 +207,7 @@ export default function Settings() {
               <TabsContent value='advanced'>
                 <div className='grid gap-4'>
                   <ColdWalletSettings />
-                  {!isMobile && <RpcSettings />}
+                  {!isMobile && rpcSettingsEnabled && <RpcSettings />}
                   <LogViewer />
                 </div>
               </TabsContent>
@@ -298,13 +303,15 @@ function GlobalSettings() {
         />
         <div>
           <ThemeSelectorSimple />
-          <div className='m-4'>
-            <Link to='/themes'>
-              <Button variant='outline' size='sm'>
-                <Trans>More Themes...</Trans>
-              </Button>
-            </Link>
-          </div>
+          {themeGalleryEnabled && (
+            <div className='m-4'>
+              <Link to='/themes'>
+                <Button variant='outline' size='sm'>
+                  <Trans>More Themes...</Trans>
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
         {isMobile && (
           <SettingItem

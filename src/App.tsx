@@ -62,6 +62,16 @@ import { AppsProvider } from '@/contexts/AppsContext.tsx';
 import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
+import { featureElement } from '@/lib/featureElement';
+import {
+  nftsEnabled,
+  offersEnabled,
+  optionsEnabled,
+  profilesEnabled,
+  swapEnabled,
+  themeGalleryEnabled,
+  tokenIssuingEnabled,
+} from '@/lib/features';
 
 // Theme-aware toast container component
 function ThemeAwareToastContainer() {
@@ -105,10 +115,13 @@ const router = createHashRouter(
       <Route path='/wallet' element={<Wallet />}>
         <Route path='' element={<TokenList />} />
         <Route path='token/:asset_id' element={<Token />} />
-        <Route path='issue-token' element={<IssueToken />} />
+        <Route
+          path='issue-token'
+          element={featureElement(tokenIssuingEnabled, <IssueToken />)}
+        />
         <Route path='send/:asset_id' element={<Send />} />
       </Route>
-      <Route path='/nfts' element={<Wallet />}>
+      <Route path='/nfts' element={featureElement(nftsEnabled, <Wallet />)}>
         <Route path='' element={<NftList />} />
         <Route path=':launcher_id' element={<Nft />} />
         <Route path='collections/:collection_id' element={<NftList />} />
@@ -120,14 +133,17 @@ const router = createHashRouter(
         <Route path='minters/:minter_did' element={<NftList />} />
         <Route path='mint' element={<MintNft />} />
       </Route>
-      <Route path='/dids' element={<Wallet />}>
+      <Route path='/dids' element={featureElement(profilesEnabled, <Wallet />)}>
         <Route path='' element={<DidList />} />
         <Route path='create' element={<CreateProfile />} />
       </Route>
       <Route path='/addresses' element={<Wallet />}>
         <Route path='' element={<Addresses />} />
       </Route>
-      <Route path='/options' element={<Wallet />}>
+      <Route
+        path='/options'
+        element={featureElement(optionsEnabled, <Wallet />)}
+      >
         <Route path='' element={<OptionList />} />
         <Route path='mint' element={<MintOption />} />
         <Route path=':option_id' element={<Option />} />
@@ -136,13 +152,13 @@ const router = createHashRouter(
         <Route path='' element={<Transactions />} />
         <Route path=':height' element={<Transaction />} />
       </Route>
-      <Route path='/offers' element={<Wallet />}>
+      <Route path='/offers' element={featureElement(offersEnabled, <Wallet />)}>
         <Route path='' element={<Offers />} />
         <Route path='make' element={<MakeOffer />} />
         <Route path='view/:offer' element={<Offer />} />
         <Route path='view_saved/:offer_id' element={<SavedOffer />} />
       </Route>
-      <Route path='/swap' element={<Wallet />}>
+      <Route path='/swap' element={featureElement(swapEnabled, <Wallet />)}>
         <Route path='' element={<Swap />} />
       </Route>
       <Route path='/apps' element={<Wallet />}>
@@ -156,7 +172,10 @@ const router = createHashRouter(
       <Route path='/settings' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />
-      <Route path='/themes' element={<Themes />} />
+      <Route
+        path='/themes'
+        element={featureElement(themeGalleryEnabled, <Themes />)}
+      />
     </>,
   ),
 );

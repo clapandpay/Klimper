@@ -35,6 +35,25 @@ New files never conflict. Files shared with Sage are kept to the lines listed he
 | `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`                                                                    | bundle id            | `DEVELOPMENT_TEAM` is still Sage's; ours arrives with TASK-003                                                                                                                                                                                       |
 | `src-tauri/gen/android/app/build.gradle.kts`, `.gitignore`, `res/values/strings.xml`, `MainActivity.kt` (moved to `com/clapandpay/klimper/`) | package and app name | not yet built, no Android SDK on the dev machine (2026-09-17)                                                                                                                                                                                        |
 
+### Reduced interface (TASK-007)
+
+Klimper shows the wallet primitives only: assets, send, receive, addresses, coins, transactions,
+peers, settings, and the Apps screen with its bridge approval dialogs. The rest is switched off
+with build flags that extend Sage's own `VITE_DISABLE_OFFERS / OPTIONS / SWAP` pattern; nothing
+is deleted, the engine and the bridge keep every capability, and every flag defaults to Sage's
+behaviour.
+
+| File                                                                          | Ours                                       | Note                                                                              |
+| ----------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `.env`                                                                        | new, force-added (upstream ignores `.env`) | the nine `VITE_DISABLE_*` flags; no secrets, those go in `.env.local`             |
+| `src/lib/featureElement.tsx`                                                  | new                                        | route gate: a disabled feature redirects to `/wallet`                             |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                                    | six flags appended                         | NFTs, profiles, token issuing, WalletConnect, RPC settings, theme gallery         |
+| `src/App.tsx`                                                                 | import block, seven route `element=` lines | offers, options and swap routes were reachable by URL upstream even when disabled |
+| `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks              |                                                                                   |
+
+These are the only edits to shared frontend files, and they are meant to stop being ours:
+propose them to Sage as one pull request ("more build-time feature flags, and gate the routes").
+
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
 
@@ -44,8 +63,6 @@ Known leftovers, deliberately not patched:
   `com.rigidnetwork.sage` data directory. Propose an override upstream before relying on the CLI.
 - App icons are still Sage's (`src-tauri/icons`, mobile asset catalogues). They must be replaced
   before any build leaves the team (TASK-004, TASK-008; trademark).
-- Sage already reads `VITE_DISABLE_OFFERS`, `VITE_DISABLE_OPTIONS` and `VITE_DISABLE_SWAP` at
-  build time (used for its App Store build). Start TASK-007 from these.
 
 ## Conflict playbook
 
