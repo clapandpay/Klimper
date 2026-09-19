@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_DISABLE_WALLETCONNECT?: string;
   readonly VITE_DISABLE_RPC_SETTINGS?: string;
   readonly VITE_DISABLE_THEME_GALLERY?: string;
+  readonly VITE_ENABLE_HANDLES?: string;
 }
 
 interface ImportMeta {

@@ -11,3 +11,5 @@ export const rpcSettingsEnabled =
   import.meta.env.VITE_DISABLE_RPC_SETTINGS !== 'true';
 export const themeGalleryEnabled =
   import.meta.env.VITE_DISABLE_THEME_GALLERY !== 'true';
+// Opt-in, unlike the flags above: "@handle" in the send screen, resolved through XCHandles.
+export const handlesEnabled = import.meta.env.VITE_ENABLE_HANDLES === 'true';
