@@ -19,7 +19,7 @@ fork into the wallet core for iOS, shipped as Klimper.
 
 | Layer                        | Project                                                                       |
 | ---------------------------- | ----------------------------------------------------------------------------- |
-| Wallet                       | Klimper (this repo, clapandpay)                                               |
+| Wallet                       | Klimper (this folder of the clapandpay monorepo)                              |
 | Explorer, also an in-app app | [mempool-xch](https://github.com/maximedogawa/mempool-xch) · mempoolxch.space |
 | Node provider                | [nodexch](https://github.com/maximedogawa/nodexch) · nodexch.space            |
 

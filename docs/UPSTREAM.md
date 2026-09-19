@@ -1,5 +1,13 @@
 # Upstream
 
+> **Monorepo (2026-09-20).** This fork lives in `klimper/` of the clapandpay repository, while
+> upstream Sage has the same files at its root. Every path in this document is relative to
+> `klimper/`. The sync script merges with `git merge -X subtree=klimper`, which shifts upstream's
+> paths into this folder; a trial merge of `upstream/main` on the day of the move touched 103
+> files, all inside `klimper/`, with no conflicts. Never merge upstream by hand without that
+> option, and never relocate files inside `klimper/`. Upstream's own workflows sit in
+> `klimper/.github/`, where GitHub does not run them; ours is `/.github/workflows/klimper.yml`.
+
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
 

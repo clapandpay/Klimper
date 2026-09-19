@@ -10,6 +10,11 @@
 #   scripts/sync-upstream.sh --check    only report what is new upstream (used by CI)
 #
 # Always a merge, never a rebase: shared history keeps later merges small.
+#
+# The wallet lives in klimper/ of the monorepo while upstream has it at the root, so the merge
+# uses git's subtree option: upstream's paths are shifted into klimper/ and nothing outside
+# that folder can be touched.
+SUBTREE="klimper"
 set -euo pipefail
 
 UPSTREAM_URL="https://github.com/xch-dev/sage.git"
@@ -48,13 +53,14 @@ if git merge-base --is-ancestor "$target" HEAD; then
 fi
 
 echo "merging $target (currently on $merged_tag)"
-if ! git merge --no-ff -m "Merge Sage $target" "$target"; then
+if ! git merge --no-ff -X "subtree=$SUBTREE" -m "Merge Sage $target into $SUBTREE/" "$target"; then
   cat >&2 <<MSG
 
-Conflicts. Ours to keep: README.md, LICENSE, src-tauri/tauri.ios.conf.json and
-tauri.android.conf.json (identifier lines), the bundle ids under src-tauri/gen/.
+Conflicts. All paths are under $SUBTREE/. Ours to keep: README.md, LICENSE,
+src-tauri/tauri.ios.conf.json and tauri.android.conf.json (identifier lines), the bundle ids
+under src-tauri/gen/.
 Everything else: take upstream and move our change behind a flag or into our own file.
-Playbook: docs/UPSTREAM.md. Finish with: git commit
+Playbook: $SUBTREE/docs/UPSTREAM.md. Finish with: git commit
 MSG
   exit 1
 fi
