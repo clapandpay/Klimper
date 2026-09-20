@@ -1,0 +1,41 @@
+[package]
+name = "sage-wallet"
+version = "0.13.1"
+edition = "2024"
+license = "Apache-2.0"
+description = "The driver code and sync logic for Sage wallet."
+authors = ["Rigidity <me@rigidnetwork.com>"]
+homepage = "https://github.com/rigidity/sage"
+repository = "https://github.com/rigidity/sage"
+readme = { workspace = true }
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+chia-wallet-sdk = { workspace = true }
+chia_streamable_macro = { workspace = true }
+chia-traits = { workspace = true }
+chia-sha2 = { workspace = true }
+sage-database = { workspace = true }
+sage-assets = { workspace = true }
+sage-config = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+itertools = { workspace = true }
+futures-util = { workspace = true }
+futures-lite = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"] }
+indexmap = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio"] }
+test-log = { workspace = true, features = ["trace"] }
+tokio = { workspace = true }
+hex-literal = { workspace = true }

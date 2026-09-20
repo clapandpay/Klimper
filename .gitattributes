@@ -1,0 +1,4 @@
+# Klimper keeps its own versions of these files when merging upstream Sage.
+# Needs the driver once per clone: git config merge.ours.driver true (scripts/sync-upstream.sh sets it).
+README.md merge=ours
+LICENSE merge=ours
