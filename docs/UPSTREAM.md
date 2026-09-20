@@ -24,6 +24,20 @@ scripts/sync-upstream.sh            # merge the newest release tag
 scripts/sync-upstream.sh <commit>   # hotfix: merge upstream/main up to a fix commit
 ```
 
+And the other direction. The size of the next merge is exactly the number of shared files we
+have touched, so that list is worth watching rather than remembering:
+
+```sh
+scripts/sync-upstream.sh --diff     # every file that differs from the merged tag, ours vs shared
+scripts/sync-upstream.sh --export   # the flag work as a patch that applies to a clean Sage tree
+```
+
+`--diff` compares upstream's tree with our `klimper/` subtree directly, so every path it prints
+is already spelled the way Sage spells it. If it lists a shared file that the table below does
+not, either the table is stale or the change belongs behind a flag — settle it then, not at the
+next merge. `--export` writes the rows marked *propose upstream* as one patch; it applies to a
+clean checkout of the merged tag with `git apply`.
+
 After a merge: `pnpm install`, `cargo check --workspace`, `pnpm tauri:build`, the bridge smoke
 test (install mempoolxch.space and sage-permission-probe, grant capabilities, one bridge call),
 then update the table above. A fix that cannot be merged because the commits before it are not
@@ -59,8 +73,25 @@ behaviour.
 | `src/App.tsx`                                                                 | import block, seven route `element=` lines | offers, options and swap routes were reachable by URL upstream even when disabled |
 | `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks              |                                                                                   |
 
-These are the only edits to shared frontend files, and they are meant to stop being ours:
-propose them to Sage as one pull request ("more build-time feature flags, and gate the routes").
+These seven files are what `scripts/sync-upstream.sh --export` writes out, and they are meant to
+stop being ours: propose them to Sage as one pull request ("more build-time feature flags, and
+gate the routes"). They are not the whole frontend diff — the two features below are ours to
+keep.
+
+### Our own features, behind their own flags
+
+Added the same way and just as removable, but nothing Sage would want: they are Clap and Pay's,
+not a wallet primitive. Both default to off in `features.ts`, so a build without `.env` is Sage's
+behaviour.
+
+| File                                                                                              | Ours                     | Note                                                                    |
+| ------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------- |
+| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx`             | new                      | `@anna` instead of an address, through XCHandles (mainnet only)         |
+| `src/pages/Send.tsx`                                                                              | +54 lines, `handlesEnabled` | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
+| `src/pages/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                                 | new                      | "Use my Clap and Pay money": the passkey wallet in one Face ID          |
+| `src/pages/Login.tsx`                                                                             | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                             |
+| `.prettierignore`                                                                                 | 1 line                   | `src/lib/clapandpayHandoff.ts`, which is generated                      |
+| `package.json`                                                                                    | `workspaces` array added | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away     |
 
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.

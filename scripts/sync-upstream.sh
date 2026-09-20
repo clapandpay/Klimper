@@ -9,6 +9,14 @@
 #   scripts/sync-upstream.sh <commit>   hotfix: merge upstream/main up to that commit
 #   scripts/sync-upstream.sh --check    only report what is new upstream (used by CI)
 #
+# And the other direction — what we owe upstream, and how to hand it over:
+#
+#   scripts/sync-upstream.sh --diff     every file that differs from the merged upstream tag,
+#                                       split into ours (never conflicts) and shared (the whole
+#                                       cost of the next merge)
+#   scripts/sync-upstream.sh --export   write the shared-file edits as a patch that applies to a
+#                                       clean Sage checkout, for proposing them upstream
+#
 # Always a merge, never a rebase: shared history keeps later merges small.
 #
 # The wallet lives in klimper/ of the monorepo while upstream has it at the root, so the merge
@@ -21,6 +29,13 @@ UPSTREAM_URL="https://github.com/xch-dev/sage.git"
 # Paths where an upstream change may be a security fix (reported by --check).
 WATCH_PATHS=(crates/sage-wallet crates/sage-keychain crates/sage-apps crates/sage-database
   crates/sage src-tauri tauri-plugin-sage Cargo.toml Cargo.lock pnpm-lock.yaml)
+
+# The edits to shared files that are meant to stop being ours: the build-time feature flags and
+# the route gate, which Sage can take as one pull request ("more VITE_DISABLE_* flags, and gate
+# the routes so a disabled feature is unreachable and not merely hidden"). Paths are Sage's, so
+# the patch --export writes applies to a clean Sage checkout as it stands.
+UPSTREAMABLE=(src/lib/features.ts src/lib/featureElement.tsx src/vite-env.d.ts src/App.tsx
+  src/components/Nav.tsx src/pages/TokenList.tsx src/pages/Settings.tsx)
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -37,6 +52,39 @@ if [[ "${1:-}" == "--check" ]]; then
   echo
   echo "upstream/main commits not in HEAD that touch watched paths:"
   git log --no-merges --format='  %h %ad %s' --date=short HEAD..upstream/main -- "${WATCH_PATHS[@]}"
+  exit 0
+fi
+
+# Upstream keeps these files at the root and we keep them under $SUBTREE/, so the two trees are
+# compared directly: `git diff <upstream tag> HEAD:$SUBTREE` lines the paths up, and every path it
+# prints is already spelled the way Sage spells it.
+if [[ "${1:-}" == "--diff" ]]; then
+  echo "fork surface against $merged_tag"
+  echo
+  echo "ours (new files, never conflict):"
+  git diff --name-status "$merged_tag" "HEAD:$SUBTREE" | awk '$1 ~ /^A/ {print "  " $2}'
+  echo
+  echo "shared with Sage (every one of these is work at the next merge):"
+  git diff --name-status "$merged_tag" "HEAD:$SUBTREE" | awk '$1 ~ /^[MR]/ {print "  " $1 "\t" $2}'
+  echo
+  echo "Keep this list and the table in $SUBTREE/docs/UPSTREAM.md saying the same thing."
+  exit 0
+fi
+
+if [[ "${1:-}" == "--export" ]]; then
+  out="${2:-upstream-flags.patch}"
+  git diff "$merged_tag" "HEAD:$SUBTREE" -- "${UPSTREAMABLE[@]}" > "$out"
+  if [[ ! -s "$out" ]]; then
+    echo "nothing to export: none of the upstreamable files differ from $merged_tag" >&2
+    rm -f "$out"
+    exit 1
+  fi
+  echo "wrote $out ($(grep -c '^diff --git' "$out") files, against $merged_tag)"
+  echo
+  echo "To propose it to Sage:"
+  echo "  git clone https://github.com/xch-dev/sage.git && cd sage"
+  echo "  git checkout -b feature-flags $merged_tag"
+  echo "  git apply $(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
   exit 0
 fi
 
