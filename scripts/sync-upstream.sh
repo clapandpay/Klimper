@@ -16,6 +16,8 @@
 #                                       cost of the next merge)
 #   scripts/sync-upstream.sh --export   write the shared-file edits as a patch that applies to a
 #                                       clean Sage checkout, for proposing them upstream
+#   scripts/sync-upstream.sh --credits  who wrote Sage, merged across the several identities
+#                                       people commit under. NOTICE has to name them all.
 #
 # Always a merge, never a rebase: shared history keeps later merges small.
 #
@@ -68,6 +70,28 @@ if [[ "${1:-}" == "--diff" ]]; then
   git diff --name-status "$merged_tag" "HEAD:$SUBTREE" | awk '$1 ~ /^[MR]/ {print "  " $1 "\t" $2}'
   echo
   echo "Keep this list and the table in $SUBTREE/docs/UPSTREAM.md saying the same thing."
+  exit 0
+fi
+
+# Apache-2.0 asks a fork to keep attribution, and Sage ships no NOTICE of its own, so ours is
+# the only place its authors are named. People commit under more than one identity, so the
+# addresses are folded together here rather than counted twice.
+if [[ "${1:-}" == "--credits" ]]; then
+  git shortlog -sne "$merged_tag" | awk -F'\t' '
+    {
+      split($2, p, " <"); name = p[1]; email = substr(p[2], 1, length(p[2]) - 1)
+      if (email ~ /rigidnetwork\.com/ || email ~ /Rigidity@/) name = "Rigidity (Brandon Haggstrom)"
+      else if (email ~ /hadamcik/)          name = "Jakub Hadamcik"
+      else if (email ~ /ronald\.goedeke/)   name = "Ronald Goedeke (BubbleTrouble14)"
+      else if (email ~ /geraldneale/)       name = "Gerald Neale"
+      n[name] += $1; total += $1
+    }
+    END {
+      for (k in n) printf "%6d  %s\n", n[k], k
+      printf "%6d  commits by %d people, at %s\n", total, length(n), "'"$merged_tag"'"
+    }' | sort -rn
+  echo
+  echo "NOTICE must name every one of them. Regenerate it after each merge."
   exit 0
 fi
 

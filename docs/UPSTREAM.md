@@ -11,10 +11,10 @@
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
 
-|                     |                                                                  |
-| ------------------- | ---------------------------------------------------------------- |
-| Merged version      | **v0.13.0** (`a98ca34b`, released 2026-08-19), merged 2026-09-17 |
-| Hotfix merges since | none                                                             |
+|                     |                                |
+| ------------------- | ------------------------------ |
+| Merged version      | **v0.13.1**, merged 2026-09-20 |
+| Hotfix merges since | none                           |
 
 ## Routine
 
@@ -35,13 +35,59 @@ scripts/sync-upstream.sh --export   # the flag work as a patch that applies to a
 `--diff` compares upstream's tree with our `klimper/` subtree directly, so every path it prints
 is already spelled the way Sage spells it. If it lists a shared file that the table below does
 not, either the table is stale or the change belongs behind a flag — settle it then, not at the
-next merge. `--export` writes the rows marked *propose upstream* as one patch; it applies to a
+next merge. `--export` writes the rows marked _propose upstream_ as one patch; it applies to a
 clean checkout of the merged tag with `git apply`.
 
-After a merge: `pnpm install`, `cargo check --workspace`, `pnpm tauri:build`, the bridge smoke
-test (install mempoolxch.space and sage-permission-probe, grant capabilities, one bridge call),
-then update the table above. A fix that cannot be merged because the commits before it are not
-wanted yet: `git cherry-pick -x <commit>` on a `hotfix/` branch; the next tag merge resolves it.
+A fix that cannot be merged because the commits before it are not wanted yet:
+`git cherry-pick -x <commit>` on a `hotfix/` branch; the next tag merge resolves it.
+
+## The upgrade, step by step
+
+Staying on the newest Sage is the point of the fork: the engine and the app bridge are theirs,
+and a release we have not merged is a bridge fix we do not have. Do this on its own branch —
+`upstream/sage-v0.13.2` — never mixed with other work, so a bad merge is one branch to drop.
+
+1. **Look.** `scripts/sync-upstream.sh --check` — what is new, and which of it touches the
+   watched paths. It lists only those paths, so it is not a changelog: a pure frontend fix will
+   not appear, though the merge still brings it.
+2. **Know what it will cost.** `scripts/sync-upstream.sh --diff`. The size of the merge is the
+   number of shared files we have touched, and nothing else.
+3. **Branch and merge.** `git switch -c upstream/sage-<tag>` then `scripts/sync-upstream.sh`,
+   or `scripts/sync-upstream.sh <tag>` for a particular one. It merges with
+   `-X subtree=klimper`; never merge upstream by hand without that.
+4. **Resolve** by the playbook below. A conflict in a file this document lists is ours to keep,
+   line by line; a conflict anywhere else means we edited a shared file, and upstream wins while
+   our change moves behind a flag or into a file of our own.
+5. **Prove it still works**, in this order, cheapest first:
+
+   ```sh
+   pnpm install
+   cargo fmt --all -- --files-with-diff --check
+   cargo clippy --workspace --all-features --all-targets
+   cargo test --workspace --all-features
+   pnpm prettier:check && pnpm exec tsc -b && pnpm lint
+   pnpm run build:frontend
+   pnpm tauri:build
+   ```
+
+   Then the bridge smoke test by hand: install mempoolxch.space and sage-permission-probe, grant
+   the capabilities, make one bridge call. CI will not catch a broken bridge.
+
+6. **Check nothing of ours was quietly reverted.** An auto-merge can take upstream's side of a
+   line we own without ever reporting a conflict:
+
+   ```sh
+   grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
+   grep -c '^VITE_' .env                            # 11
+   grep -c featureElement src/App.tsx               # 8
+   ```
+
+7. **Credit the people whose work this is.** `scripts/sync-upstream.sh --credits`, and update
+   `NOTICE` if the list moved. Apache-2.0 asks a fork to keep attribution, and since Sage ships
+   no `NOTICE` of its own, ours is the only place its authors are named. A new contributor
+   upstream is a name missing from ours until someone regenerates it.
+8. **Write it down.** The merged version in the table above, and any new row in the file tables
+   below — `--diff` tells you if one is missing.
 
 ## Our files (the whole diff against upstream)
 
@@ -84,14 +130,14 @@ Added the same way and just as removable, but nothing Sage would want: they are 
 not a wallet primitive. Both default to off in `features.ts`, so a build without `.env` is Sage's
 behaviour.
 
-| File                                                                                              | Ours                     | Note                                                                    |
-| ------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------- |
-| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx`             | new                      | `@anna` instead of an address, through XCHandles (mainnet only)         |
-| `src/pages/Send.tsx`                                                                              | +54 lines, `handlesEnabled` | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
-| `src/pages/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                                 | new                      | "Use my Clap and Pay money": the passkey wallet in one Face ID          |
-| `src/pages/Login.tsx`                                                                             | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                             |
-| `.prettierignore`                                                                                 | 1 line                   | `src/lib/clapandpayHandoff.ts`, which is generated                      |
-| `package.json`                                                                                    | `workspaces` array added | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away     |
+| File                                                                                  | Ours                                 | Note                                                                                 |
+| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
+| `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
+| `src/pages/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                     | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
+| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
+| `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
+| `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
 
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
