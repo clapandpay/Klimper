@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_DISABLE_RPC_SETTINGS?: string;
   readonly VITE_DISABLE_THEME_GALLERY?: string;
   readonly VITE_ENABLE_HANDLES?: string;
+  readonly VITE_ENABLE_CLAPANDPAY_CONNECT?: string;
+  readonly VITE_CLAPANDPAY_ORIGIN?: string;
 }
 
 interface ImportMeta {

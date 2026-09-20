@@ -34,6 +34,7 @@ import CollectionMetaData from './pages/CollectionMetaData';
 import CreateProfile from './pages/CreateProfile';
 import CreateWallet from './pages/CreateWallet';
 import { DidList } from './pages/DidList';
+import ClapAndPayConnect from './pages/ClapAndPayConnect';
 import ImportWallet from './pages/ImportWallet';
 import IssueToken from './pages/IssueToken';
 import Login from './pages/Login';
@@ -64,6 +65,7 @@ import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
 import { featureElement } from '@/lib/featureElement';
 import {
+  clapAndPayConnectEnabled,
   nftsEnabled,
   offersEnabled,
   optionsEnabled,
@@ -112,6 +114,9 @@ const router = createHashRouter(
       <Route path='/' element={<Login />} />
       <Route path='/create' element={<CreateWallet />} />
       <Route path='/import' element={<ImportWallet />} />
+      {clapAndPayConnectEnabled && (
+        <Route path='/clapandpay' element={<ClapAndPayConnect />} />
+      )}
       <Route path='/wallet' element={<Wallet />}>
         <Route path='' element={<TokenList />} />
         <Route path='token/:asset_id' element={<Token />} />

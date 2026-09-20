@@ -13,3 +13,8 @@ export const themeGalleryEnabled =
   import.meta.env.VITE_DISABLE_THEME_GALLERY !== 'true';
 // Opt-in, unlike the flags above: "@handle" in the send screen, resolved through XCHandles.
 export const handlesEnabled = import.meta.env.VITE_ENABLE_HANDLES === 'true';
+// Opt-in: "Use my Clap and Pay money" on the start screen (src/pages/ClapAndPayConnect.tsx).
+export const clapAndPayConnectEnabled =
+  import.meta.env.VITE_ENABLE_CLAPANDPAY_CONNECT === 'true';
+export const clapAndPayOrigin =
+  import.meta.env.VITE_CLAPANDPAY_ORIGIN || 'https://clapandpay.com';

@@ -7,3 +7,4 @@ tauri-plugin-sage/permissions
 tauri-plugin-sage/dist-js
 tauri-plugin-sage/ios
 tauri-plugin-sage/android
+src/lib/clapandpayHandoff.ts
