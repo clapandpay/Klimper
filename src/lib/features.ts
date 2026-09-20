@@ -13,8 +13,12 @@ export const themeGalleryEnabled =
   import.meta.env.VITE_DISABLE_THEME_GALLERY !== 'true';
 // Opt-in, unlike the flags above: "@handle" in the send screen, resolved through XCHandles.
 export const handlesEnabled = import.meta.env.VITE_ENABLE_HANDLES === 'true';
-// Opt-in: "Use my Clap and Pay money" on the start screen (src/pages/ClapAndPayConnect.tsx).
+// On by default, like the flags above: "Use my Clap and Pay money" on the start screen
+// (src/pages/ClapAndPayConnect.tsx). A passkey belongs to a website, so somebody who made their
+// wallet by opening a Green Envelope has no other way to bring it here; leaving this off meant
+// the one route from the page to the app was invisible in every build that did not ask for it.
+// `VITE_DISABLE_CLAPANDPAY_CONNECT=true` turns it off.
 export const clapAndPayConnectEnabled =
-  import.meta.env.VITE_ENABLE_CLAPANDPAY_CONNECT === 'true';
+  import.meta.env.VITE_DISABLE_CLAPANDPAY_CONNECT !== 'true';
 export const clapAndPayOrigin =
   import.meta.env.VITE_CLAPANDPAY_ORIGIN || 'https://clapandpay.com';
