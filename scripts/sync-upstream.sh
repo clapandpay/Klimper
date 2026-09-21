@@ -7,7 +7,8 @@
 #   scripts/sync-upstream.sh            merge the newest upstream v* tag
 #   scripts/sync-upstream.sh v0.13.1    merge that tag
 #   scripts/sync-upstream.sh <commit>   hotfix: merge upstream/main up to that commit
-#   scripts/sync-upstream.sh --check    only report what is new upstream (used by CI)
+#   scripts/sync-upstream.sh --check    only report what is new upstream (run by hand; CI never
+#                                       runs on a clock, see AGENTS.md "CI")
 #
 # And the other direction — what we owe upstream, and how to hand it over:
 #

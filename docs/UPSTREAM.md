@@ -6,7 +6,7 @@
 > paths into this folder; a trial merge of `upstream/main` on the day of the move touched 103
 > files, all inside `klimper/`, with no conflicts. Never merge upstream by hand without that
 > option, and never relocate files inside `klimper/`. Upstream's own workflows sit in
-> `klimper/.github/`, where GitHub does not run them; ours is `/.github/workflows/klimper.yml`.
+> `klimper/.github/`, where GitHub does not run them; ours is `/.github/workflows/ci.yml`.
 
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
@@ -97,7 +97,7 @@ New files never conflict. Files shared with Sage are kept to the lines listed he
 | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`, `LICENSE`                                                                                                                       | whole file           | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                            |
 | `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                  |                                                                                                                                                                                                                                                      |
-| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `.github/workflows/klimper.yml`                                                              | new                  |                                                                                                                                                                                                                                                      |
+| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `.github/workflows/ci.yml`                                                                   | new                  |                                                                                                                                                                                                                                                      |
 | `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                  | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge |
 | `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added        | product name, version, identifier                                                                                                                                                                                                                    |
 | `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`                                                                    | bundle id            | `DEVELOPMENT_TEAM` is still Sage's; ours arrives with TASK-003                                                                                                                                                                                       |
@@ -162,4 +162,4 @@ Known leftovers, deliberately not patched:
 Upstream's workflows (`build.yml`, `npm.yml`) stay in the tree unchanged so they never conflict,
 but they need Sage's runners and secrets and would publish to npm. Disable them once in the
 GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours is
-`.github/workflows/klimper.yml`.
+`.github/workflows/ci.yml`.
