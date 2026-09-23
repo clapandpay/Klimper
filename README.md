@@ -2,7 +2,7 @@
 
 **Clap and Pay.** Paying with your assets should be as easy as clapping. clapandpay.com
 
-Klimper is the product and App Store name (from German *klimpern*, the jingle of coins in a
+Klimper is the product and App Store name (from German _klimpern_, the jingle of coins in a
 pocket); "Clap and Pay" is the tagline; the repositories and the domain keep the clapandpay name.
 
 A minimal, fun, non-custodial Chia wallet for the phone, built on the
@@ -16,11 +16,11 @@ repository into the Sage core fork for iOS, shipped as Klimper.
 
 ## The stack
 
-| Layer | Project |
-| --- | --- |
-| Wallet | Klimper (this repo, clapandpay) |
+| Layer                        | Project                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| Wallet                       | Klimper (this repo, clapandpay)                                               |
 | Explorer, also an in-app app | [mempool-xch](https://github.com/maximedogawa/mempool-xch) · mempoolxch.space |
-| Node provider | [nodexch](https://github.com/maximedogawa/nodexch) · nodexch.space |
+| Node provider                | [nodexch](https://github.com/maximedogawa/nodexch) · nodexch.space            |
 
 ## How this repo will be shaped
 

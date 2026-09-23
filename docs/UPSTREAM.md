@@ -2,9 +2,9 @@
 
 Sage: https://github.com/xch-dev/sage (Apache-2.0), remote `upstream`.
 
-| Merged tag | Date | By |
-| --- | --- | --- |
-| v0.13.1 | 2026-09-23 | TASK-006 (first merge, `--allow-unrelated-histories`) |
+| Merged tag | Date       | By                                                    |
+| ---------- | ---------- | ----------------------------------------------------- |
+| v0.13.1    | 2026-09-23 | TASK-006 (first merge, `--allow-unrelated-histories`) |
 
 Routine: `scripts/sync-upstream.sh <tag>` (see the wiki `architecture/fork-strategy.md`).
 
