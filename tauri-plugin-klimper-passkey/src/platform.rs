@@ -27,7 +27,7 @@ impl<R: Runtime> Clone for Passkeys<R> {
 pub fn init<R: Runtime, C: DeserializeOwned>(
     _app: &AppHandle<R>,
     _api: PluginApi<R, C>,
-) -> tauri::Result<Passkeys<R>> {
+) -> std::result::Result<Passkeys<R>, Box<dyn std::error::Error>> {
     #[cfg(target_os = "ios")]
     return Ok(Passkeys(Some(
         _api.register_ios_plugin(init_plugin_klimper_passkey)?,
