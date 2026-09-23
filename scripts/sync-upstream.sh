@@ -133,6 +133,8 @@ Conflicts. All paths are under $SUBTREE/. Ours to keep: README.md, LICENSE,
 src-tauri/tauri.ios.conf.json and tauri.android.conf.json (identifier lines), the bundle ids
 under src-tauri/gen/.
 Everything else: take upstream and move our change behind a flag or into our own file.
+Keychain password (crates/sage-keychain, crates/sage): take upstream, then pass
+self.keychain.password()? wherever Sage passes b"" (docs/UPSTREAM.md, "Staying current").
 Playbook: $SUBTREE/docs/UPSTREAM.md. Finish with: git commit
 MSG
   exit 1
