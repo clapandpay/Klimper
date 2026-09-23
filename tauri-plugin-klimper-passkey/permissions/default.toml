@@ -1,0 +1,3 @@
+[default]
+description = "Status, enrolment, unlock, lock and removal of the Klimper passkey."
+permissions = ["allow-status", "allow-enroll", "allow-unlock", "allow-lock", "allow-remove"]

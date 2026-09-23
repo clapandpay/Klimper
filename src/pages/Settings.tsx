@@ -38,6 +38,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useInsets } from '@/contexts/SafeAreaContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { useBiometric } from '@/hooks/useBiometric';
+import { PasskeySettings } from '@/klimper/PasskeySettings';
 import { useColdWalletUnsigned } from '@/hooks/useColdWalletUnsigned';
 import { useDefaultClawback } from '@/hooks/useDefaultClawback';
 import { useDefaultFee } from '@/hooks/useDefaultFee';
@@ -344,6 +345,8 @@ function GlobalSettings() {
           }
         />
       </SettingsSection>
+
+      <PasskeySettings />
 
       <SettingsSection title={t`Transaction Defaults`}>
         <SettingItem

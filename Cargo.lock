@@ -6664,6 +6664,7 @@ dependencies = [
  "serde",
  "serde_with",
  "thiserror 1.0.69",
+ "zeroize",
 ]
 
 [[package]]
@@ -6721,6 +6722,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-klimper-passkey",
  "tauri-plugin-opener",
  "tauri-plugin-os",
  "tauri-plugin-safe-area-insets",
@@ -7928,6 +7930,28 @@ dependencies = [
  "thiserror 2.0.17",
  "toml 1.1.0+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-klimper-passkey"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.22.1",
+ "bip39",
+ "hkdf",
+ "rand 0.8.5",
+ "sage",
+ "sage-keychain",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-plugin",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

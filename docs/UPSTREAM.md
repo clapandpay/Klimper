@@ -139,6 +139,19 @@ behaviour.
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
 | `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
 
+### Passkey login
+
+Klimper opens the keychain with a passkey (see `docs/passkey.md`). One engine change, proposed
+upstream; the rest is files of our own and one-line hooks.
+
+| File                                                                                     | Ours                              | Note                                                                      |
+| ---------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------- |
+| `crates/sage-keychain`, `crates/sage/src/{sage.rs,error.rs,endpoints/*,utils/spends.rs}` | keychain password                 | the one engine change: lock, unlock, re-key instead of the empty password |
+| `tauri-plugin-klimper-passkey/`, `src/klimper/`, `src-tauri/capabilities/klimper.json`   | new                               | envelope, commands, Swift; lock screen and settings entry                 |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                             | workspace member, dep, one plugin |                                                                           |
+| `src/App.tsx`, `src/pages/Settings.tsx`                                                  | one import and one element each   | `<PasskeyGate />`, `<PasskeySettings />`                                  |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`      | 4 lines, 1 line                   | `webcredentials:clapandpay.com`; the plugin's generated permissions       |
+
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
 

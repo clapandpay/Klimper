@@ -198,8 +198,9 @@ impl Sage {
         let mut derivations = Vec::new();
 
         if hardened {
-            let (_mnemonic, Some(master_sk)) =
-                self.keychain.extract_secrets(wallet.fingerprint, b"")?
+            let (_mnemonic, Some(master_sk)) = self
+                .keychain
+                .extract_secrets(wallet.fingerprint, &self.keychain.password()?)?
             else {
                 return Err(Error::NoSigningKey);
             };

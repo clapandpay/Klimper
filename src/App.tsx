@@ -63,6 +63,7 @@ import { AppsProvider } from '@/contexts/AppsContext.tsx';
 import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
+import { PasskeyGate } from '@/klimper/PasskeyGate';
 import { featureElement } from '@/lib/featureElement';
 import {
   clapAndPayConnectEnabled,
@@ -229,6 +230,7 @@ function AppInner() {
     initialized &&
     isLocaleInitialized && (
       <I18nProvider i18n={i18n}>
+        <PasskeyGate />
         <WalletProvider>
           <RustThemeSync />
           <PeerProvider>
