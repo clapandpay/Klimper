@@ -1,0 +1,9 @@
+Klimper
+Copyright (C) 2026 the Klimper authors. Licensed under AGPL-3.0-or-later (see LICENSE),
+or under a commercial licence (see COMMERCIAL-LICENSE.md).
+
+This product includes Sage (https://github.com/xch-dev/sage),
+Copyright Rigidity and the Sage contributors, licensed under the Apache License,
+Version 2.0 (see LICENSE-APACHE). Files that come from Sage keep that licence; the
+Sage name and logo belong to their owners, and Klimper is not affiliated with the
+Sage project or with Chia Network, Inc.
