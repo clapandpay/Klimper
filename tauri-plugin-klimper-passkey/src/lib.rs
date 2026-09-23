@@ -300,13 +300,34 @@ async fn remove<R: Runtime>(
     Ok(())
 }
 
+/// The wallet data never goes into a phone backup: without a passkey, `keys.bin` is encrypted
+/// with the empty password. The flag sits on the directory, not on `keys.bin`, because Sage
+/// replaces that file on every save (write, then rename), which would drop a flag on the file.
+/// A new phone restores from the recovery words, or from clapandpay.com again for a wallet
+/// that came from there.
+fn keep_out_of_backups<R: Runtime>(passkeys: Passkeys<R>, dir: std::path::PathBuf) {
+    // Off the main thread, where setup runs and the Swift side answers.
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = std::fs::create_dir_all(&dir)
+            .map_err(|error| Error::Platform(error.to_string()))
+            .and_then(|()| passkeys.exclude_from_backup(&dir));
+        if let Err(error) = result {
+            tracing::error!("could not keep {} out of backups: {error}", dir.display());
+        }
+    });
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-passkey")
         .invoke_handler(tauri::generate_handler![
             status, enroll, unlock, lock, remove
         ])
         .setup(|app, api| {
-            app.manage(platform::init(app, api)?);
+            let passkeys = platform::init(app, api)?;
+            if passkeys.supported() {
+                keep_out_of_backups(passkeys.clone(), app.path().app_data_dir()?);
+            }
+            app.manage(passkeys);
             app.manage(Unlocked::default());
             Ok(())
         })

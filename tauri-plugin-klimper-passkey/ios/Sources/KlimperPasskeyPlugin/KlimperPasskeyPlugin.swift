@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Passkey registration and assertion with the PRF extension (iOS 18). The PRF output is
 // resolved to the Rust side of the plugin, which unwraps the wallet key; the webview never
-// sees it.
+// sees it. Also keeps the wallet data directory out of backups.
 
 import AuthenticationServices
 import CryptoKit
@@ -24,6 +24,10 @@ struct AssertArgs: Decodable {
   let prfSalt: String
 }
 
+struct BackupArgs: Decodable {
+  let path: String
+}
+
 extension Data {
   init?(base64URL value: String) {
     var base64 = value.replacingOccurrences(of: "-", with: "+")
@@ -44,6 +48,16 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
 {
   private var pending: Invoke?
   private var controller: ASAuthorizationController?
+
+  // Set on the directory, so it covers files Sage replaces or creates later.
+  @objc public func excludeFromBackup(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(BackupArgs.self)
+    var url = URL(fileURLWithPath: args.path, isDirectory: true)
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try url.setResourceValues(values)
+    invoke.resolve()
+  }
 
   @objc public func register(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(RegisterArgs.self)

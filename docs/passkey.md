@@ -15,12 +15,19 @@ transactions; it unlocks the keychain that holds the recovery words and keys.
   wallet key.
 - The keychain starts locked, and it locks again whenever Klimper leaves the screen. Until
   it's unlocked, every endpoint that needs a secret returns `Unauthorized`.
-- The recovery words stay the backup. A new phone either restores its iCloud backup (both
-  files come back, and the synced passkey opens them) or imports the recovery words.
+- The wallet data (`keys.bin`, `passkey.json`, the databases) is never in a phone backup: the
+  plugin marks the app data directory excluded from iCloud and device backups at every start,
+  and Android turns off backup and device transfer. The flag sits on the directory because
+  Sage replaces `keys.bin` on every save, which would drop a flag on the file.
+- So a new phone never restores the wallet from a backup. It imports the recovery words, or,
+  for money that came from clapandpay.com, runs "Use my Clap and Pay money" again: the web
+  passkey brings the same key back.
+- After that handoff, Klimper offers the passkey straight away ("Lock it with Face ID"), since
+  until then the handed-over key sits under the empty password.
 
 Code: `tauri-plugin-klimper-passkey` (envelope, commands, Swift), `src/klimper/`
 (lock screen and settings), and the keychain password in `crates/sage-keychain` (the one
-engine change, proposed upstream).
+engine change, meant for upstream but not yet proposed).
 
 ## What a release needs
 
@@ -42,3 +49,7 @@ engine change, proposed upstream).
 Settings → Passkey → Set up passkey → Face ID (once or twice, depending on whether the
 provider returns the PRF at registration). Close and reopen Klimper: the lock screen asks
 for Face ID. Remove passkey also asks for Face ID and returns to Sage's empty password.
+
+Backups: after the first start, iOS Settings → [your name] → iCloud → Manage storage →
+Backups → this iPhone lists Klimper at a few kilobytes at most. After a restore from that
+backup, Klimper starts with no wallet.

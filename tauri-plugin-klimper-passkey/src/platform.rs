@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The Swift side (`ASAuthorization` with the PRF extension, iOS 18); elsewhere unsupported.
+//! The Swift side (`ASAuthorization` with the PRF extension, iOS 18, and the backup flag);
+//! elsewhere unsupported.
 
-use serde::de::DeserializeOwned;
+use std::path::Path;
+
+use serde::{Serialize, de::DeserializeOwned};
 use tauri::{
     AppHandle, Runtime,
     plugin::{PluginApi, PluginHandle},
@@ -24,7 +27,7 @@ impl<R: Runtime> Clone for Passkeys<R> {
 pub fn init<R: Runtime, C: DeserializeOwned>(
     _app: &AppHandle<R>,
     _api: PluginApi<R, C>,
-) -> tauri::Result<Passkeys<R>> {
+) -> std::result::Result<Passkeys<R>, Box<dyn std::error::Error>> {
     #[cfg(target_os = "ios")]
     return Ok(Passkeys(Some(
         _api.register_ios_plugin(init_plugin_klimper_passkey)?,
@@ -44,6 +47,21 @@ impl<R: Runtime> Passkeys<R> {
 
     pub fn assert(&self, request: AssertRequest) -> Result<AssertResponse> {
         self.run("assert", request)
+    }
+
+    /// Leaves the directory and everything in it out of iCloud and device backups.
+    pub fn exclude_from_backup(&self, dir: &Path) -> Result<()> {
+        #[derive(Serialize)]
+        struct Request {
+            path: String,
+        }
+        self.run::<_, serde::de::IgnoredAny>(
+            "excludeFromBackup",
+            Request {
+                path: dir.to_string_lossy().into_owned(),
+            },
+        )?;
+        Ok(())
     }
 
     #[cfg_attr(not(mobile), allow(unused_variables, clippy::unused_self))]
