@@ -189,7 +189,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					24D652EC5BE9A86367B2B089 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = NQJQRYZZG3;
 					};
 				};
 			};
@@ -327,7 +327,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "sage-tauri_iOS/sage-tauri_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "NQJQRYZZG3";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -343,7 +343,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.clapandpay.klimper;
-				PRODUCT_NAME = "Klimper";
+				PRODUCT_NAME = "Sage";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -423,7 +423,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "sage-tauri_iOS/sage-tauri_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "NQJQRYZZG3";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -439,7 +439,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.clapandpay.klimper;
-				PRODUCT_NAME = "Klimper";
+				PRODUCT_NAME = "Sage";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;

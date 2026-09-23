@@ -16,10 +16,10 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 36
-    namespace = "com.rigidnetwork.sage"
+    namespace = "com.clapandpay.klimper"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.rigidnetwork.sage"
+        applicationId = "com.clapandpay.klimper"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

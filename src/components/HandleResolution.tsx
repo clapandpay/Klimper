@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { HandleLookup } from '@/hooks/useHandle';
+import { HandleErrorCode } from '@/lib/handles';
+import { t } from '@lingui/core/macro';
+import { Trans } from '@lingui/react/macro';
+import {
+  CheckCircle2Icon,
+  LoaderCircleIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
+
+export function handleErrorMessage(code: HandleErrorCode): string {
+  switch (code) {
+    case 'invalid':
+      return t`A handle is 3 to 63 letters and digits`;
+    case 'not_found':
+      return t`Nobody has this handle`;
+    case 'expired':
+      return t`This handle has expired`;
+    case 'not_payable':
+      return t`This handle cannot receive payments right now`;
+    case 'unavailable':
+      return t`Handles cannot be looked up right now. Use an address instead`;
+  }
+}
+
+// Shows what "@anna" stands for, in full: the address is what the money is sent to.
+export function HandleResolution({ lookup }: { lookup: HandleLookup }) {
+  if (lookup.status === 'idle') return null;
+
+  if (lookup.status === 'loading') {
+    return (
+      <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+        <LoaderCircleIcon className='h-4 w-4 animate-spin' aria-hidden='true' />
+        <Trans>Looking up handle…</Trans>
+      </div>
+    );
+  }
+
+  if (lookup.status === 'error') {
+    return (
+      <div className='flex items-center gap-2 text-sm text-destructive'>
+        <TriangleAlertIcon className='h-4 w-4 shrink-0' aria-hidden='true' />
+        {handleErrorMessage(lookup.error.code)}
+      </div>
+    );
+  }
+
+  const { handle, address, pendingTransfer } = lookup.resolved;
+
+  return (
+    <div className='space-y-1 text-sm'>
+      <div className='flex items-start gap-2'>
+        <CheckCircle2Icon
+          className='h-4 w-4 mt-0.5 shrink-0 text-green-600'
+          aria-hidden='true'
+        />
+        <div className='min-w-0'>
+          <div className='font-medium'>@{handle}</div>
+          <div className='font-mono text-xs text-muted-foreground break-all'>
+            {address}
+          </div>
+        </div>
+      </div>
+      {pendingTransfer && (
+        <div className='flex items-center gap-2 text-amber-600'>
+          <TriangleAlertIcon className='h-4 w-4 shrink-0' aria-hidden='true' />
+          <Trans>
+            This handle is changing owner. Check with the recipient.
+          </Trans>
+        </div>
+      )}
+    </div>
+  );
+}

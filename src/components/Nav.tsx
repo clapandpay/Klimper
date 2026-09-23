@@ -4,7 +4,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { usePeers } from '@/hooks/usePeers';
-import { offersEnabled, optionsEnabled, swapEnabled } from '@/lib/features';
+import {
+  nftsEnabled,
+  offersEnabled,
+  optionsEnabled,
+  profilesEnabled,
+  swapEnabled,
+} from '@/lib/features';
 import { logoutAndUpdateState, useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -55,21 +61,25 @@ export function TopNav({ isCollapsed }: NavProps) {
         <WalletIcon className={className} aria-hidden='true' />
       </NavLink>
 
-      <NavLink
-        url={'/nfts'}
-        isCollapsed={isCollapsed}
-        message={<Trans>NFTs</Trans>}
-      >
-        <Images className={className} />
-      </NavLink>
+      {nftsEnabled && (
+        <NavLink
+          url={'/nfts'}
+          isCollapsed={isCollapsed}
+          message={<Trans>NFTs</Trans>}
+        >
+          <Images className={className} />
+        </NavLink>
+      )}
 
-      <NavLink
-        url={'/dids'}
-        isCollapsed={isCollapsed}
-        message={<Trans>Profiles</Trans>}
-      >
-        <SquareUserRound className={className} aria-hidden='true' />
-      </NavLink>
+      {profilesEnabled && (
+        <NavLink
+          url={'/dids'}
+          isCollapsed={isCollapsed}
+          message={<Trans>Profiles</Trans>}
+        >
+          <SquareUserRound className={className} aria-hidden='true' />
+        </NavLink>
+      )}
 
       {optionsEnabled && (
         <NavLink

@@ -1,0 +1,18 @@
+{
+  "productName": "Klimper",
+  "version": "0.1.0",
+  "identifier": "com.clapandpay.klimper",
+  "app": {
+    "windows": [
+      {
+        "title": "Klimper",
+        "width": 1150,
+        "height": 750,
+        "resizable": true,
+        "maximized": false,
+        "visible": true,
+        "titleBarStyle": "Transparent"
+      }
+    ]
+  }
+}

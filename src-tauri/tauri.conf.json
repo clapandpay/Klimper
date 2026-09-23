@@ -1,7 +1,7 @@
 {
-  "productName": "Klimper",
+  "productName": "Sage",
   "version": "0.13.1",
-  "identifier": "com.clapandpay.klimper",
+  "identifier": "com.rigidnetwork.sage",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Klimper",
+        "title": "Sage",
         "width": 1150,
         "height": 750,
         "resizable": true,
@@ -37,7 +37,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "iOS": {
+      "developmentTeam": "NQJQRYZZG3"
+    }
   },
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json"
 }

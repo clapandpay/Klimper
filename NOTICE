@@ -1,9 +1,40 @@
 Klimper
-Copyright (C) 2026 the Klimper authors. Licensed under AGPL-3.0-or-later (see LICENSE),
-or under a commercial licence (see COMMERCIAL-LICENSE.md).
+Copyright 2026 the Klimper authors
 
-This product includes Sage (https://github.com/xch-dev/sage),
-Copyright Rigidity and the Sage contributors, licensed under the Apache License,
-Version 2.0 (see LICENSE-APACHE). Files that come from Sage keep that licence; the
-Sage name and logo belong to their owners, and Klimper is not affiliated with the
-Sage project or with Chia Network, Inc.
+Klimper's own files are licensed under the GNU Affero General Public License, version 3 or
+later (see LICENSE), or under a commercial licence (see COMMERCIAL-LICENSE.md).
+
+This product is a fork of Sage Wallet (https://github.com/xch-dev/sage).
+
+Sage is the work of 15 people over 3622 commits between 2024 and 2026. The wallet engine, the
+app bridge and almost every screen in Klimper are theirs, not ours: Klimper adds branding, a few
+build-time flags and two features of its own, and inherits the rest.
+
+  Copyright 2024-2026 the Sage contributors, by the names they commit under:
+
+    Rigidity (Brandon Haggstrom)      ClydeWallace22
+    Don Kackman                       Jude Allred
+    Jakub Hadamcik                    Rytek Digital Inc
+    Ronald Goedeke (BubbleTrouble14)  joshpainter
+    Andreas Greimel                   Steve Stepp
+    Gabriel Inzirillo                 Mike Gropp
+    Gerald Neale                      dennis
+                                      nongyehezuoshe
+
+Upstream ships no NOTICE file of its own, so this one is Klimper's statement of where the work
+came from. The list above is generated from the history and is not maintained by hand: after
+each upstream merge, regenerate it with
+
+  scripts/sync-upstream.sh --credits
+
+which folds the several identities people commit under into one name each, and is the authority
+for who wrote Sage — including anyone who arrived after this file was last written.
+
+Sage is licensed under the Apache License, Version 2.0; a copy is in LICENSE-APACHE. All files
+that come from Sage remain under that licence, including the ones Klimper changed: forking does
+not relicense them. Every changed file is listed in docs/UPSTREAM.md, which is Klimper's record
+of the modifications the Apache licence asks a fork to state, and every change is visible with
+
+  git diff <merged upstream tag> HEAD:klimper
+
+Klimper is not affiliated with, or endorsed by, the Sage project or Chia Network, Inc.

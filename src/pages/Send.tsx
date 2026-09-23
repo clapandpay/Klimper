@@ -2,6 +2,10 @@ import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { WalletAddressPicker } from '@/components/WalletAddressPicker';
 import { TokenConfirmation } from '@/components/confirmations/TokenConfirmation';
 import Container from '@/components/Container';
+import {
+  HandleResolution,
+  handleErrorMessage,
+} from '@/components/HandleResolution';
 import Header from '@/components/Header';
 import { NumberFormat } from '@/components/NumberFormat';
 import { PasteInput } from '@/components/PasteInput';
@@ -27,8 +31,12 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useDefaultClawback } from '@/hooks/useDefaultClawback';
 import { useErrors } from '@/hooks/useErrors';
+import { useHandle } from '@/hooks/useHandle';
+import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
+import { handlesEnabled } from '@/lib/features';
 import { amount, positiveAmount } from '@/lib/formTypes';
+import { HandleError, isHandleInput, resolveHandle } from '@/lib/handles';
 import {
   fromHexStrict,
   fromMojos,
@@ -45,7 +53,7 @@ import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
 import { AlertCircleIcon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as z from 'zod';
@@ -71,6 +79,13 @@ export default function Send() {
   const [currentMemo, setCurrentMemo] = useState<Memo | undefined>(undefined);
 
   const [bulk, setBulk] = useState(false);
+
+  // "@anna" instead of an address. The registry lives on mainnet only.
+  const { network } = useNetwork();
+  const handlePrefix =
+    handlesEnabled && !bulk && network === 'mainnet' ? 'xch' : null;
+  const resolvedAddress = useRef<string | null>(null);
+  const shownAddress = useRef<string | null>(null);
 
   const ticker = asset?.ticker || 'CAT';
 
@@ -118,8 +133,33 @@ export default function Send() {
     .object({
       address: z
         .string()
+        .superRefine(async (value, ctx) => {
+          resolvedAddress.current = null;
+          if (!handlePrefix || !isHandleInput(value)) return;
+          try {
+            const { address } = await resolveHandle(value, handlePrefix);
+            // The address on screen is the one the user agreed to. If the handle now points
+            // somewhere else, stop and let them look again.
+            if (shownAddress.current && shownAddress.current !== address) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t`This handle just changed. Check the address and try again`,
+              });
+              return;
+            }
+            resolvedAddress.current = address;
+          } catch (error) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: handleErrorMessage(
+                error instanceof HandleError ? error.code : 'unavailable',
+              ),
+            });
+          }
+        })
         .refine(
           (address) =>
+            (handlePrefix && isHandleInput(address)) ||
             Promise.all(
               addressList(address).map((address) =>
                 commands.validateAddress(address).catch(addError),
@@ -170,6 +210,10 @@ export default function Send() {
   });
   const memoMode = form.watch('memoMode') || MemoMode.Text;
 
+  const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
+  shownAddress.current =
+    handleLookup.status === 'resolved' ? handleLookup.resolved.address : null;
+
   const { handleScanOrPaste, handleScanImage } = useScannerOrClipboard(
     (scanResValue) => {
       form.setValue('address', scanResValue);
@@ -178,6 +222,7 @@ export default function Send() {
 
   const onSubmit = () => {
     const values = form.getValues();
+    const address = resolvedAddress.current ?? values.address;
 
     let memos: string[] = [];
 
@@ -223,7 +268,7 @@ export default function Send() {
         });
       } else {
         result = commands.sendXch({
-          address: values.address,
+          address,
           amount,
           fee,
           memos,
@@ -242,7 +287,7 @@ export default function Send() {
       } else {
         result = commands.sendCat({
           asset_id: assetId ?? '',
-          address: values.address,
+          address,
           amount,
           fee,
           memos,
@@ -317,13 +362,18 @@ export default function Send() {
                         autoCorrect='off'
                         autoCapitalize='off'
                         autoComplete='off'
-                        placeholder={t`Enter address`}
+                        placeholder={
+                          handlePrefix
+                            ? t`Enter address or @handle`
+                            : t`Enter address`
+                        }
                         onEndIconClick={handleScanOrPaste}
                         onScanImage={handleScanImage}
                         {...field}
                       />
                     )}
                   </FormControl>
+                  <HandleResolution lookup={handleLookup} />
                   <FormMessage />
                 </FormItem>
               )}

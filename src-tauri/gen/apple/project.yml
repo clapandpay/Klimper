@@ -10,8 +10,9 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Klimper
+      PRODUCT_NAME: Sage
       PRODUCT_BUNDLE_IDENTIFIER: com.clapandpay.klimper
+      DEVELOPMENT_TEAM: NQJQRYZZG3
 targetTemplates:
   app:
     type: application

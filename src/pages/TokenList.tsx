@@ -21,6 +21,7 @@ import { isValidAssetId, toDecimal } from '@/lib/utils';
 import { PricedTokenRecord } from '@/types/TokenViewProps';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
+import { tokenIssuingEnabled } from '@/lib/features';
 import { Coins, InfoIcon, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -177,14 +178,16 @@ export function TokenList() {
         </div>
       </Header>
       <Container>
-        <ReadOnlyButton
-          onClick={() => navigate('/wallet/issue-token')}
-          aria-label={t`Issue new token`}
-          className='mb-4'
-        >
-          <Coins className='h-4 w-4 mr-2' aria-hidden='true' />
-          <Trans>Issue Token</Trans>
-        </ReadOnlyButton>
+        {tokenIssuingEnabled && (
+          <ReadOnlyButton
+            onClick={() => navigate('/wallet/issue-token')}
+            aria-label={t`Issue new token`}
+            className='mb-4'
+          >
+            <Coins className='h-4 w-4 mr-2' aria-hidden='true' />
+            <Trans>Issue Token</Trans>
+          </ReadOnlyButton>
+        )}
 
         <TokenOptions
           query={params.search}
