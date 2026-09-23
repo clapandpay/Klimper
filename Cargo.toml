@@ -99,6 +99,7 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
+zeroize = "1.8.2"
 
 # Async
 tokio = "1.39.2"

@@ -535,7 +535,10 @@ impl Sage {
     }
 
     pub fn save_keychain(&self) -> Result<()> {
-        fs::write(self.path.join("keys.bin"), self.keychain.to_bytes()?)?;
+        // Write then rename, so a crash never leaves a half-written keychain behind.
+        let temp_path = self.path.join("keys.bin.tmp");
+        fs::write(&temp_path, self.keychain.to_bytes()?)?;
+        fs::rename(temp_path, self.path.join("keys.bin"))?;
         Ok(())
     }
 }
