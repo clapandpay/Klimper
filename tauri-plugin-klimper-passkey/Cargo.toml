@@ -24,6 +24,7 @@ hkdf = "0.12.4"
 sha2 = "0.10.9"
 rand = { workspace = true }
 zeroize = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
