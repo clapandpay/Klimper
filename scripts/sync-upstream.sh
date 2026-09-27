@@ -146,5 +146,6 @@ Merged $target. Still to do (docs/UPSTREAM.md):
   1. pnpm install && cargo check --workspace && pnpm tauri:build
   2. bridge smoke test: install mempoolxch.space and sage-permission-probe
   3. compare src-tauri/tauri.conf.json window settings with our tauri.<platform>.conf.json
-  4. record the merged version in docs/UPSTREAM.md
+  4. record the merged version in docs/UPSTREAM.md, and set Klimper's version to it
+     (tauri.*.conf.json, gen/apple/sage-tauri_iOS/Info.plist): apps check it as the Sage version
 MSG

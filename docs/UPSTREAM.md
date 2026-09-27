@@ -15,6 +15,15 @@ Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LIC
 | ------------------- | ------------------------------ |
 | Merged version      | **v0.13.1**, merged 2026-09-20 |
 | Hotfix merges since | none                           |
+| Klimper version     | **0.13.1**, the merged tag     |
+
+**Klimper's version is the version of the Sage release it is built on.** Sage's app system
+(`crates/sage-apps`) checks an app's minimum Sage version against the Tauri app version
+(`package_info().version`), not the engine's, so a Klimper version of its own made every app that
+needs Sage 0.13 refuse to run ("You are running Sage 0.1.0"; TASK-063). The version lives in
+`src-tauri/tauri.{macos,linux,windows,ios,android}.conf.json` and the committed iOS `Info.plist`;
+the upgrade below bumps it. Once upstream compares against the engine version instead, Klimper
+can number its own releases again.
 
 ## Routine
 
@@ -123,6 +132,7 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
 
    ```sh
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
+   grep -h '"version"' src-tauri/tauri.*.conf.json  # the merged tag, every one (see the top)
    grep -c '^VITE_' .env                            # 11
    grep -c featureElement src/App.tsx               # 8
    grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
@@ -134,8 +144,9 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    `NOTICE` if the list moved. Apache-2.0 asks a fork to keep attribution, and since Sage ships
    no `NOTICE` of its own, ours is the only place its authors are named. A new contributor
    upstream is a name missing from ours until someone regenerates it.
-8. **Write it down.** The merged version in the table above, and any new row in the file tables
-   below — `--diff` tells you if one is missing.
+8. **Write it down.** The merged version in the table above; Klimper's version set to it in the
+   five `tauri.*.conf.json` files and `src-tauri/gen/apple/sage-tauri_iOS/Info.plist`; and any
+   new row in the file tables below — `--diff` tells you if one is missing.
 
 ## Our files (the whole diff against upstream)
 
