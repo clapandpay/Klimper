@@ -41,6 +41,51 @@ clean checkout of the merged tag with `git apply`.
 A fix that cannot be merged because the commits before it are not wanted yet:
 `git cherry-pick -x <commit>` on a `hotfix/` branch; the next tag merge resolves it.
 
+## Staying current
+
+Pulling from Sage comes before pushing to Sage. A patch we carry (the keychain password, the
+flags) costs some work at each merge; a Sage release we have not merged is a wallet, keychain
+or bridge fix our users do not have. So we accept carrying patches, and we never delay a merge
+waiting for upstream to take one.
+
+**How we find out.** No clock runs anywhere (AGENTS.md, "CI"), so it is people who look:
+
+- Watch `xch-dev/sage` on GitHub with _Custom → Releases_ and _Security alerts_. A release or an
+  advisory then arrives as a notification.
+- Run `scripts/sync-upstream.sh --check` at the start of every work week, and before every build
+  that leaves the team. It lists the new upstream commits touching the watched paths: the wallet,
+  keychain, apps and database crates, the engine, `src-tauri`, `tauri-plugin-sage` and the
+  lockfiles.
+
+**How fast.**
+
+| What is new upstream                                                      | Merge within    | How                                                                                                                       |
+| ------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| A security fix or advisory, or a fix in a watched path marked as security | the same day    | `scripts/sync-upstream.sh <commit>` on `hotfix/sage-<short sha>`; `cherry-pick -x` if the commits before it are not ready |
+| A release tag                                                             | one week        | "The upgrade, step by step" below, on `upstream/sage-<tag>`                                                               |
+| Other commits on `upstream/main`                                          | at the next tag | nothing; releases carry them                                                                                              |
+
+A hotfix goes through the same checks as an upgrade (step 5) and gets a row in "Hotfix merges
+since" above. When a store build is in review, the fix still merges; the build is replaced.
+
+**What makes a merge slow, and what to do about it.** Only the shared files in `--diff` can
+conflict. Keep that list short: new code goes in files of our own, a shared file gets one import
+and one element at most. The keychain password is the exception, because a flag cannot switch it
+off. It touches `crates/sage-keychain` and the places the empty password used to be passed
+(`crates/sage/src/sage.rs`, `error.rs`, `utils/spends.rs`, `endpoints/{actions,keys,offers,
+wallet_connect}.rs`). When one of those conflicts:
+
+1. Take upstream's version of the file.
+2. Re-apply our change, which is always the same: where Sage passes `b""` as the keychain
+   password, ask the keychain for it (`self.keychain.password()?`), and map a locked keychain to
+   `Unauthorized`.
+3. `cargo test -p sage-keychain -p tauri-plugin-klimper-passkey`, then
+   `grep -rn 'b""' crates/sage/src`. The grep must find no keychain call: a new call site from
+   upstream that still passes the empty password would fail silently once a passkey is set.
+
+Proposing the keychain change to Sage stays worth doing, because it would make those merges
+free. But it is optional, and no upgrade waits for it.
+
 ## The upgrade, step by step
 
 Staying on the newest Sage is the point of the fork: the engine and the app bridge are theirs,
@@ -80,6 +125,9 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
    grep -c '^VITE_' .env                            # 11
    grep -c featureElement src/App.tsx               # 8
+   grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
+                                                    # cleanly but pass the empty password
+   grep -c 'Passkey' src/App.tsx src/pages/Settings.tsx  # 2 each
    ```
 
 7. **Credit the people whose work this is.** `scripts/sync-upstream.sh --credits`, and update
@@ -169,7 +217,8 @@ Known leftovers, deliberately not patched:
 1. Conflict in one of the files above: keep our lines, take everything else from upstream.
 2. Conflict anywhere else means we edited a shared file. Take upstream, then re-apply our change
    as a flag, a theme value or a file of our own; if the hiding point is missing, propose it
-   upstream first.
+   upstream first. The one exception is the keychain password, which cannot be a flag: re-apply
+   it as "Staying current" describes.
 3. Never resolve anything under `crates/sage-apps` or `packages/sage-app-sdk` in our favour.
 
 ## CI
