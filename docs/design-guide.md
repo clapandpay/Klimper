@@ -99,12 +99,12 @@ the _Look_ table in `UPSTREAM.md`). The two themes are named `light` and `dark` 
 Sage's core Light and Dark: every install, and the quick picker in Settings, gets Klimper by
 default. Sage's other themes remain selectable and are untouched by `klimper.css`.
 
-| What                                                                             | Where                                                                       |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Colours, radii, shadows, fonts, tables, switches, the backdrop (inline SVG)      | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json` |
-| Sidebar, buttons, coins, total band, Send/Receive, focus, 44px controls, motion  | `src/klimper.css`, scoped to `html.theme-light` / `.theme-dark`             |
-| Default theme, once per install by system appearance (`klimper-theme-seeded-v2`) | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                 |
-| Logo                                                                             | `src/icon-{dark,light}.png`; app icons from `src-tauri/icons/source-*.png`  |
+| What                                                                             | Where                                                                                |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Colours, radii, shadows, fonts, tables, switches, the backdrop (inline SVG)      | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json`          |
+| Sidebar, buttons, coins, total band, Send/Receive, focus, 44px controls, motion  | `src/klimper.css`, scoped to `html.theme-light` / `.theme-dark`                      |
+| Default theme, once per install by system appearance (`klimper-theme-seeded-v2`) | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                          |
+| Logo                                                                             | `src/icon-{dark,light}.png` in the app; every app icon from `scripts/update-logo.sh` |
 
 `klimper.css` finds Sage's elements by structure and by Sage's own class hooks (`btn-variant-*`,
 `bg-card`, `shadow-card`), never by translated text. Three rules depend on a particular upstream
@@ -115,3 +115,13 @@ screen) and Send/Receive (the first two outline buttons in the token card's acti
 Not done yet (TASK-004, TASK-008): a bundled display typeface (the rounded face is the system's
 where it has one); the onboarding illustration; a Klimper home screen of our own, which needs a
 screen rather than more CSS.
+
+### Changing the logo
+
+1. Replace `src/icon-light.png` (the logo on the light canvas; square, at least 1024px, opaque) and
+   `src/icon-dark.png` (the same on the dark canvas). These two are the logo inside the app.
+2. Run `scripts/update-logo.sh` from `klimper/`. It rebuilds every app icon from
+   `src/icon-light.png`: full bleed for iOS and Android, the macOS rounded square for the desktop,
+   and the Android launcher background from the logo's corner colour. Pass another file to use
+   that instead: `scripts/update-logo.sh ~/Downloads/logo.png`.
+3. Restart `pnpm tauri:dev`. macOS can keep showing the old Dock icon until the app restarts.
