@@ -154,6 +154,19 @@ upstream; the rest is files of our own and one-line hooks.
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
 
+### Look: Beidwerk UI v2 (TASK-062)
+
+The design guide is `docs/design-guide.md`. It is applied as two themes and one stylesheet scoped
+to them, so choosing a Sage theme gives Sage unchanged and no shared component is edited.
+
+| File                                                                                                             | Ours       | Note                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------- |
+| `docs/design-guide.md`, `src/themes/klimper-light/`, `src/themes/klimper-dark/`                                  | new        | the themes are ordinary theme-o-rama themes, tagged `featured`                                          |
+| `src/lib/klimperTheme.ts`, `src/klimper.css`                                                                     | new        | first-launch default by system appearance; focus, 44px controls, tabular numbers, motion, nav marker    |
+| `src/App.tsx`                                                                                                    | one import | `import '@/lib/klimperTheme'`, before the `ThemeProvider` reads the saved theme                         |
+| `src/icon-dark.png`, `src/icon-light.png`, `src-tauri/icons/*`, the iOS `AppIcon.appiconset`, Android `mipmap-*` | replaced   | the Klimper logo; regenerate with `pnpm tauri icon` from the logo on `#F2ECE5`. Take ours on a conflict |
+| `src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml`                                       | one colour | `#F2ECE5`                                                                                               |
+
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
 
@@ -161,8 +174,6 @@ Known leftovers, deliberately not patched:
 
 - `crates/sage-cli` and `crates/sage-client` look for the RPC certificates in the
   `com.rigidnetwork.sage` data directory. Propose an override upstream before relying on the CLI.
-- App icons are still Sage's (`src-tauri/icons`, mobile asset catalogues). They must be replaced
-  before any build leaves the team (TASK-004, TASK-008; trademark).
 
 ## Conflict playbook
 
