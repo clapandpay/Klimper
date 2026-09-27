@@ -155,13 +155,15 @@ data.
 
 Sage styles everything through [theme-o-rama](https://www.npmjs.com/package/theme-o-rama)
 themes, so the guide is two themes plus one stylesheet, and no shared component is edited (see
-the _Look_ table in `UPSTREAM.md`).
+the _Look_ table in `UPSTREAM.md`). The two themes are named `light` and `dark` and so replace
+Sage's core Light and Dark: every install, and the quick picker in Settings, gets Klimper by
+default. Sage's other themes remain selectable and are untouched by `klimper.css`.
 
 | What                                                                                                                     | Where                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | Colours, radii, shadows, buttons, tables, switches                                                                       | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json`                                |
-| Guide tokens (`--wine`, `--brass` …), focus ring, 44px controls, tabular numbers, mono table headers, nav marker, motion | `src/klimper.css`, scoped to `html.theme-klimper-light` / `.theme-klimper-dark`                            |
-| Default theme, set once per install by system appearance (`klimper-theme-seeded-v1`), `data-app="klimper"`               | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                                                |
+| Guide tokens (`--wine`, `--brass` …), focus ring, 44px controls, tabular numbers, mono table headers, nav marker, motion | `src/klimper.css`, scoped to `html.theme-light` / `.theme-dark`                                            |
+| Default theme, set once per install by system appearance (`klimper-theme-seeded-v2`), `data-app="klimper"`               | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                                                |
 | Logo                                                                                                                     | `src/icon-dark.png`, `src/icon-light.png`; app icons generated from it with `pnpm tauri icon` on `#F2ECE5` |
 
 Mapping onto the shadcn roles: `primary` is wine, `background` canvas, `card` and `popover`
@@ -179,5 +181,4 @@ Deliberate departures:
 
 Not done yet (TASK-004, TASK-008): coral-red and brass have no place in the current screens
 because giving them one means editing shared components (send button, balance), which needs
-hiding points upstream first; the onboarding illustration; hiding Sage's own themes from the
-quick theme picker in Settings.
+hiding points upstream first; the onboarding illustration.

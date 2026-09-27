@@ -1,10 +1,9 @@
 {
-  "name": "klimper-light",
+  "name": "light",
   "displayName": "Klimper Light",
   "schemaVersion": 1,
   "inherits": "light",
   "mostLike": "light",
-  "tags": ["featured"],
   "colors": {
     "themeColor": "#F2ECE5",
     "background": "#F2ECE5",

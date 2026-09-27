@@ -1,10 +1,9 @@
 {
-  "name": "klimper-dark",
+  "name": "dark",
   "displayName": "Klimper Dark",
   "schemaVersion": 1,
   "inherits": "dark",
   "mostLike": "dark",
-  "tags": ["featured"],
   "colors": {
     "themeColor": "#171318",
     "background": "#171318",

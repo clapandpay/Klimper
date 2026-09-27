@@ -4,11 +4,12 @@
  *
  * Beidwerk UI v2 for Klimper (docs/design-guide.md). The colours, radii and button looks live in
  * src/themes/klimper-{light,dark}/theme.json; this file holds what a theme.json cannot say.
- * Every rule is scoped to the two Klimper themes, so choosing a Sage theme gives Sage unchanged,
+ * The Klimper themes are named "light" and "dark", so they replace Sage's core themes of the same
+ * name; every rule is scoped to them, so any other Sage theme (Colorful, XCH, …) stays unchanged,
  * and no shared component is edited.
  */
 
-:root.theme-klimper-light {
+:root.theme-light {
   --canvas: #f2ece5;
   --surface: #fcf8f2;
   --ink: #1b1a1e;
@@ -21,7 +22,7 @@
   --hairline: #cdc1b7;
 }
 
-:root.theme-klimper-dark {
+:root.theme-dark {
   --canvas: #171318;
   --surface: #231c22;
   --ink: #f3eae1;
@@ -34,7 +35,7 @@
   --hairline: color-mix(in srgb, #f3eae1 20%, #171318);
 }
 
-:root:is(.theme-klimper-light, .theme-klimper-dark) {
+:root:is(.theme-light, .theme-dark) {
   /* As text on the dark canvas the guide's wine reaches 2.86:1, so the dark theme uses a lighter
      wine (#c26a80) for primary text, markers and the focus ring; the button fill stays #9b4059. */
 
@@ -55,12 +56,12 @@
 }
 
 /* Typography: heavy grotesk titles with tight tracking, mono uppercase section labels. */
-:root:is(.theme-klimper-light, .theme-klimper-dark) :is(h1, h2) {
+:root:is(.theme-light, .theme-dark) :is(h1, h2) {
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-:root:is(.theme-klimper-light, .theme-klimper-dark) thead th {
+:root:is(.theme-light, .theme-dark) thead th {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 500;
@@ -68,30 +69,30 @@
   text-transform: uppercase;
 }
 
-:root:is(.theme-klimper-light, .theme-klimper-dark) ::selection {
+:root:is(.theme-light, .theme-dark) ::selection {
   background: color-mix(in srgb, var(--wine) 24%, transparent);
 }
 
 /* Navigation */
-:root:is(.theme-klimper-light, .theme-klimper-dark) nav a[aria-current='page'] {
+:root:is(.theme-light, .theme-dark) nav a[aria-current='page'] {
   box-shadow: inset 2px 0 0 var(--primary);
   font-weight: 600;
 }
 
 /* Cards: flat, ruled, 12px. */
-:root:is(.theme-klimper-light, .theme-klimper-dark) .bg-card.shadow-card {
+:root:is(.theme-light, .theme-dark) .bg-card.shadow-card {
   border: 1px solid var(--border);
 }
 
 /* Focus: a 2px ring in the identity colour, offset from the control. */
-:root:is(.theme-klimper-light, .theme-klimper-dark) :focus-visible {
+:root:is(.theme-light, .theme-dark) :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   --tw-ring-shadow: 0 0 #0000;
 }
 
 /* Controls: 44px touch targets for text inputs and full-size buttons (not icon or small ones). */
-:root:is(.theme-klimper-light, .theme-klimper-dark)
+:root:is(.theme-light, .theme-dark)
   :is(
     input.h-9,
     button[role='combobox'].h-9,
@@ -100,12 +101,12 @@
   min-height: 44px;
 }
 
-:root:is(.theme-klimper-light, .theme-klimper-dark) .btn-variant-default {
+:root:is(.theme-light, .theme-dark) .btn-variant-default {
   font-weight: 700;
 }
 
 /* Motion: 160–240ms for common transitions, and none when the system asks for less. */
-:root:is(.theme-klimper-light, .theme-klimper-dark)
+:root:is(.theme-light, .theme-dark)
   :is(
     .transition,
     .transition-all,
@@ -118,9 +119,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root:is(.theme-klimper-light, .theme-klimper-dark) *,
-  :root:is(.theme-klimper-light, .theme-klimper-dark) *::before,
-  :root:is(.theme-klimper-light, .theme-klimper-dark) *::after {
+  :root:is(.theme-light, .theme-dark) *,
+  :root:is(.theme-light, .theme-dark) *::before,
+  :root:is(.theme-light, .theme-dark) *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
