@@ -161,7 +161,7 @@ the _Look_ table in `UPSTREAM.md`).
 | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | Colours, radii, shadows, buttons, tables, switches                                                                       | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json`                                |
 | Guide tokens (`--wine`, `--brass` …), focus ring, 44px controls, tabular numbers, mono table headers, nav marker, motion | `src/klimper.css`, scoped to `html.theme-klimper-light` / `.theme-klimper-dark`                            |
-| First-launch default (by system appearance), `data-app="klimper"`                                                        | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                                                |
+| Default theme, set once per install by system appearance (`klimper-theme-seeded-v1`), `data-app="klimper"`               | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                                                |
 | Logo                                                                                                                     | `src/icon-dark.png`, `src/icon-light.png`; app icons generated from it with `pnpm tauri icon` on `#F2ECE5` |
 
 Mapping onto the shadcn roles: `primary` is wine, `background` canvas, `card` and `popover`
