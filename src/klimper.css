@@ -1,0 +1,129 @@
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright 2026 the Klimper authors
+ *
+ * Beidwerk UI v2 for Klimper (docs/design-guide.md). The colours, radii and button looks live in
+ * src/themes/klimper-{light,dark}/theme.json; this file holds what a theme.json cannot say.
+ * Every rule is scoped to the two Klimper themes, so choosing a Sage theme gives Sage unchanged,
+ * and no shared component is edited.
+ */
+
+:root.theme-klimper-light {
+  --canvas: #f2ece5;
+  --surface: #fcf8f2;
+  --ink: #1b1a1e;
+  --graphite: #5b565d;
+  --wine: #7f3147;
+  --coral-red: #b95445;
+  --brass: #b38a3d;
+  --denim: #416179;
+  --stone: #847a74;
+  --hairline: #cdc1b7;
+}
+
+:root.theme-klimper-dark {
+  --canvas: #171318;
+  --surface: #231c22;
+  --ink: #f3eae1;
+  --graphite: #b3a9a4;
+  --wine: #9b4059;
+  --coral-red: #c26452;
+  --brass: #c9a35a;
+  --denim: #6f8fa8;
+  --stone: #847a74;
+  --hairline: color-mix(in srgb, #f3eae1 20%, #171318);
+}
+
+:root:is(.theme-klimper-light, .theme-klimper-dark) {
+  /* As text on the dark canvas the guide's wine reaches 2.86:1, so the dark theme uses a lighter
+     wine (#c26a80) for primary text, markers and the focus ring; the button fill stays #9b4059. */
+
+  /* Guide aliases, for Klimper screens and in-app pages that follow the guide. */
+  --bg: var(--canvas);
+  --text: var(--ink);
+  --text-muted: var(--graphite);
+  --accent-identity: var(--wine);
+  --accent-action: var(--coral-red);
+  --accent-highlight: var(--brass);
+
+  /* Active navigation: a tinted field and a narrow marker, not a coloured pill. */
+  --nav-active-background: color-mix(in srgb, var(--wine) 9%, transparent);
+
+  background-color: var(--canvas);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography: heavy grotesk titles with tight tracking, mono uppercase section labels. */
+:root:is(.theme-klimper-light, .theme-klimper-dark) :is(h1, h2) {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+:root:is(.theme-klimper-light, .theme-klimper-dark) thead th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root:is(.theme-klimper-light, .theme-klimper-dark) ::selection {
+  background: color-mix(in srgb, var(--wine) 24%, transparent);
+}
+
+/* Navigation */
+:root:is(.theme-klimper-light, .theme-klimper-dark) nav a[aria-current='page'] {
+  box-shadow: inset 2px 0 0 var(--primary);
+  font-weight: 600;
+}
+
+/* Cards: flat, ruled, 12px. */
+:root:is(.theme-klimper-light, .theme-klimper-dark) .bg-card.shadow-card {
+  border: 1px solid var(--border);
+}
+
+/* Focus: a 2px ring in the identity colour, offset from the control. */
+:root:is(.theme-klimper-light, .theme-klimper-dark) :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  --tw-ring-shadow: 0 0 #0000;
+}
+
+/* Controls: 44px touch targets for text inputs and full-size buttons (not icon or small ones). */
+:root:is(.theme-klimper-light, .theme-klimper-dark)
+  :is(
+    input.h-9,
+    button[role='combobox'].h-9,
+    [class*='btn-variant-']:is(.h-9, .h-10):not(.w-9)
+  ) {
+  min-height: 44px;
+}
+
+:root:is(.theme-klimper-light, .theme-klimper-dark) .btn-variant-default {
+  font-weight: 700;
+}
+
+/* Motion: 160–240ms for common transitions, and none when the system asks for less. */
+:root:is(.theme-klimper-light, .theme-klimper-dark)
+  :is(
+    .transition,
+    .transition-all,
+    .transition-colors,
+    .transition-opacity,
+    .transition-transform
+  ) {
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:is(.theme-klimper-light, .theme-klimper-dark) *,
+  :root:is(.theme-klimper-light, .theme-klimper-dark) *::before,
+  :root:is(.theme-klimper-light, .theme-klimper-dark) *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

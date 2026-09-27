@@ -1,0 +1,107 @@
+{
+  "name": "klimper-dark",
+  "displayName": "Klimper Dark",
+  "schemaVersion": 1,
+  "inherits": "dark",
+  "mostLike": "dark",
+  "tags": ["featured"],
+  "colors": {
+    "themeColor": "#171318",
+    "background": "#171318",
+    "foreground": "#F3EAE1",
+    "card": "#231C22",
+    "cardForeground": "#F3EAE1",
+    "popover": "#231C22",
+    "popoverForeground": "#F3EAE1",
+    "primary": "#C26A80",
+    "primaryForeground": "#171318",
+    "secondary": "#231C22",
+    "secondaryForeground": "#F3EAE1",
+    "muted": "#2C242B",
+    "mutedForeground": "#B3A9A4",
+    "accent": "#33262E",
+    "accentForeground": "#F3EAE1",
+    "destructive": "#C9473C",
+    "destructiveForeground": "#FFFAF2",
+    "border": "#40393D",
+    "input": "#40393D",
+    "inputBackground": "#1D171C",
+    "ring": "#C26A80"
+  },
+  "fonts": {
+    "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
+    "heading": "Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
+    "body": "Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
+    "mono": "'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+  },
+  "corners": {
+    "none": "0px",
+    "sm": "0.25rem",
+    "md": "0.625rem",
+    "lg": "0.75rem",
+    "xl": "0.875rem",
+    "full": "9999px"
+  },
+  "shadows": {
+    "sm": "0 1px 2px rgb(0 0 0 / 0.2)",
+    "card": "0 8px 24px rgb(0 0 0 / 0.25)",
+    "button": "none",
+    "dropdown": "0 12px 32px rgb(0 0 0 / 0.4)"
+  },
+  "sidebar": {
+    "background": "#171318",
+    "border": "1px solid #40393D"
+  },
+  "tables": {
+    "background": "#231C22",
+    "border": "1px solid #40393D",
+    "header": {
+      "background": "transparent",
+      "color": "#B3A9A4",
+      "border": "1px solid #F3EAE1"
+    },
+    "row": {
+      "background": "transparent",
+      "color": "#F3EAE1",
+      "border": "1px solid #40393D",
+      "hover": { "background": "#2A2229" },
+      "selected": { "background": "#33262E", "color": "#F3EAE1" }
+    }
+  },
+  "buttons": {
+    "default": {
+      "background": "#9B4059",
+      "color": "#FFFAF2",
+      "border": "1px solid #7F3449",
+      "borderRadius": "10px",
+      "boxShadow": "none",
+      "hover": { "background": "#8A3950", "boxShadow": "none" },
+      "active": { "background": "#7A3246", "boxShadow": "none" }
+    },
+    "outline": {
+      "background": "#231C22",
+      "color": "#F3EAE1",
+      "border": "1px solid #40393D",
+      "borderRadius": "10px",
+      "boxShadow": "none",
+      "hover": {
+        "background": "#2A2229",
+        "color": "#F3EAE1",
+        "borderColor": "#847A74",
+        "boxShadow": "none"
+      }
+    },
+    "secondary": {
+      "background": "#231C22",
+      "color": "#F3EAE1",
+      "border": "1px solid #40393D",
+      "borderRadius": "10px",
+      "boxShadow": "none",
+      "hover": { "background": "#2A2229", "boxShadow": "none" }
+    }
+  },
+  "switches": {
+    "checked": { "background": "#9B4059", "thumbColor": "#FFFAF2" },
+    "unchecked": { "background": "#40393D", "thumbColor": "#F3EAE1" }
+  }
+}
