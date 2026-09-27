@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 the Klimper authors
 //
-// Klimper's look: the Beidwerk UI v2 themes in src/themes/klimper-{light,dark} (named light and dark) and the rules in
+// Klimper's look (Klimper Coin): the themes in src/themes/klimper-{light,dark} (named light and dark) and the rules in
 // src/klimper.css that a theme.json cannot express (docs/design-guide.md is the source of truth).
 // Imported once from App.tsx, before theme-o-rama's ThemeProvider reads localStorage.
 import '../klimper.css';

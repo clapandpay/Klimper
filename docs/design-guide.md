@@ -1,184 +1,117 @@
-# Klimper design guide: Beidwerk UI v2
+# Klimper design guide: Klimper Coin
 
 The visual source of truth for the wallet. Where a screen and this file disagree, this file wins.
 How it is wired into the code is at the end ([In this repository](#in-this-repository)).
 
 - **Domain:** shared expenses, group money.
-- **Character:** social finance with confidence. Ink, wine, coral-red and brass. Friendly, but
-  not candy-coloured.
-- **Primary identity hue:** Wine.
+- **Character:** bright, modern and warm; money that moves. The colours and shapes come from the
+  logo: a bird flying out of a red-orange sun, with teal and red coins in its trail.
+- **It must not look like Sage.** The wallet engine is Sage's; the face is ours.
 
-## 1. Beidwerk relationship
+## History
 
-Klimper inherits the shared Beidwerk language: warm and cool material neutrals, black editorial
-hierarchy, ruled layout, restrained print texture, orbital or architectural motifs and purposeful
-motion traces. It must not look pastel, neon, or like a literal Bauhaus exercise.
+The first draft was _Beidwerk UI v2_ (ink, wine, coral-red and brass on warm paper; ruled and
+restrained). In the app it still read as Sage with a warmer paint, so the owner asked for a
+brighter, more colourful direction built on the coin and the logo (2026-09-27). Beidwerk's
+structure stays: neutral work surfaces, one strong anchor per screen, a restrained type system,
+purposeful motion. The Beidwerk text is in the git history of this file.
 
-## 2. Colour palette
+## 1. Colour
 
-| Role      | Hex       | Use                 |
-| --------- | --------- | ------------------- |
-| Canvas    | `#F2ECE5` | Warm paper          |
-| Surface   | `#FCF8F2` | Surface             |
-| Ink       | `#1B1A1E` | Text                |
-| Graphite  | `#5B565D` | Muted text          |
-| Wine      | `#7F3147` | Primary             |
-| Coral red | `#B95445` | Payment / action    |
-| Brass     | `#B38A3D` | Balance / highlight |
-| Denim     | `#416179` | Secondary           |
-| Stone     | `#847A74` | Neutral             |
-| Hairline  | `#CDC1B7` | Borders             |
+| Role        | Light                 | Dark      | Use                                                    |
+| ----------- | --------------------- | --------- | ------------------------------------------------------ |
+| Canvas      | `#FFF7EC`             | `#0F1014` | page background, cream paper                           |
+| Surface     | `#FFFFFF`             | `#1A1C22` | cards, dialogs, inputs                                 |
+| Ink         | `#111217`             | `#FFF4E6` | text; the sidebar is ink in both themes                |
+| Muted       | `#5C606B`             | `#A8ACB5` | secondary text                                         |
+| Hairline    | `#EFDCC4`             | `#2C2F37` | borders                                                |
+| Sun         | `#FF3B1F` → `#FF9A1F` | same      | the gradient: primary action, coins, the total balance |
+| Sun red     | `#FF3B1F`             | same      | small marks only (dots, badges)                        |
+| Sun orange  | `#FF7A1F`             | same      | active navigation, hover edges                         |
+| Sun yellow  | `#FFC21A`             | same      | rims and highlights                                    |
+| Teal        | `#0F7C87`             | `#3FC1CC` | second action (Receive), secondary buttons, focus ring |
+| Primary     | `#C73515`             | `#FF6A3D` | text links and `text-primary`, readable on the canvas  |
+| Destructive | `#B42318`             | `#F04438` | functional only, never branding                        |
 
-Colour behaviour:
+Rules:
 
-- The primary hue is for the call to action, active navigation, focus emphasis and the first
-  chart or data series.
-- The secondary hue appears only where it adds domain meaning or visual separation.
-- Large surfaces stay neutral. Never flood a whole screen with the accent.
-- Material colours (steel, brass, copper, stone, concrete) are secondary identity cues.
-- Semantic danger and warning colours are functional, not branding.
+- **The sun is the one loud thing.** Use it for the primary action, coins and one anchor per
+  screen (on the assets screen, the total balance band). Never as a page or card background.
+- **Text on the sun is ink, not white.** White on orange fails contrast; ink holds it across the
+  whole gradient.
+- **Teal is the counterweight:** the second action next to a sun button, secondary buttons, focus.
+- Work surfaces stay white or graphite. Colour lives in actions, coins and the backdrop.
+- No neon, no purple, no startup blue, no rainbow charts. Charts: sun first, teal second, then
+  muted greys.
 
-## 3. CSS tokens
+## 2. The coin
 
-```css
-:root[data-app='klimper'] {
-  --canvas: #f2ece5;
-  --surface: #fcf8f2;
-  --ink: #1b1a1e;
-  --graphite: #5b565d;
-  --wine: #7f3147;
-  --coral-red: #b95445;
-  --brass: #b38a3d;
-  --denim: #416179;
-  --stone: #847a74;
-  --hairline: #cdc1b7;
+The coin is Klimper's shape.
 
-  --bg: var(--canvas);
-  --text: var(--ink);
-  --text-muted: var(--graphite);
-  --border: var(--hairline);
-}
+- An asset without its own icon is a **sun coin**: a circle filled with the sun gradient, an ink
+  glyph, a light inner rim. An asset with an icon is round with a sun-yellow rim.
+- Icon buttons are circles; buttons are pills; cards are rounded tiles (20px).
+- The backdrop is the logo's motion: a sun rising from the bottom-right corner and a trail of two
+  coins and three streaks. It sits in the corner of the canvas, behind the content, never behind a
+  form or a table. On a phone it shrinks into the corner.
 
-[data-app='klimper'][data-theme='dark'] {
-  --bg: #171318;
-  --surface: #231c22;
-  --text: #f3eae1;
-  --accent: #9b4059;
-  --accent-secondary: #c26452;
-  --border: color-mix(in srgb, #f3eae1 20%, #171318);
-}
-```
+## 3. Components
 
-## 4. Component language
+- **Sidebar:** ink, in both themes. The active item is a tinted field with an orange icon.
+- **Cards:** white (graphite in dark), 1px hairline, 20px radius, a warm glow; linked cards lift by
+  2px on hover.
+- **Primary button:** a pill filled with the sun, ink text, 700 weight, a soft sun shadow. No other
+  gradient anywhere.
+- **Secondary button:** a teal pill with white text.
+- **Outline button:** a white pill with a hairline that turns orange on hover.
+- **Inputs:** at least 44px high, white, hairline border, teal focus ring.
+- **Tables:** mono uppercase column labels in muted grey, thin row rules.
+- **Money:** balances in the display face, heavy, tabular figures.
 
-- **Navigation:** mostly neutral. The active item gets a narrow accent marker, a tinted field or
-  strong text, never a big coloured pill.
-- **Cards:** flat or lightly raised, 1px ruled borders, 10–14px radius.
-- **Primary button:** solid identity colour with white or near-white text. No gradient.
-- **Secondary button:** neutral surface, ink text, border.
-- **Inputs:** at least 44px high, a clear focus ring in the identity colour, neutral at rest.
-- **Tables:** strong typographic hierarchy, thin row rules, restrained zebra striping if needed.
-- **Charts:** identity colour first, secondary colour second, then graphite and steel neutrals.
-  No rainbow series.
+## 4. Type
 
-```css
-[data-app='klimper'] .button-primary {
-  background: var(--accent, var(--wine));
-  color: #fffaf2;
-  border: 1px solid color-mix(in srgb, currentColor 0%, black 18%);
-  border-radius: 10px;
-  min-height: 44px;
-  padding: 0 16px;
-  font-weight: 700;
-}
+- **Display** (titles, balances): rounded grotesk, 800 weight, −0.03em tracking. `ui-rounded` (SF
+  Pro Rounded on Apple), then Nunito, then Inter.
+- **Body:** Inter or the system sans, sentence case.
+- **Labels:** small mono uppercase (JetBrains Mono, SF Mono).
+- Numbers: tabular figures everywhere.
+- 8px spacing rhythm.
 
-[data-app='klimper'] .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgb(20 24 27 / 0.06);
-}
+## 5. Motion
 
-[data-app='klimper'] :focus-visible {
-  outline: 2px solid var(--accent, var(--wine));
-  outline-offset: 2px;
-}
-```
+- 160–240ms for common transitions (the stylesheet uses 200ms with a soft ease-out).
+- Movement explains: a card lifts when it can be opened, a button settles when pressed.
+- No looping, pulsing or glowing in work areas. `prefers-reduced-motion` turns transitions off.
 
-## 5. Typography and layout
+## 6. Avoid
 
-- Page title: heavy grotesk, tight tracking, one to three lines at most.
-- Section labels: small mono or condensed uppercase.
-- Body: ordinary sentence case.
-- Numbers: tabular figures.
-- An 8px spacing rhythm.
-- Desktop layouts may be asymmetric, but functional alignment stays exact.
-- One strong visual anchor per page rather than many decorative fragments.
-
-## 6. Illustration and brand moments
-
-Beidwerk shows through print grain, dither, technical linework, cropped circles and arcs,
-bridge, planet and material imagery, and controlled collage. Use it in onboarding, empty states,
-campaign panels and major section transitions. No heavy texture behind forms or transaction
-data.
-
-## 7. Motion
-
-- 160–240ms for common UI transitions.
-- Movement explains a change of state, a flow or a completion.
-- No continuous pulsing, glowing or decorative looping in work areas.
-- Respect `prefers-reduced-motion`.
-
-## 8. Avoid
-
-- pastel-first UI
-- neon cyan and purple gradients
-- generic startup blue everywhere
-- glassmorphism
-- primary red, blue or yellow as large default surfaces
-- rainbow charts
-- over-rounded "bubble" components
-- poster texture over dense controls
-
-## 9. Brief for agents
-
-> Redesign Klimper using the Beidwerk UI v2 system. Keep the existing UX and information
-> architecture unless a change is required for usability. Use the palette and CSS tokens in this
-> file as the visual source of truth. The interface should feel editorial, material, technical and
-> distinctive, but still production-grade. Keep most surfaces neutral, use Wine as the dominant
-> interaction and identity colour, and use supporting colours only for clear data or semantic
-> roles. Avoid pastel, neon, glassmorphism and generic SaaS gradients. Apply Beidwerk character
-> through typography, ruled composition, asymmetry, print and material accents and restrained
-> motion rather than through excessive decoration.
+- anything that makes it look like Sage again: grey sidebars, black primary buttons, square tiles
+- white text on the sun
+- the sun as a large surface behind content
+- glassmorphism, neon, purple gradients, rainbow charts
+- decoration behind forms, tables or transaction data
 
 ## In this repository
 
 Sage styles everything through [theme-o-rama](https://www.npmjs.com/package/theme-o-rama)
-themes, so the guide is two themes plus one stylesheet, and no shared component is edited (see
+themes, so the design is two themes plus one stylesheet, and no shared component is edited (see
 the _Look_ table in `UPSTREAM.md`). The two themes are named `light` and `dark` and so replace
 Sage's core Light and Dark: every install, and the quick picker in Settings, gets Klimper by
 default. Sage's other themes remain selectable and are untouched by `klimper.css`.
 
-| What                                                                                                                     | Where                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Colours, radii, shadows, buttons, tables, switches                                                                       | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json`                                |
-| Guide tokens (`--wine`, `--brass` …), focus ring, 44px controls, tabular numbers, mono table headers, nav marker, motion | `src/klimper.css`, scoped to `html.theme-light` / `.theme-dark`                                            |
-| Default theme, set once per install by system appearance (`klimper-theme-seeded-v2`), `data-app="klimper"`               | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                                                |
-| Logo                                                                                                                     | `src/icon-dark.png`, `src/icon-light.png`; app icons generated from it with `pnpm tauri icon` on `#F2ECE5` |
+| What                                                                             | Where                                                                       |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Colours, radii, shadows, fonts, tables, switches, the backdrop (inline SVG)      | `src/themes/klimper-light/theme.json`, `src/themes/klimper-dark/theme.json` |
+| Sidebar, buttons, coins, total band, Send/Receive, focus, 44px controls, motion  | `src/klimper.css`, scoped to `html.theme-light` / `.theme-dark`             |
+| Default theme, once per install by system appearance (`klimper-theme-seeded-v2`) | `src/lib/klimperTheme.ts`, imported once from `src/App.tsx`                 |
+| Logo                                                                             | `src/icon-{dark,light}.png`; app icons from `src-tauri/icons/source-*.png`  |
 
-Mapping onto the shadcn roles: `primary` is wine, `background` canvas, `card` and `popover`
-surface, `border` and `input` hairline, `muted-foreground` graphite, `ring` wine, `destructive`
-a deeper red than coral so danger and payment never look alike.
+`klimper.css` finds Sage's elements by structure and by Sage's own class hooks (`btn-variant-*`,
+`bg-card`, `shadow-card`), never by translated text. Three rules depend on a particular upstream
+layout and are the first to check after an upstream merge: the sidebar
+(`[style*='--sidebar-background']`), the total balance band (`.mt-6.pt-4.border-t` on the assets
+screen) and Send/Receive (the first two outline buttons in the token card's action row).
 
-Deliberate departures:
-
-- **Dark primary text.** The guide's dark accent `#9B4059` reaches only 2.86:1 as text on
-  `#171318`, below WCAG AA. Klimper Dark therefore uses `#C26A80` for `primary` (links, the nav
-  marker, the focus ring) and keeps `#9B4059` as the primary button fill, where white text on it
-  is 6.2:1.
-- **Typeface.** No grotesk is bundled yet; titles use Inter or the system grotesk (SF Pro on
-  Apple) at weight 800 with −0.02em tracking. Bundling a typeface is TASK-004.
-
-Not done yet (TASK-004, TASK-008): coral-red and brass have no place in the current screens
-because giving them one means editing shared components (send button, balance), which needs
-hiding points upstream first; the onboarding illustration.
+Not done yet (TASK-004, TASK-008): a bundled display typeface (the rounded face is the system's
+where it has one); the onboarding illustration; a Klimper home screen of our own, which needs a
+screen rather than more CSS.
