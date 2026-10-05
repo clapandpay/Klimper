@@ -16,11 +16,15 @@ i18n.loadAndActivate({ locale: 'en-US', messages: {} });
 
 export function renderScreen(
   screen: ReactNode,
-  { path = '/', route = '/' }: { path?: string; route?: string } = {},
+  {
+    path = '/',
+    route = '/',
+    state = null,
+  }: { path?: string; route?: string; state?: unknown } = {},
 ): RenderResult {
   return render(
     <I18nProvider i18n={i18n}>
-      <MemoryRouter initialEntries={[route]}>
+      <MemoryRouter initialEntries={[{ pathname: route, state }]}>
         <Routes>
           <Route path={path} element={screen} />
           <Route path='*' element={<div data-testid='elsewhere' />} />

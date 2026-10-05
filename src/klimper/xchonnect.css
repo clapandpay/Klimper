@@ -12,6 +12,12 @@
   box-shadow: 0 18px 40px -18px rgb(17 18 23 / 0.45);
 }
 
+.xc-viewfinder-idle {
+  background: color-mix(in srgb, var(--muted-foreground) 8%, var(--card));
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
 .xc-corner {
   position: absolute;
   width: 2.25rem;

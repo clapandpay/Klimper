@@ -9,6 +9,7 @@
 
 import Container from '@/components/Container';
 import Header from '@/components/Header';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -19,14 +20,26 @@ import {
 } from '@/components/ui/card';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { AlertTriangle, Plus, Settings2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Plus,
+  Settings2,
+  Wallet,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
 import { useXchonnectSessions } from './useXchonnectSessions';
+import { Fact, LivePill, SiteCoin } from './XchonnectUi';
+
+/** Route state the connect screen leaves behind: the connection it just made. */
+export interface DappsState {
+  connected?: string;
+}
 
 function limitCount(session: SessionSummary): number {
   return Object.values(session.limits).filter(
@@ -37,9 +50,11 @@ function limitCount(session: SessionSummary): number {
 
 function Dapp({
   session,
+  fresh,
   onEnd,
 }: {
   readonly session: SessionSummary;
+  readonly fresh: boolean;
   readonly onEnd: (id: string) => void;
 }) {
   const navigate = useNavigate();
@@ -47,17 +62,21 @@ function Dapp({
   const connected = new Date(session.createdAt * 1000).toLocaleDateString();
   const epoch = session.epoch;
   return (
-    <Card data-testid='dapp-card'>
+    <Card data-testid='dapp-card' className={fresh ? 'xc-fresh' : undefined}>
       <CardHeader>
-        <CardTitle className='text-base'>
-          <XchonnectDomain
-            identity={identityOfSession(session)}
-            size='inline'
-            showName
-          />
-        </CardTitle>
+        <div className='flex items-start gap-3'>
+          <SiteCoin domain={session.domainUnicode} />
+          <CardTitle className='min-w-0 flex-1 text-base'>
+            <XchonnectDomain
+              identity={identityOfSession(session)}
+              size='inline'
+              showName
+            />
+          </CardTitle>
+          <LivePill live={session.connected} />
+        </div>
       </CardHeader>
-      <CardContent className='space-y-3 text-sm'>
+      <CardContent className='space-y-4 text-sm'>
         {session.needsRepair && (
           <div
             className='rounded-lg border border-destructive p-3 text-destructive'
@@ -115,52 +134,29 @@ function Dapp({
           </div>
         )}
 
-        <dl className='grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-muted-foreground'>
-          <dt>
-            <Trans>Connected</Trans>
-          </dt>
-          <dd className='text-foreground'>{connected}</dd>
-          <dt>
-            <Trans>Network</Trans>
-          </dt>
-          <dd className='text-foreground'>{session.chainId}</dd>
-          <dt>
-            <Trans>May call</Trans>
-          </dt>
-          <dd className='text-foreground break-all'>
-            {session.methods.join(', ')}
-          </dd>
-          <dt>
-            <Trans>Limits</Trans>
-          </dt>
-          <dd className='text-foreground'>
+        <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-3'>
+          <Fact label={<Trans>Connected</Trans>}>{connected}</Fact>
+          <Fact label={<Trans>Network</Trans>}>{session.chainId}</Fact>
+          <Fact label={<Trans>Limits</Trans>}>
             {limits === 0 ? (
               <Trans>none set</Trans>
             ) : (
               <Trans>{limits} set</Trans>
             )}
-          </dd>
-          <dt>
-            <Trans>Connection keys</Trans>
-          </dt>
-          <dd className='text-foreground'>
-            {/*
-              Rotation is driven by the dApp and accepted automatically by the session
-              loop; the epoch is how the user sees it happen. A user-initiated rotation
-              needs a plugin command that does not exist yet (TASK-084 AC #3).
-            */}
+          </Fact>
+          <div className='sm:col-span-2'>
+            <Fact label={<Trans>May call</Trans>}>
+              {session.methods.join(', ')}
+            </Fact>
+          </div>
+          {/*
+            Rotation is driven by the dApp and accepted automatically by the session
+            loop; the epoch is how the user sees it happen. A user-initiated rotation
+            needs a plugin command that does not exist yet (TASK-084 AC #3).
+          */}
+          <Fact label={<Trans>Connection keys</Trans>}>
             <Trans>renewed {epoch} times</Trans>
-          </dd>
-          <dt>
-            <Trans>Right now</Trans>
-          </dt>
-          <dd className='text-foreground'>
-            {session.connected ? (
-              <Trans>listening for requests</Trans>
-            ) : (
-              <Trans>not listening</Trans>
-            )}
-          </dd>
+          </Fact>
         </dl>
 
         <div className='flex flex-wrap gap-2'>
@@ -189,6 +185,8 @@ function Dapp({
 
 export default function XchonnectDapps() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const justConnected = (location.state as DappsState | null)?.connected;
   const { status, sessions, loading, error, refresh } = useXchonnectSessions();
   const { approvals } = useXchonnectApprovals();
   const [problem, setProblem] = useState<string | null>(null);
@@ -204,9 +202,11 @@ export default function XchonnectDapps() {
 
   const keyringService = status?.keyringService ?? '';
   const waiting = approvals.length;
+  const fresh = sessions.find((session) => session.sessionId === justConnected);
+  const freshDomain = fresh?.domainUnicode ?? '';
 
   return (
-    <>
+    <Layout>
       <Header title={t`Connected websites`}>
         <Button size='sm' onClick={() => navigate(XCHONNECT_ROUTES.connect)}>
           <Plus className='h-4 w-4 mr-2' aria-hidden='true' />
@@ -214,6 +214,30 @@ export default function XchonnectDapps() {
         </Button>
       </Header>
       <Container className='max-w-2xl space-y-4'>
+        {fresh !== undefined && (
+          <Card className='xc-fresh' data-testid='connected-banner'>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2 text-lg'>
+                <CheckCircle2 className='h-5 w-5' aria-hidden='true' />
+                <Trans>Connected to {freshDomain}</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  Go back to the website and carry on there. When it asks for
+                  something, Klimper shows you the request. Your wallet works as
+                  usual in the meantime.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => navigate('/wallet')}>
+                <Wallet className='h-4 w-4 mr-2' aria-hidden='true' />
+                <Trans>Back to my wallet</Trans>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {waiting > 0 && (
           <Card className='border-primary' data-testid='waiting-banner'>
             <CardHeader>
@@ -265,6 +289,7 @@ export default function XchonnectDapps() {
           <Dapp
             key={session.sessionId}
             session={session}
+            fresh={session.sessionId === justConnected}
             onEnd={(id) => void end(id)}
           />
         ))}
@@ -287,6 +312,6 @@ export default function XchonnectDapps() {
           </p>
         )}
       </Container>
-    </>
+    </Layout>
   );
 }

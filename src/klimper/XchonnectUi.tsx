@@ -81,6 +81,8 @@ export function SasDigits({ sas }: { readonly sas: string }) {
   const group = (part: string[], offset: number) => (
     <span className='flex gap-1.5' aria-hidden='true'>
       {part.map((digit, index) => (
+        // A digit's place is its identity: the six never reorder.
+        // eslint-disable-next-line react/no-array-index-key
         <span key={offset + index} className='xc-sas-digit'>
           {digit}
         </span>
@@ -127,7 +129,11 @@ export function LivePill({ live }: { readonly live: boolean }) {
   return (
     <span className='xc-pill' data-live={live}>
       <span className='xc-pill-dot' aria-hidden='true' />
-      {live ? <Trans>listening for requests</Trans> : <Trans>not listening</Trans>}
+      {live ? (
+        <Trans>listening for requests</Trans>
+      ) : (
+        <Trans>not listening</Trans>
+      )}
     </span>
   );
 }

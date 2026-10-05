@@ -13,7 +13,7 @@
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import jsQR from 'jsqr';
-import { CameraOff } from 'lucide-react';
+import { CameraOff, QrCode } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 /** Longest edge a frame is scaled to before decoding: enough for a QR on a screen. */
@@ -171,6 +171,22 @@ export function QrCameraOff({ message }: { readonly message: string }) {
     <div className='xc-viewfinder relative mx-auto flex aspect-square w-full max-w-[18rem] flex-col items-center justify-center gap-3 rounded-[1.25rem] border border-dashed border-border p-6 text-center text-sm text-muted-foreground'>
       <CameraOff className='h-6 w-6' aria-hidden='true' />
       <span>{message}</span>
+    </div>
+  );
+}
+
+/** The viewfinder before the camera is opened: where the code will go. */
+export function QrCameraIdle() {
+  return (
+    <div
+      className='xc-viewfinder xc-viewfinder-idle relative mx-auto flex aspect-square w-full max-w-[18rem] items-center justify-center rounded-[1.25rem]'
+      aria-hidden='true'
+    >
+      <span className='xc-corner xc-corner-tl' />
+      <span className='xc-corner xc-corner-tr' />
+      <span className='xc-corner xc-corner-bl' />
+      <span className='xc-corner xc-corner-br' />
+      <QrCode className='h-20 w-20 text-muted-foreground opacity-60' />
     </div>
   );
 }
