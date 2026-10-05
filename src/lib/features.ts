@@ -28,3 +28,6 @@ export const clapAndPayOrigin =
 // in, but it only does anything once a screen calls it.
 export const xchonnectEnabled =
   import.meta.env.VITE_ENABLE_XCHONNECT === 'true';
+// On by default: the Scan tab (src/klimper/Scanner.tsx), one camera for every code — a
+// website's Xchonnect code, an offer, an address. `VITE_DISABLE_SCAN=true` turns it off.
+export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';

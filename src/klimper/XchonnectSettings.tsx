@@ -5,8 +5,8 @@
 // returns `null` when the feature is off, so `Settings.tsx` — shared with upstream Sage —
 // carries one element and no condition.
 //
-// Settings is where this belongs rather than the navigation bar: connecting a website is
-// something a user does a handful of times, and the request that matters comes to them.
+// The navigation has the quicker ways in, Scan and Websites (`KlimperNavLinks.tsx`); this
+// block stays so the settings screen still answers "which websites can reach my wallet".
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
