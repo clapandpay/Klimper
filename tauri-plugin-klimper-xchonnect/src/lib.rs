@@ -291,7 +291,7 @@ async fn inspect_pairing_uri<R: Runtime>(
         developer_mode_allowed(),
         snapshot.fingerprint,
         snapshot.network.chain_id().to_owned(),
-        snapshot.newest_key,
+        snapshot.receive_keys,
     )
     .await?;
     let preview = attempt.preview();

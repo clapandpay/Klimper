@@ -69,6 +69,7 @@ const preview: PairingPreview = {
   developerMode: false,
   grantedMethods: ['chainId', 'connect', 'getPublicKeys', 'signCoinSpends'],
   grantedKey: '0xabc',
+  grantedKeyCount: 1,
   chainId: 'mainnet',
 };
 

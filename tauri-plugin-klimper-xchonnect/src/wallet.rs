@@ -46,6 +46,11 @@ pub type AppState = Arc<Mutex<Sage>>;
 /// How many derivations are read per database page.
 const PAGE: u32 = 500;
 
+/// Receive keys exposed to a paired dApp at most. Sage derives in batches of 500, so this
+/// covers a wallet's first two batches; the `session.permissions` message stays ~100 KB,
+/// well under the relay's 400 KB body limit.
+pub const MAX_EXPOSED_KEYS: usize = 1000;
+
 /// Everything about the active wallet that one request needs. Read fresh per request, so
 /// a wallet switch or a new derivation is picked up without any cache to invalidate.
 #[derive(Debug, Clone)]
@@ -60,8 +65,10 @@ pub struct WalletSnapshot {
     pub keys: HashSet<PublicKey>,
     /// Derivation of each key, so the signer never has to query the database again.
     pub derivations: HashMap<PublicKey, Derivation>,
-    /// Highest unhardened derivation, used as the "one fresh key" of the default grant.
-    pub newest_key: Option<PublicKey>,
+    /// The wallet's receive keys (unhardened synthetic keys) in derivation order, at most
+    /// [`MAX_EXPOSED_KEYS`]. Exposed to a paired dApp so it can read the wallet's balances
+    /// from the chain itself instead of asking the wallet for each one.
+    pub receive_keys: Vec<PublicKey>,
 }
 
 /// Map Sage's configured network onto wallet-kit's. The chain id is the network's own
@@ -92,7 +99,7 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
     let p2_puzzle_hashes = wallet.db.custody_p2_puzzle_hashes().await?;
     let mut keys = HashSet::new();
     let mut derivations = HashMap::new();
-    let mut newest: Option<(u32, PublicKey)> = None;
+    let mut receive: Vec<(u32, PublicKey)> = Vec::new();
     for hardened in [false, true] {
         let mut offset = 0;
         loop {
@@ -110,8 +117,8 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
                         is_hardened: row.hardened,
                     },
                 );
-                if !hardened && newest.is_none_or(|(index, _)| row.index > index) {
-                    newest = Some((row.index, row.synthetic_key));
+                if !hardened {
+                    receive.push((row.index, row.synthetic_key));
                 }
             }
             if offset >= total {
@@ -119,6 +126,9 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
             }
         }
     }
+
+    receive.sort_by_key(|(index, _)| *index);
+    receive.truncate(MAX_EXPOSED_KEYS);
 
     Ok(WalletSnapshot {
         fingerprint: wallet.fingerprint,
@@ -128,7 +138,7 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
         },
         keys,
         derivations,
-        newest_key: newest.map(|(_, key)| key),
+        receive_keys: receive.into_iter().map(|(_, key)| key).collect(),
     })
 }
 

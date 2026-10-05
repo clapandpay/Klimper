@@ -68,11 +68,14 @@ pub struct PairingPreview {
     pub expires_at: u64,
     /// A developer-mode URI (plain-HTTP loopback). Only possible in a debug build.
     pub developer_mode: bool,
-    /// What the wallet will grant: the CHIP-0002 required methods and one fresh key
-    /// (spec 9.3). Nothing is auto-approved — every request still needs its own prompt.
+    /// What the wallet will grant: the CHIP-0002 required methods and the wallet's receive
+    /// keys (spec 9.3). Nothing is auto-approved — every request still needs its own prompt.
     pub granted_methods: Vec<String>,
-    /// Hex of the single key that will be exposed, if the wallet has one.
+    /// Hex of the first exposed key (the wallet's first receive address), if it has one.
     pub granted_key: Option<String>,
+    /// How many receive keys will be exposed. With them the dApp can see every receive
+    /// address's balance on chain, so the screen has to say so.
+    pub granted_key_count: usize,
     pub chain_id: String,
 }
 
@@ -143,6 +146,7 @@ impl Attempt {
                 .exposed_keys
                 .first()
                 .map(|key| format!("0x{}", hex::encode(key.to_bytes()))),
+            granted_key_count: self.permissions.exposed_keys.len(),
             chain_id: self.chain_id.clone(),
         }
     }
@@ -172,24 +176,24 @@ pub async fn inspect(
     allow_developer_mode: bool,
     fingerprint: u32,
     chain_id: String,
-    fresh_key: Option<chia_bls::PublicKey>,
+    receive_keys: Vec<chia_bls::PublicKey>,
 ) -> Result<Attempt> {
     let (verified, developer_mode) =
         crate::origin::verify_pairing_uri(uri_text, now, allow_developer_mode).await?;
     let relay = RelayClient::new(&verified.uri().relay, developer_mode)?;
     let info = relay.info().await?;
-    // Spec 9.3: the required methods and one fresh key. No limits are configured, so
-    // every request is prompted; a per-dApp limit is set afterwards (TASK-083).
-    let permissions = match fresh_key {
-        Some(key) => DappPermissions::new_default(key),
-        None => DappPermissions {
-            methods: xchonnect_wallet_kit::permissions::DEFAULT_METHODS
-                .iter()
-                .map(|m| (*m).to_owned())
-                .collect(),
-            exposed_keys: Vec::new(),
-            limits: std::collections::BTreeMap::new(),
-        },
+    // Spec 9.3: the required methods, plus the wallet's receive keys rather than one fresh
+    // key, so the dApp can read every receive address's coins from the chain in a few
+    // batched calls instead of asking the wallet for each balance (the pairing screen says
+    // how many addresses it will see). No limits are configured, so every request is
+    // prompted; a per-dApp limit is set afterwards (TASK-083).
+    let permissions = DappPermissions {
+        methods: xchonnect_wallet_kit::permissions::DEFAULT_METHODS
+            .iter()
+            .map(|m| (*m).to_owned())
+            .collect(),
+        exposed_keys: receive_keys,
+        limits: std::collections::BTreeMap::new(),
     };
     Ok(Attempt {
         id: new_id(),
@@ -412,12 +416,13 @@ mod tests {
         assert_eq!(preview.domain_unicode, testing::DOMAIN);
         assert!(!preview.domain_differs);
         assert_eq!(preview.dapp_name, "Pengui");
-        // Spec 9.3: the required methods and exactly one key.
+        // Spec 9.3: the required methods and the exposed receive keys.
         assert_eq!(
             preview.granted_methods,
             xchonnect_wallet_kit::permissions::DEFAULT_METHODS.to_vec()
         );
         assert!(preview.granted_key.is_some());
+        assert_eq!(preview.granted_key_count, 1);
     }
 
     /// A homograph domain must reach the screen with both forms and a warning.
