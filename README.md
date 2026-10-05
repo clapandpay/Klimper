@@ -44,7 +44,8 @@ pnpm tauri:build    # bundle: target/release/bundle/
 
 ## Licence
 
-AGPL-3.0-or-later for Klimper's own code; the Sage engine keeps its Apache-2.0 licence (see
+AGPL-3.0-or-later for Klimper's own code, with an additional permission for distribution through
+app stores (`../LICENSE-APP-STORE-EXCEPTION.md`); the Sage engine keeps its Apache-2.0 licence (see
 `NOTICE` and `LICENSE-APACHE`). Commercial licences without the copyleft obligation are available,
 see `COMMERCIAL-LICENSE.md`; contributions require the CLA. "Klimper", the tagline "Clap and Pay" and the logo are
 trademarks and may not be used by forks (`TRADEMARK.md`). Not affiliated with Chia Network, Inc.
