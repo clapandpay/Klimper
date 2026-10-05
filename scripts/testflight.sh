@@ -55,6 +55,11 @@ pnpm install --frozen-lockfile
 # macros (sqlx_macros first) with a LINKEDIT that macOS 27's dyld refuses to load ("mis-aligned
 # LINKEDIT string pool"). Leaving those host-only libraries unstripped costs nothing in the app.
 export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false
+# The lib is also built as a cdylib (src-tauri/Cargo.toml, upstream's), which the app never uses:
+# Xcode links the staticlib. swift-rs only re-exports each plugin's own @_cdecl functions, so its
+# runtime (retain_object, release_object, string_from_bytes) stays internal and the cdylib link
+# fails. Let that throwaway link leave them unresolved; Xcode's final link resolves them.
+export CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS="-C link-arg=-Wl,-undefined,dynamic_lookup"
 pnpm tauri ios build --export-method app-store-connect --build-number "$build_number" --ci
 
 ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
