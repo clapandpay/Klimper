@@ -8,6 +8,10 @@ xchonnect's `docs/spec/xchonnect-spec.md`; the wallet side is `docs/wallet-integ
 Everything lives in `tauri-plugin-klimper-xchonnect/` and `src/klimper/`, behind
 `VITE_ENABLE_XCHONNECT` (off). `docs/UPSTREAM.md` lists every shared file that was touched.
 
+The screens are `docs/xchonnect-screens.md` (what is shown, and the rendering table for
+every prompt field) and the entry points are `docs/xchonnect-links.md` (QR codes,
+universal links, the same-device round trip).
+
 ## Where the thinking happens
 
 Two Apache-2.0 crates, consumed by path for now:
@@ -83,8 +87,9 @@ echo 'VITE_ENABLE_XCHONNECT=true' >> .env.local       # .env.local is git-ignore
 pnpm tauri dev
 ```
 
-Open the dApp, press "Connect wallet", copy the `xchonnect:v1?…` code into Klimper's
-`/xchonnect/pair` screen, compare the six digits, and approve the request.
+Open the dApp and press "Connect wallet". In Klimper, Settings → Connected websites →
+Connect a website, then either paste the `xchonnect:v1?…` code from the clipboard or
+choose a screenshot of the QR; compare the six digits, and approve the request.
 
 Developer-mode codes — a plain-HTTP loopback relay and a `localhost` origin document —
 are accepted **only** in a debug build (`cfg!(debug_assertions)`). There is no setting and
@@ -96,8 +101,18 @@ no environment variable that turns that on in a release build.
   rather than on a sleep, so a push becomes another sender.
 - **OHTTP**: TASK-089. Every relay call goes through one `DirectTransport`, which is the
   piece an encapsulating client replaces.
-- **Deep links and QR entry**: TASK-072 and TASK-085.
-- **The polished screens**: TASK-080, TASK-083, TASK-084. The two screens in
-  `src/klimper/` are the minimum that proves the flow and are meant to be replaced.
+- **OS link delivery**: `tauri-plugin-deep-link` is not installed, so nothing hands the
+  app a `/pair` or `/req` URL yet; `docs/xchonnect-links.md` has the four lines and the
+  hosting that is left.
+- **Same-device requests**: the pairing reply does not announce the wallet's link base
+  (`WalletMeta.link`), and the verified `return_url` is not persisted with the session or
+  surfaced on `SessionSummary`. Both are small plugin changes; the UI guard is written and
+  tested (`src/klimper/xchonnectReturn.ts`).
+- **Wallet-initiated key rotation**: the session loop accepts a dApp's rotation offer, but
+  there is no command for the user to start one (`Session::begin_rotation` is unused).
+- **Origin-key revocation**: spec 6.1 asks the wallet to revoke sessions signed by an
+  origin key that has been removed, on the next fetch. Nothing re-fetches an origin
+  document after pairing, and the session record does not keep the `kid` it was signed
+  with.
 - **Coin and balance reads, `sendTransaction`**: TASK-082. Only the methods wallet-kit
   handles are answered; anything else returns the CHIP-0002 method-not-found code.

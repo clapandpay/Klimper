@@ -180,6 +180,12 @@ including anything a dApp managed to influence — is dropped before the view se
 | `public_key` (signMessage)                   | monospace, full                                                                          | "With this key"                           |
 | anything else                                | **dropped**                                                                              | —                                         |
 
+The "Everything Klimper computed" disclosure prints the **parsed** view, not the prompt
+JSON. Printing the JSON would put every key the prompt happens to carry on the screen,
+which is the one thing this screen must not do — a field a dApp could influence would be
+rendered after all, just inside a disclosure. (That is not hypothetical care: the test
+that asserts no dApp string reaches the screen failed on exactly this.)
+
 `conditional_received` is the field this table exists for. It is a number the user would
 read as income; it is income only if somebody else acts. It is never added to a total, never
 rendered next to `net` without its sentence, and never styled like a gain.
