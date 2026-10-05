@@ -4,7 +4,7 @@ keywords = ["chia", "wallet", "blockchain", "crypto"]
 categories = ["cryptography::cryptocurrencies"]
 
 [workspace]
-members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-passkey"]
+members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-passkey", "tauri-plugin-klimper-xchonnect"]
 resolver = "2"
 
 [workspace.lints.rust]
@@ -78,6 +78,7 @@ tauri-plugin-biometric = "2.3.2"
 tauri-plugin-safe-area-insets = "0.1.0"
 tauri-plugin-sage = { path = "./tauri-plugin-sage" }
 tauri-plugin-klimper-passkey = { path = "./tauri-plugin-klimper-passkey" }
+tauri-plugin-klimper-xchonnect = { path = "./tauri-plugin-klimper-xchonnect" }
 tauri-build = "2.5.5"
 tauri-plugin = "2.5.3"
 

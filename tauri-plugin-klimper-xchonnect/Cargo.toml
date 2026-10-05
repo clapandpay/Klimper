@@ -1,0 +1,75 @@
+[package]
+name = "tauri-plugin-klimper-xchonnect"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Klimper: connect to Chia dApps over Xchonnect (remote signing, CHIP-0002)."
+publish = false
+links = "tauri-plugin-klimper-xchonnect"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Xchonnect protocol and wallet-side signing safety.
+#
+# Path dependencies: the crates are deliberately unpublished (xchonnect TASK-67 publishes
+# after its audit). The path is relative to this manifest and resolves the same way from
+# the repository and from a `clapandpay-wt-*` worktree beside it. FOLLOW-UP before any
+# release: replace both with a git revision pin or a published version (clapandpay
+# TASK-071 AC #1).
+xchonnect-core = { path = "../../../../xchonnect/xchonnect/crates/core", features = [
+  "idna",
+] }
+xchonnect-wallet-kit = { path = "../../../../xchonnect/xchonnect/crates/wallet-kit" }
+
+sage = { workspace = true }
+sage-config = { workspace = true }
+sage-database = { workspace = true }
+sage-keychain = { workspace = true }
+
+tauri = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+reqwest = { workspace = true, features = ["rustls-tls", "charset", "http2"] }
+hex = { workspace = true }
+tracing = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+
+# The same 0.36 line as Sage's chia-wallet-sdk and xchonnect-wallet-kit, so Cargo.lock
+# holds one version of each (clapandpay TASK-071 AC #2).
+chia-bls = "0.36"
+chia-protocol = "0.36"
+chia-puzzle-types = "0.36"
+
+# Session keys live in the OS keyring under their own service name, never in the Sage
+# signing keychain (clapandpay TASK-073, xchonnect spec 11.3).
+[target.'cfg(target_vendor = "apple")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = [
+  "async-secret-service",
+  "crypto-rust",
+  "tokio",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+chia-puzzles = "0.20"
+chia-sdk-driver = "0.36"
+chia-sdk-test = "0.36"
+chia-sdk-types = "0.36"
+clvm-traits = "0.36"
+clvm-utils = "0.36"
+clvmr = "0.16"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }

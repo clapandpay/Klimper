@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-dapp-policy"
+description = "Enables the set_dapp_policy command without any pre-configured scope."
+commands.allow = ["set_dapp_policy"]
+
+[[permission]]
+identifier = "deny-set-dapp-policy"
+description = "Denies the set_dapp_policy command without any pre-configured scope."
+commands.deny = ["set_dapp_policy"]
