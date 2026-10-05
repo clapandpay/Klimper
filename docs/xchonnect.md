@@ -56,6 +56,27 @@ behind it. An entry whose `state_version` is below the index is restored state: 
 
 `crates/sage-keychain` is untouched. Nothing Xchonnect ever reaches `keys.bin`.
 
+## Connecting and disconnecting
+
+- **One loop per session, ever.** `live` holds each loop's handles; an entry counts only
+  while its loop still holds the `wake` receiver. Entries are never pruned by the open
+  wallet's list, which used to orphan another wallet's loops and let a second loop start on
+  the same session (two writers of one `seq`).
+- **Disconnect is immediate.** `end_session` rejects whatever the session is waiting on,
+  cuts the loop's long poll short (`end_signal`), and drops the session from
+  `list_sessions` while the loop posts `session.end` (retried, not on a `404`) and deletes
+  the mailboxes. A loop that already returned is not flagged and forgotten: the session is
+  ended through `end_without_loop`. `tests/live_relay.rs`
+  `a_disconnect_does_not_wait_for_the_long_poll` checks it against the reference relay.
+- **The dApp ending it** (`session.end`, or a `404` from the relay) runs the same clean-up,
+  including our own mailbox and any open prompt.
+- **Pairing attempts are locked one by one.** The `session.confirm` poll holds only its own
+  attempt, so cancelling, confirming or scanning another code never waits for it. If
+  `session.ready` cannot be posted, the stored session is undone and the attempt discarded,
+  rather than listing a connection the website never learned about.
+- **Still open:** an end the app quits in the middle of is not resumed at the next start
+  (the session comes back and can be ended again).
+
 ## Per-signature approval on desktop
 
 Spec 11.1 item 4 asks for biometrics on every signature. `tauri-plugin-klimper-passkey`

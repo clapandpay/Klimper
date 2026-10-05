@@ -26,6 +26,11 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Total timeout for a non-polling call.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Attempts [`RelayClient::post_retrying`] makes, and the pause before the first retry
+/// (doubled each time).
+const POST_ATTEMPTS: u32 = 3;
+const POST_RETRY_DELAY: Duration = Duration::from_millis(500);
+
 /// What `GET /v1/info` tells us. Only the fields Klimper acts on.
 #[derive(Debug, Clone)]
 pub struct RelayInfo {
@@ -268,6 +273,27 @@ impl RelayClient {
         )
         .await?;
         Ok(())
+    }
+
+    /// [`Self::post`] for the messages the other side must not miss: `session.ready` and
+    /// `session.end`. A transient failure is retried with backoff; a `404` is not, because
+    /// the dApp's mailbox is gone and a retry cannot bring it back. Posting the same
+    /// envelope twice is harmless: the dApp drops the second as a replay.
+    pub async fn post_retrying(&self, outgoing: &Outgoing) -> Result<()> {
+        let mut delay = POST_RETRY_DELAY;
+        let mut attempt = 1;
+        loop {
+            match self.post(outgoing).await {
+                Ok(()) => return Ok(()),
+                Err(error @ Error::PairingCodeUsed) => return Err(error),
+                Err(error) if attempt == POST_ATTEMPTS => return Err(error),
+                Err(_) => {
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                    attempt += 1;
+                }
+            }
+        }
     }
 
     /// Long-poll for messages. `wait` is clamped to the relay's `max_wait_s`, so

@@ -24,10 +24,16 @@
 //! the app is in the background, and the loop is driven by a channel rather than by the
 //! sleep alone, so a push wake-up becomes another sender rather than a rewrite
 //! (decision-008 point 2).
+//!
+//! A disconnect does not wait for the long poll: `end_signal` cuts the wait short, and no
+//! further message is dispatched once the end was asked for. Only the poll is raced, never
+//! a dispatch, so an end can never land between sealing a message and persisting it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+
+use tokio::sync::Notify;
 
 use serde_json::json;
 use xchonnect_core::crypto::{MailboxId, OsEntropy, Token};
@@ -63,10 +69,14 @@ pub struct SessionLoop {
     pub approvals: Arc<ApprovalBridge>,
     pub emit: Emitter,
     pub relay: RelayClient,
+    /// Read from the relay when the loop starts, so starting a loop never waits on the
+    /// network (and never holds up `list_sessions`).
     pub info: RelayInfo,
     /// Set by `end_session`: the loop itself posts `session.end` and cleans up, so the
     /// end can never interleave with a message the loop is in the middle of sealing.
     pub end_requested: Arc<AtomicBool>,
+    /// Notified by `end_session` alongside `end_requested`, to cut a long poll short.
+    pub end_signal: Arc<Notify>,
     /// Woken by a poll tick and, later, by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
 }
@@ -101,6 +111,15 @@ impl SessionLoop {
             self.mark_repair(&mut stored);
             return;
         }
+        // An unreachable relay keeps the defaults, and a disconnect does not wait for it.
+        tokio::select! {
+            info = self.relay.info() => {
+                if let Ok(info) = info {
+                    self.info = info;
+                }
+            }
+            () = self.end_signal.notified() => {}
+        }
 
         loop {
             if self.end_requested.load(Ordering::SeqCst) {
@@ -117,17 +136,24 @@ impl SessionLoop {
                     return;
                 }
                 Err(Error::PairingCodeUsed) => {
-                    // The relay says the mailbox is gone: the dApp ended the session, or
-                    // it expired. Nothing left to drain.
+                    // The relay says a mailbox is gone: the dApp ended the session, or it
+                    // expired. The full clean-up still runs: our own mailbox may be the
+                    // one that is left, and a prompt may still be waiting for the user.
                     tracing::info!(session = %id, "the relay no longer has this mailbox");
-                    let _ = self.store.remove(fingerprint, &id);
+                    self.cleanup(&session, fingerprint, &id).await;
                     (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
                     return;
                 }
                 Err(error) => {
                     tracing::warn!(session = %id, "xchonnect session loop: {error}");
-                    tokio::time::sleep(BACKOFF).await;
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.end_signal.notified() => {}
+                    }
                 }
+            }
+            if self.end_requested.load(Ordering::SeqCst) {
+                continue;
             }
             // Wait for the next tick or wake-up. A closed channel means the app is going
             // away.
@@ -206,10 +232,12 @@ impl SessionLoop {
 
         let mailbox = session.own_mailbox();
         let read = session.own_read_token().clone();
-        let messages = self
-            .relay
-            .fetch(mailbox, &read, POLL_WAIT, &self.info)
-            .await?;
+        // The only await raced against a disconnect: nothing has changed yet, so dropping
+        // the poll loses nothing, and the relay keeps any message it was about to deliver.
+        let messages = tokio::select! {
+            messages = self.relay.fetch(mailbox, &read, POLL_WAIT, &self.info) => messages?,
+            () = self.end_signal.notified() => return Ok(Outcome::Continue),
+        };
         self.consume(session, stored, mailbox, &read, messages)
             .await
     }
@@ -223,6 +251,11 @@ impl SessionLoop {
         messages: Vec<(String, Vec<u8>)>,
     ) -> Result<Outcome> {
         for (msg_id, envelope) in messages {
+            // The user disconnected: answer nothing more. What is left unacknowledged goes
+            // with the mailbox.
+            if self.end_requested.load(Ordering::SeqCst) {
+                return Ok(Outcome::Continue);
+            }
             let ids = [msg_id];
             if envelope.is_empty() {
                 self.relay.ack(mailbox, read, &ids).await?;
@@ -417,24 +450,11 @@ fn answers_without_prompt(method: &str) -> bool {
     )
 }
 
-/// Attempts at posting `session.end` before giving up. A disconnect is the one message the
-/// user explicitly asked to reach the dApp, so a relay hiccup must not leave the website
-/// believing it is still paired.
-const END_ATTEMPTS: u32 = 3;
-
+/// Post `session.end`. A disconnect is the one message the user explicitly asked to reach
+/// the dApp, so a relay hiccup must not leave the website believing it is still paired.
 async fn post_end(relay: &RelayClient, outgoing: &xchonnect_core::session::Outgoing) {
-    let mut delay = Duration::from_millis(500);
-    for attempt in 1..=END_ATTEMPTS {
-        match relay.post(outgoing).await {
-            Ok(()) => return,
-            Err(error) if attempt == END_ATTEMPTS => {
-                tracing::warn!("could not tell the dApp the session ended: {error}");
-            }
-            Err(_) => {
-                tokio::time::sleep(delay).await;
-                delay *= 2;
-            }
-        }
+    if let Err(error) = relay.post_retrying(outgoing).await {
+        tracing::warn!("could not tell the dApp the session ended: {error}");
     }
 }
 
