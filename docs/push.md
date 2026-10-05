@@ -53,6 +53,22 @@ per target: local (a tunnel to your Mac) and deployed. Nothing else differs betw
 - Android 13 and later asks for the notification permission at the first pairing.
 - The Kotlin side has not been built yet (no Android SDK on the dev machine).
 
+## Testing it locally, without Apple
+
+`scripts/push-dev.sh` starts Xchonnect's relay and gateway on loopback and the example
+website, writes the two build settings to `.push-dev.env`, and prints the steps: build for
+the simulator with `pnpm tauri ios dev "iPhone 17"` (debug builds accept a loopback `http`
+gateway), pair with the website, send a request. The relay then calls the gateway, which
+opens the sealed token; without an Apple key it has nobody to hand it to, so the script
+delivers the same notification to the simulator with `xcrun simctl push`. With the key in
+the environment (`XCHONNECT_GATEWAY_APNS_TEAM_ID`, `_KEY_ID`, `_KEY_FILE`) the gateway sends
+to Apple's sandbox, which a simulator on an Apple-silicon Mac receives for real.
+
+The same chain without a screen is the live test
+`a_request_wakes_the_phone_through_the_gateway` in
+`tauri-plugin-klimper-xchonnect/tests/live_relay.rs`; `scripts/e2e.sh` in the Xchonnect
+repository runs it with the other Klimper live tests.
+
 ## Running the pieces
 
 The relay and the gateway are in the Xchonnect repository (`deploy/compose.yaml`, gateway
