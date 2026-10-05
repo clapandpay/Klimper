@@ -55,7 +55,10 @@ pnpm install --frozen-lockfile
 # macros (sqlx_macros first) with a LINKEDIT that macOS 27's dyld refuses to load ("mis-aligned
 # LINKEDIT string pool"). Leaving those host-only libraries unstripped costs nothing in the app.
 export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false
-pnpm tauri ios build --export-method app-store-connect --build-number "$build_number" --ci
+# CFBundleVersion is the build number alone: tauri's --build-number appends it to the version
+# (0.13.1.N), four parts where Apple allows three, and the export then drops it back to 0.13.1.
+pnpm tauri ios build --export-method app-store-connect --ci \
+  --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$build_number\"}}}"
 
 ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
 echo "Built $ipa ($(git rev-parse --short HEAD), build $build_number)"
