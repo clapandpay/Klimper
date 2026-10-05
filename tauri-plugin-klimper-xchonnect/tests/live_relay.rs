@@ -1210,3 +1210,46 @@ async fn a_session_ended_mid_prompt_closes_the_prompt_and_the_loop() {
         .delete(paired.pairing_mailbox, &paired.pairing_read)
         .await;
 }
+
+/// A cancel that comes after the user approved changes nothing: the transaction was
+/// already sent, and the dApp gets its result.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_cancel_after_approval_does_not_undo_the_broadcast() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    let request_id = post_send(&mut paired).await;
+    read_dapp_until(&mut paired, is_shown).await;
+
+    running.approvals.resolve("a1", true).unwrap();
+    let cancel = paired
+        .dapp_session
+        .seal(
+            &mut OsEntropy,
+            now(),
+            Message::RpcCancel { request_id },
+            600,
+        )
+        .unwrap();
+    paired.relay.post(&cancel).await.unwrap();
+
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert!(
+        seen.iter()
+            .any(|m| matches!(m, Message::RpcStatus { state, .. } if state == "broadcast"))
+    );
+    assert!(matches!(
+        seen.last().unwrap(),
+        Message::RpcResponse {
+            outcome: RpcOutcome::Result(_),
+            ..
+        }
+    ));
+    stop(running, paired).await;
+}
