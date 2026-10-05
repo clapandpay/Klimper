@@ -213,6 +213,20 @@ upstream; the rest is files of our own and one-line hooks.
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
 
+### iOS build on Xcode 27 (TASK-003)
+
+Under Xcode 27 swift-rs makes each Swift package's own `@_cdecl` functions public again, but
+not its own runtime (`retain_object`, `release_object`, `string_from_bytes`, `data_from_bytes`),
+which every package archive embeds, so no iOS app links. Our copy of swift-rs promotes that
+runtime in the Tauri archive alone. `scripts/testflight.sh` carries the build settings Xcode 27
+needs on top (unstripped build-time macros, `llvm-tools`).
+
+| File                       | Ours                          | Note                                                                                                                                                   |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `vendor/swift-rs/`         | new: swift-rs 1.0.8, 1 change | `src-rs/build.rs`, the "Klimper patch" comment. Drop the directory and the patch line once a swift-rs release exports its runtime; propose it upstream |
+| `Cargo.toml`, `Cargo.lock` | 2 lines; swift-rs from a path | the `swift-rs` line under `[patch.crates-io]`; on a lock conflict keep the path source                                                                 |
+| `.prettierignore`          | 1 line                        | `vendor`                                                                                                                                               |
+
 ### Look: Klimper Coin (TASK-062)
 
 The design guide (Klimper Coin) is `docs/design-guide.md`. It is applied as two themes and one stylesheet scoped

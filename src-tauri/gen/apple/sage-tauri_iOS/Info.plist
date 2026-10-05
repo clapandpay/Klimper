@@ -41,7 +41,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Read QR codes</string>
+	<string>Klimper uses the camera to read QR codes, such as a website&apos;s connect code.</string>
 	<key>NFCReaderUsageDescription</key>
 	<string>Read NFC tags</string>
 	<key>NSFaceIDUsageDescription</key>
