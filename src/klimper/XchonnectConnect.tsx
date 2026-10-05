@@ -1,0 +1,462 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Connecting a dApp: the code, the verified domain, the six digits (clapandpay TASK-069,
+// TASK-072, TASK-076, TASK-085). Replaces the placeholder `XchonnectPair.tsx`.
+//
+// The three things this screen exists to get right:
+//
+//   1. the verified domain is shown in both forms when they differ, with every homograph
+//      warning — `XchonnectDomain` is the only way a domain is rendered;
+//   2. a failure is a dead end. The `failed` stage renders no control that continues:
+//      not behind a confirmation, not behind a disclosure. `XchonnectConnect.test.tsx`
+//      asserts that, because a rule nobody tests is a rule that regresses;
+//   3. the six digits are large, and the session does not exist until the user says they
+//      match.
+//
+// A pairing code is a secret (spec 6.2): it is never written into the app URL, never
+// logged, and never put in an error message. `xchonnectLink.ts` keeps that rule.
+
+import Container from '@/components/Container';
+import Header from '@/components/Header';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
+import { t } from '@lingui/core/macro';
+import { Trans } from '@lingui/react/macro';
+import { AlertTriangle, Image as ImageIcon, QrCode } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { XchonnectDomain } from './XchonnectDomain';
+import {
+  onXchonnectEvent,
+  PairingEvent,
+  PairingPreview,
+  PairingSas,
+  xchonnect,
+  XCHONNECT_EVENTS,
+} from './xchonnect';
+import { LinkProblem, parseXchonnectLink } from './xchonnectLink';
+import {
+  subscribeXchonnectLink,
+  takeXchonnectLink,
+  XCHONNECT_ROUTES,
+} from './xchonnectLinkHandoff';
+
+type Stage = 'enter' | 'checking' | 'verified' | 'sas' | 'failed';
+
+function problemMessage(problem: LinkProblem): string {
+  switch (problem) {
+    case 'empty':
+      return t`There was nothing to read.`;
+    case 'tooLong':
+      return t`That is too long to be a pairing code.`;
+    case 'otherHost':
+      return t`That link does not belong to Klimper.`;
+    case 'unknownPath':
+      return t`That Klimper link is not a pairing or request link.`;
+    case 'noParameters':
+      return t`That pairing link is missing its code.`;
+    case 'unknownScheme':
+    default:
+      return t`That is not an Xchonnect pairing code.`;
+  }
+}
+
+function secondsLeft(deadline: number): number {
+  return Math.max(0, deadline - Math.floor(Date.now() / 1000));
+}
+
+export default function XchonnectConnect() {
+  const navigate = useNavigate();
+  const [stage, setStage] = useState<Stage>('enter');
+  const [code, setCode] = useState('');
+  const [preview, setPreview] = useState<PairingPreview | null>(null);
+  const [sas, setSas] = useState<PairingSas | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  /** Give up on this attempt. There is no path from here back into the flow. */
+  const fail = useCallback((message: string) => {
+    setFailure(message);
+    setStage('failed');
+    setPreview(null);
+    setSas(null);
+    setCode('');
+  }, []);
+
+  const check = useCallback(
+    async (raw: string) => {
+      const link = parseXchonnectLink(raw);
+      if (link.kind === 'notALink') {
+        // Not a code at all: say so and stay on the entry stage, where the user can read
+        // a different one. Nothing was created anywhere.
+        setFailure(problemMessage(link.problem));
+        setStage('enter');
+        return;
+      }
+      if (link.kind === 'request') {
+        navigate(XCHONNECT_ROUTES.request);
+        return;
+      }
+      setBusy(true);
+      setFailure(null);
+      setStage('checking');
+      try {
+        const result = await xchonnect.inspectPairingUri(link.uri);
+        setPreview(result);
+        setStage('verified');
+      } catch (error) {
+        fail(String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [fail, navigate],
+  );
+
+  // A link the operating system handed us, or one that arrived while this screen was open.
+  useEffect(() => {
+    const link = takeXchonnectLink();
+    if (link?.kind === 'pair') void check(link.uri);
+    if (link?.kind === 'notALink') setFailure(problemMessage(link.problem));
+    return subscribeXchonnectLink((incoming) => {
+      if (incoming.kind === 'pair') void check(incoming.uri);
+      if (incoming.kind === 'notALink') {
+        setFailure(problemMessage(incoming.problem));
+      }
+    });
+  }, [check]);
+
+  // The dApp's `session.confirm`, and every way the attempt can die.
+  useEffect(() => {
+    const unlisten = onXchonnectEvent<PairingEvent>(
+      XCHONNECT_EVENTS.pairing,
+      (event) => {
+        if (event.state === 'failed') {
+          fail(event.error ?? t`The website never answered.`);
+          return;
+        }
+        setSas((current) =>
+          current ? { ...current, dappConfirmed: true } : current,
+        );
+      },
+    );
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
+  }, [fail]);
+
+  // The five-minute deadline, so "waiting" is never indefinite.
+  useEffect(() => {
+    if (sas === null) return;
+    setRemaining(secondsLeft(sas.deadline));
+    const timer = setInterval(
+      () => setRemaining(secondsLeft(sas.deadline)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [sas]);
+
+  const onScanResult = useCallback((text: string) => void check(text), [check]);
+  const { handleScanOrPaste, handleScanImage, isMobile } =
+    useScannerOrClipboard(onScanResult);
+
+  const pair = async () => {
+    if (preview === null) return;
+    setBusy(true);
+    try {
+      setSas(await xchonnect.approvePairing(preview.pairingId));
+      setStage('sas');
+    } catch (error) {
+      fail(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancel = async () => {
+    if (preview !== null) {
+      try {
+        await xchonnect.cancelPairing(preview.pairingId);
+      } catch {
+        // Cancelling is the safe direction: nothing to report.
+      }
+    }
+    navigate(XCHONNECT_ROUTES.dapps);
+  };
+
+  const decide = async (matches: boolean) => {
+    if (preview === null) return;
+    setBusy(true);
+    try {
+      await xchonnect.confirmSas(preview.pairingId, matches);
+      navigate(XCHONNECT_ROUTES.dapps);
+    } catch (error) {
+      fail(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startOver = () => {
+    setFailure(null);
+    setStage('enter');
+  };
+
+  return (
+    <>
+      <Header
+        title={t`Connect a website`}
+        back={() => navigate(XCHONNECT_ROUTES.dapps)}
+      />
+      <Container className='max-w-xl space-y-4'>
+        {/*
+          The dead end. It is rendered instead of the flow, never beside it, so there is
+          no control on screen that would carry the attempt forward.
+        */}
+        {stage === 'failed' && (
+          <Card className='border-destructive' data-testid='pairing-failed'>
+            <CardHeader>
+              <CardTitle className='text-base text-destructive flex items-center gap-2'>
+                <AlertTriangle className='h-4 w-4' aria-hidden='true' />
+                <Trans>Connection stopped</Trans>
+              </CardTitle>
+              <CardDescription className='break-words'>
+                {failure}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3 text-sm'>
+              <p>
+                <Trans>
+                  There is no way to continue past this. Ask the website for a
+                  new code.
+                </Trans>
+              </p>
+              <div className='flex gap-2'>
+                <Button variant='outline' onClick={startOver}>
+                  <Trans>Read another code</Trans>
+                </Button>
+                <Button variant='outline' onClick={() => void cancel()}>
+                  <Trans>Cancel</Trans>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {stage === 'enter' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>
+                <Trans>Scan or paste the pairing code</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  The website shows a QR code. Scan it, paste the code under it,
+                  or choose a picture of it.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3'>
+              {failure !== null && (
+                <p className='text-sm text-destructive' role='alert'>
+                  {failure}
+                </p>
+              )}
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  variant='outline'
+                  onClick={() => void handleScanOrPaste()}
+                >
+                  <QrCode className='h-4 w-4 mr-2' aria-hidden='true' />
+                  {isMobile ? (
+                    <Trans>Scan the code</Trans>
+                  ) : (
+                    <Trans>Paste from the clipboard</Trans>
+                  )}
+                </Button>
+                <Button
+                  variant='outline'
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <ImageIcon className='h-4 w-4 mr-2' aria-hidden='true' />
+                  <Trans>Choose a picture of the code</Trans>
+                </Button>
+                <input
+                  ref={fileInput}
+                  type='file'
+                  accept='image/*'
+                  className='hidden'
+                  aria-label={t`Picture of the pairing code`}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) void handleScanImage(file);
+                  }}
+                />
+              </div>
+              <Textarea
+                aria-label={t`Pairing code`}
+                rows={4}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className='font-mono text-xs'
+                placeholder='xchonnect:v1?…'
+              />
+              <Button
+                onClick={() => void check(code)}
+                disabled={busy || code.trim() === ''}
+              >
+                <Trans>Check this website</Trans>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {stage === 'checking' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>
+                <Trans>Checking the website…</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  Klimper is asking the domain to prove it signed this code.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
+        {stage === 'verified' && preview !== null && (
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>
+                <Trans>This domain proved who it is</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  It owns the key that signed the code. Only the domain is
+                  verified — the name is what it claims.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4 text-sm'>
+              <XchonnectDomain
+                identity={{
+                  domainUnicode: preview.domainUnicode,
+                  domainAscii: preview.domainAscii,
+                  domainDiffers: preview.domainDiffers,
+                  warnings: preview.warnings,
+                  dappName: preview.dappName,
+                }}
+              />
+              <dl className='grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-muted-foreground'>
+                <dt>
+                  <Trans>Network</Trans>
+                </dt>
+                <dd className='text-foreground'>{preview.chainId}</dd>
+                <dt>
+                  <Trans>It may ask for</Trans>
+                </dt>
+                <dd className='text-foreground'>
+                  {preview.grantedMethods.join(', ')}
+                </dd>
+                <dt>
+                  <Trans>Address it will see</Trans>
+                </dt>
+                <dd className='text-foreground font-mono text-xs break-all'>
+                  {preview.grantedKey ?? t`none`}
+                </dd>
+                <dt>
+                  <Trans>Relay</Trans>
+                </dt>
+                <dd className='text-foreground font-mono text-xs break-all'>
+                  {preview.relay}
+                </dd>
+              </dl>
+              {preview.developerMode && (
+                <p className='text-destructive' role='alert'>
+                  <Trans>
+                    Developer mode: this code uses a local relay without
+                    encryption in transit. Never for real money.
+                  </Trans>
+                </p>
+              )}
+              <p className='text-muted-foreground'>
+                <Trans>
+                  Nothing is signed automatically. Every request still asks you,
+                  and you can change what this website may do at any time.
+                </Trans>
+              </p>
+              <div className='flex gap-2'>
+                <Button onClick={() => void pair()} disabled={busy}>
+                  <Trans>Connect</Trans>
+                </Button>
+                <Button
+                  variant='outline'
+                  onClick={() => void cancel()}
+                  disabled={busy}
+                >
+                  <Trans>Cancel</Trans>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {stage === 'sas' && sas !== null && (
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>
+                <Trans>Do these six digits match?</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  The website shows the same six digits. If they are different,
+                  somebody is in the middle.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div
+                className='text-5xl font-mono tracking-[0.3em] text-center py-4'
+                data-testid='sas-digits'
+              >
+                {sas.sas}
+              </div>
+              {sas.dappConfirmed ? (
+                <div className='flex gap-2'>
+                  <Button onClick={() => void decide(true)} disabled={busy}>
+                    <Trans>They match</Trans>
+                  </Button>
+                  <Button
+                    variant='destructive'
+                    onClick={() => void decide(false)}
+                    disabled={busy}
+                  >
+                    <Trans>They are different</Trans>
+                  </Button>
+                </div>
+              ) : (
+                <p className='text-sm text-muted-foreground text-center'>
+                  <Trans>
+                    Waiting for the website… {remaining} seconds left
+                  </Trans>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </Container>
+    </>
+  );
+}
