@@ -16,8 +16,10 @@
 		88144AD19AA674BA2B248770 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = A5A605B7CB8DC8CA37D58A02 /* assets */; };
 		9F56F158C37B5AB178A24BD5 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9BE24BD519EDDCAD25BB3710 /* Security.framework */; };
 		D77BB436DA92BA7054DB296F /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4A3D52136706249F106003A2 /* main.mm */; };
+		6B1E5C2A9D4F4E7A8C3B1A02 /* KlimperScene.m in Sources */ = {isa = PBXBuildFile; fileRef = 6B1E5C2A9D4F4E7A8C3B1A01 /* KlimperScene.m */; };
 		DC8A7E7BC85CF72391F7DB06 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1272591EA92E9E93072C73F8 /* WebKit.framework */; };
 		ED56FD091A61C5EF0E4B49FB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D9D63B1548E841957A1E32 /* Assets.xcassets */; };
+		6B1E5C2A9D4F4E7A8C3B1A04 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */; };
 		FEF377FC1FC81BF2E0E465DF /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F9E557ADA88D73B10BF473F /* libapp.a */; };
 /* End PBXBuildFile section */
 
@@ -33,6 +35,7 @@
 		2304A1988156A19CBDF4A717 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
 		32D9D63B1548E841957A1E32 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4A3D52136706249F106003A2 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		6B1E5C2A9D4F4E7A8C3B1A01 /* KlimperScene.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KlimperScene.m; sourceTree = "<group>"; };
 		4F5E5720FDE8B96D681CBAED /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		518875D00FD14133C61149AB /* commands.rs */ = {isa = PBXFileReference; path = commands.rs; sourceTree = "<group>"; };
 		7F5BF2F34A8FE054D23E3F41 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
@@ -43,6 +46,7 @@
 		BCDAEB1DE5FD02983C866661 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		F7817F2DF56B54F478F55A1C /* error.rs */ = {isa = PBXFileReference; path = error.rs; sourceTree = "<group>"; };
 		FFAE4B03B84DF1CE0FF7B0B3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +129,7 @@
 		8DB181AA59B45B8767FC41C8 /* sage-tauri */ = {
 			isa = PBXGroup;
 			children = (
+				6B1E5C2A9D4F4E7A8C3B1A01 /* KlimperScene.m */,
 				4A3D52136706249F106003A2 /* main.mm */,
 				90AD9DBC6ECDD35EC959591F /* bindings */,
 			);
@@ -151,6 +156,7 @@
 			isa = PBXGroup;
 			children = (
 				FFAE4B03B84DF1CE0FF7B0B3 /* Info.plist */,
+				6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */,
 				046EF1EBB621DCF40B92A2D8 /* sage-tauri_iOS.entitlements */,
 			);
 			path = "sage-tauri_iOS";
@@ -219,6 +225,7 @@
 			files = (
 				ED56FD091A61C5EF0E4B49FB /* Assets.xcassets in Resources */,
 				1ACB1DFBDEB0809BFDA2C513 /* LaunchScreen.storyboard in Resources */,
+				6B1E5C2A9D4F4E7A8C3B1A04 /* PrivacyInfo.xcprivacy in Resources */,
 				88144AD19AA674BA2B248770 /* assets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -254,6 +261,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6B1E5C2A9D4F4E7A8C3B1A02 /* KlimperScene.m in Sources */,
 				D77BB436DA92BA7054DB296F /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
