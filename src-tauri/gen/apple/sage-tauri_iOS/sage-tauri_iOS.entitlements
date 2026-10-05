@@ -6,8 +6,6 @@
 	<array>
 		<string>TAG</string>
 	</array>
-	<key>com.apple.developer.group-session</key>
-	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:clapandpay.com</string>
