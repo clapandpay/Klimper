@@ -10,8 +10,7 @@ import { NavLink } from '@/components/NavLink';
 import { scanEnabled, xchonnectEnabled } from '@/lib/features';
 import { Trans } from '@lingui/react/macro';
 import { Globe, ScanLine } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { SCANNER_ROUTE, ScannerState } from './Scanner';
+import { SCANNER_ROUTE } from './Scanner';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 
 interface KlimperNavLinksProps {
@@ -26,7 +25,13 @@ export function KlimperNavLinks({
   return (
     <>
       {scanEnabled && (
-        <ScanNavLink isCollapsed={isCollapsed} className={className} />
+        <NavLink
+          url={SCANNER_ROUTE}
+          isCollapsed={isCollapsed}
+          message={<Trans>Scan</Trans>}
+        >
+          <ScanLine className={className} aria-hidden='true' />
+        </NavLink>
       )}
       {xchonnectEnabled && (
         <NavLink
@@ -38,21 +43,5 @@ export function KlimperNavLinks({
         </NavLink>
       )}
     </>
-  );
-}
-
-/** A button rather than a link, so the tap can carry `start` and open the camera at once. */
-function ScanNavLink({ isCollapsed, className }: KlimperNavLinksProps) {
-  const navigate = useNavigate();
-  const state: ScannerState = { start: true };
-
-  return (
-    <NavLink
-      url={() => navigate(SCANNER_ROUTE, { state })}
-      isCollapsed={isCollapsed}
-      message={<Trans>Scan</Trans>}
-    >
-      <ScanLine className={className} aria-hidden='true' />
-    </NavLink>
   );
 }
