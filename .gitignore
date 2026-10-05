@@ -26,6 +26,7 @@ dist-ssr
 # Rust
 target
 .env
+.env.local
 /test.sqlite*
 
 /builtin-apps/build/*

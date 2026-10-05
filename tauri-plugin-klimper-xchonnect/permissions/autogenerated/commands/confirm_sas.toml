@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-confirm-sas"
+description = "Enables the confirm_sas command without any pre-configured scope."
+commands.allow = ["confirm_sas"]
+
+[[permission]]
+identifier = "deny-confirm-sas"
+description = "Denies the confirm_sas command without any pre-configured scope."
+commands.deny = ["confirm_sas"]

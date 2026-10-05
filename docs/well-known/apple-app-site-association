@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.com.clapandpay.klimper"],
+        "components": [
+          {
+            "/": "/pair",
+            "comment": "Xchonnect pairing: parameters are in the fragment and never reach this server"
+          },
+          {
+            "/": "/req",
+            "comment": "Xchonnect same-device request hint"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.com.clapandpay.klimper"]
+  }
+}

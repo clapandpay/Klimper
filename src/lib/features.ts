@@ -22,3 +22,12 @@ export const clapAndPayConnectEnabled =
   import.meta.env.VITE_DISABLE_CLAPANDPAY_CONNECT !== 'true';
 export const clapAndPayOrigin =
   import.meta.env.VITE_CLAPANDPAY_ORIGIN || 'https://clapandpay.com';
+// Opt-in: dApp connections over Xchonnect (decision-008, milestone m-4). Off unless set to
+// true, so a build that does not ask for it has no Xchonnect entry point at all — the
+// routes redirect and the navigation entry is absent. The Rust plugin is always compiled
+// in, but it only does anything once a screen calls it.
+export const xchonnectEnabled =
+  import.meta.env.VITE_ENABLE_XCHONNECT === 'true';
+// On by default: the Scan tab (src/klimper/Scanner.tsx), one camera for every code — a
+// website's Xchonnect code, an offer, an address. `VITE_DISABLE_SCAN=true` turns it off.
+export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';

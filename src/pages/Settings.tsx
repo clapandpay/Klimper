@@ -39,6 +39,7 @@ import { useInsets } from '@/contexts/SafeAreaContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { useBiometric } from '@/hooks/useBiometric';
 import { PasskeySettings } from '@/klimper/PasskeySettings';
+import { XchonnectSettings } from '@/klimper/XchonnectSettings';
 import { useColdWalletUnsigned } from '@/hooks/useColdWalletUnsigned';
 import { useDefaultClawback } from '@/hooks/useDefaultClawback';
 import { useDefaultFee } from '@/hooks/useDefaultFee';
@@ -347,6 +348,8 @@ function GlobalSettings() {
       </SettingsSection>
 
       <PasskeySettings />
+
+      <XchonnectSettings />
 
       <SettingsSection title={t`Transaction Defaults`}>
         <SettingItem

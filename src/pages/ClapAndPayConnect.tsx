@@ -23,10 +23,10 @@ import { LoadingButton } from '@/components/ui/loading-button';
 import { useWallet } from '@/contexts/WalletContext';
 import { useErrors } from '@/hooks/useErrors';
 import { notifyPasskeyChanged, passkey } from '@/klimper/passkey';
-import { useNetwork } from '@/hooks/useNetwork';
 import {
   createHandoffRequest,
   HandoffError,
+  HandoffPayload,
   HandoffRequest,
 } from '@/lib/clapandpayHandoff';
 import { clapAndPayOrigin } from '@/lib/features';
@@ -37,27 +37,32 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { commands } from '../bindings';
-import { fetchState } from '../state';
+import { clearState, fetchState } from '../state';
+
+// The page this build talks to: clapandpay.com, or a Green Envelope dev server such as
+// localhost:5173 when VITE_CLAPANDPAY_ORIGIN says so (docs/clapandpay-connect.md).
+const pageHost = new URL(clapAndPayOrigin).host;
 
 function problemText(error: unknown): string | null {
   if (!(error instanceof HandoffError)) return null;
   if (error.code === 'wrong_receiver') {
     return t`That answer was made for another request. Open the page again from here.`;
   }
-  return t`That is not an answer from clapandpay.com. Copy it there and paste again.`;
+  return t`That is not an answer from ${pageHost}. Copy it there and paste again.`;
 }
 
 export default function ClapAndPayConnect() {
   const navigate = useNavigate();
   const { addError } = useErrors();
   const { setWallet } = useWallet();
-  const { network } = useNetwork();
 
   // Lives in memory only: closing this screen ends the request, and its answer becomes useless.
   const [request, setRequest] = useState<HandoffRequest | null>(null);
   const [opened, setOpened] = useState(false);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // An answer for another network than Klimper's: kept, so one tap can switch and finish.
+  const [elsewhere, setElsewhere] = useState<HandoffPayload | null>(null);
   // After the import: offer the passkey, and say so if it would lock other wallets too.
   const [offerLock, setOfferLock] = useState<{ otherWallets: boolean } | null>(
     null,
@@ -81,46 +86,74 @@ export default function ClapAndPayConnect() {
       .catch(addError);
   };
 
+  const bringIn = async (payload: HandoffPayload) => {
+    await commands.importKey({
+      name: 'Clap and Pay',
+      key: payload.masterSk,
+      derivation_index: 5000,
+      hardened: false,
+      unhardened: true,
+      emoji: '🟢',
+    });
+    await fetchState();
+    const data = await commands.getKey({});
+    setWallet(data.key);
+
+    const status = await passkey.status().catch(() => null);
+    if (status?.supported && !status.enrolled) {
+      const { keys } = await commands.getKeys({});
+      setOfferLock({ otherWallets: keys.length > 1 });
+      return;
+    }
+    navigate('/wallet');
+  };
+
+  const fail = (error: unknown) => {
+    const text = problemText(error);
+    if (text === null) addError(error as Parameters<typeof addError>[0]);
+    else setProblem(text);
+  };
+
   const paste = async () => {
     if (!request) return;
     setPending(true);
     setProblem(null);
+    setElsewhere(null);
     try {
       const payload = await request.open((await readText()) ?? '');
-      const theirs = payload.network;
-      if (network !== null && network !== 'unknown' && theirs !== network) {
-        setProblem(
-          t`That money is on ${theirs}, and Klimper is set to ${network}. Change the network in the settings first.`,
-        );
+      // Names, not kinds: the page says "testnet11", and so does Sage's network list.
+      const current = (await commands.getNetwork({})).network.name;
+      if (payload.network !== current) {
+        setElsewhere(payload);
         return;
       }
-      await commands.importKey({
-        name: 'Clap and Pay',
-        key: payload.masterSk,
-        derivation_index: 5000,
-        hardened: false,
-        unhardened: true,
-        emoji: '🟢',
-      });
-      await fetchState();
-      const data = await commands.getKey({});
-      setWallet(data.key);
-
-      const status = await passkey.status().catch(() => null);
-      if (status?.supported && !status.enrolled) {
-        const { keys } = await commands.getKeys({});
-        setOfferLock({ otherWallets: keys.length > 1 });
-        return;
-      }
-      navigate('/wallet');
+      await bringIn(payload);
     } catch (error) {
-      const text = problemText(error);
-      if (text === null) addError(error as Parameters<typeof addError>[0]);
-      else setProblem(text);
+      fail(error);
     } finally {
       setPending(false);
     }
   };
+
+  // The same switch as the network setting, then the import it was waiting for.
+  const switchAndBringIn = async () => {
+    if (!elsewhere) return;
+    setPending(true);
+    setProblem(null);
+    try {
+      clearState();
+      await commands.setNetwork({ name: elsewhere.network });
+      await fetchState();
+      await bringIn(elsewhere);
+      setElsewhere(null);
+    } catch (error) {
+      fail(error);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const theirNetwork = elsewhere?.network ?? '';
 
   const lock = async () => {
     setLocking(true);
@@ -229,7 +262,7 @@ export default function ClapAndPayConnect() {
                 disabled={!request}
                 onClick={openPage}
               >
-                <Trans>1. Open clapandpay.com</Trans>
+                <Trans>1. Open {pageHost}</Trans>
               </Button>
               <LoadingButton
                 className='w-full'
@@ -243,6 +276,27 @@ export default function ClapAndPayConnect() {
               </LoadingButton>
             </div>
 
+            {elsewhere && (
+              <Alert>
+                <AlertDescription className='space-y-3'>
+                  <p>
+                    <Trans>
+                      That money is on {theirNetwork}. Klimper switches over to
+                      bring it in; you can switch back in the settings.
+                    </Trans>
+                  </p>
+                  <LoadingButton
+                    className='w-full'
+                    loading={pending}
+                    loadingText={t`Bringing it in…`}
+                    onClick={switchAndBringIn}
+                  >
+                    <Trans>Switch to {theirNetwork} and bring it in</Trans>
+                  </LoadingButton>
+                </AlertDescription>
+              </Alert>
+            )}
+
             {problem && (
               <Alert variant='destructive'>
                 <AlertDescription>{problem}</AlertDescription>
@@ -252,8 +306,8 @@ export default function ClapAndPayConnect() {
             <p className='text-sm text-muted-foreground'>
               <Trans>
                 The key then lives in Klimper on this device. On a phone it
-                never goes into a backup. If you lose the device, open
-                clapandpay.com again: your passkey brings the money back.
+                never goes into a backup. If you lose the device, open{' '}
+                {pageHost} again: your passkey brings the money back.
               </Trans>
             </p>
           </CardContent>
