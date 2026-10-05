@@ -17,6 +17,7 @@
 
 import Container from '@/components/Container';
 import Header from '@/components/Header';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -29,10 +30,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { AlertTriangle, Image as ImageIcon, QrCode } from 'lucide-react';
+import { readText } from '@tauri-apps/plugin-clipboard-manager';
+import {
+  AlertTriangle,
+  Camera,
+  ClipboardPaste,
+  Image as ImageIcon,
+  ShieldCheck,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  CameraProblem,
+  cameraProblemMessage,
+  cameraSupported,
+  QrCamera,
+  QrCameraIdle,
+  QrCameraOff,
+} from './QrCamera';
 import { XchonnectDomain } from './XchonnectDomain';
+import { ConnectSteps, Fact, SasDigits, SiteCoin } from './XchonnectUi';
 import {
   onXchonnectEvent,
   PairingEvent,
@@ -49,6 +66,9 @@ import {
 } from './xchonnectLinkHandoff';
 
 type Stage = 'enter' | 'checking' | 'verified' | 'sas' | 'failed';
+
+/** The desktop camera: not asked for until the user taps, released as soon as it reads. */
+type CameraState = 'off' | 'on' | CameraProblem;
 
 function problemMessage(problem: LinkProblem): string {
   switch (problem) {
@@ -81,6 +101,7 @@ export default function XchonnectConnect() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
+  const [camera, setCamera] = useState<CameraState>('off');
   const fileInput = useRef<HTMLInputElement>(null);
 
   /** Give up on this attempt. There is no path from here back into the flow. */
@@ -165,7 +186,13 @@ export default function XchonnectConnect() {
     return () => clearInterval(timer);
   }, [sas]);
 
-  const onScanResult = useCallback((text: string) => void check(text), [check]);
+  const onScanResult = useCallback(
+    (text: string) => {
+      setCamera('off');
+      void check(text);
+    },
+    [check],
+  );
   const { handleScanOrPaste, handleScanImage, isMobile } =
     useScannerOrClipboard(onScanResult);
 
@@ -193,12 +220,36 @@ export default function XchonnectConnect() {
     navigate(XCHONNECT_ROUTES.dapps);
   };
 
+  /** The phone's native scanner, or the computer's camera inside the page. */
+  const scan = () => {
+    setFailure(null);
+    if (isMobile) {
+      void handleScanOrPaste();
+      return;
+    }
+    setCamera(cameraSupported() ? 'on' : 'unsupported');
+  };
+
+  const paste = async () => {
+    setFailure(null);
+    try {
+      const text = await readText();
+      if (text) onScanResult(text);
+      else setFailure(t`The clipboard is empty.`);
+    } catch {
+      setFailure(t`Klimper could not read the clipboard.`);
+    }
+  };
+
   const decide = async (matches: boolean) => {
     if (preview === null) return;
     setBusy(true);
     try {
-      await xchonnect.confirmSas(preview.pairingId, matches);
-      navigate(XCHONNECT_ROUTES.dapps);
+      const session = await xchonnect.confirmSas(preview.pairingId, matches);
+      // The list opens on the new connection, so the user sees what they just made.
+      navigate(XCHONNECT_ROUTES.dapps, {
+        state: matches && session ? { connected: session.sessionId } : null,
+      });
     } catch (error) {
       fail(String(error));
     } finally {
@@ -211,13 +262,18 @@ export default function XchonnectConnect() {
     setStage('enter');
   };
 
+  const step =
+    stage === 'enter' ? 'scan' : stage === 'sas' ? 'compare' : 'check';
+
   return (
-    <>
+    <Layout>
       <Header
         title={t`Connect a website`}
         back={() => navigate(XCHONNECT_ROUTES.dapps)}
       />
       <Container className='max-w-xl space-y-4'>
+        {stage !== 'failed' && <ConnectSteps current={step} />}
+
         {/*
           The dead end. It is rendered instead of the flow, never beside it, so there is
           no control on screen that would carry the attempt forward.
@@ -225,22 +281,22 @@ export default function XchonnectConnect() {
         {stage === 'failed' && (
           <Card className='border-destructive' data-testid='pairing-failed'>
             <CardHeader>
-              <CardTitle className='text-base text-destructive flex items-center gap-2'>
-                <AlertTriangle className='h-4 w-4' aria-hidden='true' />
+              <CardTitle className='text-lg text-destructive flex items-center gap-2'>
+                <AlertTriangle className='h-5 w-5' aria-hidden='true' />
                 <Trans>Connection stopped</Trans>
               </CardTitle>
               <CardDescription className='break-words'>
                 {failure}
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-3 text-sm'>
+            <CardContent className='space-y-4 text-sm'>
               <p>
                 <Trans>
                   There is no way to continue past this. Ask the website for a
                   new code.
                 </Trans>
               </p>
-              <div className='flex gap-2'>
+              <div className='flex flex-wrap gap-2'>
                 <Button variant='outline' onClick={startOver}>
                   <Trans>Read another code</Trans>
                 </Button>
@@ -255,40 +311,55 @@ export default function XchonnectConnect() {
         {stage === 'enter' && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-base'>
-                <Trans>Scan or paste the pairing code</Trans>
+              <CardTitle className='text-xl'>
+                <Trans>Scan the website&apos;s code</Trans>
               </CardTitle>
               <CardDescription>
                 <Trans>
-                  The website shows a QR code. Scan it, paste the code under it,
-                  or choose a picture of it.
+                  Press connect on the website. It shows a QR code: point the
+                  camera at it, or paste the code under it.
                 </Trans>
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-3'>
+            <CardContent className='space-y-5'>
+              {camera === 'on' ? (
+                <QrCamera onCode={onScanResult} onProblem={setCamera} />
+              ) : camera !== 'off' ? (
+                <QrCameraOff message={cameraProblemMessage(camera)} />
+              ) : (
+                <QrCameraIdle />
+              )}
+
               {failure !== null && (
-                <p className='text-sm text-destructive' role='alert'>
+                <p
+                  className='text-sm text-destructive text-center'
+                  role='alert'
+                >
                   {failure}
                 </p>
               )}
-              <div className='flex flex-wrap gap-2'>
-                <Button
-                  variant='outline'
-                  onClick={() => void handleScanOrPaste()}
-                >
-                  <QrCode className='h-4 w-4 mr-2' aria-hidden='true' />
-                  {isMobile ? (
-                    <Trans>Scan the code</Trans>
-                  ) : (
-                    <Trans>Paste from the clipboard</Trans>
-                  )}
+
+              <div className='flex flex-wrap justify-center gap-2'>
+                {camera === 'on' ? (
+                  <Button variant='outline' onClick={() => setCamera('off')}>
+                    <Trans>Stop the camera</Trans>
+                  </Button>
+                ) : (
+                  <Button onClick={scan}>
+                    <Camera className='h-4 w-4 mr-2' aria-hidden='true' />
+                    <Trans>Scan with the camera</Trans>
+                  </Button>
+                )}
+                <Button variant='secondary' onClick={() => void paste()}>
+                  <ClipboardPaste className='h-4 w-4 mr-2' aria-hidden='true' />
+                  <Trans>Paste the code</Trans>
                 </Button>
                 <Button
                   variant='outline'
                   onClick={() => fileInput.current?.click()}
                 >
                   <ImageIcon className='h-4 w-4 mr-2' aria-hidden='true' />
-                  <Trans>Choose a picture of the code</Trans>
+                  <Trans>Choose a picture</Trans>
                 </Button>
                 <input
                   ref={fileInput}
@@ -303,20 +374,27 @@ export default function XchonnectConnect() {
                   }}
                 />
               </div>
-              <Textarea
-                aria-label={t`Pairing code`}
-                rows={4}
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                className='font-mono text-xs'
-                placeholder='xchonnect:v1?…'
-              />
-              <Button
-                onClick={() => void check(code)}
-                disabled={busy || code.trim() === ''}
-              >
-                <Trans>Check this website</Trans>
-              </Button>
+
+              <div className='space-y-2 border-t border-border pt-4'>
+                <div className='xc-label'>
+                  <Trans>Or type the code</Trans>
+                </div>
+                <Textarea
+                  aria-label={t`Pairing code`}
+                  rows={3}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  className='font-mono text-xs'
+                  placeholder='xchonnect:v1?…'
+                />
+                <Button
+                  variant={code.trim() === '' ? 'outline' : 'default'}
+                  onClick={() => void check(code)}
+                  disabled={busy || code.trim() === ''}
+                >
+                  <Trans>Check this website</Trans>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -324,7 +402,7 @@ export default function XchonnectConnect() {
         {stage === 'checking' && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-base'>
+              <CardTitle className='text-xl'>
                 <Trans>Checking the website…</Trans>
               </CardTitle>
               <CardDescription>
@@ -338,10 +416,25 @@ export default function XchonnectConnect() {
 
         {stage === 'verified' && preview !== null && (
           <Card>
-            <CardHeader>
-              <CardTitle className='text-base'>
+            <CardHeader className='space-y-4'>
+              <div className='flex items-center gap-2 text-sm font-medium text-muted-foreground'>
+                <ShieldCheck className='h-4 w-4' aria-hidden='true' />
                 <Trans>This domain proved who it is</Trans>
-              </CardTitle>
+              </div>
+              <div className='flex items-start gap-4'>
+                <SiteCoin domain={preview.domainUnicode} size='lg' />
+                <div className='min-w-0 flex-1'>
+                  <XchonnectDomain
+                    identity={{
+                      domainUnicode: preview.domainUnicode,
+                      domainAscii: preview.domainAscii,
+                      domainDiffers: preview.domainDiffers,
+                      warnings: preview.warnings,
+                      dappName: preview.dappName,
+                    }}
+                  />
+                </div>
+              </div>
               <CardDescription>
                 <Trans>
                   It owns the key that signed the code. Only the domain is
@@ -349,42 +442,28 @@ export default function XchonnectConnect() {
                 </Trans>
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4 text-sm'>
-              <XchonnectDomain
-                identity={{
-                  domainUnicode: preview.domainUnicode,
-                  domainAscii: preview.domainAscii,
-                  domainDiffers: preview.domainDiffers,
-                  warnings: preview.warnings,
-                  dappName: preview.dappName,
-                }}
-              />
-              <dl className='grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-muted-foreground'>
-                <dt>
-                  <Trans>Network</Trans>
-                </dt>
-                <dd className='text-foreground'>{preview.chainId}</dd>
-                <dt>
-                  <Trans>It may ask for</Trans>
-                </dt>
-                <dd className='text-foreground'>
+            <CardContent className='space-y-5 text-sm'>
+              <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-2'>
+                <Fact label={<Trans>Network</Trans>}>{preview.chainId}</Fact>
+                <Fact label={<Trans>It may ask for</Trans>}>
                   {preview.grantedMethods.join(', ')}
-                </dd>
-                <dt>
-                  <Trans>Address it will see</Trans>
-                </dt>
-                <dd className='text-foreground font-mono text-xs break-all'>
+                </Fact>
+                <Fact label={<Trans>Address it will see</Trans>} mono>
                   {preview.grantedKey ?? t`none`}
-                </dd>
-                <dt>
-                  <Trans>Relay</Trans>
-                </dt>
-                <dd className='text-foreground font-mono text-xs break-all'>
+                </Fact>
+                <Fact label={<Trans>Relay</Trans>} mono>
                   {preview.relay}
-                </dd>
+                </Fact>
               </dl>
               {preview.developerMode && (
-                <p className='text-destructive' role='alert'>
+                <p
+                  className='flex items-start gap-2 text-destructive'
+                  role='alert'
+                >
+                  <AlertTriangle
+                    className='h-4 w-4 mt-0.5 shrink-0'
+                    aria-hidden='true'
+                  />
                   <Trans>
                     Developer mode: this code uses a local relay without
                     encryption in transit. Never for real money.
@@ -397,7 +476,7 @@ export default function XchonnectConnect() {
                   and you can change what this website may do at any time.
                 </Trans>
               </p>
-              <div className='flex gap-2'>
+              <div className='flex flex-wrap gap-2'>
                 <Button onClick={() => void pair()} disabled={busy}>
                   <Trans>Connect</Trans>
                 </Button>
@@ -416,7 +495,7 @@ export default function XchonnectConnect() {
         {stage === 'sas' && sas !== null && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-base'>
+              <CardTitle className='text-xl'>
                 <Trans>Do these six digits match?</Trans>
               </CardTitle>
               <CardDescription>
@@ -426,15 +505,10 @@ export default function XchonnectConnect() {
                 </Trans>
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div
-                className='text-5xl font-mono tracking-[0.3em] text-center py-4'
-                data-testid='sas-digits'
-              >
-                {sas.sas}
-              </div>
+            <CardContent className='space-y-5'>
+              <SasDigits sas={sas.sas} />
               {sas.dappConfirmed ? (
-                <div className='flex gap-2'>
+                <div className='flex flex-wrap justify-center gap-2'>
                   <Button onClick={() => void decide(true)} disabled={busy}>
                     <Trans>They match</Trans>
                   </Button>
@@ -457,6 +531,6 @@ export default function XchonnectConnect() {
           </Card>
         )}
       </Container>
-    </>
+    </Layout>
   );
 }

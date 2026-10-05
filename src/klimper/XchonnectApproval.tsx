@@ -21,6 +21,7 @@
 
 import Container from '@/components/Container';
 import Header from '@/components/Header';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -172,7 +173,7 @@ export default function XchonnectApproval() {
   const waiting = approvals.length - 1;
 
   return (
-    <>
+    <Layout>
       <Header
         title={t`Approve a request`}
         back={() => navigate(XCHONNECT_ROUTES.dapps)}
@@ -325,6 +326,6 @@ export default function XchonnectApproval() {
           </DialogContent>
         </Dialog>
       </Container>
-    </>
+    </Layout>
   );
 }

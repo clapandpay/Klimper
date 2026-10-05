@@ -14,6 +14,9 @@ import type { PairingPreview } from './xchonnect';
 
 // The app chrome needs the wallet, theme and safe-area contexts; none of that is what
 // these tests are about.
+vi.mock('@/components/Layout', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
@@ -247,5 +250,42 @@ describe('entry points', () => {
       expect(screen.getByText(/not an Xchonnect pairing code/)).toBeDefined(),
     );
     expect(inspectPairingUri).not.toHaveBeenCalled();
+  });
+
+  it('says so instead of showing a camera when the device has none', async () => {
+    renderScreen(<XchonnectConnect />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan with the camera' }),
+    );
+
+    // jsdom has no navigator.mediaDevices, like a webview without camera access.
+    await waitFor(() =>
+      expect(screen.getByText(/cannot share its camera/)).toBeDefined(),
+    );
+    expect(screen.queryByTestId('qr-camera')).toBeNull();
+    expect(screen.getByLabelText('Pairing code')).toBeDefined();
+  });
+});
+
+describe('after the six digits match', () => {
+  it('opens the list on the new connection', async () => {
+    inspectPairingUri.mockResolvedValue(preview);
+    approvePairing.mockResolvedValue({
+      pairingId: 'p1',
+      sas: '123456',
+      dappConfirmed: true,
+      deadline: Math.floor(Date.now() / 1000) + 300,
+    });
+    confirmSas.mockResolvedValue({ sessionId: 'sess-new' });
+
+    enterCode();
+    await waitFor(() => screen.getByRole('button', { name: 'Connect' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => screen.getByRole('button', { name: 'They match' }));
+    fireEvent.click(screen.getByRole('button', { name: 'They match' }));
+
+    await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeDefined());
+    expect(confirmSas).toHaveBeenCalledWith('p1', true);
   });
 });

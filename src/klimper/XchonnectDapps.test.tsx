@@ -6,6 +6,9 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionSummary } from './xchonnect';
 
+vi.mock('@/components/Layout', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 vi.mock('@/components/Header', () => ({
   default: ({ title, children }: { title: string; children?: unknown }) => (
     <h1>
@@ -187,4 +190,27 @@ it('says where the connection keys live, and that it is not the signing keychain
   expect(
     screen.getByText(/separate from the keys that sign your money/),
   ).toBeDefined();
+});
+
+it('opens on the connection that was just made, with the way back to the wallet', async () => {
+  listSessions.mockResolvedValue([session]);
+  renderScreen(<XchonnectDapps />, { state: { connected: 'sess-1' } });
+
+  await waitFor(() =>
+    expect(screen.getByTestId('connected-banner')).toBeDefined(),
+  );
+  expect(screen.getByTestId('connected-banner').textContent).toContain(
+    'Connected to pengui.xyz',
+  );
+  expect(
+    screen.getByRole('button', { name: 'Back to my wallet' }),
+  ).toBeDefined();
+});
+
+it('shows no banner for a connection that is not in the list', async () => {
+  listSessions.mockResolvedValue([session]);
+  renderScreen(<XchonnectDapps />, { state: { connected: 'someone-else' } });
+
+  await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
+  expect(screen.queryByTestId('connected-banner')).toBeNull();
 });

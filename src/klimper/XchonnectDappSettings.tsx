@@ -15,6 +15,7 @@
 
 import Container from '@/components/Container';
 import Header from '@/components/Header';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -150,19 +151,19 @@ export default function XchonnectDappSettings() {
 
   if (loading && session === null) {
     return (
-      <>
+      <Layout>
         <Header
           title={t`What this website may do`}
           back={() => navigate(XCHONNECT_ROUTES.dapps)}
         />
         <Container className='max-w-xl' />
-      </>
+      </Layout>
     );
   }
 
   if (session === null || draft === null) {
     return (
-      <>
+      <Layout>
         <Header
           title={t`What this website may do`}
           back={() => navigate(XCHONNECT_ROUTES.dapps)}
@@ -181,7 +182,7 @@ export default function XchonnectDappSettings() {
             </CardContent>
           </Card>
         </Container>
-      </>
+      </Layout>
     );
   }
 
@@ -261,7 +262,7 @@ export default function XchonnectDappSettings() {
   );
 
   return (
-    <>
+    <Layout>
       <Header
         title={t`What this website may do`}
         back={() => navigate(XCHONNECT_ROUTES.dapps)}
@@ -508,6 +509,6 @@ export default function XchonnectDappSettings() {
           </DialogContent>
         </Dialog>
       </Container>
-    </>
+    </Layout>
   );
 }

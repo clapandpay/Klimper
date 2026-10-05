@@ -75,19 +75,26 @@ immediate and needs no confirmation dialog — it is the safe direction.
 
 ### 2. Connect a dApp — `/xchonnect/connect` (TASK-072, TASK-085)
 
-| Stage        | What is shown                                                                                                                                              |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| entry        | scan or paste the code; on desktop: paste from the clipboard or choose a QR image; on mobile: the camera. The field accepts `xchonnect:v1?…` and `/pair#…` |
-| checking     | one line, no spinner theatre: "Checking the website…"                                                                                                      |
-| verified     | the domain slab, warnings, what the dApp may ask for, the single address shared, the network, the relay, and "nothing is signed automatically"             |
-| failed       | the reason, "there is no way to continue past this", and only Start over / Cancel                                                                          |
-| SAS          | six digits, large; "the website shows the same six digits"; both answers only once the dApp has answered                                                   |
-| waiting      | "Waiting for the website…" with the deadline                                                                                                               |
-| used/expired | the same dead end as `failed`, with the copy below                                                                                                         |
+| Stage        | What is shown                                                                                                                                                                                                                                                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| entry        | a viewfinder; **Scan with the camera** (on desktop the webview's camera, read live with `jsQR` in `QrCamera.tsx` and released as soon as it reads; on mobile the native scanner), **Paste the code**, **Choose a picture**, or type it. The field accepts `xchonnect:v1?…` and `/pair#…`. No camera: a sentence, and the other three still work |
+| checking     | one line, no spinner theatre: "Checking the website…"                                                                                                                                                                                                                                                                                           |
+| verified     | the domain slab, warnings, what the dApp may ask for, the single address shared, the network, the relay, and "nothing is signed automatically"                                                                                                                                                                                                  |
+| failed       | the reason, "there is no way to continue past this", and only Start over / Cancel                                                                                                                                                                                                                                                               |
+| SAS          | six digits, large; "the website shows the same six digits"; both answers only once the dApp has answered                                                                                                                                                                                                                                        |
+| waiting      | "Waiting for the website…" with the deadline                                                                                                                                                                                                                                                                                                    |
+| used/expired | the same dead end as `failed`, with the copy below                                                                                                                                                                                                                                                                                              |
 
 A link that arrives from the OS is handed over in memory, never through the app URL: the
 app uses a hash router, so a fragment in the URL would both break routing and write the
 pairing secret into the history stack.
+
+Every Xchonnect screen renders inside the app's `Layout`, so the sidebar and the wallet stay one
+tap away during and after pairing. A step line (Scan · Check · Compare) sits above the flow and is
+text, never a control; it is not shown on the dead end. Matching digits open `/xchonnect` on the
+new connection: a banner names the domain, its card is outlined in teal, and **Back to my
+wallet** returns to the wallet. Shared pieces (site coin, step line, digit tiles, facts, the
+listening pill) are `XchonnectUi.tsx` and `xchonnect.css`, theme tokens only.
 
 ### 3. Approval — `/xchonnect/request` (TASK-080)
 
