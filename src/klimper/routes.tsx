@@ -68,6 +68,19 @@ function gate(route: RouteObject): RouteObject {
   } as RouteObject;
 }
 
+/**
+ * `createRoutesFromElements` numbers the routes it makes by position ("0", "0-0", …), and
+ * Sage's routes and Klimper's are made by two separate calls, so both lists start at "0". A
+ * data router refuses duplicate ids and the app renders nothing. Dropping the ids lets the
+ * router number the joined tree once.
+ */
+function withoutIds(route: RouteObject): RouteObject {
+  const next = { ...route, children: route.children?.map(withoutIds) };
+  delete next.id;
+  if (next.children === undefined) delete next.children;
+  return next as RouteObject;
+}
+
 /** Sage's routes, with Klimper's feature flags applied and Klimper's screens added. */
 export function withKlimper(routes: RouteObject[]): RouteObject[] {
   return [
@@ -81,7 +94,7 @@ export function withKlimper(routes: RouteObject[]): RouteObject[] {
         {scannerRoutes}
       </>,
     ),
-  ];
+  ].map(withoutIds);
 }
 
 /**

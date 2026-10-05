@@ -217,14 +217,14 @@ Added the same way and just as removable, but nothing Sage would want: they are 
 not a wallet primitive. Both default to off in `features.ts`, so a build without `.env` is Sage's
 behaviour.
 
-| File                                                                                  | Ours                                 | Note                                                                                 |
-| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
-| `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
-| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
-| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
-| `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
-| `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
+| File                                                                                  | Ours                                                                   | Note                                                                                 |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                                                    | `@anna` instead of an address, through XCHandles (mainnet only)                      |
+| `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`                                            | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
+| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                                                    | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
+| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled`; the welcome heading says Klimper | one button on the start screen                                                       |
+| `.prettierignore`                                                                     | 1 line                                                                 | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
+| `package.json`                                                                        | `workspaces` array added                                               | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
 
 ### Passkey login
 
@@ -254,6 +254,20 @@ needs on top (unstripped build-time macros, `llvm-tools`).
 | `vendor/swift-rs/`         | new: swift-rs 1.0.8, 1 change | `src-rs/build.rs`, the "Klimper patch" comment. Drop the directory and the patch line once a swift-rs release exports its runtime; propose it upstream |
 | `Cargo.toml`, `Cargo.lock` | 2 lines; swift-rs from a path | the `swift-rs` line under `[patch.crates-io]`; on a lock conflict keep the path source                                                                 |
 | `.prettierignore`          | 1 line                        | `vendor`                                                                                                                                               |
+
+### iOS release build (TASK-003)
+
+Apps linked against the iOS 27 SDK must use the UIScene life cycle or UIKit refuses to launch
+them; tao 0.34 (Sage's pinned Tauri) has none. A shim of our own bridges it until tao 0.37.
+
+| File                                                                                | Ours                   | Note                                                                                                                                                 |
+| ----------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src-tauri/gen/apple/Sources/sage-tauri/KlimperScene.m`, `src-tauri/Info.ios.plist` | new                    | the scene delegate and its manifest; drop both once Sage's Tauri uses tao 0.37 or later                                                              |
+| `src-tauri/gen/apple/sage-tauri_iOS/PrivacyInfo.xcprivacy`                          | new                    | no tracking, no collection; the required-reason APIs the binary links (file timestamps, disk space). Re-check with `nm -u` when a dependency changes |
+| `src-tauri/gen/apple/sage-tauri.xcodeproj/project.pbxproj`                          | the two files above    |                                                                                                                                                      |
+| `src-tauri/tauri.ios.conf.json`                                                     | `bundle.iOS.infoPlist` | points Tauri at `Info.ios.plist`, which it does not pick up by itself                                                                                |
+| `.env.production`                                                                   | new                    | the release flags: Vite reads it for every production build and never for `pnpm dev`                                                                 |
+| `src/locales/*/messages.po`                                                         | regenerated            | `pnpm extract` after a merge: a production build shows a message id, not text, for anything missing                                                  |
 
 ### Look: Klimper Coin (TASK-062)
 
