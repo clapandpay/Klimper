@@ -305,8 +305,50 @@ describe('readPrompt', () => {
           ],
         },
       });
+      // Never shown as some other figure: the request cannot be described, so it cannot
+      // be approved.
+      expect(view.kind).toBe('unreadable');
+    });
+
+    it('refuses amounts that lost precision or are not whole', () => {
+      for (const net of [2 ** 53 + 2, 1.5, Number.NaN]) {
+        const view = readPrompt({
+          ...simpleSend,
+          summary: {
+            ...simpleSend.summary,
+            assets: [
+              {
+                asset: { type: 'xch' },
+                sent: 0,
+                received: 0,
+                conditional_received: 0,
+                net,
+              },
+            ],
+          },
+        });
+        expect(view.kind, String(net)).toBe('unreadable');
+      }
+    });
+
+    it('reads large amounts given as decimal strings exactly', () => {
+      const view = readPrompt({
+        ...simpleSend,
+        summary: {
+          ...simpleSend.summary,
+          assets: [
+            {
+              asset: { type: 'xch' },
+              sent: '9007199254740993',
+              received: 0,
+              conditional_received: 0,
+              net: '-9007199254740993',
+            },
+          ],
+        },
+      });
       if (view.kind !== 'spend') throw new Error('expected a spend');
-      expect(view.assets[0].net.toString()).toBe('0');
+      expect(view.assets[0].net.toFixed()).toBe('-9007199254740993');
     });
   });
 });

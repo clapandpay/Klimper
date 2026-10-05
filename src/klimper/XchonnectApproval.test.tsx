@@ -667,3 +667,20 @@ describe('cancelling a request', () => {
     );
   });
 });
+
+describe('one answer per request', () => {
+  it('ignores a second press while the first answer is on its way', async () => {
+    // An answer that never comes back: the wallet is still signing.
+    resolveApproval.mockReturnValue(new Promise<null>(() => undefined));
+    pendingApprovals.mockResolvedValue([request(spendPrompt())]);
+    renderScreen(<XchonnectApproval />);
+    const approve = await waitFor(() =>
+      screen.getByRole('button', { name: 'Approve' }),
+    );
+    fireEvent.click(approve);
+    fireEvent.click(approve);
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    await waitFor(() => expect(resolveApproval).toHaveBeenCalledTimes(1));
+    expect(resolveApproval).toHaveBeenCalledWith('a1', true);
+  });
+});

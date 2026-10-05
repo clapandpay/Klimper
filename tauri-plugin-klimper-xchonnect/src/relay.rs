@@ -146,17 +146,25 @@ impl RelayClient {
         {
             return Err(Error::Relay("the relay sent too much data".to_owned()));
         }
-        let text = response
-            .text()
+        // Read in chunks and stop at the cap: a chunked response has no length to check up
+        // front, and a relay is named by whoever made the pairing code (it is contacted on
+        // scan, before the user has agreed to anything).
+        let mut response = response;
+        let mut bytes = Vec::with_capacity(1024);
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|error| Error::Relay(describe(&error)))?;
-        if text.len() as u64 > MAX_RESPONSE_BYTES {
-            return Err(Error::Relay("the relay sent too much data".to_owned()));
+            .map_err(|error| Error::Relay(describe(&error)))?
+        {
+            if (bytes.len() + chunk.len()) as u64 > MAX_RESPONSE_BYTES {
+                return Err(Error::Relay("the relay sent too much data".to_owned()));
+            }
+            bytes.extend_from_slice(&chunk);
         }
-        let body = if text.trim().is_empty() {
+        let body = if bytes.iter().all(u8::is_ascii_whitespace) {
             Value::Null
         } else {
-            serde_json::from_str(&text).unwrap_or(Value::Null)
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
         };
         Ok(Reply { status, body })
     }

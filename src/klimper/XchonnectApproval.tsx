@@ -106,14 +106,16 @@ export default function XchonnectApproval() {
 
   const resolve = (approval: Approval, approved: boolean) => {
     const dapp = approval.dapp;
-    void answer(approval.id, approved).then(() =>
+    void answer(approval.id, approved).then((taken) => {
+      // Not taken: the error banner says so, and there is no answer to go back with.
+      if (!taken) return;
       // Integration guide 5.4: with no usable return URL the user is left here with a
       // clear "you can go back now" state rather than a guessed navigation. The guard
       // that would open one lives in `xchonnectReturn.ts`.
-      returnToDapp(undefined, dapp).then((outcome) => {
+      void returnToDapp(undefined, dapp).then((outcome) => {
         if (outcome !== 'opened') setAnswered(dapp);
-      }),
-    );
+      });
+    });
     if (picked !== null) {
       navigate(XCHONNECT_ROUTES.request, { replace: true });
     }

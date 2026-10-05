@@ -314,6 +314,9 @@ pub struct SessionStore {
     secrets: Box<dyn SecretStore>,
     index_path: PathBuf,
     index: Mutex<Index>,
+    /// Serialises read-modify-write of one session's blob: the session loop and
+    /// [`SessionStore::update_policy`] both write the same record.
+    writes: Mutex<()>,
 }
 
 impl SessionStore {
@@ -329,6 +332,7 @@ impl SessionStore {
             secrets,
             index_path,
             index: Mutex::new(index),
+            writes: Mutex::new(()),
         })
     }
 
@@ -356,7 +360,46 @@ impl SessionStore {
     /// Persist a session. Bumps `state_version`, writes the keyring entry and only then
     /// the index. Callers must do this **before** posting the envelope the change
     /// produced (integration guide §2).
+    ///
+    /// The user's policy for the dApp (methods, limits, the two allow switches) is never
+    /// taken from `stored`: it is copied from the stored record, so a caller holding an older
+    /// copy (the session loop between two requests) cannot revert a change the user made in
+    /// the meantime. [`SessionStore::update_policy`] is the only way to change it.
     pub fn save(&self, stored: &mut StoredSession) -> Result<()> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let (fingerprint, id) = (stored.record.fingerprint, stored.record.id.clone());
+        if let Some(blob) = self.secrets.get(&Self::session_key(fingerprint, &id))?
+            && let Ok(current) = serde_json::from_slice::<StoredSession>(&blob)
+        {
+            stored.record.permissions = current.record.permissions;
+            stored.record.allow_agg_sig_unsafe = current.record.allow_agg_sig_unsafe;
+            stored.record.allow_unknown_contracts = current.record.allow_unknown_contracts;
+            stored.record.state_version = stored
+                .record
+                .state_version
+                .max(current.record.state_version);
+        }
+        self.write(stored)
+    }
+
+    /// Change the user's policy for a dApp and nothing else: the session state written by
+    /// the session loop (sequence numbers, keys) is kept as stored, never replaced by an
+    /// older copy.
+    pub fn update_policy(
+        &self,
+        fingerprint: u32,
+        id: &str,
+        change: impl FnOnce(&mut SessionRecord),
+    ) -> Result<StoredSession> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut stored = self.load(fingerprint, id)?;
+        change(&mut stored.record);
+        self.write(&mut stored)?;
+        Ok(stored)
+    }
+
+    /// Bump `state_version`, write the keyring entry, then the index.
+    fn write(&self, stored: &mut StoredSession) -> Result<()> {
         let (fingerprint, id) = (stored.record.fingerprint, stored.record.id.clone());
         stored.record.state_version = stored.record.state_version.saturating_add(1);
         let blob = serde_json::to_vec(stored).map_err(Error::internal)?;
@@ -619,6 +662,45 @@ mod tests {
         store.remove_wallet(1234).unwrap();
         assert!(store.list(1234).unwrap().is_empty());
         assert!(store.load(1234, "one").is_err());
+    }
+
+    /// The user narrows a dApp's policy while the session loop holds an older copy of the
+    /// record. The loop's next save (a pong, a receipt) must neither revert the policy nor
+    /// let the policy change roll back the loop's session state.
+    #[test]
+    fn a_stale_copy_cannot_revert_the_users_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(dir.path());
+        let mut looped = StoredSession {
+            record: record("four"),
+            session_hex: "01".to_owned(),
+        };
+        looped.record.allow_agg_sig_unsafe = true;
+        store.save(&mut looped).unwrap();
+
+        let changed = store
+            .update_policy(1234, "four", |record| {
+                record.allow_agg_sig_unsafe = false;
+                record.permissions.methods = vec!["chainId".to_owned()];
+            })
+            .unwrap();
+        assert_eq!(
+            changed.session_hex, "01",
+            "the policy change keeps the session state"
+        );
+
+        // The loop advanced its session and saves its (stale-policy) copy.
+        looped.session_hex = "02".to_owned();
+        store.save(&mut looped).unwrap();
+        let back = store.load(1234, "four").unwrap();
+        assert!(!back.record.allow_agg_sig_unsafe, "policy not reverted");
+        assert_eq!(back.record.permissions.methods, vec!["chainId".to_owned()]);
+        assert_eq!(back.session_hex, "02", "session state from the loop");
+        assert!(!back.record.needs_repair, "versions stay monotonic");
+        assert!(
+            !looped.record.allow_agg_sig_unsafe,
+            "the loop's copy is refreshed too"
+        );
     }
 
     /// The index is the newer of the two writes, so a restored keyring entry is detected.

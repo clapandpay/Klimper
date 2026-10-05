@@ -9,7 +9,7 @@ import '@/lib/klimperTheme';
 import { PasskeyGate } from './PasskeyGate';
 import { XchonnectApprovalHost } from './XchonnectApprovalHost';
 
-export { klimperRouter, withKlimper } from './routes';
+export { klimperRouter } from './routes';
 
 /** The passkey gate over the app, and the approval overlay over every screen. */
 export function KlimperRoot() {
