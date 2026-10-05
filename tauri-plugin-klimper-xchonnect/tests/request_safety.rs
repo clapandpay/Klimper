@@ -222,6 +222,7 @@ impl Harness {
             keys: &self.keys,
             limits: &limits,
             now: NOW,
+            chain: None,
         };
         let host = Host {
             signer: &signer,
@@ -482,6 +483,7 @@ fn a_cancelled_authentication_cancels_the_request() {
         keys: &harness.keys,
         limits: &limits,
         now: NOW,
+        chain: None,
     };
     let outcome = kit::handle(
         "signCoinSpends",
@@ -756,6 +758,7 @@ fn a_request_for_another_network_is_refused() {
         keys: &harness.keys,
         limits: &limits,
         now: NOW,
+        chain: None,
     };
     let outcome = kit::handle(
         "signCoinSpends",

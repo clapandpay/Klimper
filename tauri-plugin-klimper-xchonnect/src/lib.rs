@@ -55,6 +55,7 @@ use tokio::sync::Mutex;
 use xchonnect_core::domain::display_domain;
 
 pub mod approval;
+pub mod chain;
 pub mod error;
 pub mod execute;
 pub mod native_push;

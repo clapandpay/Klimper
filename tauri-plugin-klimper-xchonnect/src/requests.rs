@@ -280,6 +280,9 @@ fn run(
     // One approval per request, one key unlock per request (xchonnect-wiki 04).
     let signer = KlimperSigner::new(state.clone(), snapshot);
     let broadcaster = SageBroadcaster::new(state.clone());
+    // The optional reads and broadcast (TASK-082), scoped by wallet-kit to the keys this
+    // dApp was given.
+    let chain = crate::chain::KlimperChain::new(state.clone());
 
     let context = RequestContext {
         dapp: &record.dapp,
@@ -292,6 +295,7 @@ fn run(
         keys: &snapshot.keys,
         limits: &limits,
         now,
+        chain: Some(&chain),
     };
     let host = Host {
         signer: &signer,
