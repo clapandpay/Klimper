@@ -46,5 +46,22 @@
 	<string>Klimper reads NFC tags that carry a Chia offer.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Klimper uses Face ID to unlock your wallet and to confirm payments.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>KlimperSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 </dict>
 </plist>
