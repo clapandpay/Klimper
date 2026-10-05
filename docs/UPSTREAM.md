@@ -256,6 +256,18 @@ needs on top (unstripped build-time macros, `llvm-tools`).
 | `Cargo.toml`, `Cargo.lock` | 2 lines; swift-rs from a path | the `swift-rs` line under `[patch.crates-io]`; on a lock conflict keep the path source                                                                 |
 | `.prettierignore`          | 1 line                        | `vendor`                                                                                                                                               |
 
+### iOS release build (TASK-003)
+
+Apps linked against the iOS 27 SDK must use the UIScene life cycle or UIKit refuses to launch
+them; tao 0.34 (Sage's pinned Tauri) has none. A shim of our own bridges it until tao 0.37.
+
+| File                                                                                | Ours                   | Note                                                                                                |
+| ----------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `src-tauri/gen/apple/Sources/sage-tauri/KlimperScene.m`, `src-tauri/Info.ios.plist` | new                    | the scene delegate and its manifest; drop both once Sage's Tauri uses tao 0.37 or later             |
+| `src-tauri/gen/apple/sage-tauri.xcodeproj/project.pbxproj`                          | `KlimperScene.m`       | registered as a source                                                                              |
+| `src-tauri/tauri.ios.conf.json`                                                     | `bundle.iOS.infoPlist` | points Tauri at `Info.ios.plist`, which it does not pick up by itself                               |
+| `src/locales/*/messages.po`                                                         | regenerated            | `pnpm extract` after a merge: a production build shows a message id, not text, for anything missing |
+
 ### Look: Klimper Coin (TASK-062)
 
 The design guide (Klimper Coin) is `docs/design-guide.md`. It is applied as two themes and one stylesheet scoped
