@@ -5,7 +5,12 @@
 // added. The flags are mocked: offers and token issuing off, NFTs on.
 
 import { isValidElement } from 'react';
-import { createRoutesFromElements, Navigate, Route } from 'react-router-dom';
+import {
+  createMemoryRouter,
+  createRoutesFromElements,
+  Navigate,
+  Route,
+} from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
@@ -80,5 +85,11 @@ describe('withKlimper', () => {
     expect(paths).toEqual(
       expect.arrayContaining(['/clapandpay', '/xchonnect', '/scanner']),
     );
+  });
+
+  it('builds a data router: Sage’s and Klimper’s route ids never collide', () => {
+    // Both lists come from separate createRoutesFromElements calls, which number routes from
+    // "0" each time; a data router refuses the duplicates and the app renders nothing.
+    expect(() => createMemoryRouter(withKlimper(sage()))).not.toThrow();
   });
 });
