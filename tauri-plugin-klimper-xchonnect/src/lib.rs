@@ -24,6 +24,7 @@
 //! | `confirm_sas` | `pairingId: string`, `matches: boolean` | [`SessionSummary`] or `null` |
 //! | `list_sessions` | — | [`SessionSummary`]`[]` (and resumes their message loops) |
 //! | `end_session` | `sessionId: string` | `null` |
+//! | `rotate_session_keys` | `sessionId: string` | `null` |
 //! | `set_dapp_policy` | `sessionId: string`, `policy:` [`DappPolicy`] | [`SessionSummary`] |
 //! | `pending_approvals` | — | [`Approval`]`[]` |
 //! | `resolve_approval` | `approvalId: string`, `approved: boolean` | `null` |
@@ -82,12 +83,48 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// A running session's control handles. Dropping the sender is what stops the loop and
-/// its ticker, so removing the entry is all a shutdown has to do.
+/// A session loop's control handles.
+///
+/// The entry outlives the loop: a loop that returned (the dApp ended the session, the state
+/// needed re-pairing) leaves it behind, and the ticker keeps its own `wake` sender, so
+/// removing the entry does not stop a running loop either. [`Live::running`] is therefore
+/// the only test of whether a loop is there to talk to.
 struct Live {
     end_requested: Arc<AtomicBool>,
+    rotate_requested: Arc<AtomicBool>,
+    interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
 }
+
+impl Live {
+    /// The loop still holds its receiver.
+    fn running(&self) -> bool {
+        !self.wake.is_closed()
+    }
+
+    /// The user disconnected and the loop is posting `session.end`: no longer listed.
+    fn ending(&self) -> bool {
+        self.running() && self.end_requested.load(Ordering::SeqCst)
+    }
+
+    fn request_rotation(&self) {
+        self.rotate_requested.store(true, Ordering::SeqCst);
+        self.interrupt.notify_one();
+        let _ = self.wake.try_send(());
+    }
+
+    fn request_end(&self) {
+        self.end_requested.store(true, Ordering::SeqCst);
+        // `notify_one` keeps a permit when the loop is not waiting yet, so the end is
+        // seen by the next poll rather than lost.
+        self.interrupt.notify_one();
+        let _ = self.wake.try_send(());
+    }
+}
+
+/// A pairing attempt, locked on its own: a poll for `session.confirm` on one attempt never
+/// holds up cancelling it, confirming it, or starting another.
+type SharedAttempt = Arc<Mutex<Attempt>>;
 
 /// Plugin state.
 pub struct Xchonnect<R: Runtime> {
@@ -95,7 +132,7 @@ pub struct Xchonnect<R: Runtime> {
     store: Arc<SessionStore>,
     approvals: Arc<ApprovalBridge>,
     emit: Emitter,
-    attempts: Mutex<BTreeMap<String, Attempt>>,
+    attempts: Mutex<BTreeMap<String, SharedAttempt>>,
     live: Mutex<BTreeMap<String, Live>>,
 }
 
@@ -148,6 +185,12 @@ pub struct SessionSummary {
     pub sas_confirmed: bool,
     /// Stored state was lost or rolled back: the dApp must be paired again.
     pub needs_repair: bool,
+    /// The website withdrew the origin key this connection was paired under, so Klimper
+    /// ended it (spec 6.1). Only removing it is left.
+    pub revoked: bool,
+    /// New keys were offered and the dApp has not answered yet, or the previous epoch's
+    /// mailbox is still being read.
+    pub rotating: bool,
     pub developer_mode: bool,
     pub methods: Vec<String>,
     pub exposed_keys: Vec<String>,
@@ -178,7 +221,7 @@ pub struct DappPolicy {
 }
 
 /// Describe one stored session for the webview.
-fn summary(stored: &StoredSession, epoch: u64, connected: bool) -> SessionSummary {
+fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSummary {
     let shown = display_domain(&stored.record.dapp);
     SessionSummary {
         session_id: stored.record.id.clone(),
@@ -193,9 +236,11 @@ fn summary(stored: &StoredSession, epoch: u64, connected: bool) -> SessionSummar
         dapp_name: stored.record.dapp_name.clone(),
         chain_id: stored.record.chain_id.clone(),
         created_at: stored.record.created_at,
-        epoch,
+        epoch: keys.epoch,
         sas_confirmed: stored.record.sas_confirmed,
         needs_repair: stored.record.needs_repair,
+        revoked: stored.record.revoked,
+        rotating: keys.rotating,
         developer_mode: stored.record.developer_mode,
         methods: stored.record.permissions.methods.clone(),
         exposed_keys: stored.record.permissions.exposed_keys.clone(),
@@ -211,16 +256,17 @@ impl<R: Runtime> Xchonnect<R> {
     /// session needs re-pairing.
     async fn ensure_loop(&self, stored: StoredSession) -> Result<bool> {
         let id = stored.record.id.clone();
-        if stored.record.needs_repair || !stored.record.sas_confirmed {
+        if stored.record.revoked || stored.record.needs_repair || !stored.record.sas_confirmed {
             return Ok(false);
         }
         let mut live = self.live.lock().await;
-        if live.contains_key(&id) {
+        if live.get(&id).is_some_and(Live::running) {
             return Ok(true);
         }
         let relay = relay::RelayClient::new(&stored.record.relay, stored.record.developer_mode)?;
-        let info = relay.info().await.unwrap_or_default();
         let end_requested = Arc::new(AtomicBool::new(false));
+        let rotate_requested = Arc::new(AtomicBool::new(false));
+        let interrupt = Arc::new(tokio::sync::Notify::new());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
         let message_loop = SessionLoop {
@@ -229,8 +275,12 @@ impl<R: Runtime> Xchonnect<R> {
             approvals: self.approvals.clone(),
             emit: self.emit.clone(),
             relay,
-            info,
+            // The loop reads the relay's own limits when it starts: no network call is
+            // made while `live` is locked.
+            info: relay::RelayInfo::default(),
             end_requested: end_requested.clone(),
+            rotate_requested: rotate_requested.clone(),
+            interrupt: interrupt.clone(),
             wake: wake_rx,
         };
         session_loop::spawn_ticker(wake_tx.clone());
@@ -239,10 +289,43 @@ impl<R: Runtime> Xchonnect<R> {
             id,
             Live {
                 end_requested,
+                rotate_requested,
+                interrupt,
                 wake: wake_tx,
             },
         );
         Ok(true)
+    }
+
+    /// Sessions the user has disconnected whose loop is still posting `session.end`.
+    async fn ending(&self) -> Vec<String> {
+        self.live
+            .lock()
+            .await
+            .iter()
+            .filter(|(_, live)| live.ending())
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    async fn attempt(&self, pairing_id: &str) -> Result<SharedAttempt> {
+        self.attempts
+            .lock()
+            .await
+            .get(pairing_id)
+            .cloned()
+            .ok_or(Error::UnknownPairing)
+    }
+
+    /// Forget an attempt and delete its mailbox. Returns at once: the deletion waits for
+    /// whatever holds the attempt (a poll, a reply being posted) in the background.
+    async fn drop_attempt(&self, pairing_id: &str) {
+        let attempt = self.attempts.lock().await.remove(pairing_id);
+        if let Some(attempt) = attempt {
+            tauri::async_runtime::spawn(async move {
+                attempt.lock().await.discard().await;
+            });
+        }
     }
 }
 
@@ -264,7 +347,15 @@ async fn status<R: Runtime>(app: AppHandle<R>, state: State<'_, Xchonnect<R>>) -
         }
     };
     let session_count = match fingerprint {
-        Some(fingerprint) => state.store.list(fingerprint)?.len(),
+        Some(fingerprint) => {
+            let ending = state.ending().await;
+            state
+                .store
+                .list(fingerprint)?
+                .iter()
+                .filter(|s| !ending.contains(&s.record.id))
+                .count()
+        }
         None => 0,
     };
     Ok(Status {
@@ -295,11 +386,13 @@ async fn inspect_pairing_uri<R: Runtime>(
     )
     .await?;
     let preview = attempt.preview();
-    state
-        .attempts
-        .lock()
-        .await
-        .insert(attempt.id.clone(), attempt);
+    let mut attempts = state.attempts.lock().await;
+    // A preview the user walked away from is never cancelled; one past its deadline is
+    // worth nothing, so it goes when the next code is scanned. One that is busy (being
+    // replied to or polled) is left to its own deadline.
+    let now_s = now();
+    attempts.retain(|_, a| a.try_lock().map_or(true, |a| a.deadline >= now_s));
+    attempts.insert(attempt.id.clone(), Arc::new(Mutex::new(attempt)));
     Ok(preview)
 }
 
@@ -311,11 +404,8 @@ async fn approve_pairing<R: Runtime>(
     state: State<'_, Xchonnect<R>>,
     pairing_id: String,
 ) -> Result<PairingSas> {
-    let sas = {
-        let mut attempts = state.attempts.lock().await;
-        let attempt = attempts.get_mut(&pairing_id).ok_or(Error::UnknownPairing)?;
-        pairing::reply(attempt, now()).await?
-    };
+    let attempt = state.attempt(&pairing_id).await?;
+    let sas = pairing::reply(&mut *attempt.lock().await, now()).await?;
     spawn_confirm_poller(app, pairing_id);
     Ok(sas)
 }
@@ -326,10 +416,7 @@ async fn cancel_pairing<R: Runtime>(
     state: State<'_, Xchonnect<R>>,
     pairing_id: String,
 ) -> Result<()> {
-    let attempt = state.attempts.lock().await.remove(&pairing_id);
-    if let Some(attempt) = attempt {
-        attempt.discard().await;
-    }
+    state.drop_attempt(&pairing_id).await;
     Ok(())
 }
 
@@ -341,25 +428,38 @@ async fn confirm_sas<R: Runtime>(
     pairing_id: String,
     matches: bool,
 ) -> Result<Option<SessionSummary>> {
-    let mut attempts = state.attempts.lock().await;
-    let attempt = attempts.get_mut(&pairing_id).ok_or(Error::UnknownPairing)?;
+    let shared = state.attempt(&pairing_id).await?;
+    let mut attempt = shared.lock().await;
     if !matches {
-        pairing::reject(attempt, now()).await?;
-        attempts.remove(&pairing_id);
-        drop(attempts);
+        pairing::reject(&mut attempt, now()).await?;
+        drop(attempt);
+        state.attempts.lock().await.remove(&pairing_id);
         (state.emit)(EVENT_SESSIONS, json!({}));
         return Ok(None);
     }
-    let stored = pairing::confirm(attempt, &state.store, now()).await?;
-    let epoch = attempt
+    // The dApp has not answered yet: nothing to confirm, and nothing to throw away either.
+    if attempt.session.is_none() {
+        return Err(Error::UnknownPairing);
+    }
+    let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
+        Ok(stored) => stored,
+        Err(error) => {
+            // Nothing is left half made: `confirm` undid the stored session, and the
+            // attempt and its mailbox go, so the screen can only offer to start again.
+            drop(attempt);
+            state.drop_attempt(&pairing_id).await;
+            return Err(error);
+        }
+    };
+    let keys = attempt
         .session
         .as_ref()
-        .map_or(0, xchonnect_core::session::Session::epoch);
-    attempts.remove(&pairing_id);
-    drop(attempts);
+        .map_or_else(KeyState::default, KeyState::of);
+    drop(attempt);
+    state.attempts.lock().await.remove(&pairing_id);
 
     let connected = state.ensure_loop(stored.clone()).await?;
-    let summary = summary(&stored, epoch, connected);
+    let summary = summary(&stored, keys, connected);
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(Some(summary))
 }
@@ -374,27 +474,49 @@ async fn list_sessions<R: Runtime>(
 ) -> Result<Vec<SessionSummary>> {
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
     let sessions = state.store.list(snapshot.fingerprint)?;
-    // A loop that has returned (the dApp ended the session) leaves a stale entry behind;
-    // dropping it also drops the last `wake` sender.
-    {
-        let known: Vec<String> = sessions.iter().map(|s| s.record.id.clone()).collect();
-        state.live.lock().await.retain(|id, _| known.contains(id));
-    }
+    // Only entries whose loop has returned are dropped. Pruning by this wallet's list
+    // would orphan the running loops of another wallet's sessions, and switching back
+    // would then start a second loop on the same session: two writers of one `seq`.
+    state.live.lock().await.retain(|_, live| live.running());
+    let ending = state.ending().await;
     let mut out = Vec::with_capacity(sessions.len());
     for stored in sessions {
-        let epoch = epoch_of(&stored);
+        // Disconnected a moment ago: gone as far as the user is concerned, while the loop
+        // finishes telling the dApp.
+        if ending.contains(&stored.record.id) {
+            continue;
+        }
+        let keys = KeyState::stored(&stored);
         let connected = state.ensure_loop(stored.clone()).await.unwrap_or(false);
-        out.push(summary(&stored, epoch, connected));
+        out.push(summary(&stored, keys, connected));
     }
     Ok(out)
 }
 
-fn epoch_of(stored: &StoredSession) -> u64 {
-    stored
-        .session_bytes()
-        .ok()
-        .and_then(|bytes| xchonnect_core::session::Session::from_bytes(&bytes).ok())
-        .map_or(0, |session| session.epoch())
+/// What the screen shows about a session's keys.
+#[derive(Debug, Clone, Copy, Default)]
+struct KeyState {
+    epoch: u64,
+    rotating: bool,
+}
+
+impl KeyState {
+    fn of(session: &xchonnect_core::session::Session) -> Self {
+        KeyState {
+            epoch: session.epoch(),
+            rotating: session.pending_rotation_mailbox().is_some()
+                || session.draining_mailbox().is_some(),
+        }
+    }
+
+    /// From the stored bytes. A revoked session has none left, and reads as epoch 0.
+    fn stored(stored: &StoredSession) -> Self {
+        stored
+            .session_bytes()
+            .ok()
+            .and_then(|bytes| xchonnect_core::session::Session::from_bytes(&bytes).ok())
+            .map_or_else(KeyState::default, |session| KeyState::of(&session))
+    }
 }
 
 /// End a connection: `session.end` to the dApp, then the mailboxes and the keyring entries
@@ -406,11 +528,21 @@ async fn end_session<R: Runtime>(
     state: State<'_, Xchonnect<R>>,
     session_id: String,
 ) -> Result<()> {
-    let live = state.live.lock().await;
+    // Whatever the session is waiting on is rejected now, not when the loop gets to it: a
+    // prompt for a connection the user just ended must not stay on screen.
+    state.approvals.withdraw_session(&session_id);
+    let mut live = state.live.lock().await;
     if let Some(handle) = live.get(&session_id) {
-        handle.end_requested.store(true, Ordering::SeqCst);
-        let _ = handle.wake.try_send(());
-        return Ok(());
+        if handle.running() {
+            handle.request_end();
+            drop(live);
+            // `list_sessions` leaves an ending session out, so the list is right at once.
+            (state.emit)(EVENT_SESSIONS, json!({}));
+            return Ok(());
+        }
+        // The loop returned without removing the session (it was marked for re-pairing):
+        // flagging it would do nothing at all, so end it as if no loop had ever run.
+        live.remove(&session_id);
     }
     drop(live);
     // No loop running (the wallet was locked when it would have started, or the session
@@ -423,6 +555,27 @@ async fn end_session<R: Runtime>(
     state.store.remove(snapshot.fingerprint, &session_id)?;
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(())
+}
+
+/// Renew one connection's keys (spec 9.2.1, the wallet as initiator). The session's loop
+/// creates a mailbox and posts the offer; the switch happens when the dApp accepts, and
+/// the `rotating` flag on the summary stays set until the old mailbox is drained.
+#[command]
+async fn rotate_session_keys<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+    session_id: String,
+) -> Result<()> {
+    let live = state.live.lock().await;
+    match live.get(&session_id) {
+        Some(handle) if handle.running() && !handle.ending() => {
+            handle.request_rotation();
+            Ok(())
+        }
+        // Not listening (locked wallet, needs re-pairing, revoked, being ended): there is
+        // no loop to carry the offer, and a rotation needs the dApp to answer.
+        _ => Err(Error::SessionNotUsable),
+    }
 }
 
 /// Change one dApp's permissions and limits. The session loop reloads them before every
@@ -449,10 +602,15 @@ async fn set_dapp_policy<R: Runtime>(
         stored.record.allow_unknown_contracts = allow;
     }
     state.store.save(&mut stored)?;
-    let epoch = epoch_of(&stored);
-    let connected = state.live.lock().await.contains_key(&session_id);
+    let keys = KeyState::stored(&stored);
+    let connected = state
+        .live
+        .lock()
+        .await
+        .get(&session_id)
+        .is_some_and(Live::running);
     (state.emit)(EVENT_SESSIONS, json!({}));
-    Ok(summary(&stored, epoch, connected))
+    Ok(summary(&stored, keys, connected))
 }
 
 /// Everything waiting for the user, so a reloaded screen can rebuild itself.
@@ -482,18 +640,18 @@ fn spawn_confirm_poller<R: Runtime>(app: AppHandle<R>, pairing_id: String) {
     tauri::async_runtime::spawn(async move {
         loop {
             let state = app.state::<Xchonnect<R>>();
+            // Looked up afresh each round: a cancelled attempt is simply no longer there.
+            let Ok(shared) = state.attempt(&pairing_id).await else {
+                return;
+            };
             let outcome = {
-                let mut attempts = state.attempts.lock().await;
-                let Some(attempt) = attempts.get_mut(&pairing_id) else {
-                    return; // cancelled
-                };
-                pairing::poll_for_confirm(attempt, now()).await
+                let mut attempt = shared.lock().await;
+                pairing::poll_for_confirm(&mut attempt, now())
+                    .await
+                    .map(|created| created.then(|| attempt.sas()))
             };
             match outcome {
-                Ok(true) => {
-                    let attempts = state.attempts.lock().await;
-                    let sas = attempts.get(&pairing_id).and_then(Attempt::sas);
-                    drop(attempts);
+                Ok(Some(sas)) => {
                     (state.emit)(
                         EVENT_PAIRING,
                         json!({
@@ -505,19 +663,15 @@ fn spawn_confirm_poller<R: Runtime>(app: AppHandle<R>, pairing_id: String) {
                     );
                     return;
                 }
-                Ok(false) => tokio::time::sleep(pairing::POLL_GAP).await,
+                Ok(None) => tokio::time::sleep(pairing::POLL_GAP).await,
                 Err(error) => {
-                    let message = error.to_string();
-                    let attempt = state.attempts.lock().await.remove(&pairing_id);
-                    if let Some(attempt) = attempt {
-                        attempt.discard().await;
-                    }
+                    state.drop_attempt(&pairing_id).await;
                     (state.emit)(
                         EVENT_PAIRING,
                         json!({
                             "pairingId": pairing_id,
                             "state": "failed",
-                            "error": message,
+                            "error": error.to_string(),
                         }),
                     );
                     return;
@@ -539,6 +693,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             confirm_sas,
             list_sessions,
             end_session,
+            rotate_session_keys,
             set_dapp_policy,
             pending_approvals,
             resolve_approval

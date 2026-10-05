@@ -15,7 +15,7 @@
 //!   the local simulation, so a dApp's own labels and amounts never reach the screen
 //!   (spec 11.1 item 2, integration guide §5).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
@@ -83,8 +83,16 @@ pub type Emitter = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 /// The registry of outstanding approvals.
 pub struct ApprovalBridge {
-    waiting: Mutex<BTreeMap<String, Waiting>>,
+    registry: Mutex<Registry>,
     emit: Emitter,
+}
+
+#[derive(Default)]
+struct Registry {
+    waiting: BTreeMap<String, Waiting>,
+    /// Sessions that were withdrawn. Ids are random and never reused, so an entry only
+    /// ever stops a request that was already on its way when the session ended.
+    closed: BTreeSet<String>,
 }
 
 impl std::fmt::Debug for ApprovalBridge {
@@ -96,7 +104,7 @@ impl std::fmt::Debug for ApprovalBridge {
 impl ApprovalBridge {
     pub fn new(emit: Emitter) -> Self {
         ApprovalBridge {
-            waiting: Mutex::new(BTreeMap::new()),
+            registry: Mutex::new(Registry::default()),
             emit,
         }
     }
@@ -108,11 +116,15 @@ impl ApprovalBridge {
         let (tx, rx) = mpsc::channel();
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
         {
-            let Ok(mut waiting) = self.waiting.lock() else {
+            let Ok(mut registry) = self.registry.lock() else {
                 tracing::error!("approval registry poisoned; refusing the request");
                 return false;
             };
-            waiting.insert(
+            // The session ended while this request was being simulated: nothing to ask.
+            if registry.closed.contains(&approval.session_id) {
+                return false;
+            }
+            registry.waiting.insert(
                 id.clone(),
                 Waiting {
                     approval,
@@ -125,8 +137,8 @@ impl ApprovalBridge {
         // A timeout and a closed channel are both rejections: the only path to `true` is
         // the user pressing approve.
         let decision = matches!(rx.recv_timeout(DECISION_TIMEOUT), Ok(true));
-        if let Ok(mut waiting) = self.waiting.lock() {
-            waiting.remove(&id);
+        if let Ok(mut registry) = self.registry.lock() {
+            registry.waiting.remove(&id);
         }
         (self.emit)(
             EVENT_APPROVAL_DONE,
@@ -138,8 +150,8 @@ impl ApprovalBridge {
     /// The webview answered.
     pub fn resolve(&self, id: &str, approved: bool) -> Result<()> {
         let sender = {
-            let waiting = self.waiting.lock().map_err(Error::internal)?;
-            waiting.get(id).map(|w| w.answer.clone())
+            let registry = self.registry.lock().map_err(Error::internal)?;
+            registry.waiting.get(id).map(|w| w.answer.clone())
         };
         let sender = sender.ok_or(Error::UnknownApproval)?;
         // The waiting thread removes its own entry; a send failure means it already gave
@@ -149,19 +161,23 @@ impl ApprovalBridge {
 
     /// Everything still waiting, so a reloaded webview can rebuild its screen.
     pub fn outstanding(&self) -> Vec<Approval> {
-        self.waiting
+        self.registry
             .lock()
-            .map(|w| w.values().map(|x| x.approval.clone()).collect())
+            .map(|r| r.waiting.values().map(|x| x.approval.clone()).collect())
             .unwrap_or_default()
     }
 
-    /// Reject everything belonging to a session (it ended, or the wallet was locked).
+    /// The session ended: reject everything it is waiting on, and anything it would still
+    /// ask, so a request that was mid-simulation when the user disconnected cannot open a
+    /// prompt for a connection that no longer exists.
     pub fn withdraw_session(&self, session_id: &str) {
         let senders: Vec<mpsc::Sender<bool>> = self
-            .waiting
+            .registry
             .lock()
-            .map(|w| {
-                w.values()
+            .map(|mut r| {
+                r.closed.insert(session_id.to_owned());
+                r.waiting
+                    .values()
                     .filter(|x| x.approval.session_id == session_id)
                     .map(|x| x.answer.clone())
                     .collect()
@@ -246,6 +262,16 @@ mod tests {
         }
         bridge.withdraw_session("s1");
         assert!(!worker.join().unwrap());
+    }
+
+    #[test]
+    fn a_withdrawn_session_cannot_ask_again() {
+        let (bridge, seen) = bridge();
+        bridge.withdraw_session("s1");
+        // Refused at once rather than after DECISION_TIMEOUT, and the webview never sees it.
+        assert!(!bridge.ask(approval("d")));
+        assert!(bridge.outstanding().is_empty());
+        assert!(seen.lock().unwrap().is_empty());
     }
 
     #[test]

@@ -26,19 +26,29 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::Notify;
 
 use xchonnect_core::b64;
 use xchonnect_core::crypto::{Ed25519Seed, MailboxId, OsEntropy, Token};
-use xchonnect_core::message::{Message, WalletMeta};
+use xchonnect_core::message::{Message, RotatePhase, WalletMeta};
 use xchonnect_core::origin::MAX_DOCUMENT_BYTES;
 use xchonnect_core::pairing::{DappPairing, DappPairingParams, WalletPairing};
 use xchonnect_core::rpc;
+use xchonnect_core::session::Session;
 use xchonnect_core::uri::{LocalSigner, ParseOptions};
 
+use tauri_plugin_klimper_xchonnect::approval::{ApprovalBridge, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Error;
 use tauri_plugin_klimper_xchonnect::origin;
-use tauri_plugin_klimper_xchonnect::relay::RelayClient;
+use tauri_plugin_klimper_xchonnect::relay::{RelayClient, RelayInfo};
+use tauri_plugin_klimper_xchonnect::session_loop::SessionLoop;
+use tauri_plugin_klimper_xchonnect::store::{
+    MemorySecrets, SessionRecord, SessionStore, StoredPermissions, StoredSession,
+};
 
 fn relay_url() -> String {
     std::env::var("XCHONNECT_TEST_RELAY").unwrap_or_else(|_| "http://127.0.0.1:18788".to_owned())
@@ -106,14 +116,27 @@ fn signer() -> LocalSigner {
     LocalSigner::new(Ed25519Seed::from_bytes([7; 32]), "k1").unwrap()
 }
 
-/// The whole handshake over a real relay, ending in an answered `rpc.request`.
+/// Both ends of a session paired over a real relay, the SAS confirmed on both sides.
+struct Paired {
+    relay: RelayClient,
+    info: RelayInfo,
+    domain: String,
+    dapp_session: Session,
+    dapp_mailbox: MailboxId,
+    dapp_read: Token,
+    pairing_mailbox: MailboxId,
+    pairing_read: Token,
+    wallet_session: Session,
+    wallet_mailbox: MailboxId,
+    wallet_read: Token,
+}
+
+/// The handshake over a real relay, asserting every step on the way.
 ///
 /// Klimper's side is its own [`RelayClient`] and [`origin::verify_pairing_uri`]; the dApp
 /// side is `xchonnect-core` driven directly, which is what a browser dApp does through
 /// the WASM SDK.
-#[tokio::test]
-#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
-async fn a_full_pairing_and_a_request_over_a_real_relay() {
+async fn pair_over_relay() -> Paired {
     let signer = signer();
     let port = origin_server(&signer);
     let domain = format!("localhost:{port}");
@@ -259,6 +282,39 @@ async fn a_full_pairing_and_a_request_over_a_real_relay() {
         .await
         .unwrap();
 
+    Paired {
+        relay,
+        info,
+        domain,
+        dapp_session,
+        dapp_mailbox,
+        dapp_read,
+        pairing_mailbox,
+        pairing_read,
+        wallet_session,
+        wallet_mailbox,
+        wallet_read,
+    }
+}
+
+/// The whole handshake over a real relay, ending in an answered `rpc.request`.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_full_pairing_and_a_request_over_a_real_relay() {
+    let Paired {
+        relay,
+        info,
+        mut dapp_session,
+        dapp_mailbox,
+        dapp_read,
+        pairing_mailbox,
+        pairing_read,
+        mut wallet_session,
+        wallet_mailbox,
+        wallet_read,
+        ..
+    } = pair_over_relay().await;
+
     // --- A request, and an answer.
     let request = rpc::request("chainId", "{}").unwrap();
     let outgoing = dapp_session
@@ -316,6 +372,347 @@ async fn a_full_pairing_and_a_request_over_a_real_relay() {
     // --- Deleting the mailbox makes every later call a 404, which Klimper reports as
     // --- "this code was already used or the session is gone".
     relay.delete(wallet_mailbox, &wallet_read).await;
+    let error = relay
+        .fetch(wallet_mailbox, &wallet_read, 0, &info)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::PairingCodeUsed), "{error}");
+
+    relay.delete(dapp_mailbox, &dapp_read).await;
+    relay.delete(pairing_mailbox, &pairing_read).await;
+}
+
+/// A real [`SessionLoop`] running the wallet half of a [`Paired`] session.
+struct Running {
+    _dir: tempfile::TempDir,
+    store: Arc<SessionStore>,
+    /// The `state` of every session event the loop emitted, in order.
+    events: Arc<Mutex<Vec<String>>>,
+    end_requested: Arc<AtomicBool>,
+    interrupt: Arc<Notify>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+const SESSION_ID: &str = "live";
+
+/// Store `wallet_session` as a confirmed session for `dapp` and start its loop, with a
+/// ticker standing in for the app's. `rotate` asks for a key rotation before the first
+/// poll, as `rotate_session_keys` does.
+fn start_loop(
+    wallet_session: &Session,
+    dapp: &str,
+    origin_kid: Option<&str>,
+    rotate: bool,
+) -> Running {
+    let dir = tempfile::tempdir().unwrap();
+    let store =
+        Arc::new(SessionStore::open(dir.path(), Box::new(MemorySecrets::default())).unwrap());
+    let mut stored = StoredSession {
+        record: SessionRecord {
+            id: SESSION_ID.to_owned(),
+            fingerprint: 1,
+            dapp: dapp.to_owned(),
+            dapp_name: "Live Test dApp".to_owned(),
+            relay: relay_url(),
+            chain_id: "testnet11".to_owned(),
+            created_at: now(),
+            state_version: 0,
+            developer_mode: true,
+            sas_confirmed: true,
+            needs_repair: false,
+            permissions: StoredPermissions::default(),
+            allow_agg_sig_unsafe: false,
+            allow_unknown_contracts: false,
+            origin_kid: origin_kid.map(str::to_owned),
+            revoked: false,
+        },
+        session_hex: hex::encode(wallet_session.to_bytes().unwrap()),
+    };
+    store.save(&mut stored).unwrap();
+
+    let events = Arc::new(Mutex::new(Vec::<String>::new()));
+    let sink = events.clone();
+    let emit: Emitter = Arc::new(move |_event, payload| {
+        sink.lock()
+            .unwrap()
+            .push(payload["state"].as_str().unwrap_or_default().to_owned());
+    });
+    let end_requested = Arc::new(AtomicBool::new(false));
+    let interrupt = Arc::new(Notify::new());
+    let (wake_tx, wake) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        while wake_tx.send(()).await.is_ok() {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    });
+    let message_loop = SessionLoop {
+        state: Arc::new(tokio::sync::Mutex::new(sage::Sage::new(dir.path(), true))),
+        store: store.clone(),
+        approvals: Arc::new(ApprovalBridge::new(emit.clone())),
+        emit,
+        relay: RelayClient::new(&relay_url(), true).unwrap(),
+        info: RelayInfo::default(),
+        end_requested: end_requested.clone(),
+        rotate_requested: Arc::new(AtomicBool::new(rotate)),
+        interrupt: interrupt.clone(),
+        wake,
+    };
+    let task = tokio::spawn(message_loop.run(stored));
+    Running {
+        _dir: dir,
+        store,
+        events,
+        end_requested,
+        interrupt,
+        task,
+    }
+}
+
+/// Disconnecting reaches the dApp at once, not after the long poll the loop is sitting
+/// in: the poll is cut short, `session.end` is posted, and this side's mailbox and stored
+/// state are gone.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_disconnect_does_not_wait_for_the_long_poll() {
+    let Paired {
+        relay,
+        info,
+        domain,
+        mut dapp_session,
+        dapp_mailbox,
+        dapp_read,
+        pairing_mailbox,
+        pairing_read,
+        wallet_session,
+        wallet_mailbox,
+        wallet_read,
+    } = pair_over_relay().await;
+
+    // The origin document still lists `k1`, so the check the loop makes on starting
+    // passes and the session stays up until the user ends it.
+    let running = start_loop(&wallet_session, &domain, Some("k1"), false);
+    let Running {
+        store,
+        events,
+        end_requested,
+        interrupt,
+        task: running,
+        ..
+    } = running;
+
+    // Let it settle into the long poll (up to 20 s on this relay), then disconnect.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let asked = Instant::now();
+    end_requested.store(true, Ordering::SeqCst);
+    interrupt.notify_one();
+    tokio::time::timeout(Duration::from_secs(5), running)
+        .await
+        .expect("the loop ends without waiting for its long poll")
+        .unwrap();
+    assert!(asked.elapsed() < Duration::from_secs(5));
+    assert_eq!(*events.lock().unwrap(), vec!["ended".to_owned()]);
+
+    // The dApp is told.
+    let messages = relay
+        .fetch(dapp_mailbox, &dapp_read, 5, &info)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1, "exactly the session.end");
+    let inner = dapp_session
+        .open(now(), &dapp_mailbox, &messages[0].1)
+        .unwrap();
+    assert!(matches!(inner.message, Message::SessionEnd { .. }));
+
+    // And nothing is left on this side.
+    assert!(store.list(1).unwrap().is_empty());
+    let error = relay
+        .fetch(wallet_mailbox, &wallet_read, 0, &info)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::PairingCodeUsed), "{error}");
+
+    relay.delete(dapp_mailbox, &dapp_read).await;
+    relay.delete(pairing_mailbox, &pairing_read).await;
+}
+
+/// Spec 9.2.1 with Klimper as the initiator: the user renews the keys, the dApp accepts,
+/// both sides switch to epoch 1, the session keeps answering on the new mailboxes, and the
+/// wallet's old mailbox is drained and deleted.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_wallet_key_rotation_keeps_the_session_working() {
+    let Paired {
+        relay,
+        info,
+        domain,
+        mut dapp_session,
+        dapp_mailbox,
+        dapp_read,
+        pairing_mailbox,
+        pairing_read,
+        wallet_session,
+        wallet_mailbox,
+        wallet_read,
+    } = pair_over_relay().await;
+    let running = start_loop(&wallet_session, &domain, Some("k1"), true);
+
+    // The offer arrives on the dApp's current mailbox, under epoch 0.
+    let messages = relay
+        .fetch(dapp_mailbox, &dapp_read, 10, &info)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1, "exactly the rotation offer");
+    let inner = dapp_session
+        .open(now(), &dapp_mailbox, &messages[0].1)
+        .unwrap();
+    let Message::SessionRotate(offer) = inner.message else {
+        panic!("expected session.rotate, got {}", inner.message.type_name())
+    };
+    assert_eq!((offer.phase, offer.epoch), (RotatePhase::Offer, 1));
+    relay
+        .ack(dapp_mailbox, &dapp_read, &[messages[0].0.clone()])
+        .await
+        .unwrap();
+
+    // The dApp accepts with a mailbox of its own and switches.
+    let (new_read, new_write) = (Token::random(&mut OsEntropy), Token::random(&mut OsEntropy));
+    let new_mailbox = relay
+        .create_mailbox(&new_read, &new_write, None)
+        .await
+        .unwrap();
+    let (accept, abandoned) = dapp_session
+        .accept_rotation(
+            &mut OsEntropy,
+            now(),
+            &offer,
+            new_mailbox,
+            new_read.clone(),
+            new_write,
+        )
+        .unwrap();
+    assert!(abandoned.is_none());
+    relay.post(&accept).await.unwrap();
+    assert_eq!(dapp_session.epoch(), 1);
+
+    // Klimper switches on the accept and pings the dApp's new mailbox (spec 9.2.1 step 4),
+    // which is what lets the dApp give up its old one.
+    let messages = relay
+        .fetch(new_mailbox, &new_read, 10, &info)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1, "the wallet's ping under the new keys");
+    let inner = dapp_session
+        .open(now(), &new_mailbox, &messages[0].1)
+        .unwrap();
+    assert!(matches!(inner.message, Message::SessionPing));
+    relay
+        .ack(new_mailbox, &new_read, &[messages[0].0.clone()])
+        .await
+        .unwrap();
+    let retired = dapp_session.finish_drain().expect("the dApp may retire");
+    relay.delete(retired.mailbox, &retired.read_token).await;
+
+    // The session still works, now in epoch 1, in both directions.
+    let ping = dapp_session
+        .seal(&mut OsEntropy, now(), Message::SessionPing, 60)
+        .unwrap();
+    relay.post(&ping).await.unwrap();
+    let messages = relay
+        .fetch(new_mailbox, &new_read, 10, &info)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1);
+    let inner = dapp_session
+        .open(now(), &new_mailbox, &messages[0].1)
+        .unwrap();
+    assert!(matches!(inner.message, Message::SessionPong));
+
+    // The new keys were persisted, and the wallet's epoch-0 mailbox was drained and
+    // deleted (one more pass of the loop at most).
+    let stored = running.store.load(1, SESSION_ID).unwrap();
+    let saved = Session::from_bytes(&stored.session_bytes().unwrap()).unwrap();
+    assert_eq!(saved.epoch(), 1);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match relay.fetch(wallet_mailbox, &wallet_read, 0, &info).await {
+            Err(Error::PairingCodeUsed) => break,
+            _ if Instant::now() > deadline => panic!("the old mailbox was never deleted"),
+            _ => tokio::time::sleep(Duration::from_millis(100)).await,
+        }
+    }
+    let events = running.events.lock().unwrap().clone();
+    assert_eq!(events, vec!["rotating".to_owned(), "rotated".to_owned()]);
+
+    running.end_requested.store(true, Ordering::SeqCst);
+    running.interrupt.notify_one();
+    tokio::time::timeout(Duration::from_secs(5), running.task)
+        .await
+        .unwrap()
+        .unwrap();
+    relay.delete(new_mailbox, &new_read).await;
+    relay.delete(pairing_mailbox, &pairing_read).await;
+}
+
+/// Spec 6.1: the dApp removed the origin key the pairing code was signed with. The loop's
+/// fresh fetch of the origin document finds it gone, ends the session, erases its secrets
+/// and keeps the record marked as revoked.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_removed_origin_key_revokes_the_session() {
+    let Paired {
+        relay,
+        info,
+        mut dapp_session,
+        dapp_mailbox,
+        dapp_read,
+        pairing_mailbox,
+        pairing_read,
+        wallet_session,
+        wallet_mailbox,
+        wallet_read,
+        ..
+    } = pair_over_relay().await;
+    // The same dApp after rotating its origin keys: `k1` is gone, only `k2` is listed.
+    let rotated_document = format!(
+        r#"{{"v":1,"name":"Live Test dApp","origin_keys":[{{"kid":"k2","pk":"{}","not_after":"2030-01-01"}}]}}"#,
+        b64::encode(&signer().public_key())
+    )
+    .into_bytes();
+    let port = serve(move |path| {
+        if path.starts_with("/.well-known/xchonnect.json") {
+            http("200 OK", "application/json", &rotated_document)
+        } else {
+            http("404 Not Found", "text/plain", b"no")
+        }
+    });
+    let running = start_loop(
+        &wallet_session,
+        &format!("localhost:{port}"),
+        Some("k1"),
+        false,
+    );
+
+    tokio::time::timeout(Duration::from_secs(10), running.task)
+        .await
+        .expect("a revoked session's loop ends")
+        .unwrap();
+    assert_eq!(*running.events.lock().unwrap(), vec!["revoked".to_owned()]);
+
+    // Marked, with nothing secret left.
+    let stored = running.store.load(1, SESSION_ID).unwrap();
+    assert!(stored.record.revoked);
+    assert!(stored.session_hex.is_empty());
+
+    // The dApp is told, and the wallet's mailbox is gone.
+    let messages = relay
+        .fetch(dapp_mailbox, &dapp_read, 5, &info)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1, "exactly the session.end");
+    let inner = dapp_session
+        .open(now(), &dapp_mailbox, &messages[0].1)
+        .unwrap();
+    assert!(matches!(inner.message, Message::SessionEnd { .. }));
     let error = relay
         .fetch(wallet_mailbox, &wallet_read, 0, &info)
         .await

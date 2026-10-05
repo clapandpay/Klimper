@@ -56,6 +56,41 @@ behind it. An entry whose `state_version` is below the index is restored state: 
 
 `crates/sage-keychain` is untouched. Nothing Xchonnect ever reaches `keys.bin`.
 
+## Connecting and disconnecting
+
+- **One loop per session, ever.** `live` holds each loop's handles; an entry counts only
+  while its loop still holds the `wake` receiver. Entries are never pruned by the open
+  wallet's list, which used to orphan another wallet's loops and let a second loop start on
+  the same session (two writers of one `seq`).
+- **Disconnect is immediate.** `end_session` rejects whatever the session is waiting on,
+  cuts the loop's long poll short (`end_signal`), and drops the session from
+  `list_sessions` while the loop posts `session.end` (retried, not on a `404`) and deletes
+  the mailboxes. A loop that already returned is not flagged and forgotten: the session is
+  ended through `end_without_loop`. `tests/live_relay.rs`
+  `a_disconnect_does_not_wait_for_the_long_poll` checks it against the reference relay.
+- **The dApp ending it** (`session.end`, or a `404` from the relay) runs the same clean-up,
+  including our own mailbox and any open prompt.
+- **Pairing attempts are locked one by one.** The `session.confirm` poll holds only its own
+  attempt, so cancelling, confirming or scanning another code never waits for it. If
+  `session.ready` cannot be posted, the stored session is undone and the attempt discarded,
+  rather than listing a connection the website never learned about.
+- **Renewing keys** (spec 9.2.1). `rotate_session_keys` asks the session's loop to offer
+  new keys: a fresh mailbox, then `session.rotate` under the current epoch. The loop also
+  offers on its own once `Session::needs_rotation` says so (30 days or 10 000 messages).
+  On the dApp's accept it switches, pings the dApp's new mailbox so the dApp may retire
+  its old one, then drains and deletes its own old mailbox. A dApp that never answers
+  leaves the offer pending; the session keeps working on the old keys, and a dApp offer
+  of its own still wins.
+- **Origin-key revocation** (spec 6.1). The record keeps the `kid` the pairing code was
+  signed with, and the loop re-fetches the origin document when it starts and every 24
+  hours. Only a document that was fetched, parsed and no longer lists the `kid` revokes:
+  the loop posts `session.end`, deletes the mailboxes, erases the session bytes and keeps
+  the record with `revoked: true`, which the screen shows until the user removes it. A
+  site that is down never revokes anything. Sessions paired before the `kid` was kept
+  cannot be checked.
+- **Still open:** an end the app quits in the middle of is not resumed at the next start
+  (the session comes back and can be ended again).
+
 ## Per-signature approval on desktop
 
 Spec 11.1 item 4 asks for biometrics on every signature. `tauri-plugin-klimper-passkey`
@@ -108,11 +143,5 @@ no environment variable that turns that on in a release build.
   (`WalletMeta.link`), and the verified `return_url` is not persisted with the session or
   surfaced on `SessionSummary`. Both are small plugin changes; the UI guard is written and
   tested (`src/klimper/xchonnectReturn.ts`).
-- **Wallet-initiated key rotation**: the session loop accepts a dApp's rotation offer, but
-  there is no command for the user to start one (`Session::begin_rotation` is unused).
-- **Origin-key revocation**: spec 6.1 asks the wallet to revoke sessions signed by an
-  origin key that has been removed, on the next fetch. Nothing re-fetches an origin
-  document after pairing, and the session record does not keep the `kid` it was signed
-  with.
 - **Coin and balance reads, `sendTransaction`**: TASK-082. Only the methods wallet-kit
   handles are answered; anything else returns the CHIP-0002 method-not-found code.

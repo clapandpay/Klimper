@@ -7,6 +7,7 @@ const COMMANDS: &[&str] = &[
     "confirm_sas",
     "list_sessions",
     "end_session",
+    "rotate_session_keys",
     "set_dapp_policy",
     "pending_approvals",
     "resolve_approval",

@@ -332,6 +332,8 @@ pub async fn confirm(
             permissions: StoredPermissions::from_kit(&attempt.permissions),
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
+            origin_kid: Some(uri.kid.clone()),
+            revoked: false,
         },
         session_hex: hex::encode(session.to_bytes().map_err(Error::protocol)?),
     };
@@ -339,8 +341,16 @@ pub async fn confirm(
     // whose `seq` the wallet would reuse (integration guide §2).
     store.save(&mut stored)?;
 
-    if let Some(ready) = ready {
-        attempt.relay.post(&ready).await?;
+    if let Some(ready) = ready
+        && let Err(error) = attempt.relay.post_retrying(&ready).await
+    {
+        // The dApp never learns the session exists, so keeping it would list a connection
+        // that cannot work and leave the website waiting. Undo it; the caller discards the
+        // attempt and its mailbox, and the user connects again.
+        if let Err(remove) = store.remove(stored.record.fingerprint, &stored.record.id) {
+            tracing::warn!("could not remove a half-made session: {remove}");
+        }
+        return Err(error);
     }
     // Tell the dApp what it may ask for, so it does not have to learn by being refused
     // (spec 9.3). This changes the session state, so it is persisted first as well.
