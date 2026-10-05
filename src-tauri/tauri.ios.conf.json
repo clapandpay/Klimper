@@ -6,6 +6,9 @@
     "beforeBuildCommand": "pnpm run build:frontend"
   },
   "bundle": {
-    "resources": []
+    "resources": [],
+    "iOS": {
+      "developmentTeam": "HTP35W93ZF"
+    }
   }
 }

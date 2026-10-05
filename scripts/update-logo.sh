@@ -37,6 +37,11 @@ magick "$src" -resize '824x824^' -gravity center -extent 824x824 -alpha off \
 
 # Phones first: this writes src-tauri/icons, the iOS asset catalogue and the Android mipmaps.
 pnpm exec tauri icon "$icons/source-mobile.png" >/dev/null 2>&1
+# tauri icon writes the iOS icons with an alpha channel, opaque or not, and App Store Connect
+# refuses an upload whose 1024px icon has one (ITMS-90717). Drop the channel.
+for f in src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/*.png; do
+  magick "$f" -background white -alpha remove -alpha off "$f"
+done
 
 # Then the desktop files, from the macOS-shaped source, over the ones just written.
 pnpm exec tauri icon "$icons/source-desktop.png" -o "$tmp" >/dev/null 2>&1
