@@ -46,8 +46,10 @@ export interface PairingPreview {
   developerMode: boolean;
   /** The default grant: the CHIP-0002 required methods. */
   grantedMethods: string[];
-  /** The single fresh key that will be exposed. */
+  /** The first exposed key (the wallet's first receive address). */
   grantedKey: string | null;
+  /** How many receive keys will be exposed; the dApp can see their balances on chain. */
+  grantedKeyCount: number;
   chainId: string;
 }
 

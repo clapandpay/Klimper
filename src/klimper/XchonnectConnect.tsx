@@ -97,6 +97,7 @@ export default function XchonnectConnect() {
   const [stage, setStage] = useState<Stage>('enter');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<PairingPreview | null>(null);
+  const keyCount = preview?.grantedKeyCount ?? 0;
   const [sas, setSas] = useState<PairingSas | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -448,8 +449,15 @@ export default function XchonnectConnect() {
                 <Fact label={<Trans>It may ask for</Trans>}>
                   {preview.grantedMethods.join(', ')}
                 </Fact>
-                <Fact label={<Trans>Address it will see</Trans>} mono>
-                  {preview.grantedKey ?? t`none`}
+                <Fact label={<Trans>Addresses it will see</Trans>}>
+                  {keyCount > 0 ? (
+                    <Trans>
+                      Your {keyCount} receive addresses, so it can show your
+                      balances
+                    </Trans>
+                  ) : (
+                    t`none`
+                  )}
                 </Fact>
                 <Fact label={<Trans>Relay</Trans>} mono>
                   {preview.relay}

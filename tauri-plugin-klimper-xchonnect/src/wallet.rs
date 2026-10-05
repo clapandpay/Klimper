@@ -46,8 +46,15 @@ pub type AppState = Arc<Mutex<Sage>>;
 /// How many derivations are read per database page.
 const PAGE: u32 = 500;
 
-/// Everything about the active wallet that one request needs. Read fresh per request, so
-/// a wallet switch or a new derivation is picked up without any cache to invalidate.
+/// Receive keys exposed to a paired dApp at most. Sage derives in batches of 500, so this
+/// covers a wallet's first two batches; the `session.permissions` message stays ~100 KB,
+/// well under the relay's 400 KB body limit.
+pub const MAX_EXPOSED_KEYS: usize = 1000;
+
+/// Everything about the active wallet that one request needs. Ownership is read fresh per
+/// request; the key and derivation set is cached and re-read whenever the wallet, the
+/// network or the highest derivation index changes, so a wallet switch or a new
+/// derivation is still picked up on the very next request.
 #[derive(Debug, Clone)]
 pub struct WalletSnapshot {
     /// Active wallet fingerprint. Sessions are scoped to it (TASK-073 AC #3).
@@ -60,8 +67,10 @@ pub struct WalletSnapshot {
     pub keys: HashSet<PublicKey>,
     /// Derivation of each key, so the signer never has to query the database again.
     pub derivations: HashMap<PublicKey, Derivation>,
-    /// Highest unhardened derivation, used as the "one fresh key" of the default grant.
-    pub newest_key: Option<PublicKey>,
+    /// The wallet's receive keys (unhardened synthetic keys) in derivation order, at most
+    /// [`MAX_EXPOSED_KEYS`]. Exposed to a paired dApp so it can read the wallet's balances
+    /// from the chain itself instead of asking the wallet for each one.
+    pub receive_keys: Vec<PublicKey>,
 }
 
 /// Map Sage's configured network onto wallet-kit's. The chain id is the network's own
@@ -79,24 +88,38 @@ pub fn network_of(network: &sage_config::Network) -> Network {
     }
 }
 
-/// Read the active wallet. Fails with [`Error::NoWallet`] when no wallet is open.
-pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
-    // Take what is needed under the lock and let go of it: the database queries below
-    // would otherwise hold up every other Sage command.
-    let (wallet, network) = {
-        let sage = state.lock().await;
-        let wallet = sage.wallet().map_err(|_| Error::NoWallet)?;
-        (wallet, network_of(sage.network()))
-    };
+/// The part of a snapshot that only changes when the wallet derives new keys.
+#[derive(Debug)]
+struct DerivationSet {
+    keys: HashSet<PublicKey>,
+    derivations: HashMap<PublicKey, Derivation>,
+    receive_keys: Vec<PublicKey>,
+}
 
-    let p2_puzzle_hashes = wallet.db.custody_p2_puzzle_hashes().await?;
+/// What a cached [`DerivationSet`] is valid for. Derivations are append-only, so the same
+/// wallet on the same network with the same highest index has the same set; a wallet
+/// switch, a network switch or a new derivation changes the key and the set is re-read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DerivationKey {
+    fingerprint: u32,
+    chain_id: String,
+    max_unhardened: Option<u32>,
+    max_hardened: Option<u32>,
+}
+
+/// Reading every derivation (two pages of 500 or more, joined) was most of the cost of
+/// answering a request; the ownership set is still read fresh every time.
+static DERIVATIONS: std::sync::Mutex<Option<(DerivationKey, Arc<DerivationSet>)>> =
+    std::sync::Mutex::new(None);
+
+async fn read_derivations(db: &sage_database::Database) -> Result<DerivationSet> {
     let mut keys = HashSet::new();
     let mut derivations = HashMap::new();
-    let mut newest: Option<(u32, PublicKey)> = None;
+    let mut receive: Vec<(u32, PublicKey)> = Vec::new();
     for hardened in [false, true] {
         let mut offset = 0;
         loop {
-            let (rows, total) = wallet.db.derivations(hardened, PAGE, offset).await?;
+            let (rows, total) = db.derivations(hardened, PAGE, offset).await?;
             if rows.is_empty() {
                 break;
             }
@@ -110,8 +133,8 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
                         is_hardened: row.hardened,
                     },
                 );
-                if !hardened && newest.is_none_or(|(index, _)| row.index > index) {
-                    newest = Some((row.index, row.synthetic_key));
+                if !hardened {
+                    receive.push((row.index, row.synthetic_key));
                 }
             }
             if offset >= total {
@@ -119,6 +142,49 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
             }
         }
     }
+    receive.sort_by_key(|(index, _)| *index);
+    receive.truncate(MAX_EXPOSED_KEYS);
+    Ok(DerivationSet {
+        keys,
+        derivations,
+        receive_keys: receive.into_iter().map(|(_, key)| key).collect(),
+    })
+}
+
+/// Read the active wallet. Fails with [`Error::NoWallet`] when no wallet is open.
+pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
+    // Take what is needed under the lock and let go of it: the database queries below
+    // would otherwise hold up every other Sage command.
+    let (wallet, network) = {
+        let sage = state.lock().await;
+        let wallet = sage.wallet().map_err(|_| Error::NoWallet)?;
+        (wallet, network_of(sage.network()))
+    };
+
+    // Ownership is read fresh: it also holds non-derivation puzzles that can change on
+    // their own.
+    let p2_puzzle_hashes = wallet.db.custody_p2_puzzle_hashes().await?;
+    let key = DerivationKey {
+        fingerprint: wallet.fingerprint,
+        chain_id: network.chain_id().to_owned(),
+        max_unhardened: wallet.db.max_derivation_index(false).await?,
+        max_hardened: wallet.db.max_derivation_index(true).await?,
+    };
+    let cached = DERIVATIONS.lock().ok().and_then(|guard| {
+        guard
+            .as_ref()
+            .filter(|(k, _)| *k == key)
+            .map(|(_, set)| set.clone())
+    });
+    let set = if let Some(set) = cached {
+        set
+    } else {
+        let set = Arc::new(read_derivations(&wallet.db).await?);
+        if let Ok(mut guard) = DERIVATIONS.lock() {
+            *guard = Some((key, set.clone()));
+        }
+        set
+    };
 
     Ok(WalletSnapshot {
         fingerprint: wallet.fingerprint,
@@ -126,9 +192,9 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
         ownership: Ownership {
             p2_puzzle_hashes: p2_puzzle_hashes.into_iter().collect(),
         },
-        keys,
-        derivations,
-        newest_key: newest.map(|(_, key)| key),
+        keys: set.keys.clone(),
+        derivations: set.derivations.clone(),
+        receive_keys: set.receive_keys.clone(),
     })
 }
 

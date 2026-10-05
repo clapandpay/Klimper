@@ -291,7 +291,7 @@ async fn inspect_pairing_uri<R: Runtime>(
         developer_mode_allowed(),
         snapshot.fingerprint,
         snapshot.network.chain_id().to_owned(),
-        snapshot.newest_key,
+        snapshot.receive_keys,
     )
     .await?;
     let preview = attempt.preview();
@@ -413,9 +413,13 @@ async fn end_session<R: Runtime>(
         return Ok(());
     }
     drop(live);
-    // No loop running (the session needs re-pairing, or the wallet is locked): forget it
-    // locally. The relay drops an unused mailbox after 30 days.
+    // No loop running (the wallet was locked when it would have started, or the session
+    // needs re-pairing): the website is still told, and this side's mailboxes go, so
+    // disconnecting always unpairs both sides.
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
+    if let Ok(mut stored) = state.store.load(snapshot.fingerprint, &session_id) {
+        session_loop::end_without_loop(&state.store, &mut stored).await;
+    }
     state.store.remove(snapshot.fingerprint, &session_id)?;
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(())
