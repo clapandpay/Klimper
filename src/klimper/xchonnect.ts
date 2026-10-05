@@ -29,6 +29,16 @@ export interface XchonnectStatus {
   keyringService: string;
 }
 
+/** Whether wake-ups can reach this phone (clapandpay TASK-087). */
+export interface PushStatus {
+  /** False in a build without a push gateway: nothing could be woken. */
+  enabled: boolean;
+  /** What the phone's notification settings said when last asked; null before the first answer. */
+  permission: PushPermission | null;
+}
+
+export type PushPermission = 'granted' | 'denied' | 'undetermined';
+
 export interface PairingPreview {
   pairingId: string;
   /** The domain as the user reads it. */
@@ -161,6 +171,7 @@ export const xchonnect = {
   /** Withdraw a request: the website is told it was cancelled (4102), not rejected. */
   cancelApproval: (approvalId: string) =>
     call<null>('cancel_approval', { approvalId }),
+  pushStatus: () => call<PushStatus>('push_status'),
 };
 
 export const XCHONNECT_EVENTS = {
@@ -178,6 +189,8 @@ export const XCHONNECT_EVENTS = {
   approvalResolved: 'klimper-xchonnect://approval-resolved',
   /** `{ dapp, method, transactionId, status }` — Klimper broadcast a transaction. */
   sent: 'klimper-xchonnect://sent',
+  /** `{ state: PushPermission }` — the user answered the notification prompt. */
+  push: 'klimper-xchonnect://push',
 } as const;
 
 export interface SentEvent {

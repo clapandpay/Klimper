@@ -22,6 +22,7 @@ import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import {
   AlertTriangle,
+  BellOff,
   CheckCircle2,
   KeyRound,
   Plus,
@@ -34,6 +35,7 @@ import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
+import { useXchonnectPush } from './useXchonnectPush';
 import { useXchonnectSessions } from './useXchonnectSessions';
 import { Fact, LivePill, SiteCoin } from './XchonnectUi';
 
@@ -263,6 +265,7 @@ export default function XchonnectDapps() {
     await refresh();
   };
 
+  const push = useXchonnectPush();
   const keyringService = status?.keyringService ?? '';
   const waiting = approvals.length;
   const fresh = sessions.find((session) => session.sessionId === justConnected);
@@ -277,6 +280,26 @@ export default function XchonnectDapps() {
         </Button>
       </Header>
       <Container className='max-w-2xl space-y-4'>
+        {push.denied && (
+          <div
+            className='rounded-lg border border-destructive p-3 text-sm text-destructive'
+            role='status'
+            data-testid='push-denied'
+          >
+            <div className='flex items-start gap-2 font-semibold'>
+              <BellOff className='h-4 w-4 mt-0.5 shrink-0' aria-hidden='true' />
+              <Trans>Notifications are off</Trans>
+            </div>
+            <p className='pl-6 mt-1'>
+              <Trans>
+                Klimper only sees a request from a website while it is open. To
+                be told when one arrives, turn notifications on for Klimper in
+                your phone&apos;s settings. Notifications never show amounts or
+                addresses.
+              </Trans>
+            </p>
+          </div>
+        )}
         {fresh !== undefined && (
           <Card className='xc-fresh' data-testid='connected-banner'>
             <CardHeader>

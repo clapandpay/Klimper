@@ -9,12 +9,50 @@
 //! Nothing here reads a notification. A wake-up only ever wakes the session loop; what it
 //! carried is not parsed (the app never acts on push content).
 
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 use xchonnect_core::b64;
-use xchonnect_core::crypto::{Entropy, random_array};
-use xchonnect_core::push::{MAX_LIFETIME_S, Platform, PushToken};
+use xchonnect_core::crypto::{Entropy, hmac_sha256, random_array};
+use xchonnect_core::push::{MAX_DEVICE_TOKEN, MAX_LIFETIME_S, Platform, PushToken};
 
 use crate::error::{Error, Result};
+
+/// Event for the screen: what the user answered when asked for notification permission
+/// (`{ "state": "granted" | "denied" | "undetermined" }`).
+pub const EVENT_PUSH: &str = "klimper-xchonnect://push";
+
+/// Which push service the phone's token belongs to: Apple's on iOS, Firebase's on Android.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    Apns,
+    Fcm,
+}
+
+impl Kind {
+    /// APNs tokens are hex; FCM tokens are URL-safe text with `:` in them. Either way a
+    /// token is bounded, so a bad one is dropped rather than sealed into a registration.
+    pub fn accepts(self, token: &str) -> bool {
+        !token.is_empty()
+            && token.len() <= MAX_DEVICE_TOKEN
+            && match self {
+                Kind::Apns => token.bytes().all(|b| b.is_ascii_hexdigit()),
+                Kind::Fcm => token
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'-')),
+            }
+    }
+}
+
+/// What the user answered, or the system's current state, for notifications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionState {
+    Granted,
+    Denied,
+    Undetermined,
+}
 
 /// Re-register once less than this is left on the token (it lives at most 90 days).
 pub const RENEW_BEFORE_S: u64 = 30 * 24 * 3600;
@@ -58,13 +96,95 @@ impl GatewayConfig {
 pub struct Registration {
     pub expires_at: u64,
     pub hint_key_hex: String,
+    /// The mailbox the token was registered on. A key rotation moves the session to a new
+    /// mailbox, which has no push token yet.
+    #[serde(default)]
+    pub mailbox: String,
+    /// [`token_tag`] of the device token that was sealed, so a new one is noticed without
+    /// keeping the token itself.
+    #[serde(default)]
+    pub token_tag: String,
 }
 
 impl Registration {
-    /// True when the token should be sealed again: it is close to expiry, or APNs gave the
-    /// phone a new device token since.
-    pub fn needs_renewal(&self, now: u64) -> bool {
+    /// True when the token should be sealed again: it is close to expiry, the session moved
+    /// to another mailbox, or APNs gave the phone a new device token since.
+    pub fn due(&self, mailbox: &str, token_tag: &str, now: u64) -> bool {
         self.expires_at.saturating_sub(now) < RENEW_BEFORE_S
+            || self.mailbox != mailbox
+            || self.token_tag != token_tag
+    }
+}
+
+/// A short, non-reversible label for a device token: 8 bytes of an HMAC under a fixed key.
+pub fn token_tag(kind: Kind, device_token: &str) -> String {
+    let kind: &[u8] = match kind {
+        Kind::Apns => b"apns",
+        Kind::Fcm => b"fcm",
+    };
+    hmac_sha256(b"klimper push token tag", &[kind, device_token.as_bytes()])
+        .map(|mac| hex::encode(&mac[..8]))
+        .unwrap_or_default()
+}
+
+/// The phone's push token and which service issued it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceToken {
+    pub kind: Kind,
+    pub token: String,
+}
+
+/// What the loops share: where wake-ups go, and the phone's current device token. The token
+/// arrives from the native side (it can change at any launch) and is held in memory only;
+/// each session stores just its [`token_tag`]. Also remembers the notification permission,
+/// so a screen can say why wake-ups are not arriving.
+#[derive(Debug, Default)]
+pub struct PushHandle {
+    gateway: Option<GatewayConfig>,
+    device_token: Mutex<Option<DeviceToken>>,
+    permission: Mutex<Option<PermissionState>>,
+}
+
+impl PushHandle {
+    pub fn new(gateway: Option<GatewayConfig>) -> Self {
+        PushHandle {
+            gateway,
+            ..Self::default()
+        }
+    }
+
+    pub fn gateway(&self) -> Option<&GatewayConfig> {
+        self.gateway.as_ref()
+    }
+
+    pub fn device_token(&self) -> Option<DeviceToken> {
+        self.device_token.lock().ok()?.clone()
+    }
+
+    /// Remember the device token; true when it is new, so the loops should register it.
+    pub fn set_device_token(&self, kind: Kind, token: &str) -> bool {
+        let Ok(mut held) = self.device_token.lock() else {
+            return false;
+        };
+        let new = DeviceToken {
+            kind,
+            token: token.to_owned(),
+        };
+        if held.as_ref() == Some(&new) {
+            return false;
+        }
+        *held = Some(new);
+        true
+    }
+
+    pub fn permission(&self) -> Option<PermissionState> {
+        *self.permission.lock().ok()?
+    }
+
+    pub fn set_permission(&self, state: PermissionState) {
+        if let Ok(mut held) = self.permission.lock() {
+            *held = Some(state);
+        }
     }
 }
 
@@ -75,24 +195,24 @@ pub struct Sealed {
     pub registration: Registration,
 }
 
-/// Seal `device_token` for one session. `sandbox` is true for builds signed for development
-/// (debug), where APNs is its sandbox; `TestFlight` and App Store builds use production.
+/// Seal the device token for one session. `sandbox` is true for iOS builds signed for
+/// development (debug), where APNs is its sandbox, and is ignored for Android; `TestFlight` and App Store builds use production.
 pub fn seal(
     rng: &mut dyn Entropy,
     gateway: &GatewayConfig,
-    device_token: &str,
+    device: &DeviceToken,
     sandbox: bool,
     now: u64,
 ) -> Result<Sealed> {
     let hint_key = random_array::<32>(rng);
     let expires_at = now + MAX_LIFETIME_S;
     let token = PushToken {
-        platform: if sandbox {
-            Platform::ApnsSandbox
-        } else {
-            Platform::Apns
+        platform: match (device.kind, sandbox) {
+            (Kind::Fcm, _) => Platform::Fcm,
+            (Kind::Apns, true) => Platform::ApnsSandbox,
+            (Kind::Apns, false) => Platform::Apns,
         },
-        device_token: device_token.to_owned(),
+        device_token: device.token.clone(),
         hint_key,
         exp: expires_at,
     };
@@ -109,6 +229,8 @@ pub fn seal(
         registration: Registration {
             expires_at,
             hint_key_hex: hex::encode(hint_key),
+            mailbox: String::new(),
+            token_tag: token_tag(device.kind, &device.token),
         },
     })
 }
@@ -120,6 +242,13 @@ mod tests {
     use crate::testing::NOW;
     use xchonnect_core::crypto::{OsEntropy, X25519Secret};
 
+    fn apns(token: &str) -> DeviceToken {
+        DeviceToken {
+            kind: Kind::Apns,
+            token: token.to_owned(),
+        }
+    }
+
     fn gateway(secret: &X25519Secret) -> GatewayConfig {
         GatewayConfig {
             url: "https://push.example/v1/wake".to_owned(),
@@ -130,7 +259,7 @@ mod tests {
     #[test]
     fn the_gateway_opens_what_the_wallet_sealed_and_nobody_else_can() {
         let sk = X25519Secret::from_bytes([7; 32]);
-        let sealed = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", false, NOW).unwrap();
+        let sealed = seal(&mut OsEntropy, &gateway(&sk), &apns("abcd1234"), false, NOW).unwrap();
         let raw = b64::decode(sealed.body["push_reg"]["sealed_token"].as_str().unwrap()).unwrap();
 
         let opened = PushToken::open(&sk, &raw, NOW + 1).unwrap();
@@ -149,7 +278,7 @@ mod tests {
     #[test]
     fn debug_builds_register_with_the_apns_sandbox() {
         let sk = X25519Secret::from_bytes([7; 32]);
-        let sealed = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", true, NOW).unwrap();
+        let sealed = seal(&mut OsEntropy, &gateway(&sk), &apns("abcd1234"), true, NOW).unwrap();
         let raw = b64::decode(sealed.body["push_reg"]["sealed_token"].as_str().unwrap()).unwrap();
         assert_eq!(
             PushToken::open(&sk, &raw, NOW).unwrap().platform,
@@ -161,21 +290,105 @@ mod tests {
     #[test]
     fn every_registration_is_sealed_afresh() {
         let sk = X25519Secret::from_bytes([7; 32]);
-        let a = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", false, NOW).unwrap();
-        let b = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", false, NOW).unwrap();
+        let a = seal(&mut OsEntropy, &gateway(&sk), &apns("abcd1234"), false, NOW).unwrap();
+        let b = seal(&mut OsEntropy, &gateway(&sk), &apns("abcd1234"), false, NOW).unwrap();
         assert_ne!(a.body, b.body);
         assert_ne!(a.registration.hint_key_hex, b.registration.hint_key_hex);
     }
 
+    fn registered(device_token: &str) -> Registration {
+        let sk = X25519Secret::from_bytes([7; 32]);
+        let mut reg = seal(
+            &mut OsEntropy,
+            &gateway(&sk),
+            &apns(device_token),
+            false,
+            NOW,
+        )
+        .unwrap()
+        .registration;
+        reg.mailbox = "mbx".to_owned();
+        reg
+    }
+
     #[test]
     fn a_registration_is_renewed_thirty_days_before_it_expires() {
+        let reg = registered("abcd1234");
+        let tag = token_tag(Kind::Apns, "abcd1234");
+        assert!(!reg.due("mbx", &tag, NOW + 59 * 24 * 3600));
+        assert!(reg.due("mbx", &tag, NOW + 61 * 24 * 3600));
+        assert!(reg.due("mbx", &tag, reg.expires_at + 1));
+    }
+
+    #[test]
+    fn a_rotated_mailbox_or_a_new_device_token_registers_again() {
+        let reg = registered("abcd1234");
+        assert!(!reg.due("mbx", &token_tag(Kind::Apns, "abcd1234"), NOW));
+        assert!(reg.due("other mailbox", &token_tag(Kind::Apns, "abcd1234"), NOW));
+        assert!(reg.due("mbx", &token_tag(Kind::Apns, "ffff0000"), NOW));
+    }
+
+    #[test]
+    fn the_tag_neither_contains_nor_repeats_the_token() {
+        assert!(!token_tag(Kind::Apns, "abcd1234").contains("abcd1234"));
+        assert_eq!(
+            token_tag(Kind::Apns, "abcd1234"),
+            token_tag(Kind::Apns, "abcd1234")
+        );
+        assert_ne!(
+            token_tag(Kind::Apns, "abcd1234"),
+            token_tag(Kind::Apns, "abcd1235")
+        );
+        assert_ne!(
+            token_tag(Kind::Apns, "abcd1234"),
+            token_tag(Kind::Fcm, "abcd1234")
+        );
+    }
+
+    #[test]
+    fn only_a_changed_device_token_wakes_the_loops() {
+        let handle = PushHandle::new(None);
+        assert_eq!(handle.device_token(), None);
+        assert!(handle.set_device_token(Kind::Apns, "aa"));
+        assert!(!handle.set_device_token(Kind::Apns, "aa"));
+        assert!(handle.set_device_token(Kind::Apns, "bb"));
+        assert!(handle.set_device_token(Kind::Fcm, "bb"));
+        assert_eq!(
+            handle.device_token(),
+            Some(DeviceToken {
+                kind: Kind::Fcm,
+                token: "bb".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn android_registers_with_fcm_whatever_the_build() {
         let sk = X25519Secret::from_bytes([7; 32]);
-        let reg = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", false, NOW)
-            .unwrap()
-            .registration;
-        assert!(!reg.needs_renewal(NOW + 59 * 24 * 3600));
-        assert!(reg.needs_renewal(NOW + 61 * 24 * 3600));
-        assert!(reg.needs_renewal(reg.expires_at + 1));
+        let fcm = DeviceToken {
+            kind: Kind::Fcm,
+            token: "dXNl:APA91b-x_y".to_owned(),
+        };
+        for sandbox in [false, true] {
+            let sealed = seal(&mut OsEntropy, &gateway(&sk), &fcm, sandbox, NOW).unwrap();
+            let raw =
+                b64::decode(sealed.body["push_reg"]["sealed_token"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                PushToken::open(&sk, &raw, NOW).unwrap().platform,
+                Platform::Fcm
+            );
+        }
+    }
+
+    #[test]
+    fn each_service_accepts_only_its_own_kind_of_token() {
+        assert!(Kind::Apns.accepts("ab01CD"));
+        assert!(!Kind::Apns.accepts("dXNl:APA91b"));
+        assert!(Kind::Fcm.accepts("dXNl:APA91b-x_y"));
+        assert!(!Kind::Fcm.accepts("has space"));
+        assert!(!Kind::Fcm.accepts("a/b"));
+        assert!(!Kind::Apns.accepts(""));
+        assert!(!Kind::Fcm.accepts(&"a".repeat(4097)));
     }
 
     #[test]

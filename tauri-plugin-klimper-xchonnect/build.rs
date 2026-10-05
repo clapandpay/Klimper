@@ -12,8 +12,15 @@ const COMMANDS: &[&str] = &[
     "pending_approvals",
     "resolve_approval",
     "cancel_approval",
+    "push_status",
 ];
 
 fn main() {
-    tauri_plugin::Builder::new(COMMANDS).build();
+    // The push gateway is compiled in (src/push.rs); changing it must rebuild the plugin.
+    println!("cargo:rerun-if-env-changed=KLIMPER_PUSH_GATEWAY_URL");
+    println!("cargo:rerun-if-env-changed=KLIMPER_PUSH_GATEWAY_KEY");
+    tauri_plugin::Builder::new(COMMANDS)
+        .ios_path("ios")
+        .android_path("android")
+        .build();
 }

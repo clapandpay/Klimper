@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Push wake-ups for Xchonnect sessions (clapandpay TASK-087).
+//
+// Tauri has no remote-push plugin on iOS, so this one asks for permission, registers with APNs
+// and hands the two things Rust needs over a channel: the device token, and "a notification
+// arrived". The notification itself is never read: not its payload, not its text. Rust answers a
+// wake-up by fetching the mailbox, and only what the relay returns is acted on.
+//
+// iOS reports the device token and silent arrivals to the application delegate, which is tao's
+// and has no push methods. They are added to its class at run time (class_addMethod), so
+// Sage's window code stays untouched.
+
+import ObjectiveC
+import SwiftRs
+import Tauri
+import UIKit
+import UserNotifications
+
+struct StartArgs: Decodable {
+  let channel: Channel
+}
+
+class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
+  static weak var current: KlimperXchonnectPlugin?
+
+  private var channel: Channel?
+  // A notification can start the app, and its tap reaches us before Rust has given us a
+  // channel. One flag is enough: a wake-up carries nothing else.
+  private var wakeBeforeChannel = false
+
+  override init() {
+    super.init()
+    KlimperXchonnectPlugin.current = self
+    onMain {
+      UNUserNotificationCenter.current().delegate = self
+      self.installApplicationDelegateHooks()
+    }
+  }
+
+  // MARK: Commands
+
+  // Called when the app starts. Registers silently when the user already allowed
+  // notifications; it never shows the permission prompt (that waits for the first pairing).
+  @objc public func start(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(StartArgs.self)
+    channel = args.channel
+    if wakeBeforeChannel {
+      wakeBeforeChannel = false
+      send(["kind": "wake"])
+    }
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      let state = Self.state(settings.authorizationStatus)
+      if state == "granted" { self.registerWithApns() }
+      invoke.resolve(["state": state])
+    }
+  }
+
+  // The first pairing asks. iOS shows its prompt once; after a refusal this only reports it.
+  @objc public func requestPermission(_ invoke: Invoke) {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
+      granted, _ in
+      if granted { self.registerWithApns() }
+      invoke.resolve(["state": granted ? "granted" : "denied"])
+    }
+  }
+
+  // MARK: Notifications
+
+  // In the foreground the session loop is already reading the mailbox: no banner, just a wake.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    wake()
+    completionHandler([])
+  }
+
+  // A tap opens the app; the wake makes the loop read the mailbox at once, so the request
+  // is waiting on screen.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    wake()
+    completionHandler()
+  }
+
+  // MARK: Plumbing
+
+  private static func state(_ status: UNAuthorizationStatus) -> String {
+    switch status {
+    case .authorized, .provisional, .ephemeral: return "granted"
+    case .denied: return "denied"
+    default: return "undetermined"
+    }
+  }
+
+  private func registerWithApns() {
+    onMain { UIApplication.shared.registerForRemoteNotifications() }
+  }
+
+  fileprivate func wake() {
+    guard channel != nil else {
+      wakeBeforeChannel = true
+      return
+    }
+    send(["kind": "wake"])
+  }
+
+  fileprivate func deviceToken(_ data: Data) {
+    send(["kind": "token", "platform": "apns", "token": data.map { String(format: "%02x", $0) }.joined()])
+  }
+
+  private func send(_ event: JsonObject) {
+    channel?.send(event)
+  }
+
+  private func onMain(_ work: @escaping () -> Void) {
+    if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
+  }
+
+  private func installApplicationDelegateHooks() {
+    guard let delegate = UIApplication.shared.delegate else { return }
+    let target: AnyClass = type(of: delegate)
+
+    let registered: @convention(block) (AnyObject, UIApplication, Data) -> Void = { _, _, token in
+      KlimperXchonnectPlugin.current?.deviceToken(token)
+    }
+    add(
+      target, #selector(UIApplicationDelegate.application(_:didRegisterForRemoteNotificationsWithDeviceToken:)),
+      registered, "v@:@@")
+
+    // Polling carries on without push: a failure here is logged and nothing else.
+    let failed: @convention(block) (AnyObject, UIApplication, Error) -> Void = { _, _, error in
+      NSLog("klimper push: APNs registration failed: \(error.localizedDescription)")
+    }
+    add(
+      target, #selector(UIApplicationDelegate.application(_:didFailToRegisterForRemoteNotificationsWithError:)),
+      failed, "v@:@@")
+
+    // Only reached when a push carries content-available; the gateway's alerts do not, but a
+    // wake is harmless either way.
+    let received:
+      @convention(block) (
+        AnyObject, UIApplication, [AnyHashable: Any],
+        @escaping (UIBackgroundFetchResult) -> Void
+      ) -> Void = { _, _, _, completion in
+        KlimperXchonnectPlugin.current?.wake()
+        completion(.newData)
+      }
+    add(
+      target,
+      #selector(UIApplicationDelegate.application(_:didReceiveRemoteNotification:fetchCompletionHandler:)),
+      received, "v@:@@@?")
+  }
+
+  private func add(_ target: AnyClass, _ selector: Selector, _ block: Any, _ types: String) {
+    let implementation = imp_implementationWithBlock(block)
+    if !class_addMethod(target, selector, implementation, types) {
+      // tao implements it itself now: that is a change to review, not to override.
+      NSLog("klimper push: \(target) already implements \(selector); push may not reach us")
+    }
+  }
+}
+
+@_cdecl("init_plugin_klimper_xchonnect")
+func initPlugin() -> Plugin {
+  return KlimperXchonnectPlugin()
+}

@@ -18,6 +18,7 @@ never reach this surface.
 - `allow-pending-approvals`
 - `allow-resolve-approval`
 - `allow-cancel-approval`
+- `allow-push-status`
 
 ## Permission Table
 
@@ -232,6 +233,32 @@ Enables the pending_approvals command without any pre-configured scope.
 <td>
 
 Denies the pending_approvals command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-push-status`
+
+</td>
+<td>
+
+Enables the push_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-push-status`
+
+</td>
+<td>
+
+Denies the push_status command without any pre-configured scope.
 
 </td>
 </tr>

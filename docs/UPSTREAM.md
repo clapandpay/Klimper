@@ -240,6 +240,7 @@ upstream; the rest is files of our own and one-line hooks.
 | `src/pages/Settings.tsx`                                                                      | one import and one element               | `<PasskeySettings />`; `<PasskeyGate />` is in `src/klimper/KlimperRoot.tsx`                                                                                                  |
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `src-tauri/gen/android/{build.gradle.kts,app/build.gradle.kts,app/.gitignore}` | 4 lines, 1 line, 4 lines, 1 line | push wake-ups (TASK-087): `aps-environment` and time-sensitive notifications; the `google-services` Gradle plugin, applied only when `google-services.json` exists. `docs/push.md` |
 
 ### iOS build on Xcode 27 (TASK-003)
 
