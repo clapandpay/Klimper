@@ -38,6 +38,7 @@ import { Approval } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
 import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
 import { SiteCoin } from './XchonnectUi';
+import { useTicker } from './useTicker';
 
 /** Seconds until the approval bridge refuses the request by itself. */
 function secondsLeft(expiresAt: number): number {
@@ -168,9 +169,13 @@ export function XchonnectApprovalDetail({
   titleId,
 }: ApprovalDetailProps) {
   const [confirming, setConfirming] = useState(false);
+  const ticker = useTicker();
   const view = useMemo(
-    () => (approval.kind === 'request' ? readPrompt(approval.prompt) : null),
-    [approval],
+    () =>
+      approval.kind === 'request'
+        ? readPrompt(approval.prompt, { xchLabel: ticker })
+        : null,
+    [approval, ticker],
   );
 
   useEffect(() => setConfirming(false), [approval.id]);

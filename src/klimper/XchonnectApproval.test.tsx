@@ -21,6 +21,8 @@ vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
+const ticker = vi.hoisted(() => ({ value: 'XCH' }));
+vi.mock('./useTicker', () => ({ useTicker: () => ticker.value }));
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
@@ -127,6 +129,7 @@ function signature(index: number, total: number, publicKey: string): Approval {
 }
 
 beforeEach(() => {
+  ticker.value = 'XCH';
   handlers.clear();
   vi.clearAllMocks();
   resolveApproval.mockResolvedValue(null);
@@ -529,5 +532,91 @@ describe('a message request', () => {
     expect(screen.getByText(/moves no money/)).toBeDefined();
     // No amount line is invented for a message.
     expect(screen.queryByTestId('asset-net')).toBeNull();
+  });
+});
+
+describe('where the money goes', () => {
+  const BOB = 'b0'.repeat(32);
+  const ALICE = 'a1'.repeat(32);
+  // 1.5 coin: 0.1 to Bob, 1.399999 back, 0.000001 fee (implied and reserved alike).
+  function sendTo(recipient: string, toUser: boolean) {
+    return spendPrompt({
+      summary: {
+        ...spendPrompt().summary,
+        assets: [
+          {
+            asset: { type: 'xch' },
+            sent: 1_500_000_000_000,
+            received: toUser ? 1_499_999_000_000 : 1_399_999_000_000,
+            conditional_received: 0,
+            net: toUser ? -1_000_000 : -100_001_000_000,
+          },
+        ],
+        implied_fee: 1_000_000,
+        reserve_fee: 1_000_000,
+        outputs: [
+          {
+            asset: { type: 'xch' },
+            amount: 100_000_000_000,
+            puzzle_hash: recipient,
+            recipient,
+            to_user: toUser,
+          },
+          {
+            asset: { type: 'xch' },
+            amount: 1_399_999_000_000,
+            puzzle_hash: ALICE,
+            recipient: ALICE,
+            to_user: true,
+          },
+        ],
+      },
+    });
+  }
+
+  it('names the amount and the address it goes to, and the change apart', async () => {
+    pendingApprovals.mockResolvedValue([request(sendTo(BOB, false))]);
+    renderScreen(<XchonnectApproval />);
+
+    const sent = await waitFor(() => screen.getByTestId('prompt-output'));
+    expect(sent.textContent).toContain('0.1 XCH');
+    const address = screen.getByTestId('output-address');
+    expect(address.getAttribute('title')).toMatch(/^xch1[02-9ac-hj-np-z]{58}$/);
+    expect(screen.getByTestId('prompt-change').textContent).toContain(
+      '1.399999 XCH',
+    );
+    // The total still carries the fee, and says so.
+    expect(screen.getByTestId('asset-net').textContent).toBe('−0.100001 XCH');
+    expect(screen.getByText('In total, with the fee')).toBeDefined();
+    // One fee line, not two, when the implied and reserved fee agree.
+    expect(screen.getByTestId('prompt-implied-fee')).toBeDefined();
+    expect(screen.queryByTestId('prompt-reserve-fee')).toBeNull();
+  });
+
+  it('says so when everything goes to the user’s own addresses', async () => {
+    pendingApprovals.mockResolvedValue([request(sendTo(ALICE, true))]);
+    renderScreen(<XchonnectApproval />);
+
+    const own = await waitFor(() => screen.getByTestId('prompt-only-own'));
+    expect(own.textContent).toContain('Only to your own addresses');
+    expect(own.textContent).toContain('0.1 XCH');
+    expect(screen.queryByTestId('prompt-output')).toBeNull();
+    expect(screen.getByTestId('asset-net').textContent).toBe('−0.000001 XCH');
+  });
+
+  it('uses the network’s own name and addresses on testnet', async () => {
+    ticker.value = 'TXCH';
+    pendingApprovals.mockResolvedValue([request(sendTo(BOB, false))]);
+    renderScreen(<XchonnectApproval />);
+
+    const sent = await waitFor(() => screen.getByTestId('prompt-output'));
+    expect(sent.textContent).toContain('0.1 TXCH');
+    expect(screen.getByTestId('output-address').getAttribute('title')).toMatch(
+      /^txch1/,
+    );
+    expect(screen.getByTestId('prompt-implied-fee').textContent).toContain(
+      '0.000001 TXCH',
+    );
+    expect(document.body.textContent).not.toMatch(/\bXCH\b/);
   });
 });

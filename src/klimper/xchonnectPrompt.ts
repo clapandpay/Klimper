@@ -71,9 +71,25 @@ export interface BindingView {
   readonly payments: readonly BoundPaymentView[];
 }
 
+/** One coin the user's signature creates: where the money goes. */
+export interface OutputView {
+  readonly label: string;
+  readonly isXch: boolean;
+  readonly precision: number;
+  readonly amount: BigNumber;
+  /** The recipient's p2 puzzle hash (what an address encodes), or null when unknown. */
+  readonly recipient: string | null;
+  /** To one of the user's own addresses: change, or a send to oneself. */
+  readonly toUser: boolean;
+}
+
 export interface SpendPromptView {
   readonly kind: 'spend';
+  /** The network's own name for its coin: `XCH`, or `TXCH` on testnet. */
+  readonly xchLabel: string;
   readonly assets: readonly AssetView[];
+  /** Every coin the user's own spends create, in order. Empty from an older wallet-kit. */
+  readonly outputs: readonly OutputView[];
   /** Fee implied by the request. `null` means outputs exceed inputs (a partial spend). */
   readonly impliedFee: BigNumber | null;
   readonly reserveFee: BigNumber;
@@ -163,24 +179,27 @@ function hexOf(value: unknown, maxBytes: number): string | null {
  * The label is derived here, never read: a CAT's human name would be a string from
  * outside, and this screen shows no such string.
  */
-function assetOf(value: unknown): {
+function assetOf(
+  value: unknown,
+  xchLabel: string,
+): {
   label: string;
   isXch: boolean;
   assetId: string | null;
 } {
-  if (!isRecord(value)) return { label: 'XCH', isXch: true, assetId: null };
+  if (!isRecord(value)) return { label: xchLabel, isXch: true, assetId: null };
   if (value.type === 'cat') {
     const assetId = hexOf(value.asset_id, 32);
     return assetId === null
       ? { label: 'Unknown CAT', isXch: false, assetId: null }
       : { label: `CAT ${assetId.slice(0, 8)}…`, isXch: false, assetId };
   }
-  return { label: 'XCH', isXch: true, assetId: null };
+  return { label: xchLabel, isXch: true, assetId: null };
 }
 
-function assetViewOf(entry: unknown): AssetView | null {
+function assetViewOf(entry: unknown, xchLabel: string): AssetView | null {
   if (!isRecord(entry)) return null;
-  const asset = assetOf(entry.asset);
+  const asset = assetOf(entry.asset, xchLabel);
   return {
     label: asset.label,
     isXch: asset.isXch,
@@ -190,6 +209,19 @@ function assetViewOf(entry: unknown): AssetView | null {
     conditionalReceived: amountOf(entry.conditional_received),
     sent: amountOf(entry.sent),
     received: amountOf(entry.received),
+  };
+}
+
+function outputViewOf(entry: unknown, xchLabel: string): OutputView | null {
+  if (!isRecord(entry)) return null;
+  const asset = assetOf(entry.asset, xchLabel);
+  return {
+    label: asset.label,
+    isXch: asset.isXch,
+    precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
+    amount: amountOf(entry.amount),
+    recipient: hexOf(entry.recipient, 32),
+    toUser: boolOf(entry.to_user),
   };
 }
 
@@ -212,12 +244,12 @@ function timeLocksOf(value: unknown): TimeLockView {
   };
 }
 
-function bindingOf(value: unknown): BindingView | null {
+function bindingOf(value: unknown, xchLabel: string): BindingView | null {
   if (!isRecord(value)) return null;
   const payments: BoundPaymentView[] = [];
   for (const entry of arrayOf(value.bound_payments)) {
     if (!isRecord(entry)) continue;
-    const asset = assetOf(entry.asset);
+    const asset = assetOf(entry.asset, xchLabel);
     payments.push({
       label: asset.label,
       precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
@@ -294,7 +326,10 @@ export function claimedText(value: unknown): string {
  * the screen then offers only Reject, because a request the wallet cannot describe is
  * not a request a user can consent to.
  */
-export function readPrompt(prompt: unknown): PromptView {
+export function readPrompt(
+  prompt: unknown,
+  { xchLabel = 'XCH' }: { readonly xchLabel?: string } = {},
+): PromptView {
   if (!isRecord(prompt)) return { kind: 'unreadable' };
 
   if (prompt.type === 'sign_message') {
@@ -320,8 +355,14 @@ export function readPrompt(prompt: unknown): PromptView {
 
   const assets: AssetView[] = [];
   for (const entry of arrayOf(summary.assets)) {
-    const view = assetViewOf(entry);
+    const view = assetViewOf(entry, xchLabel);
     if (view !== null) assets.push(view);
+  }
+
+  const outputs: OutputView[] = [];
+  for (const entry of arrayOf(summary.outputs)) {
+    const view = outputViewOf(entry, xchLabel);
+    if (view !== null) outputs.push(view);
   }
 
   const signatures: SignatureView[] = [];
@@ -347,7 +388,9 @@ export function readPrompt(prompt: unknown): PromptView {
 
   return {
     kind: 'spend',
+    xchLabel,
     assets,
+    outputs,
     impliedFee,
     reserveFee: amountOf(summary.reserve_fee),
     unknownPuzzles,
@@ -358,7 +401,7 @@ export function readPrompt(prompt: unknown): PromptView {
     // own, so the warning does not depend on both being written.
     hasUnsafe: boolOf(plan.has_unsafe) || signatures.some((s) => s.isUnsafe),
     partial: boolOf(prompt.partial),
-    binding: bindingOf(prompt.binding),
+    binding: bindingOf(prompt.binding, xchLabel),
   };
 }
 

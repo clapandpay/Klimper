@@ -53,6 +53,7 @@ import { AssetLimit, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { CAT_PRECISION, XCH_PRECISION } from './xchonnectPrompt';
 import { useXchonnectSessions } from './useXchonnectSessions';
+import { useTicker } from './useTicker';
 import './xchonnect.css';
 
 /** The CHIP-0002 methods a pairing grants by default (wallet-kit `DEFAULT_METHODS`). */
@@ -68,8 +69,8 @@ export const DEFAULT_METHODS = [
 const ESSENTIAL_METHODS = ['chainId', 'connect'] as const;
 
 /** `xch` or `cat:<64 hex>` (the plugin's `asset_key`). */
-function assetLabel(key: string): string {
-  if (key === 'xch') return 'XCH';
+function assetLabel(key: string, ticker: string): string {
+  if (key === 'xch') return ticker;
   const tail = key.startsWith('cat:') ? key.slice(4) : key;
   return `CAT ${tail.slice(0, 8)}…`;
 }
@@ -191,6 +192,7 @@ type Dangerous = 'unsafe' | 'unknown';
 
 export default function XchonnectDappSettings() {
   const navigate = useNavigate();
+  const ticker = useTicker();
   const { sessionId } = useParams<{ sessionId: string }>();
   const { sessions, loading, refresh } = useXchonnectSessions();
   const session = useMemo(
@@ -406,7 +408,7 @@ export default function XchonnectDappSettings() {
           <CardContent className='space-y-4'>
             {assetKeys.map((key) => (
               <div key={key} className='space-y-2'>
-                <div className='font-medium'>{assetLabel(key)}</div>
+                <div className='font-medium'>{assetLabel(key, ticker)}</div>
                 <div className='grid grid-cols-2 gap-3'>
                   <div className='space-y-1'>
                     <Label htmlFor={`per-request-${key}`}>

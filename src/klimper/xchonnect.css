@@ -452,3 +452,22 @@
   border-radius: 20px;
   padding: 1rem 1.25rem;
 }
+
+/* Where the money goes: the amount sent, in the display face. */
+.xc-send-amount {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every output is the user's own: a calm teal note, not a warning. */
+.xc-own {
+  border-radius: 16px;
+  padding: 0.875rem 1rem;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--teal, var(--primary)) 10%, var(--card));
+  border: 1px solid
+    color-mix(in srgb, var(--teal, var(--primary)) 35%, transparent);
+}

@@ -17,6 +17,7 @@ vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
+vi.mock('./useTicker', () => ({ useTicker: () => 'XCH' }));
 vi.mock('theme-o-rama', () => ({
   useTheme: () => ({ currentTheme: { mostLike: 'light' } }),
 }));
