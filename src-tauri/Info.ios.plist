@@ -4,6 +4,11 @@
      The scene manifest belongs to Sources/sage-tauri/KlimperScene.m in gen/apple. -->
 <plist version="1.0">
     <dict>
+        <!-- Klimper implements standard algorithms itself (AES-256-GCM and Argon2 for the key
+             file, BLS, and X25519, Ed25519, HPKE and XChaCha20-Poly1305 for Xchonnect), beyond
+             the encryption in iOS: answered as such in App Store Connect (TASK-090). -->
+        <key>ITSAppUsesNonExemptEncryption</key>
+        <true/>
         <key>UIApplicationSceneManifest</key>
         <dict>
             <key>UIApplicationSupportsMultipleScenes</key>
