@@ -440,6 +440,7 @@ fn start_loop_with(
             allow_unknown_contracts: false,
             origin_kid: origin_kid.map(str::to_owned),
             revoked: false,
+            push: None,
         },
         session_hex: hex::encode(wallet_session.to_bytes().unwrap()),
     };
@@ -472,6 +473,7 @@ fn start_loop_with(
         rotate_requested: Arc::new(AtomicBool::new(rotate)),
         interrupt: interrupt.clone(),
         wake,
+        push: Arc::new(tauri_plugin_klimper_xchonnect::push::PushHandle::default()),
         answer,
     };
     let task = tokio::spawn(message_loop.run(stored));

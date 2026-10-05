@@ -140,6 +140,7 @@ pub struct Xchonnect<R: Runtime> {
     emit: Emitter,
     attempts: Mutex<BTreeMap<String, SharedAttempt>>,
     live: Mutex<BTreeMap<String, Live>>,
+    push: Arc<push::PushHandle>,
 }
 
 impl<R: Runtime> std::fmt::Debug for Xchonnect<R> {
@@ -291,6 +292,7 @@ impl<R: Runtime> Xchonnect<R> {
             rotate_requested: rotate_requested.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
+            push: self.push.clone(),
             answer: session_loop::default_answerer(),
         };
         session_loop::spawn_ticker(wake_tx.clone());
@@ -305,6 +307,29 @@ impl<R: Runtime> Xchonnect<R> {
             },
         );
         Ok(true)
+    }
+
+    /// The native side hands over the phone's APNs device token (at launch and whenever iOS
+    /// issues a new one). A new token makes every running loop register it at its next pass.
+    pub async fn set_device_token(&self, token: &str) {
+        if self.push.set_device_token(token) {
+            self.wake_all().await;
+        }
+    }
+
+    /// A push wake-up arrived: every running loop reads its mailbox now instead of at the
+    /// next tick. What the notification carried is never looked at.
+    pub async fn wake_all(&self) {
+        for live in self
+            .live
+            .lock()
+            .await
+            .values()
+            .filter(|live| live.running())
+        {
+            live.interrupt.notify_one();
+            let _ = live.wake.try_send(());
+        }
     }
 
     /// Sessions the user has disconnected whose loop is still posting `session.end`.
@@ -745,6 +770,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 emit,
                 attempts: Mutex::new(BTreeMap::new()),
                 live: Mutex::new(BTreeMap::new()),
+                push: Arc::new(push::PushHandle::new(push::GatewayConfig::from_build())),
             });
             Ok(())
         })

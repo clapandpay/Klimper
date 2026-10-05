@@ -9,9 +9,11 @@
 //! Nothing here reads a notification. A wake-up only ever wakes the session loop; what it
 //! carried is not parsed (the app never acts on push content).
 
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 use xchonnect_core::b64;
-use xchonnect_core::crypto::{Entropy, random_array};
+use xchonnect_core::crypto::{Entropy, hmac_sha256, random_array};
 use xchonnect_core::push::{MAX_LIFETIME_S, Platform, PushToken};
 
 use crate::error::{Error, Result};
@@ -58,13 +60,68 @@ impl GatewayConfig {
 pub struct Registration {
     pub expires_at: u64,
     pub hint_key_hex: String,
+    /// The mailbox the token was registered on. A key rotation moves the session to a new
+    /// mailbox, which has no push token yet.
+    #[serde(default)]
+    pub mailbox: String,
+    /// [`token_tag`] of the device token that was sealed, so a new one is noticed without
+    /// keeping the token itself.
+    #[serde(default)]
+    pub token_tag: String,
 }
 
 impl Registration {
-    /// True when the token should be sealed again: it is close to expiry, or APNs gave the
-    /// phone a new device token since.
-    pub fn needs_renewal(&self, now: u64) -> bool {
+    /// True when the token should be sealed again: it is close to expiry, the session moved
+    /// to another mailbox, or APNs gave the phone a new device token since.
+    pub fn due(&self, mailbox: &str, token_tag: &str, now: u64) -> bool {
         self.expires_at.saturating_sub(now) < RENEW_BEFORE_S
+            || self.mailbox != mailbox
+            || self.token_tag != token_tag
+    }
+}
+
+/// A short, non-reversible label for a device token: 8 bytes of an HMAC under a fixed key.
+pub fn token_tag(device_token: &str) -> String {
+    hmac_sha256(b"klimper push token tag", &[device_token.as_bytes()])
+        .map(|mac| hex::encode(&mac[..8]))
+        .unwrap_or_default()
+}
+
+/// What the loops share: where wake-ups go, and the phone's current APNs device token. The
+/// token arrives from the native side (it can change at any launch) and is held in memory
+/// only; each session stores just its [`token_tag`].
+#[derive(Debug, Default)]
+pub struct PushHandle {
+    gateway: Option<GatewayConfig>,
+    device_token: Mutex<Option<String>>,
+}
+
+impl PushHandle {
+    pub fn new(gateway: Option<GatewayConfig>) -> Self {
+        PushHandle {
+            gateway,
+            device_token: Mutex::new(None),
+        }
+    }
+
+    pub fn gateway(&self) -> Option<&GatewayConfig> {
+        self.gateway.as_ref()
+    }
+
+    pub fn device_token(&self) -> Option<String> {
+        self.device_token.lock().ok()?.clone()
+    }
+
+    /// Remember the device token; true when it is new, so the loops should register it.
+    pub fn set_device_token(&self, token: &str) -> bool {
+        let Ok(mut held) = self.device_token.lock() else {
+            return false;
+        };
+        if held.as_deref() == Some(token) {
+            return false;
+        }
+        *held = Some(token.to_owned());
+        true
     }
 }
 
@@ -109,6 +166,8 @@ pub fn seal(
         registration: Registration {
             expires_at,
             hint_key_hex: hex::encode(hint_key),
+            mailbox: String::new(),
+            token_tag: token_tag(device_token),
         },
     })
 }
@@ -167,15 +226,47 @@ mod tests {
         assert_ne!(a.registration.hint_key_hex, b.registration.hint_key_hex);
     }
 
-    #[test]
-    fn a_registration_is_renewed_thirty_days_before_it_expires() {
+    fn registered(device_token: &str) -> Registration {
         let sk = X25519Secret::from_bytes([7; 32]);
-        let reg = seal(&mut OsEntropy, &gateway(&sk), "abcd1234", false, NOW)
+        let mut reg = seal(&mut OsEntropy, &gateway(&sk), device_token, false, NOW)
             .unwrap()
             .registration;
-        assert!(!reg.needs_renewal(NOW + 59 * 24 * 3600));
-        assert!(reg.needs_renewal(NOW + 61 * 24 * 3600));
-        assert!(reg.needs_renewal(reg.expires_at + 1));
+        reg.mailbox = "mbx".to_owned();
+        reg
+    }
+
+    #[test]
+    fn a_registration_is_renewed_thirty_days_before_it_expires() {
+        let reg = registered("abcd1234");
+        let tag = token_tag("abcd1234");
+        assert!(!reg.due("mbx", &tag, NOW + 59 * 24 * 3600));
+        assert!(reg.due("mbx", &tag, NOW + 61 * 24 * 3600));
+        assert!(reg.due("mbx", &tag, reg.expires_at + 1));
+    }
+
+    #[test]
+    fn a_rotated_mailbox_or_a_new_device_token_registers_again() {
+        let reg = registered("abcd1234");
+        assert!(!reg.due("mbx", &token_tag("abcd1234"), NOW));
+        assert!(reg.due("other mailbox", &token_tag("abcd1234"), NOW));
+        assert!(reg.due("mbx", &token_tag("ffff0000"), NOW));
+    }
+
+    #[test]
+    fn the_tag_neither_contains_nor_repeats_the_token() {
+        assert!(!token_tag("abcd1234").contains("abcd1234"));
+        assert_eq!(token_tag("abcd1234"), token_tag("abcd1234"));
+        assert_ne!(token_tag("abcd1234"), token_tag("abcd1235"));
+    }
+
+    #[test]
+    fn only_a_changed_device_token_wakes_the_loops() {
+        let handle = PushHandle::new(None);
+        assert_eq!(handle.device_token(), None);
+        assert!(handle.set_device_token("aa"));
+        assert!(!handle.set_device_token("aa"));
+        assert!(handle.set_device_token("bb"));
+        assert_eq!(handle.device_token().as_deref(), Some("bb"));
     }
 
     #[test]

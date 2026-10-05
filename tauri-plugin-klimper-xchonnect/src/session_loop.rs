@@ -114,11 +114,16 @@ pub struct SessionLoop {
     pub rotate_requested: Arc<AtomicBool>,
     /// Notified alongside either request, to cut a long poll short.
     pub interrupt: Arc<Notify>,
-    /// Woken by a poll tick and, later, by a push wake-up.
+    /// Woken by a poll tick and by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
+    /// The gateway and the phone's device token, for registering this session's wake-ups.
+    pub push: Arc<crate::push::PushHandle>,
     /// Answers requests: [`default_answerer`].
     pub answer: Answerer,
 }
+
+/// Pause after a failed push registration before the next try.
+const PUSH_RETRY_S: u64 = 300;
 
 /// Unix seconds.
 fn now() -> u64 {
@@ -165,6 +170,7 @@ impl SessionLoop {
         }
 
         let mut origin_checked_at: Option<u64> = None;
+        let mut push_retry_at = 0;
         loop {
             if self.end_requested.load(Ordering::SeqCst) {
                 self.end_now(&mut session, &mut stored, "ended by the user")
@@ -188,6 +194,8 @@ impl SessionLoop {
             } else if asked {
                 tracing::info!(session = %id, "a key rotation is already in progress");
             }
+            self.ensure_push(&session, &mut stored, &mut push_retry_at)
+                .await;
             // The origin check may have taken the disconnect's notification: look at the
             // flag itself before going into a long poll.
             if self.end_requested.load(Ordering::SeqCst) {
@@ -225,6 +233,54 @@ impl SessionLoop {
             if self.wake.recv().await.is_none() {
                 return;
             }
+        }
+    }
+
+    /// Register this session's wake-ups with the relay when that is due: the phone has a
+    /// device token, a gateway is configured, and the session has no registration yet, has
+    /// moved to a new mailbox, is within 30 days of expiry or was registered under another
+    /// device token. Never fatal: the loop polls whether or not push works, and a refusal
+    /// (a relay that has not allowlisted our gateway) is tried again in five minutes.
+    async fn ensure_push(&self, session: &Session, stored: &mut StoredSession, retry_at: &mut u64) {
+        let (Some(gateway), Some(device_token)) = (self.push.gateway(), self.push.device_token())
+        else {
+            return;
+        };
+        let (mailbox, now) = (session.own_mailbox(), now());
+        let (mailbox_b64, tag) = (mailbox.to_b64(), crate::push::token_tag(&device_token));
+        let current = stored
+            .record
+            .push
+            .as_ref()
+            .is_some_and(|reg| !reg.due(&mailbox_b64, &tag, now));
+        if current || now < *retry_at {
+            return;
+        }
+        let sealed = match crate::push::seal(
+            &mut OsEntropy,
+            gateway,
+            &device_token,
+            cfg!(debug_assertions),
+            now,
+        ) {
+            Ok(sealed) => sealed,
+            Err(error) => {
+                tracing::warn!("could not seal a push token: {error}");
+                *retry_at = now + PUSH_RETRY_S;
+                return;
+            }
+        };
+        let read = session.own_read_token().clone();
+        if let Err(error) = self.relay.set_push(mailbox, &read, sealed.body).await {
+            tracing::warn!(session = %stored.record.id, "could not register for push: {error}");
+            *retry_at = now + PUSH_RETRY_S;
+            return;
+        }
+        let mut registration = sealed.registration;
+        registration.mailbox = mailbox_b64;
+        stored.record.push = Some(registration);
+        if let Err(error) = self.store.save(stored) {
+            tracing::warn!("could not store a push registration: {error}");
         }
     }
 
@@ -991,6 +1047,7 @@ mod tests {
             allow_unknown_contracts: false,
             origin_kid: None,
             revoked: false,
+            push: None,
         };
         assert!(requests::check_usable(&record).is_err());
         record.sas_confirmed = true;
