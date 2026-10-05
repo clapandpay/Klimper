@@ -198,13 +198,7 @@ function Binding({
   );
 }
 
-function SpendPrompt({
-  view,
-  raw,
-}: {
-  readonly view: SpendPromptView;
-  readonly raw: unknown;
-}) {
+function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
   return (
     <div className='space-y-4'>
       <p className='text-sm text-muted-foreground'>
@@ -298,7 +292,7 @@ function SpendPrompt({
         foreign={view.foreignSignatures}
       />
 
-      <RawPrompt raw={raw} />
+      <ComputedDetail view={view} />
     </div>
   );
 }
@@ -369,27 +363,28 @@ function SignatureCounts({
   );
 }
 
-/** Everything the wallet computed, verbatim, for anyone who wants to check. */
-function RawPrompt({ raw }: { readonly raw: unknown }) {
+/**
+ * Everything the wallet computed, for anyone who wants to check the detail.
+ *
+ * It prints the **parsed** view, not the prompt JSON. Printing the JSON would put every
+ * key the prompt happens to carry on the screen, which is the one thing this screen must
+ * not do: a field a dApp could influence would be rendered after all, just inside a
+ * disclosure. Everything here has been through `readPrompt`.
+ */
+function ComputedDetail({ view }: { readonly view: PromptView }) {
   return (
     <details>
       <summary className='cursor-pointer text-xs text-muted-foreground'>
         <Trans>Everything Klimper computed</Trans>
       </summary>
       <pre className='text-[10px] overflow-x-auto bg-muted p-2 rounded mt-1'>
-        {JSON.stringify(raw, null, 2)}
+        {JSON.stringify(view, null, 2)}
       </pre>
     </details>
   );
 }
 
-export function XchonnectPromptView({
-  view,
-  raw,
-}: {
-  readonly view: PromptView;
-  readonly raw: unknown;
-}) {
+export function XchonnectPromptView({ view }: { readonly view: PromptView }) {
   if (view.kind === 'unreadable') {
     return (
       <Danger
@@ -406,7 +401,7 @@ export function XchonnectPromptView({
   return view.kind === 'message' ? (
     <MessagePrompt view={view} />
   ) : (
-    <SpendPrompt view={view} raw={raw} />
+    <SpendPrompt view={view} />
   );
 }
 

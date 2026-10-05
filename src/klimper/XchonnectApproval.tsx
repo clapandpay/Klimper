@@ -264,9 +264,7 @@ export default function XchonnectApproval() {
               <SignatureApproval approval={current} onAnswer={resolve} />
             ) : (
               <CardContent className='space-y-4'>
-                {view !== null && (
-                  <XchonnectPromptView view={view} raw={current.prompt} />
-                )}
+                {view !== null && <XchonnectPromptView view={view} />}
                 <p className='text-xs text-muted-foreground'>
                   <Trans>
                     If you do nothing, this request is refused. Approving asks
