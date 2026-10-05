@@ -2,7 +2,7 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["TEAMID.com.clapandpay.klimper"],
+        "appIDs": ["HTP35W93ZF.com.clapandpay.klimper"],
         "components": [
           {
             "/": "/pair",
@@ -17,6 +17,6 @@
     ]
   },
   "webcredentials": {
-    "apps": ["TEAMID.com.clapandpay.klimper"]
+    "apps": ["HTP35W93ZF.com.clapandpay.klimper"]
   }
 }
