@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "klimper-capability",
-  "description": "Klimper: passkey unlock, for the main webview only (never app webviews)",
+  "description": "Klimper: passkey unlock and Xchonnect dApp connections, for the main webview only (never app webviews)",
   "webviews": ["main"],
-  "permissions": ["klimper-passkey:default"]
+  "permissions": ["klimper-passkey:default", "klimper-xchonnect:default"]
 }

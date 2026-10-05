@@ -11,6 +11,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:clapandpay.com</string>
+		<string>applinks:clapandpay.com</string>
 	</array>
 </dict>
 </plist>

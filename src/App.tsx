@@ -65,6 +65,7 @@ import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
 import { PasskeyGate } from '@/klimper/PasskeyGate';
+import { xchonnectRoutes } from '@/klimper/XchonnectRoutes';
 import { featureElement } from '@/lib/featureElement';
 import {
   clapAndPayConnectEnabled,
@@ -176,6 +177,7 @@ const router = createHashRouter(
           }
         />
       </Route>
+      {xchonnectRoutes}
       <Route path='/settings' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />

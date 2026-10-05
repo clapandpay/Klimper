@@ -1,0 +1,18 @@
+[default]
+description = """
+Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,
+list and end sessions, and answer signing approvals. Main webview only — app webviews must
+never reach this surface.
+"""
+permissions = [
+  "allow-status",
+  "allow-inspect-pairing-uri",
+  "allow-approve-pairing",
+  "allow-cancel-pairing",
+  "allow-confirm-sas",
+  "allow-list-sessions",
+  "allow-end-session",
+  "allow-set-dapp-policy",
+  "allow-pending-approvals",
+  "allow-resolve-approval",
+]
