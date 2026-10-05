@@ -126,14 +126,15 @@ impl ApprovalBridge {
         (self.emit)(EVENT_SENT, payload);
     }
 
-    /// Ask the user and block until the answer arrives. Called from a blocking thread
-    /// inside `handle()`; `false` means "do not sign".
+    /// [`ApprovalBridge::ask_with`] without a callback.
+    #[cfg(test)]
     pub fn ask(&self, approval: Approval) -> bool {
         self.ask_with(approval, || {})
     }
 
-    /// [`ApprovalBridge::ask`], calling `on_shown` once the prompt is on screen (not when
-    /// the request was refused before it could be shown).
+    /// Ask the user and block until the answer arrives. Called from a blocking thread
+    /// inside `handle()`; `false` means "do not sign". `on_shown` runs once the prompt is
+    /// on screen (not when the request was refused before it could be shown).
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
         let (tx, rx) = mpsc::channel();

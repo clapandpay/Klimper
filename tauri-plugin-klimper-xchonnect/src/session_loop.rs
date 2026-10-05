@@ -13,9 +13,12 @@
 //!    let a restart reuse it, and the dApp would then reject everything that follows as a
 //!    replay (spec 5.3, integration guide §2).
 //! 2. **Acknowledge last.** A message is acknowledged only after it was processed and the
-//!    new state was persisted, so a crash while the user is still looking at an approval
-//!    leaves the request in the mailbox and the relay delivers it again (TASK-074 AC #2,
-//!    TASK-077 AC #4).
+//!    new state was persisted, so a crash before that leaves it in the mailbox and the relay
+//!    delivers it again (TASK-074 AC #2, TASK-077 AC #4). A request that reached the user
+//!    is the exception by design: its delivery receipt persisted the session, so after a
+//!    crash a redelivery is a replay and the dApp's request expires (4100) instead of
+//!    prompting twice. Messages read while a request waits are acknowledged as they are
+//!    read for the same reason.
 //! 3. **Drain before use.** After a rotation the previous epoch's mailbox is read until it
 //!    is empty, then `finish_drain` gives it up and it is deleted on the relay
 //!    (TASK-074 AC #3).
@@ -545,19 +548,32 @@ impl SessionLoop {
                 biased;
                 outcome = &mut answer => break outcome,
                 Some(step) = progress_rx.recv(), if !session.is_ended() => {
-                    self.send(session, stored, status(request_id, step), 3600).await?;
+                    self.report(session, stored, request_id, step).await;
                 }
                 fetched = self.relay.fetch(mailbox, &read, POLL_WAIT, &self.info), if polling => {
-                    match fetched {
+                    let read_all = match fetched {
                         Ok(messages) => {
-                            self.read_while_waiting(session, stored, mailbox, &read, request_id, messages, &mut deferred)
-                                .await?;
+                            self.read_while_waiting(
+                                session,
+                                stored,
+                                mailbox,
+                                &read,
+                                request_id,
+                                messages,
+                                &mut deferred,
+                            )
+                            .await
                         }
-                        Err(error) => {
-                            // The answer still goes out; only cancellation is lost.
-                            tracing::info!(session = %stored.record.id, "stopped reading while a request waits: {error}");
-                            polling = false;
-                        }
+                        Err(error) => Err(error),
+                    };
+                    if let Err(error) = read_all {
+                        // Never abandon a request the user may be approving: stop reading,
+                        // keep waiting, answer it. Only cancellation is lost.
+                        tracing::info!(
+                            session = %stored.record.id,
+                            "stopped reading while a request waits: {error}"
+                        );
+                        polling = false;
                     }
                 }
                 () = self.interrupt.notified() => {
@@ -579,17 +595,23 @@ impl SessionLoop {
         // Progress reported just before the answer goes out first, so the dApp sees it in
         // order.
         while let Ok(step) = progress_rx.try_recv() {
-            self.send(session, stored, status(request_id, step), 3600)
-                .await?;
+            self.report(session, stored, request_id, step).await;
         }
 
         let message = match (outcome, withdrawn) {
             // Already signed (and maybe broadcast) when the cancel came: the answer stands.
             (Ok(result), _) => rpc::result(request_id, &result).map_err(Error::protocol)?,
             (Err(_), Some(by)) => {
-                if by == Withdrawn::ByUser {
-                    self.send(session, stored, Message::RpcCancel { request_id }, 3600)
-                        .await?;
+                // Informative: the 4102 that follows is what settles the request.
+                if by == Withdrawn::ByUser
+                    && let Err(error) = self
+                        .send(session, stored, Message::RpcCancel { request_id }, 3600)
+                        .await
+                {
+                    tracing::info!(
+                        session = %stored.record.id,
+                        "could not send rpc.cancel: {error}"
+                    );
                 }
                 cancelled(request_id)?
             }
@@ -604,8 +626,27 @@ impl SessionLoop {
                 rpc::error(request_id, code, &message, data.as_deref()).map_err(Error::protocol)?
             }
         };
-        self.send(session, stored, message, 3600).await?;
+        // The one message that must arrive: the transaction may already be on its way, and
+        // a dApp left without the answer could ask again.
+        self.send_retrying(session, stored, message, 3600).await?;
         Ok(deferred)
+    }
+
+    /// `rpc.status` is informative: a post that fails is logged and never ends the wait,
+    /// so it cannot abandon a request the user is deciding or has approved.
+    async fn report(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        request_id: [u8; 16],
+        step: Progress,
+    ) {
+        if let Err(error) = self
+            .send(session, stored, status(request_id, step), 3600)
+            .await
+        {
+            tracing::info!(session = %stored.record.id, "could not report progress: {error}");
+        }
     }
 
     /// Messages read while a request waits for the user. An `rpc.cancel` for it withdraws
@@ -698,6 +739,22 @@ impl SessionLoop {
             }),
         );
         Ok(())
+    }
+
+    /// [`SessionLoop::send`], retrying the post with backoff.
+    async fn send_retrying(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        message: Message,
+        ttl: u64,
+    ) -> Result<()> {
+        let outgoing = session
+            .seal(&mut OsEntropy, now(), message, ttl)
+            .map_err(Error::protocol)?;
+        stored.session_hex = encode(session)?;
+        self.store.save(stored)?;
+        self.relay.post_retrying(&outgoing).await
     }
 
     /// Seal, persist, then post. The order is the point of this function existing.
