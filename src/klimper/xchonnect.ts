@@ -82,6 +82,10 @@ export interface SessionSummary {
   sasConfirmed: boolean;
   /** Stored state was lost or rolled back: pair again. */
   needsRepair: boolean;
+  /** The website withdrew the key this connection was made with; Klimper ended it. */
+  revoked: boolean;
+  /** New keys were offered and are not in use yet. */
+  rotating: boolean;
   developerMode: boolean;
   methods: string[];
   exposedKeys: string[];
@@ -140,6 +144,10 @@ export const xchonnect = {
 
   endSession: (sessionId: string) => call<null>('end_session', { sessionId }),
 
+  /** Offer the website new connection keys. Rejects when the connection is not live. */
+  rotateSessionKeys: (sessionId: string) =>
+    call<null>('rotate_session_keys', { sessionId }),
+
   setDappPolicy: (sessionId: string, policy: DappPolicy) =>
     call<SessionSummary>('set_dapp_policy', { sessionId, policy }),
 
@@ -155,7 +163,7 @@ export const XCHONNECT_EVENTS = {
   pairing: 'klimper-xchonnect://pairing',
   /** `{}` — the list of connected dApps changed. */
   sessions: 'klimper-xchonnect://sessions',
-  /** `{ sessionId, state: 'ended' | 'rotated' | 'needsRepair', epoch?, dapp? }` */
+  /** `{ sessionId, state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair', epoch?, dapp? }` */
   session: 'klimper-xchonnect://session',
   /** `{ sessionId, dapp, method }` — a request arrived. */
   request: 'klimper-xchonnect://request',
@@ -175,7 +183,7 @@ export interface PairingEvent {
 
 export interface SessionEvent {
   sessionId: string;
-  state: 'ended' | 'rotated' | 'needsRepair';
+  state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair';
   epoch?: number;
   dapp?: string;
 }

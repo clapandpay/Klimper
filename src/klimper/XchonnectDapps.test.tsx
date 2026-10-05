@@ -21,6 +21,7 @@ vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 
 const listSessions = vi.fn();
 const endSession = vi.fn();
+const rotateSessionKeys = vi.fn();
 const pendingApprovals = vi.fn();
 
 vi.mock('./xchonnect', () => ({
@@ -35,6 +36,7 @@ vi.mock('./xchonnect', () => ({
       }),
     listSessions: () => listSessions(),
     endSession: (id: string) => endSession(id),
+    rotateSessionKeys: (id: string) => rotateSessionKeys(id),
     pendingApprovals: () => pendingApprovals(),
   },
   XCHONNECT_EVENTS: {
@@ -61,6 +63,8 @@ const session: SessionSummary = {
   epoch: 2,
   sasConfirmed: true,
   needsRepair: false,
+  revoked: false,
+  rotating: false,
   developerMode: false,
   methods: ['chainId', 'connect', 'signCoinSpends'],
   exposedKeys: [`0x${'a'.repeat(96)}`],
@@ -74,6 +78,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   pendingApprovals.mockResolvedValue([]);
   endSession.mockResolvedValue(null);
+  rotateSessionKeys.mockResolvedValue(null);
 });
 
 afterEach(cleanup);
@@ -156,6 +161,50 @@ it('ends a connection without asking twice', async () => {
 
   await waitFor(() => expect(endSession).toHaveBeenCalledWith('sess-1'));
   await waitFor(() => expect(screen.getByTestId('empty-state')).toBeDefined());
+});
+
+it('renews the keys of a live connection', async () => {
+  listSessions.mockResolvedValue([session]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => screen.getByRole('button', { name: 'Renew keys' }));
+  listSessions.mockResolvedValue([{ ...session, rotating: true }]);
+  fireEvent.click(screen.getByRole('button', { name: 'Renew keys' }));
+
+  await waitFor(() => expect(rotateSessionKeys).toHaveBeenCalledWith('sess-1'));
+  await waitFor(() => expect(screen.getByText('being renewed')).toBeDefined());
+  expect(
+    (screen.getByRole('button', { name: 'Renew keys' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it('cannot renew a connection that is not listening', async () => {
+  listSessions.mockResolvedValue([{ ...session, connected: false }]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => screen.getByRole('button', { name: 'Renew keys' }));
+  expect(
+    (screen.getByRole('button', { name: 'Renew keys' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it('marks a revoked connection and only offers to remove it', async () => {
+  listSessions.mockResolvedValue([
+    { ...session, revoked: true, connected: false },
+  ]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => expect(screen.getByTestId('revoked')).toBeDefined());
+  expect(screen.getByTestId('revoked').textContent).toMatch(
+    /withdrew the key this connection was made with/,
+  );
+  expect(screen.queryByRole('button', { name: 'Renew keys' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'What it may do' })).toBeNull();
+  listSessions.mockResolvedValue([]);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+  await waitFor(() => expect(endSession).toHaveBeenCalledWith('sess-1'));
 });
 
 it('points at the approval screen when something is waiting', async () => {

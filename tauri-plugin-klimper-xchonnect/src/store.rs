@@ -263,6 +263,15 @@ pub struct SessionRecord {
     pub allow_agg_sig_unsafe: bool,
     #[serde(default)]
     pub allow_unknown_contracts: bool,
+    /// `kid` of the origin key that signed the pairing code. A session paired before
+    /// this was kept has none and cannot be checked against key removal.
+    #[serde(default)]
+    pub origin_kid: Option<String>,
+    /// The dApp removed the origin key this session was paired under (spec 6.1): the
+    /// session was ended and its secrets erased, and the record stays only so the user
+    /// sees why the connection is gone.
+    #[serde(default)]
+    pub revoked: bool,
 }
 
 /// A session record plus the opaque `Session::to_bytes()` blob.
@@ -545,6 +554,8 @@ mod tests {
             permissions: StoredPermissions::default(),
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
+            origin_kid: None,
+            revoked: false,
         }
     }
 

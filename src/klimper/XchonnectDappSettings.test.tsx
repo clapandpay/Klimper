@@ -58,6 +58,8 @@ const fresh: SessionSummary = {
   epoch: 0,
   sasConfirmed: true,
   needsRepair: false,
+  revoked: false,
+  rotating: false,
   developerMode: false,
   methods: [...DEFAULT_METHODS],
   exposedKeys: [`0x${'a'.repeat(96)}`],

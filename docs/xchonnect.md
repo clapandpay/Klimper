@@ -74,6 +74,20 @@ behind it. An entry whose `state_version` is below the index is restored state: 
   attempt, so cancelling, confirming or scanning another code never waits for it. If
   `session.ready` cannot be posted, the stored session is undone and the attempt discarded,
   rather than listing a connection the website never learned about.
+- **Renewing keys** (spec 9.2.1). `rotate_session_keys` asks the session's loop to offer
+  new keys: a fresh mailbox, then `session.rotate` under the current epoch. The loop also
+  offers on its own once `Session::needs_rotation` says so (30 days or 10 000 messages).
+  On the dApp's accept it switches, pings the dApp's new mailbox so the dApp may retire
+  its old one, then drains and deletes its own old mailbox. A dApp that never answers
+  leaves the offer pending; the session keeps working on the old keys, and a dApp offer
+  of its own still wins.
+- **Origin-key revocation** (spec 6.1). The record keeps the `kid` the pairing code was
+  signed with, and the loop re-fetches the origin document when it starts and every 24
+  hours. Only a document that was fetched, parsed and no longer lists the `kid` revokes:
+  the loop posts `session.end`, deletes the mailboxes, erases the session bytes and keeps
+  the record with `revoked: true`, which the screen shows until the user removes it. A
+  site that is down never revokes anything. Sessions paired before the `kid` was kept
+  cannot be checked.
 - **Still open:** an end the app quits in the middle of is not resumed at the next start
   (the session comes back and can be ended again).
 
@@ -129,11 +143,5 @@ no environment variable that turns that on in a release build.
   (`WalletMeta.link`), and the verified `return_url` is not persisted with the session or
   surfaced on `SessionSummary`. Both are small plugin changes; the UI guard is written and
   tested (`src/klimper/xchonnectReturn.ts`).
-- **Wallet-initiated key rotation**: the session loop accepts a dApp's rotation offer, but
-  there is no command for the user to start one (`Session::begin_rotation` is unused).
-- **Origin-key revocation**: spec 6.1 asks the wallet to revoke sessions signed by an
-  origin key that has been removed, on the next fetch. Nothing re-fetches an origin
-  document after pairing, and the session record does not keep the `kid` it was signed
-  with.
 - **Coin and balance reads, `sendTransaction`**: TASK-082. Only the methods wallet-kit
   handles are answered; anything else returns the CHIP-0002 method-not-found code.

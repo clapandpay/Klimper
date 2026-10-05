@@ -43,6 +43,12 @@ fn rpc_error(code: i64, message: &str) -> RpcError {
 /// Returned before the wallet is even looked at, so an unconfirmed session cannot be
 /// probed for the wallet's keys either.
 pub fn check_usable(record: &SessionRecord) -> std::result::Result<(), RpcError> {
+    if record.revoked {
+        return Err(rpc_error(
+            codes::UNAUTHORIZED,
+            "this connection was revoked: the website withdrew the key it was paired with",
+        ));
+    }
     if record.needs_repair {
         return Err(rpc_error(
             codes::UNAUTHORIZED,
@@ -343,6 +349,8 @@ mod tests {
             permissions: StoredPermissions::default(),
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
+            origin_kid: None,
+            revoked: false,
         }
     }
 
@@ -366,6 +374,27 @@ mod tests {
             check_usable(&rolled_back).unwrap_err().code,
             codes::UNAUTHORIZED
         );
+
+        // So is a session whose origin key the dApp withdrew (spec 6.1).
+        let mut revoked = confirmed;
+        revoked.revoked = true;
+        assert_eq!(
+            check_usable(&revoked).unwrap_err().code,
+            codes::UNAUTHORIZED
+        );
+    }
+
+    /// Records written before the origin `kid` and the revocation mark existed still load,
+    /// as unchecked and not revoked.
+    #[test]
+    fn an_older_record_loads_without_the_new_fields() {
+        let mut value = serde_json::to_value(record()).unwrap();
+        let fields = value.as_object_mut().unwrap();
+        fields.remove("origin_kid");
+        fields.remove("revoked");
+        let old: SessionRecord = serde_json::from_value(value).unwrap();
+        assert_eq!(old.origin_kid, None);
+        assert!(!old.revoked);
     }
 
     #[test]

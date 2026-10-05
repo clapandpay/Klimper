@@ -25,7 +25,7 @@
 //! sleep alone, so a push wake-up becomes another sender rather than a rewrite
 //! (decision-008 point 2).
 //!
-//! A disconnect does not wait for the long poll: `end_signal` cuts the wait short, and no
+//! A disconnect does not wait for the long poll: `interrupt` cuts the wait short, and no
 //! further message is dispatched once the end was asked for. Only the poll is raced, never
 //! a dispatch, so an end can never land between sealing a message and persisting it.
 
@@ -42,8 +42,11 @@ use xchonnect_core::rpc;
 use xchonnect_core::session::Session;
 use xchonnect_wallet_kit::RpcError;
 
+use xchonnect_core::uri::ParseOptions;
+
 use crate::approval::{ApprovalBridge, Emitter};
 use crate::error::{Error, Result};
+use crate::origin;
 use crate::relay::{RelayClient, RelayInfo};
 use crate::requests::{self, AnswerInputs, RequestMeta};
 use crate::store::{SessionStore, StoredSession};
@@ -58,6 +61,8 @@ pub const EVENT_REQUEST: &str = "klimper-xchonnect://request";
 const POLL_WAIT: u64 = 20;
 /// Pause after a relay failure before trying again.
 const BACKOFF: Duration = Duration::from_secs(5);
+/// Spec 6.1: an origin document is cached for no more than 24 hours.
+const ORIGIN_RECHECK_S: u64 = 24 * 60 * 60;
 
 /// Everything one session's loop needs.
 ///
@@ -75,8 +80,10 @@ pub struct SessionLoop {
     /// Set by `end_session`: the loop itself posts `session.end` and cleans up, so the
     /// end can never interleave with a message the loop is in the middle of sealing.
     pub end_requested: Arc<AtomicBool>,
-    /// Notified by `end_session` alongside `end_requested`, to cut a long poll short.
-    pub end_signal: Arc<Notify>,
+    /// Set by `rotate_session_keys`: the loop offers new keys at its next pass.
+    pub rotate_requested: Arc<AtomicBool>,
+    /// Notified alongside either request, to cut a long poll short.
+    pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and, later, by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
 }
@@ -99,6 +106,10 @@ impl SessionLoop {
     pub async fn run(mut self, mut stored: StoredSession) {
         let id = stored.record.id.clone();
         let fingerprint = stored.record.fingerprint;
+        // Its secrets are erased: there is nothing to run.
+        if stored.record.revoked {
+            return;
+        }
         let Ok(bytes) = stored.session_bytes() else {
             self.mark_repair(&mut stored);
             return;
@@ -118,15 +129,37 @@ impl SessionLoop {
                     self.info = info;
                 }
             }
-            () = self.end_signal.notified() => {}
+            () = self.interrupt.notified() => {}
         }
 
+        let mut origin_checked_at: Option<u64> = None;
         loop {
             if self.end_requested.load(Ordering::SeqCst) {
-                self.end_now(&mut session, &mut stored).await;
+                self.end_now(&mut session, &mut stored, "ended by the user")
+                    .await;
                 self.cleanup(&session, fingerprint, &id).await;
                 (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
                 return;
+            }
+            if origin_checked_at.is_none_or(|at| now().saturating_sub(at) >= ORIGIN_RECHECK_S) {
+                origin_checked_at = Some(now());
+                if self.origin_key_removed(&stored).await {
+                    self.revoke(&mut session, &mut stored).await;
+                    return;
+                }
+            }
+            let asked = self.rotate_requested.swap(false, Ordering::SeqCst);
+            if (asked || session.needs_rotation(now())) && rotation_idle(&session) {
+                if let Err(error) = self.begin_rotation(&mut session, &mut stored).await {
+                    tracing::warn!(session = %id, "could not start a key rotation: {error}");
+                }
+            } else if asked {
+                tracing::info!(session = %id, "a key rotation is already in progress");
+            }
+            // The origin check may have taken the disconnect's notification: look at the
+            // flag itself before going into a long poll.
+            if self.end_requested.load(Ordering::SeqCst) {
+                continue;
             }
             match self.pump(&mut session, &mut stored).await {
                 Ok(Outcome::Continue) => {}
@@ -148,7 +181,7 @@ impl SessionLoop {
                     tracing::warn!(session = %id, "xchonnect session loop: {error}");
                     tokio::select! {
                         () = tokio::time::sleep(BACKOFF) => {}
-                        () = self.end_signal.notified() => {}
+                        () = self.interrupt.notified() => {}
                     }
                 }
             }
@@ -165,8 +198,8 @@ impl SessionLoop {
 
     /// Tell the dApp the user ended the connection. Seal, persist, post — in that order,
     /// as everywhere else.
-    async fn end_now(&self, session: &mut Session, stored: &mut StoredSession) {
-        match session.end(&mut OsEntropy, now(), Some("ended by the user".to_owned())) {
+    async fn end_now(&self, session: &mut Session, stored: &mut StoredSession, reason: &str) {
+        match session.end(&mut OsEntropy, now(), Some(reason.to_owned())) {
             Ok(outgoing) => {
                 if let Ok(encoded) = encode(session) {
                     stored.session_hex = encoded;
@@ -194,18 +227,83 @@ impl SessionLoop {
     /// Delete the session's mailboxes and its stored state.
     async fn cleanup(&self, session: &Session, fingerprint: u32, id: &str) {
         self.approvals.withdraw_session(id);
-        if let Some((mailbox, read)) = session.draining_mailbox() {
-            self.relay.delete(mailbox, read).await;
-        }
-        if let Some((mailbox, read)) = session.pending_rotation_mailbox() {
-            self.relay.delete(mailbox, read).await;
-        }
-        self.relay
-            .delete(session.own_mailbox(), session.own_read_token())
-            .await;
+        delete_mailboxes(&self.relay, session).await;
         if let Err(error) = self.store.remove(fingerprint, id) {
             tracing::warn!("could not remove a session from the keyring: {error}");
         }
+    }
+
+    /// Spec 6.1: re-fetch the origin document and look for the key the pairing code was
+    /// signed with. Only a document that was fetched and parsed and no longer lists the key
+    /// counts as a removal: a website that is down, slow or serving garbage must not be
+    /// able to end its users' connections by accident, and a session paired before the
+    /// `kid` was kept cannot be checked at all.
+    async fn origin_key_removed(&self, stored: &StoredSession) -> bool {
+        let Some(kid) = stored.record.origin_kid.as_deref() else {
+            return false;
+        };
+        let options = ParseOptions {
+            developer_mode: stored.record.developer_mode,
+        };
+        let document = tokio::select! {
+            document = origin::fetch(&stored.record.dapp, options) => document,
+            () = self.interrupt.notified() => return false,
+        };
+        match document {
+            Ok(document) => !document.keys.iter().any(|key| key.kid == kid),
+            Err(error) => {
+                tracing::debug!(dapp = %stored.record.dapp, "origin document not checked: {error}");
+                false
+            }
+        }
+    }
+
+    /// The dApp withdrew the origin key this session was paired under: end it, erase its
+    /// secrets, and keep the record marked so the user sees why it is gone.
+    async fn revoke(&self, session: &mut Session, stored: &mut StoredSession) {
+        let id = stored.record.id.clone();
+        tracing::warn!(dapp = %stored.record.dapp, "origin key removed; revoking the session");
+        self.approvals.withdraw_session(&id);
+        self.end_now(session, stored, "origin key revoked").await;
+        delete_mailboxes(&self.relay, session).await;
+        stored.record.revoked = true;
+        stored.session_hex = String::new();
+        if let Err(error) = self.store.save(stored) {
+            tracing::warn!("could not mark a revoked session: {error}");
+        }
+        (self.emit)(
+            EVENT_SESSION,
+            json!({ "sessionId": id, "state": "revoked", "dapp": stored.record.dapp }),
+        );
+    }
+
+    /// Offer new keys (spec 9.2.1, this side as initiator): a fresh mailbox, then
+    /// `session.rotate` offer under the current epoch. The switch happens when the dApp's
+    /// accept arrives, in [`SessionLoop::dispatch`].
+    async fn begin_rotation(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+    ) -> Result<()> {
+        let read = Token::random(&mut OsEntropy);
+        let write = Token::random(&mut OsEntropy);
+        let mailbox = self.relay.create_mailbox(&read, &write, None).await?;
+        let outgoing =
+            match session.begin_rotation(&mut OsEntropy, now(), mailbox, read.clone(), write) {
+                Ok(outgoing) => outgoing,
+                Err(error) => {
+                    self.relay.delete(mailbox, &read).await;
+                    return Err(Error::protocol(error));
+                }
+            };
+        stored.session_hex = encode(session)?;
+        self.store.save(stored)?;
+        self.relay.post_retrying(&outgoing).await?;
+        (self.emit)(
+            EVENT_SESSION,
+            json!({ "sessionId": stored.record.id, "state": "rotating", "epoch": session.epoch() }),
+        );
+        Ok(())
     }
 
     /// One pass over the mailboxes.
@@ -236,7 +334,7 @@ impl SessionLoop {
         // the poll loses nothing, and the relay keeps any message it was about to deliver.
         let messages = tokio::select! {
             messages = self.relay.fetch(mailbox, &read, POLL_WAIT, &self.info) => messages?,
-            () = self.end_signal.notified() => return Ok(Outcome::Continue),
+            () = self.interrupt.notified() => return Ok(Outcome::Continue),
         };
         self.consume(session, stored, mailbox, &read, messages)
             .await
@@ -300,6 +398,21 @@ impl SessionLoop {
             }
             Message::SessionRotate(rotate) if rotate.phase == RotatePhase::Offer => {
                 self.accept_rotation(session, stored, &rotate).await?;
+            }
+            Message::SessionRotate(_) => {
+                // The dApp accepted our offer and `Session::open` has switched epochs. A
+                // first message on the dApp's new mailbox is what lets it retire its old
+                // one (spec 9.2.1 step 4); `send` persists the new state before posting.
+                self.send(session, stored, Message::SessionPing, 300)
+                    .await?;
+                (self.emit)(
+                    EVENT_SESSION,
+                    json!({
+                        "sessionId": stored.record.id,
+                        "state": "rotated",
+                        "epoch": session.epoch(),
+                    }),
+                );
             }
             Message::SessionPing => {
                 self.send(session, stored, Message::SessionPong, 300)
@@ -487,6 +600,17 @@ pub async fn end_without_loop(store: &SessionStore, stored: &mut StoredSession) 
         }
         Err(error) => tracing::warn!("could not build session.end: {error}"),
     }
+    delete_mailboxes(&relay, &session).await;
+}
+
+/// No rotation of ours is waiting for an accept and no previous epoch is still draining.
+fn rotation_idle(session: &Session) -> bool {
+    session.pending_rotation_mailbox().is_none() && session.draining_mailbox().is_none()
+}
+
+/// Delete every mailbox this side holds for the session. Failures are logged by
+/// [`RelayClient::delete`]; the relay drops an unused mailbox after 30 days anyway.
+async fn delete_mailboxes(relay: &RelayClient, session: &Session) {
     if let Some((mailbox, read)) = session.draining_mailbox() {
         relay.delete(mailbox, read).await;
     }
@@ -605,6 +729,8 @@ mod tests {
             permissions: crate::store::StoredPermissions::default(),
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
+            origin_kid: None,
+            revoked: false,
         };
         assert!(requests::check_usable(&record).is_err());
         record.sas_confirmed = true;

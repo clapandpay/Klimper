@@ -24,6 +24,7 @@
 //! | `confirm_sas` | `pairingId: string`, `matches: boolean` | [`SessionSummary`] or `null` |
 //! | `list_sessions` | — | [`SessionSummary`]`[]` (and resumes their message loops) |
 //! | `end_session` | `sessionId: string` | `null` |
+//! | `rotate_session_keys` | `sessionId: string` | `null` |
 //! | `set_dapp_policy` | `sessionId: string`, `policy:` [`DappPolicy`] | [`SessionSummary`] |
 //! | `pending_approvals` | — | [`Approval`]`[]` |
 //! | `resolve_approval` | `approvalId: string`, `approved: boolean` | `null` |
@@ -90,7 +91,8 @@ fn now() -> u64 {
 /// the only test of whether a loop is there to talk to.
 struct Live {
     end_requested: Arc<AtomicBool>,
-    end_signal: Arc<tokio::sync::Notify>,
+    rotate_requested: Arc<AtomicBool>,
+    interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
 }
 
@@ -105,11 +107,17 @@ impl Live {
         self.running() && self.end_requested.load(Ordering::SeqCst)
     }
 
+    fn request_rotation(&self) {
+        self.rotate_requested.store(true, Ordering::SeqCst);
+        self.interrupt.notify_one();
+        let _ = self.wake.try_send(());
+    }
+
     fn request_end(&self) {
         self.end_requested.store(true, Ordering::SeqCst);
         // `notify_one` keeps a permit when the loop is not waiting yet, so the end is
         // seen by the next poll rather than lost.
-        self.end_signal.notify_one();
+        self.interrupt.notify_one();
         let _ = self.wake.try_send(());
     }
 }
@@ -177,6 +185,12 @@ pub struct SessionSummary {
     pub sas_confirmed: bool,
     /// Stored state was lost or rolled back: the dApp must be paired again.
     pub needs_repair: bool,
+    /// The website withdrew the origin key this connection was paired under, so Klimper
+    /// ended it (spec 6.1). Only removing it is left.
+    pub revoked: bool,
+    /// New keys were offered and the dApp has not answered yet, or the previous epoch's
+    /// mailbox is still being read.
+    pub rotating: bool,
     pub developer_mode: bool,
     pub methods: Vec<String>,
     pub exposed_keys: Vec<String>,
@@ -207,7 +221,7 @@ pub struct DappPolicy {
 }
 
 /// Describe one stored session for the webview.
-fn summary(stored: &StoredSession, epoch: u64, connected: bool) -> SessionSummary {
+fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSummary {
     let shown = display_domain(&stored.record.dapp);
     SessionSummary {
         session_id: stored.record.id.clone(),
@@ -222,9 +236,11 @@ fn summary(stored: &StoredSession, epoch: u64, connected: bool) -> SessionSummar
         dapp_name: stored.record.dapp_name.clone(),
         chain_id: stored.record.chain_id.clone(),
         created_at: stored.record.created_at,
-        epoch,
+        epoch: keys.epoch,
         sas_confirmed: stored.record.sas_confirmed,
         needs_repair: stored.record.needs_repair,
+        revoked: stored.record.revoked,
+        rotating: keys.rotating,
         developer_mode: stored.record.developer_mode,
         methods: stored.record.permissions.methods.clone(),
         exposed_keys: stored.record.permissions.exposed_keys.clone(),
@@ -240,7 +256,7 @@ impl<R: Runtime> Xchonnect<R> {
     /// session needs re-pairing.
     async fn ensure_loop(&self, stored: StoredSession) -> Result<bool> {
         let id = stored.record.id.clone();
-        if stored.record.needs_repair || !stored.record.sas_confirmed {
+        if stored.record.revoked || stored.record.needs_repair || !stored.record.sas_confirmed {
             return Ok(false);
         }
         let mut live = self.live.lock().await;
@@ -249,7 +265,8 @@ impl<R: Runtime> Xchonnect<R> {
         }
         let relay = relay::RelayClient::new(&stored.record.relay, stored.record.developer_mode)?;
         let end_requested = Arc::new(AtomicBool::new(false));
-        let end_signal = Arc::new(tokio::sync::Notify::new());
+        let rotate_requested = Arc::new(AtomicBool::new(false));
+        let interrupt = Arc::new(tokio::sync::Notify::new());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
         let message_loop = SessionLoop {
@@ -262,7 +279,8 @@ impl<R: Runtime> Xchonnect<R> {
             // made while `live` is locked.
             info: relay::RelayInfo::default(),
             end_requested: end_requested.clone(),
-            end_signal: end_signal.clone(),
+            rotate_requested: rotate_requested.clone(),
+            interrupt: interrupt.clone(),
             wake: wake_rx,
         };
         session_loop::spawn_ticker(wake_tx.clone());
@@ -271,7 +289,8 @@ impl<R: Runtime> Xchonnect<R> {
             id,
             Live {
                 end_requested,
-                end_signal,
+                rotate_requested,
+                interrupt,
                 wake: wake_tx,
             },
         );
@@ -432,15 +451,15 @@ async fn confirm_sas<R: Runtime>(
             return Err(error);
         }
     };
-    let epoch = attempt
+    let keys = attempt
         .session
         .as_ref()
-        .map_or(0, xchonnect_core::session::Session::epoch);
+        .map_or_else(KeyState::default, KeyState::of);
     drop(attempt);
     state.attempts.lock().await.remove(&pairing_id);
 
     let connected = state.ensure_loop(stored.clone()).await?;
-    let summary = summary(&stored, epoch, connected);
+    let summary = summary(&stored, keys, connected);
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(Some(summary))
 }
@@ -467,19 +486,37 @@ async fn list_sessions<R: Runtime>(
         if ending.contains(&stored.record.id) {
             continue;
         }
-        let epoch = epoch_of(&stored);
+        let keys = KeyState::stored(&stored);
         let connected = state.ensure_loop(stored.clone()).await.unwrap_or(false);
-        out.push(summary(&stored, epoch, connected));
+        out.push(summary(&stored, keys, connected));
     }
     Ok(out)
 }
 
-fn epoch_of(stored: &StoredSession) -> u64 {
-    stored
-        .session_bytes()
-        .ok()
-        .and_then(|bytes| xchonnect_core::session::Session::from_bytes(&bytes).ok())
-        .map_or(0, |session| session.epoch())
+/// What the screen shows about a session's keys.
+#[derive(Debug, Clone, Copy, Default)]
+struct KeyState {
+    epoch: u64,
+    rotating: bool,
+}
+
+impl KeyState {
+    fn of(session: &xchonnect_core::session::Session) -> Self {
+        KeyState {
+            epoch: session.epoch(),
+            rotating: session.pending_rotation_mailbox().is_some()
+                || session.draining_mailbox().is_some(),
+        }
+    }
+
+    /// From the stored bytes. A revoked session has none left, and reads as epoch 0.
+    fn stored(stored: &StoredSession) -> Self {
+        stored
+            .session_bytes()
+            .ok()
+            .and_then(|bytes| xchonnect_core::session::Session::from_bytes(&bytes).ok())
+            .map_or_else(KeyState::default, |session| KeyState::of(&session))
+    }
 }
 
 /// End a connection: `session.end` to the dApp, then the mailboxes and the keyring entries
@@ -520,6 +557,27 @@ async fn end_session<R: Runtime>(
     Ok(())
 }
 
+/// Renew one connection's keys (spec 9.2.1, the wallet as initiator). The session's loop
+/// creates a mailbox and posts the offer; the switch happens when the dApp accepts, and
+/// the `rotating` flag on the summary stays set until the old mailbox is drained.
+#[command]
+async fn rotate_session_keys<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+    session_id: String,
+) -> Result<()> {
+    let live = state.live.lock().await;
+    match live.get(&session_id) {
+        Some(handle) if handle.running() && !handle.ending() => {
+            handle.request_rotation();
+            Ok(())
+        }
+        // Not listening (locked wallet, needs re-pairing, revoked, being ended): there is
+        // no loop to carry the offer, and a rotation needs the dApp to answer.
+        _ => Err(Error::SessionNotUsable),
+    }
+}
+
 /// Change one dApp's permissions and limits. The session loop reloads them before every
 /// request, so a change applies to the next request without restarting anything.
 #[command]
@@ -544,7 +602,7 @@ async fn set_dapp_policy<R: Runtime>(
         stored.record.allow_unknown_contracts = allow;
     }
     state.store.save(&mut stored)?;
-    let epoch = epoch_of(&stored);
+    let keys = KeyState::stored(&stored);
     let connected = state
         .live
         .lock()
@@ -552,7 +610,7 @@ async fn set_dapp_policy<R: Runtime>(
         .get(&session_id)
         .is_some_and(Live::running);
     (state.emit)(EVENT_SESSIONS, json!({}));
-    Ok(summary(&stored, epoch, connected))
+    Ok(summary(&stored, keys, connected))
 }
 
 /// Everything waiting for the user, so a reloaded screen can rebuild itself.
@@ -635,6 +693,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             confirm_sas,
             list_sessions,
             end_session,
+            rotate_session_keys,
             set_dapp_policy,
             pending_approvals,
             resolve_approval

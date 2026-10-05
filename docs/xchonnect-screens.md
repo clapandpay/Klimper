@@ -66,12 +66,15 @@ hex value appears in any Xchonnect screen.
 | empty                 | "No dApps are connected." plus what a connection is and the one button that starts one                                                                |
 | a session             | verified domain (both forms when they differ), claimed name as claimed, when it was connected, key epoch, listening or not, methods, limits, switches |
 | `needsRepair`         | the card is marked unusable, with "Connect again" — no action that would use it                                                                       |
+| `revoked`             | the website withdrew its origin key: "Klimper ended this connection", why, and only **Remove**                                                        |
+| `rotating`            | the keys read "being renewed" and **Renew keys** is disabled until the website has answered                                                           |
 | `warnings`            | a danger line per warning, on the card                                                                                                                |
 | dangerous switches on | a warning line naming which one                                                                                                                       |
 | no wallet open        | the list is empty and says the wallet has to be unlocked first                                                                                        |
 
-Actions per session: **Permissions** (screen 5) and **End connection**. Ending is
-immediate and needs no confirmation dialog — it is the safe direction.
+Actions per session: **Permissions** (screen 5), **Renew keys** (spec 9.2.1, only while
+the connection is listening) and **End connection**. Ending is immediate and needs no
+confirmation dialog — it is the safe direction.
 
 ### 2. Connect a dApp — `/xchonnect/connect` (TASK-072, TASK-085)
 
@@ -230,10 +233,6 @@ _only_ the domain is; the word "website" rather than "dApp" wherever a user read
 
 Reported rather than faked. Each needs a plugin command that the transport does not expose:
 
-- **Wallet-initiated key rotation** (TASK-084 AC #3). `xchonnect-core` has
-  `Session::begin_rotation`, and the session loop accepts a dApp's offer, but there is no
-  command for the user to start one. The screen shows the key epoch and that rotation
-  happens automatically; a `rotate_session_keys` command would make the action real.
 - **Return to the dApp** (TASK-085 AC #1, #2). The verified `return_url` reaches the plugin
   as `VerifiedUri::return_url` and the core already refuses one that leaves the dApp's
   domain, but it is neither persisted with the session nor surfaced on `SessionSummary`.
