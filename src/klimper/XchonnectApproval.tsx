@@ -1,122 +1,79 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The approval screen (clapandpay TASK-080, TASK-085). Replaces the approval half of the
-// placeholder `XchonnectSessions.tsx`.
+// The requests page (clapandpay TASK-080, TASK-085): everything waiting for the user, and
+// the one they picked in the same large view the overlay shows
+// (`XchonnectApprovalDetail`).
 //
-// This screen is the product's safety promise, so it is worth being explicit about what it
-// does and does not render:
+// The list only shows what is waiting and when it is refused by itself; it carries no
+// amount and no Approve. A request is answered from its full view and nowhere else, so
+// picking one out of order can never approve something the user has not seen.
 //
-//   * it renders a `PromptView`, which can only be built by `readPrompt` from the
-//     wallet's own local simulation. The dApp's description of its request has no path
-//     here, and neither does the name it gave itself — only the verified domain is shown;
-//   * `conditional_received` is a line of its own with its own sentence, never part of a
-//     total (`XchonnectPromptView`);
-//   * an unrecognised puzzle needs a second, separate confirmation that shows the puzzle
-//     hash: approving a request and approving "I accept a contract nobody can read" are
-//     two different decisions;
-//   * a `kind: 'signature'` approval is answered on its own. There is deliberately no
-//     control that answers more than one approval, so a plan with three signatures asks
-//     three times (spec 11.1 item 4, the desktop form of it — see `docs/xchonnect.md`);
-//   * doing nothing is a refusal. The approval bridge in Rust treats five minutes of
-//     silence, a closed webview and a session that ended as "do not sign".
+// On a wide window the list and the view sit side by side. On a phone the list comes
+// first and the view replaces it; with a single request the view is shown at once.
 
 import Container from '@/components/Container';
 import Header from '@/components/Header';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { KeyRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { XchonnectPromptView } from './XchonnectPromptView';
+import { ChevronRight, Inbox } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Approval, xchonnect } from './xchonnect';
-import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
+import {
+  approvalHeadline,
+  Countdown,
+  XchonnectApprovalDetail,
+} from './XchonnectApprovalDetail';
 import {
   subscribeXchonnectLink,
   takeXchonnectLink,
   XCHONNECT_ROUTES,
 } from './xchonnectLinkHandoff';
+import { SiteCoin } from './XchonnectUi';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
 import { returnToDapp } from './xchonnectReturn';
 
-function minutesLeft(expiresAt: number): number {
-  return Math.max(0, Math.ceil((expiresAt - Date.now() / 1000) / 60));
-}
-
-/** The verified domain, and only that: this line sits next to amounts. */
-function AsksYouToSign({ dapp }: { readonly dapp: string }) {
-  return <Trans>{dapp} asks you to sign</Trans>;
-}
-
-function RefusedIn({ minutes }: { readonly minutes: number }) {
-  return <Trans>refused by itself in {minutes} minutes</Trans>;
-}
-
-/** One signature out of an approved plan. Its own decision, every time. */
-function SignatureApproval({
+function RequestRow({
   approval,
-  onAnswer,
+  selected,
+  onSelect,
 }: {
-  readonly approval: Approval & { kind: 'signature' };
-  readonly onAnswer: (approved: boolean) => void;
+  readonly approval: Approval;
+  readonly selected: boolean;
+  readonly onSelect: () => void;
 }) {
-  const index = approval.index;
-  const total = approval.total;
   return (
-    <CardContent className='space-y-4' data-testid='signature-approval'>
-      <p className='text-sm text-muted-foreground'>
-        <Trans>
-          You approved the request. Each signature it needs is authorised on its
-          own.
-        </Trans>
-      </p>
-      <div className='flex items-start gap-2'>
-        <KeyRound className='h-4 w-4 mt-1 shrink-0' aria-hidden='true' />
-        <div>
-          <div className='text-sm text-muted-foreground'>
-            <Trans>Signing key</Trans>
-          </div>
-          <div
-            className='font-mono text-xs break-all'
-            data-testid='signature-key'
-          >
-            {approval.publicKey}
-          </div>
-        </div>
-      </div>
-      <div className='flex gap-2'>
-        <Button onClick={() => onAnswer(true)}>
-          <Trans>
-            Authorise signature {index} of {total}
-          </Trans>
-        </Button>
-        <Button variant='outline' onClick={() => onAnswer(false)}>
-          <Trans>Reject</Trans>
-        </Button>
-      </div>
-    </CardContent>
+    <li>
+      <button
+        type='button'
+        className='xc-request-row'
+        data-selected={selected}
+        aria-current={selected ? 'true' : undefined}
+        onClick={onSelect}
+        data-testid='request-row'
+      >
+        <SiteCoin domain={approval.dapp} />
+        <span className='min-w-0 flex-1 text-left'>
+          <span className='block font-semibold truncate'>{approval.dapp}</span>
+          <span className='block text-sm text-muted-foreground truncate'>
+            {approvalHeadline(approval)}
+          </span>
+          <Countdown expiresAt={approval.expiresAt} />
+        </span>
+        <ChevronRight
+          className='h-4 w-4 shrink-0 text-muted-foreground'
+          aria-hidden='true'
+        />
+      </button>
+    </li>
   );
 }
 
 export default function XchonnectApproval() {
   const navigate = useNavigate();
-  const { approvals, current, error, answer, reload } = useXchonnectApprovals();
-  const [confirming, setConfirming] = useState(false);
+  const { approvalId } = useParams();
+  const { approvals, error, answer, cancel, reload } = useXchonnectApprovals();
   /** A `/req` link arrived with nothing pending: say so, neutrally. */
   const [cameFromLink, setCameFromLink] = useState(false);
   /** The domain of the last request answered here, for the "you can go back" state. */
@@ -138,20 +95,18 @@ export default function XchonnectApproval() {
     return subscribeXchonnectLink((link) => act(link.kind));
   }, [reload]);
 
-  const view = useMemo(
-    () =>
-      current !== null && current.kind === 'request'
-        ? readPrompt(current.prompt)
-        : null,
-    [current],
-  );
+  // The one the user picked, while it is still waiting; otherwise the oldest.
+  const picked = approvals.find((item) => item.id === approvalId) ?? null;
+  const current = picked ?? approvals[0] ?? null;
+  // On a phone: the list unless a request was picked or there is only one.
+  const showDetailFirst = picked !== null || approvals.length === 1;
 
-  useEffect(() => setConfirming(false), [current?.id]);
+  const select = (id: string) =>
+    navigate(`${XCHONNECT_ROUTES.request}/${id}`, { replace: true });
 
-  const resolve = (approved: boolean) => {
-    if (current === null) return;
-    const dapp = current.dapp;
-    void answer(current.id, approved).then(() =>
+  const resolve = (approval: Approval, approved: boolean) => {
+    const dapp = approval.dapp;
+    void answer(approval.id, approved).then(() =>
       // Integration guide 5.4: with no usable return URL the user is left here with a
       // clear "you can go back now" state rather than a guessed navigation. The guard
       // that would open one lives in `xchonnectReturn.ts`.
@@ -159,58 +114,59 @@ export default function XchonnectApproval() {
         if (outcome !== 'opened') setAnswered(dapp);
       }),
     );
-    setConfirming(false);
-  };
-
-  const onApprove = () => {
-    if (view !== null && needsSecondConfirmation(view)) {
-      setConfirming(true);
-      return;
+    if (picked !== null) {
+      navigate(XCHONNECT_ROUTES.request, { replace: true });
     }
-    resolve(true);
   };
 
-  const waiting = approvals.length - 1;
+  const withdraw = (approval: Approval) => {
+    void cancel(approval.id);
+    if (picked !== null) {
+      navigate(XCHONNECT_ROUTES.request, { replace: true });
+    }
+  };
+
+  const count = approvals.length;
 
   return (
     <Layout>
       <Header
-        title={t`Approve a request`}
+        title={t`Requests`}
         back={() => navigate(XCHONNECT_ROUTES.dapps)}
       />
-      <Container className='max-w-xl space-y-4'>
+      <Container className='max-w-5xl space-y-4'>
         {error !== null && (
-          <Card className='border-destructive'>
-            <CardHeader>
-              <CardDescription className='break-words text-destructive'>
-                {error}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div
+            className='rounded-[20px] border border-destructive p-4 text-sm text-destructive break-words'
+            role='alert'
+          >
+            {error}
+          </div>
         )}
 
         {current === null && answered !== null && (
-          <Card data-testid='go-back-notice'>
-            <CardHeader>
-              <CardTitle className='text-base'>
-                <Trans>Answered</Trans>
-              </CardTitle>
-              <CardDescription>
-                <Trans>
-                  {answered} has your answer. You can go back to it now.
-                </Trans>
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className='xc-notice' data-testid='go-back-notice'>
+            <div className='font-semibold'>
+              <Trans>Answered</Trans>
+            </div>
+            <div className='text-sm text-muted-foreground'>
+              <Trans>
+                {answered} has your answer. You can go back to it now.
+              </Trans>
+            </div>
+          </div>
         )}
 
         {current === null && (
-          <Card data-testid='nothing-waiting'>
-            <CardHeader>
-              <CardTitle className='text-base'>
+          <div className='xc-empty' data-testid='nothing-waiting'>
+            <span className='xc-empty-icon' aria-hidden='true'>
+              <Inbox className='h-6 w-6' />
+            </span>
+            <div className='space-y-1'>
+              <div className='text-lg font-semibold'>
                 <Trans>Nothing is waiting for you</Trans>
-              </CardTitle>
-              <CardDescription>
+              </div>
+              <p className='text-sm text-muted-foreground max-w-md'>
                 {cameFromLink ? (
                   <Trans>
                     A website asked for your signature, but nothing has arrived
@@ -223,108 +179,59 @@ export default function XchonnectApproval() {
                     appears here.
                   </Trans>
                 )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant='outline'
-                onClick={() => navigate(XCHONNECT_ROUTES.dapps)}
-              >
-                <Trans>Connected websites</Trans>
-              </Button>
-            </CardContent>
-          </Card>
+              </p>
+            </div>
+            <Button
+              variant='outline'
+              onClick={() => navigate(XCHONNECT_ROUTES.dapps)}
+            >
+              <Trans>Connected websites</Trans>
+            </Button>
+          </div>
         )}
 
         {current !== null && (
-          <Card className='border-primary'>
-            <CardHeader>
-              <CardTitle className='text-base break-all'>
-                {/*
-                  The verified domain, and nothing the website chose to call itself:
-                  this header is next to amounts, and a claimed name next to an amount
-                  is a claim about the amount.
-                */}
-                <AsksYouToSign dapp={current.dapp} />
-              </CardTitle>
-              <CardDescription>
-                {current.method} ·{' '}
-                <RefusedIn minutes={minutesLeft(current.expiresAt)} />
-                {waiting > 0 && (
-                  <>
-                    {' · '}
-                    <span data-testid='queue-count'>
-                      <Trans>{waiting} more waiting</Trans>
-                    </span>
-                  </>
-                )}
-              </CardDescription>
-            </CardHeader>
+          <div className='grid gap-4 md:grid-cols-[minmax(15rem,20rem)_1fr] md:items-start'>
+            <section
+              className={showDetailFirst ? 'hidden md:block' : 'block'}
+              aria-label={t`Waiting for you`}
+            >
+              <div className='xc-label mb-2 px-1'>
+                <Trans>Waiting for you · {count}</Trans>
+              </div>
+              <ul className='space-y-2' data-testid='request-list'>
+                {approvals.map((approval) => (
+                  <RequestRow
+                    key={approval.id}
+                    approval={approval}
+                    selected={approval.id === current.id}
+                    onSelect={() => select(approval.id)}
+                  />
+                ))}
+              </ul>
+            </section>
 
-            {current.kind === 'signature' ? (
-              <SignatureApproval approval={current} onAnswer={resolve} />
-            ) : (
-              <CardContent className='space-y-4'>
-                {view !== null && <XchonnectPromptView view={view} />}
-                <p className='text-xs text-muted-foreground'>
-                  <Trans>
-                    If you do nothing, this request is refused. Approving asks
-                    you again for every signature it needs.
-                  </Trans>
-                </p>
-                <div className='flex gap-2'>
-                  <Button
-                    onClick={onApprove}
-                    disabled={view?.kind === 'unreadable'}
-                  >
-                    <Trans>Approve</Trans>
-                  </Button>
-                  <Button variant='outline' onClick={() => resolve(false)}>
-                    <Trans>Reject</Trans>
-                  </Button>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        )}
-
-        {/*
-          The second confirmation. Separate decision, separate words, and the puzzle hash
-          in full: there is nothing else anybody can tell the user about this contract.
-        */}
-        <Dialog open={confirming} onOpenChange={setConfirming}>
-          <DialogContent data-testid='unknown-contract-confirm'>
-            <DialogHeader>
-              <DialogTitle className='text-destructive'>
-                <Trans>This spend uses a contract Klimper cannot read</Trans>
-              </DialogTitle>
-              <DialogDescription>
-                <Trans>
-                  Nobody can tell you what it does with your coins. Approve only
-                  if you know this contract from somewhere other than this
-                  website.
-                </Trans>
-              </DialogDescription>
-            </DialogHeader>
-            {view?.kind === 'spend' &&
-              view.unknownPuzzles.map((hash) => (
-                <div
-                  key={hash}
-                  className='font-mono text-xs break-all bg-muted p-2 rounded'
+            <section className={showDetailFirst ? 'block' : 'hidden md:block'}>
+              {picked !== null && count > 1 && (
+                <button
+                  type='button'
+                  className='mb-2 text-sm text-primary md:hidden'
+                  onClick={() =>
+                    navigate(XCHONNECT_ROUTES.request, { replace: true })
+                  }
                 >
-                  {hash}
-                </div>
-              ))}
-            <DialogFooter>
-              <Button variant='outline' onClick={() => setConfirming(false)}>
-                <Trans>Go back</Trans>
-              </Button>
-              <Button variant='destructive' onClick={() => resolve(true)}>
-                <Trans>I accept the unknown contract</Trans>
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                  <Trans>All requests</Trans>
+                </button>
+              )}
+              <XchonnectApprovalDetail
+                approval={current}
+                waiting={count - 1}
+                onAnswer={(approved) => resolve(current, approved)}
+                onCancel={() => withdraw(current)}
+              />
+            </section>
+          </div>
+        )}
       </Container>
     </Layout>
   );

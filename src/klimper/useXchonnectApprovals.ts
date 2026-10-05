@@ -29,6 +29,8 @@ export interface ApprovalQueue {
   readonly error: string | null;
   /** Answer one approval. The queue drops it either way. */
   readonly answer: (id: string, approved: boolean) => Promise<void>;
+  /** Withdraw one approval; the website is told it was cancelled. */
+  readonly cancel: (id: string) => Promise<void>;
   readonly reload: () => Promise<void>;
 }
 
@@ -81,11 +83,22 @@ export function useXchonnectApprovals(): ApprovalQueue {
     setApprovals((current) => current.filter((item) => item.id !== id));
   }, []);
 
+  const cancel = useCallback(async (id: string) => {
+    try {
+      await xchonnect.cancelApproval(id);
+    } catch (problem) {
+      // Already answered, timed out or ended: it is no longer waiting either way.
+      setError(String(problem));
+    }
+    setApprovals((current) => current.filter((item) => item.id !== id));
+  }, []);
+
   return {
     approvals,
     current: approvals[0] ?? null,
     error,
     answer,
+    cancel,
     reload,
   };
 }

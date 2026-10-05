@@ -106,16 +106,18 @@ export interface DappPolicy {
 /** What wallet-kit computed, as JSON. See xchonnect docs/wallet-integration.md §5. */
 export type Prompt = Record<string, unknown>;
 
-export type Approval = {
+/** One request waiting for the user: one decision signs (and, if Klimper broadcasts, sends) it. */
+export interface Approval {
   id: string;
   sessionId: string;
   dapp: string;
   method: string;
+  /** The Xchonnect request it answers. */
+  requestId: string;
   expiresAt: number;
-} & (
-  | { kind: 'request'; prompt: Prompt }
-  | { kind: 'signature'; index: number; total: number; publicKey: string }
-);
+  kind: 'request';
+  prompt: Prompt;
+}
 
 export const xchonnect = {
   status: () => call<XchonnectStatus>('status'),
@@ -156,6 +158,9 @@ export const xchonnect = {
   /** Answer one approval. No answer within five minutes is a rejection. */
   resolveApproval: (approvalId: string, approved: boolean) =>
     call<null>('resolve_approval', { approvalId, approved }),
+  /** Withdraw a request: the website is told it was cancelled (4102), not rejected. */
+  cancelApproval: (approvalId: string) =>
+    call<null>('cancel_approval', { approvalId }),
 };
 
 export const XCHONNECT_EVENTS = {
@@ -171,7 +176,16 @@ export const XCHONNECT_EVENTS = {
   approval: 'klimper-xchonnect://approval',
   /** `{ id, approved }` — answered, withdrawn or timed out. */
   approvalResolved: 'klimper-xchonnect://approval-resolved',
+  /** `{ dapp, method, transactionId, status }` — Klimper broadcast a transaction. */
+  sent: 'klimper-xchonnect://sent',
 } as const;
+
+export interface SentEvent {
+  dapp: string;
+  method: string;
+  transactionId: string;
+  status: string | null;
+}
 
 export interface PairingEvent {
   pairingId: string;

@@ -37,6 +37,10 @@ export const xchonnectRoutes = (
       element={featureElement(xchonnectEnabled, <XchonnectApproval />)}
     />
     <Route
+      path='/xchonnect/request/:approvalId'
+      element={featureElement(xchonnectEnabled, <XchonnectApproval />)}
+    />
+    <Route
       path='/xchonnect/dapp/:sessionId'
       element={featureElement(xchonnectEnabled, <XchonnectDappSettings />)}
     />

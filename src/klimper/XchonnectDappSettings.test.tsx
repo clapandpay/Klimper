@@ -17,6 +17,7 @@ vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
+vi.mock('./useTicker', () => ({ useTicker: () => 'XCH' }));
 vi.mock('theme-o-rama', () => ({
   useTheme: () => ({ currentTheme: { mostLike: 'light' } }),
 }));
@@ -85,20 +86,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the defaults of a new connection', () => {
-  it('is the five required methods, one key, no limits and both switches off', async () => {
+  it('is the default methods, one key, no limits and both switches off', async () => {
     openSettings();
 
     await waitFor(() =>
       expect(screen.getByLabelText('signCoinSpends')).toBeDefined(),
     );
 
-    // Spec 9.1's required set, and nothing beyond it.
+    // Spec 9.1's required set, plus the two methods where Klimper signs and sends
+    // (xchonnect-wiki 04). Each still asks.
     expect([...DEFAULT_METHODS]).toEqual([
       'chainId',
       'connect',
       'getPublicKeys',
       'signCoinSpends',
       'signMessage',
+      'xchonnect_submitCoinSpends',
+      'chia_send',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(
@@ -113,7 +117,11 @@ describe('the defaults of a new connection', () => {
     );
 
     // One fresh key.
-    expect(screen.getByText(`0x${'a'.repeat(96)}`)).toBeDefined();
+    const shared = screen.getByTestId('shared-keys');
+    expect(shared.querySelectorAll('[title]')).toHaveLength(1);
+    expect(shared.querySelector('[title]')?.getAttribute('title')).toBe(
+      `0x${'a'.repeat(96)}`,
+    );
 
     // No limits: both XCH fields are empty.
     expect(screen.getByLabelText('Per request')).toHaveProperty('value', '');
@@ -139,6 +147,21 @@ describe('the defaults of a new connection', () => {
     );
     expect(
       screen.getByText(/will not see a signing prompt for it/),
+    ).toBeDefined();
+  });
+});
+
+describe('the key the website sees', () => {
+  it('is one short line, with the explanation kept for a tooltip', async () => {
+    openSettings();
+
+    const row = await waitFor(() => screen.getByTestId('shared-keys'));
+    expect(row.textContent).toContain('Shared key');
+    expect(row.textContent).toContain(`0x${'a'.repeat(4)}…${'a'.repeat(4)}`);
+    // The full 96-digit key is not spelled out on the screen.
+    expect(document.body.textContent).not.toContain('a'.repeat(96));
+    expect(
+      screen.getByRole('button', { name: 'What does the website see?' }),
     ).toBeDefined();
   });
 });

@@ -1,0 +1,529 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Wallet-side execution (xchonnect-wiki 04, decided 2026-10-05): Klimper builds, signs
+//! once and broadcasts; a website receives only the result.
+//!
+//! Three pieces, each small:
+//!
+//! * [`SageBroadcaster`]: hands a signed bundle to Klimper's own light-wallet peers through
+//!   Sage's `send_transaction_immediately` — not to a third-party node, so no outside
+//!   service links the user's address to the transaction — and records it as pending.
+//! * [`send`]: `chia_send`, Sage's `WalletConnect` method. Sage builds the spend from the
+//!   wallet's own coins (`auto_submit: false`), and it is then run through the same path as
+//!   any other spend — wallet-kit's simulation, policy, limits, one approval, one batch
+//!   signature — with an intent Klimper derives from the request itself, so the bundle is
+//!   proven to pay exactly what was asked to exactly whom.
+//! * [`cross_check`]: Sage's own summary of a spend (from the wallet database) against
+//!   wallet-kit's independent simulation. If they disagree about what leaves the wallet —
+//!   the user's coins spent, what goes to others, the fee — the request is refused and the
+//!   user is never asked to approve a figure one of the two engines contradicts.
+
+use std::collections::BTreeMap;
+
+use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
+use sage_api::wallet_connect::SendTransactionImmediately;
+use sage_api::{
+    Amount, AssetKind, CoinJson, CoinSpendJson, SendCat, SendXch, TransactionSummary,
+    ViewCoinSpends,
+};
+use serde_json::Value;
+use xchonnect_core::rpc::codes;
+use xchonnect_wallet_kit::{
+    self as kit, AssetId, Broadcast, Broadcaster, Intent, RecipientClaim, RequestContext, RpcError,
+    SubmitRequest, Summary,
+};
+
+use crate::wallet::AppState;
+
+/// The method name, as Sage's `WalletConnect` handler knows it.
+pub const CHIA_SEND: &str = "chia_send";
+
+/// Methods Klimper builds itself, granted at pairing next to wallet-kit's defaults. Each
+/// still asks the user before anything is signed.
+pub const WALLET_BUILT_METHODS: [&str; 1] = [CHIA_SEND];
+
+fn error(code: i64, message: &str, reason: Option<&str>) -> RpcError {
+    RpcError {
+        code,
+        message: message.to_owned(),
+        data: reason.map(|r| serde_json::json!({ "reason": r }).to_string()),
+    }
+}
+
+fn invalid(reason: &str) -> RpcError {
+    error(codes::INVALID_PARAMS, "invalid params", Some(reason))
+}
+
+fn hex0x(bytes: impl AsRef<[u8]>) -> String {
+    format!("0x{}", hex::encode(bytes))
+}
+
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    hex::decode(text.strip_prefix("0x").unwrap_or(text)).ok()
+}
+
+/// Run a Sage call from the request thread (a plain OS thread, see `requests::answer`).
+fn on_sage<T>(
+    state: &AppState,
+    call: impl AsyncFnOnce(&sage::Sage) -> sage::Result<T>,
+) -> Result<T, String> {
+    let state = state.clone();
+    tauri::async_runtime::block_on(async move {
+        let sage = state.lock().await;
+        call(&sage).await.map_err(|e| e.to_string())
+    })
+}
+
+// ---------------------------------------------------------------------------------------
+// Conversions between chia_protocol and Sage's JSON shapes.
+// ---------------------------------------------------------------------------------------
+
+fn to_json(cs: &CoinSpend) -> CoinSpendJson {
+    CoinSpendJson {
+        coin: CoinJson {
+            parent_coin_info: hex0x(cs.coin.parent_coin_info),
+            puzzle_hash: hex0x(cs.coin.puzzle_hash),
+            amount: Amount::u64(cs.coin.amount),
+        },
+        puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
+        solution: hex0x(cs.solution.as_ref()),
+    }
+}
+
+fn from_json(cs: &CoinSpendJson) -> Option<CoinSpend> {
+    Some(CoinSpend {
+        coin: Coin {
+            parent_coin_info: Bytes32::try_from(unhex(&cs.coin.parent_coin_info)?.as_slice())
+                .ok()?,
+            puzzle_hash: Bytes32::try_from(unhex(&cs.coin.puzzle_hash)?.as_slice()).ok()?,
+            amount: cs.coin.amount.to_u64()?,
+        },
+        puzzle_reveal: Program::from(unhex(&cs.puzzle_reveal)?),
+        solution: Program::from(unhex(&cs.solution)?),
+    })
+}
+
+// ---------------------------------------------------------------------------------------
+// Broadcasting through Klimper's own peers.
+// ---------------------------------------------------------------------------------------
+
+/// Submits through Sage's peer connections and records the transaction as pending.
+pub struct SageBroadcaster {
+    state: AppState,
+}
+
+impl std::fmt::Debug for SageBroadcaster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SageBroadcaster").finish_non_exhaustive()
+    }
+}
+
+impl SageBroadcaster {
+    pub fn new(state: AppState) -> Self {
+        SageBroadcaster { state }
+    }
+}
+
+impl Broadcaster for SageBroadcaster {
+    fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
+        let request = SendTransactionImmediately {
+            spend_bundle: sage_api::wallet_connect::SpendBundle {
+                coin_spends: bundle
+                    .coin_spends
+                    .iter()
+                    .map(|cs| sage_api::wallet_connect::CoinSpend {
+                        coin: sage_api::wallet_connect::Coin {
+                            parent_coin_info: hex0x(cs.coin.parent_coin_info),
+                            puzzle_hash: hex0x(cs.coin.puzzle_hash),
+                            amount: Amount::u64(cs.coin.amount),
+                        },
+                        puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
+                        solution: hex0x(cs.solution.as_ref()),
+                    })
+                    .collect(),
+                aggregated_signature: hex0x(bundle.aggregated_signature.to_bytes()),
+            },
+        };
+        let response = on_sage(&self.state, async move |sage| {
+            sage.send_transaction_immediately(request).await
+        })?;
+        let transaction_id = hex0x(bundle.name());
+        match response.status {
+            // In a peer's mempool, and recorded by the wallet as pending.
+            1 => Ok(Broadcast {
+                transaction_id,
+                status: "pending".to_owned(),
+            }),
+            // No peer said yes or no. It may still propagate; the dApp is told so.
+            3 => Ok(Broadcast {
+                transaction_id,
+                status: "unknown".to_owned(),
+            }),
+            status => Err(response.error.unwrap_or_else(|| format!("status {status}"))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Sage's summary against wallet-kit's simulation.
+// ---------------------------------------------------------------------------------------
+
+/// What leaves the user's wallet, per asset, in the two engines' terms.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Outflow {
+    /// The user's coins spent.
+    spent: BTreeMap<AssetId, u128>,
+    /// Paid by the user's spends to others.
+    paid: BTreeMap<AssetId, u128>,
+}
+
+fn sage_asset(asset: Option<&sage_api::Asset>) -> Option<AssetId> {
+    let asset = asset?;
+    if asset.kind != AssetKind::Token {
+        return None;
+    }
+    match asset.asset_id.as_deref() {
+        None | Some("xch" | "") => Some(AssetId::Xch),
+        Some(id) => Bytes32::try_from(unhex(id)?.as_slice())
+            .ok()
+            .map(AssetId::Cat),
+    }
+}
+
+/// Refuse when the wallet database and the simulation disagree about what leaves the
+/// wallet. Only coins wallet-kit counts as the user's are compared — the other inputs of
+/// a multi-party bundle are someone else's — and only XCH and CATs, the assets both engines
+/// value.
+pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(), RpcError> {
+    let owned: std::collections::HashSet<String> = kit_summary
+        .spends
+        .iter()
+        .filter(|s| s.owned)
+        .map(|s| s.coin_id.clone())
+        .collect();
+
+    let mut from_sage = Outflow::default();
+    for input in &sage.inputs {
+        let id = input.coin_id.strip_prefix("0x").unwrap_or(&input.coin_id);
+        if !owned.contains(id) {
+            continue;
+        }
+        let Some(asset) = sage_asset(input.asset.as_ref()) else {
+            continue;
+        };
+        let amount = u128::from(input.amount.to_u64().unwrap_or(u64::MAX));
+        *from_sage.spent.entry(asset).or_default() += amount;
+        for output in input.outputs.iter().filter(|o| !o.receiving) {
+            let amount = u128::from(output.amount.to_u64().unwrap_or(u64::MAX));
+            *from_sage.paid.entry(asset).or_default() += amount;
+        }
+    }
+
+    let mut from_kit = Outflow::default();
+    for delta in &kit_summary.assets {
+        if delta.sent > 0 {
+            from_kit.spent.insert(delta.asset, delta.sent);
+        }
+    }
+    for output in kit_summary.outputs.iter().filter(|o| !o.to_user) {
+        *from_kit.paid.entry(output.asset).or_default() += u128::from(output.amount);
+    }
+    from_sage.spent.retain(|_, v| *v > 0);
+    from_sage.paid.retain(|_, v| *v > 0);
+
+    let fee_agrees = kit_summary.implied_fee.map(u128::from) == sage.fee.to_u64().map(u128::from);
+    if from_sage != from_kit || !fee_agrees {
+        tracing::warn!("xchonnect: the wallet database and the simulation disagree; refusing");
+        return Err(error(
+            codes::UNAUTHORIZED,
+            "the wallet could not confirm what this transaction does",
+            Some("crosscheck_mismatch"),
+        ));
+    }
+    Ok(())
+}
+
+/// Sage's summary of `spends`, and wallet-kit's simulation of them, compared.
+pub fn check_spends(
+    state: &AppState,
+    ctx: &RequestContext<'_>,
+    spends: &[CoinSpend],
+) -> Result<(), RpcError> {
+    let kit_summary = kit::simulate(spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
+        .map_err(RpcError::from)?;
+    let request = ViewCoinSpends {
+        coin_spends: spends.iter().map(to_json).collect(),
+    };
+    let sage_summary = on_sage(state, async move |sage| {
+        sage.view_coin_spends(request).await
+    })
+    .map_err(|e| {
+        tracing::warn!("xchonnect: the wallet could not summarise a spend: {e}");
+        error(
+            codes::UNSUPPORTED_CONTENT,
+            "the wallet could not read this transaction",
+            Some("crosscheck_unavailable"),
+        )
+    })?;
+    cross_check(&sage_summary.summary, &kit_summary)
+}
+
+// ---------------------------------------------------------------------------------------
+// chia_send
+// ---------------------------------------------------------------------------------------
+
+/// `safeAmount` in Sage's `WalletConnect` schema: a non-negative integer, number or string.
+fn amount_param(params: &Value, key: &str) -> Result<Option<u64>, RpcError> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(n)) => n.as_u64().map(Some).ok_or_else(|| invalid(key)),
+        Some(Value::String(s)) => s.parse().map(Some).map_err(|_| invalid(key)),
+        Some(_) => Err(invalid(key)),
+    }
+}
+
+/// `chia_send { address, amount, fee?, assetId?, memos? }`: Sage builds the send from the
+/// wallet's own coins, Klimper checks, asks once, signs once and broadcasts.
+pub fn send(
+    state: &AppState,
+    ctx: &RequestContext<'_>,
+    signer: &dyn kit::Signer,
+    approver: &dyn kit::Approver,
+    broadcaster: &dyn Broadcaster,
+    params_json: &str,
+) -> Result<String, RpcError> {
+    let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
+    let address = params
+        .get("address")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid("address"))?
+        .to_owned();
+    let amount = amount_param(&params, "amount")?.ok_or_else(|| invalid("amount"))?;
+    if amount == 0 {
+        return Err(invalid("amount"));
+    }
+    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let memos: Vec<String> = params
+        .get("memos")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|m| m.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    let asset = match params.get("assetId").and_then(Value::as_str) {
+        None | Some("" | "xch") => AssetId::Xch,
+        Some(id) => AssetId::Cat(
+            Bytes32::try_from(unhex(id).ok_or_else(|| invalid("assetId"))?.as_slice())
+                .map_err(|_| invalid("assetId"))?,
+        ),
+    };
+
+    // Build from the wallet's own coins; nothing is signed or submitted here.
+    let to_address = address.clone();
+    let built = on_sage(state, async move |sage| match asset {
+        AssetId::Xch => {
+            sage.send_xch(SendXch {
+                address: to_address,
+                amount: Amount::u64(amount),
+                fee: Amount::u64(fee),
+                memos,
+                clawback: None,
+                auto_submit: false,
+            })
+            .await
+        }
+        AssetId::Cat(id) => {
+            sage.send_cat(SendCat {
+                asset_id: hex::encode(id),
+                address: to_address,
+                amount: Amount::u64(amount),
+                fee: Amount::u64(fee),
+                include_hint: true,
+                memos,
+                clawback: None,
+                auto_submit: false,
+            })
+            .await
+        }
+    })
+    .map_err(|e| {
+        tracing::info!("xchonnect: chia_send could not be built: {e}");
+        error(codes::SPENDABLE_BALANCE_EXCEEDED, &e, Some("build_failed"))
+    })?;
+    let puzzle_hash = on_sage(state, async move |sage| sage.parse_address(address))
+        .map_err(|_| invalid("address"))?;
+
+    let spends: Vec<CoinSpend> = built
+        .coin_spends
+        .iter()
+        .map(from_json)
+        .collect::<Option<_>>()
+        .ok_or_else(|| invalid("coin_spends"))?;
+
+    // The send is proven to do what was asked: exactly this payment to exactly this
+    // recipient (none to anyone else) and exactly this fee. A send to one of the user's
+    // own addresses pays nobody else.
+    let to_self = ctx.ownership.p2_puzzle_hashes.contains(&puzzle_hash);
+    let intent = Intent {
+        kind: Some(if to_self { "send.self" } else { "send" }.to_owned()),
+        recipients: Some(if to_self {
+            Vec::new()
+        } else {
+            vec![RecipientClaim {
+                asset,
+                puzzle_hash,
+                amount,
+            }]
+        }),
+        fee: Some(fee),
+        net: None,
+    };
+
+    let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
+        .map_err(RpcError::from)?;
+    cross_check(&built.summary, &kit_summary)?;
+
+    let submitted = kit::submit(
+        SubmitRequest {
+            method: CHIA_SEND,
+            spends,
+            other_signature: None,
+            intent: Some(&intent),
+            wallet_built: true,
+        },
+        ctx,
+        signer,
+        approver,
+        broadcaster,
+    )?;
+    Ok(submitted.to_json())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use sage_api::{TransactionInput, TransactionOutput};
+    use xchonnect_wallet_kit::simulate::{OutputInfo, SpendInfo};
+    use xchonnect_wallet_kit::{AssetDelta, SpendKind, TimeLocks};
+
+    const COIN: &str = "11";
+
+    fn kit_summary(sent: u128, paid: u64, change: u64, fee: u64) -> Summary {
+        Summary {
+            assets: vec![AssetDelta {
+                asset: AssetId::Xch,
+                sent,
+                received: u128::from(change),
+                conditional_received: 0,
+                net: i128::from(change) - i128::try_from(sent).unwrap(),
+            }],
+            implied_fee: Some(fee),
+            reserve_fee: fee,
+            owned_reserve_fee: fee,
+            time_locks: TimeLocks::default(),
+            unknown_puzzles: vec![],
+            cost: 0,
+            spends: vec![SpendInfo {
+                coin_id: COIN.repeat(32),
+                puzzle_hash: "22".repeat(32),
+                amount: u64::try_from(sent).unwrap(),
+                kind: SpendKind::Standard,
+                owned: true,
+                agg_sigs: vec![],
+                cost: 0,
+            }],
+            outputs: vec![
+                OutputInfo {
+                    asset: AssetId::Xch,
+                    amount: paid,
+                    puzzle_hash: "33".repeat(32),
+                    recipient: Some("33".repeat(32)),
+                    to_user: false,
+                },
+                OutputInfo {
+                    asset: AssetId::Xch,
+                    amount: change,
+                    puzzle_hash: "22".repeat(32),
+                    recipient: Some("22".repeat(32)),
+                    to_user: true,
+                },
+            ],
+        }
+    }
+
+    fn xch() -> sage_api::Asset {
+        sage_api::Asset {
+            asset_id: None,
+            name: Some("Chia".into()),
+            ticker: Some("XCH".into()),
+            precision: 12,
+            icon_url: None,
+            description: None,
+            is_sensitive_content: false,
+            is_visible: true,
+            revocation_address: None,
+            kind: AssetKind::Token,
+        }
+    }
+
+    fn sage_summary(input: u64, paid: u64, change: u64, fee: u64) -> TransactionSummary {
+        let output = |amount: u64, receiving: bool| TransactionOutput {
+            coin_id: "0x00".into(),
+            amount: Amount::u64(amount),
+            address: "xch1…".into(),
+            receiving,
+            burning: false,
+        };
+        TransactionSummary {
+            fee: Amount::u64(fee),
+            inputs: vec![TransactionInput {
+                coin_id: format!("0x{}", COIN.repeat(32)),
+                amount: Amount::u64(input),
+                address: "xch1…".into(),
+                asset: Some(xch()),
+                outputs: vec![output(paid, false), output(change, true)],
+            }],
+        }
+    }
+
+    #[test]
+    fn the_two_engines_agreeing_lets_the_request_through() {
+        assert!(
+            cross_check(
+                &sage_summary(1000, 700, 290, 10),
+                &kit_summary(1000, 700, 290, 10)
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn any_disagreement_about_what_leaves_the_wallet_refuses() {
+        let kit = kit_summary(1000, 700, 290, 10);
+        for sage in [
+            sage_summary(1000, 70, 920, 10),   // a different payment
+            sage_summary(2000, 700, 1290, 10), // different coins spent
+            sage_summary(1000, 700, 290, 1),   // a different fee
+        ] {
+            let refused = cross_check(&sage, &kit).unwrap_err();
+            assert!(refused.data.unwrap().contains("crosscheck_mismatch"));
+        }
+    }
+
+    #[test]
+    fn coin_spends_survive_the_round_trip_through_sages_json() {
+        let cs = CoinSpend {
+            coin: Coin::new(
+                Bytes32::new([1; 32]),
+                Bytes32::new([2; 32]),
+                1_500_000_000_000,
+            ),
+            puzzle_reveal: Program::from(vec![0xff, 0x01, 0x80]),
+            solution: Program::from(vec![0x80]),
+        };
+        assert_eq!(from_json(&to_json(&cs)).unwrap(), cs);
+    }
+}

@@ -28,6 +28,7 @@
 //! | `set_dapp_policy` | `sessionId: string`, `policy:` [`DappPolicy`] | [`SessionSummary`] |
 //! | `pending_approvals` | — | [`Approval`]`[]` |
 //! | `resolve_approval` | `approvalId: string`, `approved: boolean` | `null` |
+//! | `cancel_approval` | `approvalId: string` | `null` (the dApp gets `rpc.cancel` and 4102) |
 //!
 //! Events:
 //!
@@ -55,6 +56,7 @@ use xchonnect_core::domain::display_domain;
 
 pub mod approval;
 pub mod error;
+pub mod execute;
 pub mod origin;
 pub mod pairing;
 pub mod relay;
@@ -282,6 +284,7 @@ impl<R: Runtime> Xchonnect<R> {
             rotate_requested: rotate_requested.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
+            answer: session_loop::default_answerer(),
         };
         session_loop::spawn_ticker(wake_tx.clone());
         tauri::async_runtime::spawn(message_loop.run(stored));
@@ -634,6 +637,18 @@ async fn resolve_approval<R: Runtime>(
     state.approvals.resolve(&approval_id, approved)
 }
 
+/// Withdraw a waiting request from the requests page. Unlike rejecting it (4002), the
+/// dApp is told the request was cancelled (`rpc.cancel`, then 4102), so it can drop it from
+/// its own list.
+#[command]
+async fn cancel_approval<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+    approval_id: String,
+) -> Result<()> {
+    state.approvals.cancel(&approval_id)
+}
+
 /// Polls the wallet's mailbox for `session.confirm` and gives up after five minutes with
 /// the same warning as a `not_found` (TASK-076 AC #3).
 fn spawn_confirm_poller<R: Runtime>(app: AppHandle<R>, pairing_id: String) {
@@ -696,7 +711,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             rotate_session_keys,
             set_dapp_policy,
             pending_approvals,
-            resolve_approval
+            resolve_approval,
+            cancel_approval
         ])
         .setup(|app, _api| {
             let data_dir = app.path().app_data_dir()?;

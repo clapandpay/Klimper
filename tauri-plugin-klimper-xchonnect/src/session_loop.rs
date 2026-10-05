@@ -25,10 +25,18 @@
 //! sleep alone, so a push wake-up becomes another sender rather than a rewrite
 //! (decision-008 point 2).
 //!
+//! While a request waits for the user, the loop keeps reading the mailbox (TASK-100): an
+//! `rpc.cancel` for it withdraws the prompt and is answered 4102, progress is reported as
+//! `rpc.status` (shown, approved, broadcast), and every other message waits until the
+//! request is answered, so messages are still handled one at a time and in order.
+//!
 //! A disconnect does not wait for the long poll: `interrupt` cuts the wait short, and no
 //! further message is dispatched once the end was asked for. Only the poll is raced, never
 //! a dispatch, so an end can never land between sealing a message and persisting it.
 
+use std::collections::VecDeque;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -36,19 +44,20 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 use serde_json::json;
+use xchonnect_core::b64;
 use xchonnect_core::crypto::{MailboxId, OsEntropy, Token};
-use xchonnect_core::message::{Message, RotatePhase};
+use xchonnect_core::message::{Inner, Message, RotatePhase};
 use xchonnect_core::rpc;
 use xchonnect_core::session::Session;
 use xchonnect_wallet_kit::RpcError;
 
 use xchonnect_core::uri::ParseOptions;
 
-use crate::approval::{ApprovalBridge, Emitter};
+use crate::approval::{ApprovalBridge, Emitter, Withdrawn};
 use crate::error::{Error, Result};
 use crate::origin;
 use crate::relay::{RelayClient, RelayInfo};
-use crate::requests::{self, AnswerInputs, RequestMeta};
+use crate::requests::{self, AnswerInputs, Progress, RequestMeta};
 use crate::store::{SessionStore, StoredSession};
 use crate::wallet::AppState;
 
@@ -63,6 +72,21 @@ const POLL_WAIT: u64 = 20;
 const BACKOFF: Duration = Duration::from_secs(5);
 /// Spec 6.1: an origin document is cached for no more than 24 hours.
 const ORIGIN_RECHECK_S: u64 = 24 * 60 * 60;
+
+/// Answers one request. [`default_answerer`] in the app; the live tests put a stand-in
+/// here, because the real one needs an unlocked Sage wallet.
+pub type Answerer = Arc<
+    dyn Fn(
+            AnswerInputs,
+        ) -> Pin<Box<dyn Future<Output = std::result::Result<String, RpcError>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// [`requests::answer`]: the wallet's simulation, the approval UI, the signer and Sage.
+pub fn default_answerer() -> Answerer {
+    Arc::new(|inputs| Box::pin(requests::answer(inputs)))
+}
 
 /// Everything one session's loop needs.
 ///
@@ -86,6 +110,8 @@ pub struct SessionLoop {
     pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and, later, by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
+    /// Answers requests: [`default_answerer`].
+    pub answer: Answerer,
 }
 
 /// Unix seconds.
@@ -372,7 +398,18 @@ impl SessionLoop {
                     continue;
                 }
             };
-            let ended = self.dispatch(session, stored, mailbox, read, inner).await?;
+            let mut queue = VecDeque::from([inner]);
+            let mut ended = false;
+            // Messages that arrived while a request waited for the user come next, before
+            // the rest of this batch (which the wait already read; those are now replays).
+            while let Some(inner) = queue.pop_front() {
+                let (done, deferred) = self.dispatch(session, stored, mailbox, read, inner).await?;
+                queue.extend(deferred);
+                if done {
+                    ended = true;
+                    break;
+                }
+            }
             // Acknowledge only now: processed and persisted.
             self.relay.ack(mailbox, read, &ids).await?;
             if ended {
@@ -382,19 +419,22 @@ impl SessionLoop {
         Ok(Outcome::Continue)
     }
 
-    /// Handle one decoded message. Returns `true` when the session has ended.
+    /// Handle one decoded message. Returns `true` when the session has ended, and the
+    /// messages that arrived while a request waited for the user, to handle next.
     async fn dispatch(
         &self,
         session: &mut Session,
         stored: &mut StoredSession,
         mailbox: MailboxId,
         read: &Token,
-        inner: xchonnect_core::message::Inner,
-    ) -> Result<bool> {
+        inner: Inner,
+    ) -> Result<(bool, Vec<Inner>)> {
         match inner.message {
             Message::RpcRequest { method, params } => {
-                self.handle_request(session, stored, inner.id, inner.exp, &method, params)
+                let deferred = self
+                    .handle_request(session, stored, inner.id, inner.exp, &method, params)
                     .await?;
+                return Ok((false, deferred));
             }
             Message::SessionRotate(rotate) if rotate.phase == RotatePhase::Offer => {
                 self.accept_rotation(session, stored, &rotate).await?;
@@ -425,16 +465,17 @@ impl SessionLoop {
                     reason.unwrap_or_default()
                 );
                 let _ = (mailbox, read);
-                return Ok(true);
+                return Ok((true, Vec::new()));
             }
             other => {
-                // `session.permissions`, a type this version does not know, a stray pong.
+                // `session.permissions`, a type this version does not know, a stray pong, an
+                // `rpc.cancel` for a request that was already answered.
                 tracing::debug!("xchonnect message {} needs no answer", other.type_name());
                 stored.session_hex = encode(session)?;
                 self.store.save(stored)?;
             }
         }
-        Ok(false)
+        Ok((false, Vec::new()))
     }
 
     /// Answer one `rpc.request`.
@@ -446,7 +487,7 @@ impl SessionLoop {
         request_exp: u64,
         method: &str,
         params: String,
-    ) -> Result<()> {
+    ) -> Result<Vec<Inner>> {
         let now_s = now();
         // Pick up a permission or limit change the user made since the last request
         // (`set_dapp_policy`). Only the policy fields are taken: the session bytes in
@@ -475,7 +516,9 @@ impl SessionLoop {
                 .await?;
         }
 
-        let outcome = requests::answer(AnswerInputs {
+        let request_b64 = b64::encode(&request_id);
+        let (progress, mut progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let answer = (self.answer)(AnswerInputs {
             state: self.state.clone(),
             store: self.store.clone(),
             approvals: self.approvals.clone(),
@@ -484,24 +527,144 @@ impl SessionLoop {
                 session_id: stored.record.id.clone(),
                 dapp: stored.record.dapp.clone(),
                 method: method.to_owned(),
+                request_id: request_b64.clone(),
                 expires_at: requests::prompt_deadline(now_s, request_exp),
+                progress: Some(progress),
             },
             params,
             now: now_s,
-        })
-        .await;
+        });
+        tokio::pin!(answer);
 
-        let message = match outcome {
-            Ok(result) => rpc::result(request_id, &result).map_err(Error::protocol)?,
-            Err(RpcError {
-                code,
-                message,
-                data,
-            }) => {
+        let mailbox = session.own_mailbox();
+        let read = session.own_read_token().clone();
+        let mut deferred: Vec<Inner> = Vec::new();
+        let mut polling = true;
+        let outcome = loop {
+            tokio::select! {
+                biased;
+                outcome = &mut answer => break outcome,
+                Some(step) = progress_rx.recv(), if !session.is_ended() => {
+                    self.send(session, stored, status(request_id, step), 3600).await?;
+                }
+                fetched = self.relay.fetch(mailbox, &read, POLL_WAIT, &self.info), if polling => {
+                    match fetched {
+                        Ok(messages) => {
+                            self.read_while_waiting(session, stored, mailbox, &read, request_id, messages, &mut deferred)
+                                .await?;
+                        }
+                        Err(error) => {
+                            // The answer still goes out; only cancellation is lost.
+                            tracing::info!(session = %stored.record.id, "stopped reading while a request waits: {error}");
+                            polling = false;
+                        }
+                    }
+                }
+                () = self.interrupt.notified() => {
+                    if self.end_requested.load(Ordering::SeqCst) {
+                        // The user disconnected: the prompt goes, the loop ends after this.
+                        self.approvals.withdraw_session(&stored.record.id);
+                    }
+                }
+            }
+        };
+        let withdrawn = self
+            .approvals
+            .take_withdrawn(&stored.record.id, &request_b64);
+        // The dApp ended the session while the user decided: nobody to answer. The
+        // deferred `session.end` ends the loop next.
+        if session.is_ended() {
+            return Ok(deferred);
+        }
+        // Progress reported just before the answer goes out first, so the dApp sees it in
+        // order.
+        while let Ok(step) = progress_rx.try_recv() {
+            self.send(session, stored, status(request_id, step), 3600)
+                .await?;
+        }
+
+        let message = match (outcome, withdrawn) {
+            // Already signed (and maybe broadcast) when the cancel came: the answer stands.
+            (Ok(result), _) => rpc::result(request_id, &result).map_err(Error::protocol)?,
+            (Err(_), Some(by)) => {
+                if by == Withdrawn::ByUser {
+                    self.send(session, stored, Message::RpcCancel { request_id }, 3600)
+                        .await?;
+                }
+                cancelled(request_id)?
+            }
+            (
+                Err(RpcError {
+                    code,
+                    message,
+                    data,
+                }),
+                None,
+            ) => {
                 rpc::error(request_id, code, &message, data.as_deref()).map_err(Error::protocol)?
             }
         };
-        self.send(session, stored, message, 3600).await
+        self.send(session, stored, message, 3600).await?;
+        Ok(deferred)
+    }
+
+    /// Messages read while a request waits for the user. An `rpc.cancel` for it withdraws
+    /// it; one for a request that has not started yet answers that request 4102 at once;
+    /// the rest is kept for after the answer. Each is acknowledged as soon as it is read,
+    /// since it was opened (and the replay window moved) and is now held here.
+    #[allow(clippy::too_many_arguments)]
+    async fn read_while_waiting(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        mailbox: MailboxId,
+        read: &Token,
+        current: [u8; 16],
+        messages: Vec<(String, Vec<u8>)>,
+        deferred: &mut Vec<Inner>,
+    ) -> Result<()> {
+        for (msg_id, envelope) in messages {
+            let ids = [msg_id];
+            let opened = if envelope.is_empty() {
+                None
+            } else {
+                // A replay is expected here: the request itself, and the rest of the batch
+                // it came in, are still unacknowledged.
+                session.open(now(), &mailbox, &envelope).ok()
+            };
+            stored.session_hex = encode(session)?;
+            self.store.save(stored)?;
+            self.relay.ack(mailbox, read, &ids).await?;
+            let Some(inner) = opened else { continue };
+            match inner.message {
+                Message::RpcCancel { request_id } if request_id == current => {
+                    self.approvals.withdraw_request(
+                        &stored.record.id,
+                        &b64::encode(&request_id),
+                        Withdrawn::ByDapp,
+                    );
+                }
+                Message::RpcCancel { request_id } => {
+                    let queued = deferred.iter().position(|d| {
+                        d.id == request_id && matches!(d.message, Message::RpcRequest { .. })
+                    });
+                    if let Some(index) = queued
+                        && !session.is_ended()
+                    {
+                        deferred.remove(index);
+                        self.send(session, stored, cancelled(request_id)?, 3600)
+                            .await?;
+                    }
+                }
+                Message::SessionEnd { .. } => {
+                    // The dApp is gone: close its prompt now, end after the answer.
+                    self.approvals.withdraw_session(&stored.record.id);
+                    deferred.push(inner);
+                }
+                _ => deferred.push(inner),
+            }
+        }
+        Ok(())
     }
 
     /// Accept a rotation offer without asking the user: new keys for the same session
@@ -552,6 +715,31 @@ impl SessionLoop {
         self.store.save(stored)?;
         self.relay.post(&outgoing).await
     }
+}
+
+/// `rpc.status` for one step.
+fn status(request_id: [u8; 16], step: Progress) -> Message {
+    let (state, tx_id) = match step {
+        Progress::Shown => ("shown", None),
+        Progress::Approved => ("approved", None),
+        Progress::Broadcast(id) => ("broadcast", Some(id)),
+    };
+    Message::RpcStatus {
+        request_id,
+        state: state.to_owned(),
+        tx_id,
+    }
+}
+
+/// The answer to a withdrawn request (xchonnect spec 9.1).
+fn cancelled(request_id: [u8; 16]) -> Result<Message> {
+    rpc::error(
+        request_id,
+        rpc::codes::REQUEST_CANCELLED,
+        "request cancelled",
+        None,
+    )
+    .map_err(Error::protocol)
 }
 
 /// Methods wallet-kit answers without asking the user (spec 9.1: `connect` is answered

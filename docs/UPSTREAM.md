@@ -11,11 +11,12 @@
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
 
-|                     |                                |
-| ------------------- | ------------------------------ |
-| Merged version      | **v0.13.1**, merged 2026-09-20 |
-| Hotfix merges since | none                           |
-| Klimper version     | **0.13.1**, the merged tag     |
+|                     |                                                    |
+| ------------------- | -------------------------------------------------- |
+| Merged version      | **v0.13.1**, merged 2026-09-20                     |
+| Hotfix merges since | none                                               |
+| Last checked        | 2026-10-05: `upstream/main` = v0.13.1, nothing new |
+| Klimper version     | **0.13.1**, the merged tag                         |
 
 **Klimper's version is the version of the Sage release it is built on.** Sage's app system
 (`crates/sage-apps`) checks an app's minimum Sage version against the Tauri app version
@@ -134,10 +135,10 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
    grep -h '"version"' src-tauri/tauri.*.conf.json  # the merged tag, every one (see the top)
    grep -c '^VITE_' .env                            # 11
-   grep -c featureElement src/App.tsx               # 8
+   grep -c 'klimperRouter\|KlimperRoot' src/App.tsx # 3: the import, the router, the root
    grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
                                                     # cleanly but pass the empty password
-   grep -c 'Passkey' src/App.tsx src/pages/Settings.tsx  # 2 each
+   grep -c 'Passkey' src/pages/Settings.tsx         # 2
    ```
 
 7. **Credit the people whose work this is.** `scripts/sync-upstream.sh --credits`, and update
@@ -147,6 +148,33 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
 8. **Write it down.** The merged version in the table above; Klimper's version set to it in the
    five `tauri.*.conf.json` files and `src-tauri/gen/apple/sage-tauri_iOS/Info.plist`; and any
    new row in the file tables below — `--diff` tells you if one is missing.
+
+## Hook points
+
+`src/App.tsx` is where every Klimper feature used to land — a flag around seven routes, three
+route groups, three elements, two imports — so any upstream change to Sage's route block was a
+merge conflict. Since 2026-10-05 it differs from Sage's in **four lines**, and Sage's route
+block is byte for byte upstream's:
+
+```tsx
+import { KlimperRoot, klimperRouter } from '@/klimper/KlimperRoot'; // + a comment line
+const router = klimperRouter(createHashRouter)(   // was: createHashRouter(
+        <KlimperRoot />                           // inside <I18nProvider>
+```
+
+- `src/klimper/routes.tsx` — `withKlimper(routes)`: a feature switched off in `features.ts`
+  turns its route into a redirect, looked up **by path** in one table (`GATED`,
+  `GATED_CHILDREN`); Klimper's own screens (`/clapandpay`, `/xchonnect/*`, `/scanner`) are
+  appended. A new upstream route needs nothing; a new gated feature is one table line.
+  `klimperRouter(create)` wraps Sage's own factory, so neither the indentation of the block
+  nor Sage's imports change. Tested in `routes.test.tsx`.
+- `src/klimper/KlimperRoot.tsx` — everything rendered next to the app (`PasskeyGate`, the
+  Xchonnect approval overlay) and the `klimperTheme` import.
+
+New Klimper screens and app-wide pieces go there, never into `App.tsx`. The rest of the shared
+frontend diff is single elements wrapped in a flag (`Nav.tsx`, `Settings.tsx`,
+`TokenList.tsx`, `Login.tsx`) and the @handle field in `Send.tsx` — all rows marked _propose
+upstream_ below, so they leave the diff once Sage takes the hiding points.
 
 ## Our files (the whole diff against upstream)
 
@@ -170,13 +198,13 @@ with build flags that extend Sage's own `VITE_DISABLE_OFFERS / OPTIONS / SWAP` p
 is deleted, the engine and the bridge keep every capability, and every flag defaults to Sage's
 behaviour.
 
-| File                                                                          | Ours                                       | Note                                                                              |
-| ----------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `.env`                                                                        | new, force-added (upstream ignores `.env`) | the nine `VITE_DISABLE_*` flags; no secrets, those go in `.env.local`             |
-| `src/lib/featureElement.tsx`                                                  | new                                        | route gate: a disabled feature redirects to `/wallet`                             |
-| `src/lib/features.ts`, `src/vite-env.d.ts`                                    | six flags appended                         | NFTs, profiles, token issuing, WalletConnect, RPC settings, theme gallery         |
-| `src/App.tsx`                                                                 | import block, seven route `element=` lines | offers, options and swap routes were reachable by URL upstream even when disabled |
-| `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks              |                                                                                   |
+| File                                                                          | Ours                                       | Note                                                                                                                                                           |
+| ----------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.env`                                                                        | new, force-added (upstream ignores `.env`) | the nine `VITE_DISABLE_*` flags; no secrets, those go in `.env.local`                                                                                          |
+| `src/lib/featureElement.tsx`                                                  | new                                        | route gate: a disabled feature redirects to `/wallet`                                                                                                          |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                                    | six flags appended                         | NFTs, profiles, token issuing, WalletConnect, RPC settings, theme gallery                                                                                      |
+| `src/klimper/routes.tsx` (`GATED`, `GATED_CHILDREN`)                          | new                                        | offers, options, swap, NFTs, profiles, token issuing and the theme gallery redirect by path when off; `src/App.tsx` is only the hook point (see "Hook points") |
+| `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks              |                                                                                                                                                                |
 
 These seven files are what `scripts/sync-upstream.sh --export` writes out, and they are meant to
 stop being ours: propose them to Sage as one pull request ("more build-time feature flags, and
@@ -193,7 +221,7 @@ behaviour.
 | ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
 | `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
-| `src/pages/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                     | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
+| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
 | `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
 | `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
@@ -209,7 +237,7 @@ upstream; the rest is files of our own and one-line hooks.
 | `tauri-plugin-klimper-passkey/`, `src/klimper/`, `src-tauri/capabilities/klimper.json`        | new                                      | envelope, commands, Swift; lock screen and settings entry                                                                                                                     |
 | `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                  | workspace member, dep, one plugin        |                                                                                                                                                                               |
 | `Cargo.lock`                                                                                  | the plugin, and `swift-rs` 1.0.7 → 1.0.8 | 1.0.7 builds Swift for macOS under Xcode 27, so no iOS build works; on a conflict take upstream's lock, then `cargo update -p swift-rs` unless upstream is already past 1.0.7 |
-| `src/App.tsx`, `src/pages/Settings.tsx`                                                       | one import and one element each          | `<PasskeyGate />`, `<PasskeySettings />`                                                                                                                                      |
+| `src/pages/Settings.tsx`                                                                      | one import and one element               | `<PasskeySettings />`; `<PasskeyGate />` is in `src/klimper/KlimperRoot.tsx`                                                                                                  |
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
 
@@ -237,7 +265,7 @@ Sage's other themes stay selectable and unchanged, and no shared component is ed
 | ---------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `docs/design-guide.md`, `src/themes/klimper-light/`, `src/themes/klimper-dark/`                                  | new        | ordinary theme-o-rama themes named `light` and `dark`: theme-o-rama keys themes by name, so they replace its built-ins |
 | `src/lib/klimperTheme.ts`, `src/klimper.css`                                                                     | new        | default theme once per install; ink sidebar, pill buttons, coins, total band, focus, 44px controls, motion             |
-| `src/App.tsx`                                                                                                    | one import | `import '@/lib/klimperTheme'`, before the `ThemeProvider` reads the saved theme                                        |
+| `src/klimper/KlimperRoot.tsx`                                                                                    | new        | `import '@/lib/klimperTheme'`, evaluated before the `ThemeProvider` reads the saved theme                              |
 | `src/icon-dark.png`, `src/icon-light.png`, `src-tauri/icons/*`, the iOS `AppIcon.appiconset`, Android `mipmap-*` | replaced   | the Klimper logo; every app icon is regenerated by `scripts/update-logo.sh` (new, ours). Take ours on a conflict       |
 | `src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml`                                       | one colour | set by `scripts/update-logo.sh` from the logo's corner                                                                 |
 
@@ -247,20 +275,20 @@ Klimper answers CHIP-0002 requests from outside websites over Xchonnect (decisio
 milestone m-4). Same shape as the passkey work: one crate of our own, screens of our own,
 and single-line hooks in shared files. `docs/xchonnect.md` has the detail.
 
-| File                                                                                     | Ours                              | Note                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tauri-plugin-klimper-xchonnect/`, `src/klimper/xchonnect*.{ts,tsx}`, `useXchonnect*.ts` | new                               | the plugin, the typed command wrappers, the screens and their tests. `docs/xchonnect-screens.md` and `docs/xchonnect-links.md` are the design and the entry points |
-| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                             | workspace member, dep, one plugin | exactly the three lines the passkey plugin needed                                                                                                                  |
-| `src-tauri/capabilities/klimper.json`                                                    | one permission                    | `klimper-xchonnect:default`, main webview only — app webviews must never reach it                                                                                  |
-| `src/App.tsx`                                                                            | one import, one element           | `{xchonnectRoutes}` — the five routes live in `src/klimper/XchonnectRoutes.tsx`, each behind `featureElement`                                                      |
-| `src/pages/Settings.tsx`                                                                 | one import, one element           | `<XchonnectSettings />`, which renders nothing when the flag is off. The only entry point: before it, `/xchonnect` was reachable by typed URL alone                |
-| `src/components/Nav.tsx`                                                                 | one import, one element           | `<KlimperNavLinks />`: the Scan tab (`scanEnabled`) and Websites (`xchonnectEnabled`); every flag is checked inside it                                             |
-| `src/App.tsx`, `src/lib/features.ts`, `src/vite-env.d.ts`                                | one element, one flag             | `{scannerRoutes}` (`/scanner`, `src/klimper/Scanner.tsx`) and `VITE_DISABLE_SCAN`                                                                                  |
-| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`                         | 1 line                            | `applinks:clapandpay.com`, next to the passkey work's `webcredentials` entry. Serve `docs/well-known/apple-app-site-association` (TASK-040)                        |
-| `src-tauri/Info.plist`                                                                   | 2 lines                           | `NSCameraUsageDescription`: the desktop pairing screen reads QR codes from the camera (`src/klimper/QrCamera.tsx`)                                                 |
-| `src/lib/features.ts`, `src/vite-env.d.ts`, `.env`                                       | one flag                          | `VITE_ENABLE_XCHONNECT`, off, and commented out in `.env` until TASK-094 has reviewed the flow                                                                     |
-| `.prettierignore`                                                                        | 1 line                            | the plugin's generated permissions                                                                                                                                 |
-| `Cargo.lock`                                                                             | the plugin and its dependencies   | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check`       |
+| File                                                                                     | Ours                              | Note                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tauri-plugin-klimper-xchonnect/`, `src/klimper/xchonnect*.{ts,tsx}`, `useXchonnect*.ts` | new                               | the plugin, the typed command wrappers, the screens and their tests. `docs/xchonnect-screens.md` and `docs/xchonnect-links.md` are the design and the entry points        |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                             | workspace member, dep, one plugin | exactly the three lines the passkey plugin needed                                                                                                                         |
+| `src-tauri/capabilities/klimper.json`                                                    | one permission                    | `klimper-xchonnect:default`, main webview only — app webviews must never reach it                                                                                         |
+| `src/klimper/routes.tsx`                                                                 | new                               | `xchonnectRoutes` appended by `withKlimper`; the routes live in `src/klimper/XchonnectRoutes.tsx`, each behind `featureElement`; the approval overlay is in `KlimperRoot` |
+| `src/pages/Settings.tsx`                                                                 | one import, one element           | `<XchonnectSettings />`, which renders nothing when the flag is off. The only entry point: before it, `/xchonnect` was reachable by typed URL alone                       |
+| `src/components/Nav.tsx`                                                                 | one import, one element           | `<KlimperNavLinks />`: the Scan tab (`scanEnabled`) and Websites (`xchonnectEnabled`); every flag is checked inside it                                                    |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                                               | one flag                          | `{scannerRoutes}` (`/scanner`, `src/klimper/Scanner.tsx`) and `VITE_DISABLE_SCAN`                                                                                         |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`                         | 1 line                            | `applinks:clapandpay.com`, next to the passkey work's `webcredentials` entry. Serve `docs/well-known/apple-app-site-association` (TASK-040)                               |
+| `src-tauri/Info.plist`                                                                   | 2 lines                           | `NSCameraUsageDescription`: the desktop pairing screen reads QR codes from the camera (`src/klimper/QrCamera.tsx`)                                                        |
+| `src/lib/features.ts`, `src/vite-env.d.ts`, `.env`                                       | one flag                          | `VITE_ENABLE_XCHONNECT`, off, and commented out in `.env` until TASK-094 has reviewed the flow                                                                            |
+| `.prettierignore`                                                                        | 1 line                            | the plugin's generated permissions                                                                                                                                        |
+| `Cargo.lock`                                                                             | the plugin and its dependencies   | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check`              |
 
 The two xchonnect crates are deliberately unpublished (xchonnect TASK-67 publishes after
 its audit), so they are consumed by path:
