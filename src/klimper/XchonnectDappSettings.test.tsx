@@ -113,7 +113,11 @@ describe('the defaults of a new connection', () => {
     );
 
     // One fresh key.
-    expect(screen.getByText(`0x${'a'.repeat(96)}`)).toBeDefined();
+    const shared = screen.getByTestId('shared-keys');
+    expect(shared.querySelectorAll('[title]')).toHaveLength(1);
+    expect(shared.querySelector('[title]')?.getAttribute('title')).toBe(
+      `0x${'a'.repeat(96)}`,
+    );
 
     // No limits: both XCH fields are empty.
     expect(screen.getByLabelText('Per request')).toHaveProperty('value', '');
@@ -139,6 +143,21 @@ describe('the defaults of a new connection', () => {
     );
     expect(
       screen.getByText(/will not see a signing prompt for it/),
+    ).toBeDefined();
+  });
+});
+
+describe('the key the website sees', () => {
+  it('is one short line, with the explanation kept for a tooltip', async () => {
+    openSettings();
+
+    const row = await waitFor(() => screen.getByTestId('shared-keys'));
+    expect(row.textContent).toContain('Shared key');
+    expect(row.textContent).toContain(`0x${'a'.repeat(4)}…${'a'.repeat(4)}`);
+    // The full 96-digit key is not spelled out on the screen.
+    expect(document.body.textContent).not.toContain('a'.repeat(96));
+    expect(
+      screen.getByRole('button', { name: 'What does the website see?' }),
     ).toBeDefined();
   });
 });
