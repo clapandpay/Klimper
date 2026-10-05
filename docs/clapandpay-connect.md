@@ -6,9 +6,11 @@ check happens on that page; it answers with one line of text that only this Klim
 and Klimper imports the key with Sage's ordinary key import. The protocol and its limits: the
 wiki's `architecture/passkey-handoff.md`.
 
-## Against clapandpay.com
+## Against the live page
 
-Nothing to set up. Klimper opens `https://clapandpay.com/connect?...`.
+Nothing to set up. Klimper opens `https://envelope.clapandpay.com/connect?...`. The wallet's passkey
+still belongs to `clapandpay.com`: the web wallet names that domain as its relying party on every
+subdomain of it, which is why the same key comes back in Klimper.
 
 ## Against a local Green Envelope dev server
 

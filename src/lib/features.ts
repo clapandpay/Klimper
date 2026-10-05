@@ -27,7 +27,7 @@ export const clapAndPayOrigin =
   configuredOrigin &&
   (!import.meta.env.PROD || configuredOrigin.startsWith('https://'))
     ? configuredOrigin
-    : 'https://clapandpay.com';
+    : 'https://envelope.clapandpay.com';
 // Opt-in: dApp connections over Xchonnect (decision-008, milestone m-4). Off unless set to
 // true, so a build that does not ask for it has no Xchonnect entry point at all — the
 // routes redirect and the navigation entry is absent. The Rust plugin is always compiled
