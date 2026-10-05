@@ -31,6 +31,7 @@ import {
   WalletIcon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { KlimperNavLinks } from '@/klimper/KlimperNavLinks';
 import { NavLink } from './NavLink';
 import { Separator } from './ui/separator';
 
@@ -60,6 +61,8 @@ export function TopNav({ isCollapsed }: NavProps) {
       >
         <WalletIcon className={className} aria-hidden='true' />
       </NavLink>
+
+      <KlimperNavLinks isCollapsed={isCollapsed} className={className} />
 
       {nftsEnabled && (
         <NavLink

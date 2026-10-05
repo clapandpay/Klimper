@@ -65,6 +65,7 @@ import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
 import { PasskeyGate } from '@/klimper/PasskeyGate';
+import { scannerRoutes } from '@/klimper/Scanner';
 import { xchonnectRoutes } from '@/klimper/XchonnectRoutes';
 import { featureElement } from '@/lib/featureElement';
 import {
@@ -178,6 +179,7 @@ const router = createHashRouter(
         />
       </Route>
       {xchonnectRoutes}
+      {scannerRoutes}
       <Route path='/settings' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />

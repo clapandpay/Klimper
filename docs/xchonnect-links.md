@@ -60,6 +60,24 @@ Desktop is the demo target, and a desktop browser shows the QR on screen — so 
 usually arrives by clipboard or as a screenshot, both of which work now. The textarea
 remains for a code read aloud or typed.
 
+### The Scan tab
+
+The pairing screen is no longer the only way in. **Scan** is a tab in the main navigation
+(`src/klimper/Scanner.tsx`, behind `scanEnabled`, on by default): one camera for every code.
+On a phone the tap opens the camera at once; on a computer the page offers the clipboard, a
+picture and a text field. What was read is sorted by `classifyScan` (`scanTarget.ts`):
+
+| Code                                            | Goes to                                     |
+| ----------------------------------------------- | ------------------------------------------- |
+| `xchonnect:v1?…`, `clapandpay.com/pair`, `/req` | `offerXchonnectLink`, so the connect screen |
+| `xch1…`, `txch1…` (also behind `chia:`)         | Send for XCH, the address filled in         |
+| `offer1…` (when offers are built in)            | the offer                                   |
+| anything else                                   | shown on the page, to copy                  |
+
+Anything that starts `xchonnect:` but cannot be used is reported without its text, for the
+same reason the pairing screen never echoes a code. **Websites** sits beside it in the
+navigation when `xchonnectEnabled`, so the connected websites are not only in Settings.
+
 ## What is still missing for a real universal link
 
 Two pieces, and neither is in the webview.
