@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<resources>
+  <!-- Fixed text: a wake-up carries nothing, so the lock screen shows nothing about the request. -->
+  <string name="klimper_push_channel">Signing requests</string>
+  <string name="klimper_push_title">Klimper</string>
+  <string name="klimper_push_body">New signing request</string>
+</resources>

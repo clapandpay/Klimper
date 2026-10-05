@@ -272,6 +272,10 @@ pub struct SessionRecord {
     /// sees why the connection is gone.
     #[serde(default)]
     pub revoked: bool,
+    /// The push token registered with the relay for this session (clapandpay TASK-087);
+    /// `None` until the phone has a device token and a gateway is configured.
+    #[serde(default)]
+    pub push: Option<crate::push::Registration>,
 }
 
 /// A session record plus the opaque `Session::to_bytes()` blob.
@@ -599,6 +603,7 @@ mod tests {
             allow_unknown_contracts: false,
             origin_kid: None,
             revoked: false,
+            push: None,
         }
     }
 

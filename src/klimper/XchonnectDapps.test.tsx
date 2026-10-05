@@ -23,6 +23,7 @@ const listSessions = vi.fn();
 const endSession = vi.fn();
 const rotateSessionKeys = vi.fn();
 const pendingApprovals = vi.fn();
+const pushStatus = vi.fn();
 
 vi.mock('./xchonnect', () => ({
   xchonnect: {
@@ -38,12 +39,14 @@ vi.mock('./xchonnect', () => ({
     endSession: (id: string) => endSession(id),
     rotateSessionKeys: (id: string) => rotateSessionKeys(id),
     pendingApprovals: () => pendingApprovals(),
+    pushStatus: () => pushStatus(),
   },
   XCHONNECT_EVENTS: {
     sessions: 'sessions',
     session: 'session',
     approval: 'approval',
     approvalResolved: 'approval-resolved',
+    push: 'push',
   },
   onXchonnectEvent: () => Promise.resolve(() => undefined),
 }));
@@ -77,6 +80,7 @@ const session: SessionSummary = {
 beforeEach(() => {
   vi.clearAllMocks();
   pendingApprovals.mockResolvedValue([]);
+  pushStatus.mockResolvedValue({ enabled: false, permission: null });
   endSession.mockResolvedValue(null);
   rotateSessionKeys.mockResolvedValue(null);
 });
@@ -264,3 +268,31 @@ it('shows no banner for a connection that is not in the list', async () => {
   await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
   expect(screen.queryByTestId('connected-banner')).toBeNull();
 });
+
+it('says so when notifications are refused and wake-ups are built in', async () => {
+  listSessions.mockResolvedValue([session]);
+  pushStatus.mockResolvedValue({ enabled: true, permission: 'denied' });
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => expect(screen.getByTestId('push-denied')).toBeDefined());
+  expect(screen.getByTestId('push-denied').textContent).toMatch(
+    /only sees a request from a website while it is open/,
+  );
+});
+
+it.each([
+  ['granted', true],
+  ['undetermined', true],
+  ['denied', false],
+])(
+  'stays quiet about notifications when they are %s (wake-ups built in: %s)',
+  async (permission, enabled) => {
+    listSessions.mockResolvedValue([session]);
+    pushStatus.mockResolvedValue({ enabled, permission });
+    renderScreen(<XchonnectDapps />);
+
+    await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
+    // A build without a gateway has no wake-ups to explain, whatever the phone says.
+    expect(screen.queryByTestId('push-denied')).toBeNull();
+  },
+);

@@ -8,7 +8,8 @@
   "bundle": {
     "resources": [],
     "iOS": {
-      "developmentTeam": "HTP35W93ZF"
+      "developmentTeam": "HTP35W93ZF",
+      "infoPlist": "Info.ios.plist"
     }
   }
 }

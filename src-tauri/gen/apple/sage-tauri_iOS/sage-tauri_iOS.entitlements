@@ -6,6 +6,13 @@
 	<array>
 		<string>TAG</string>
 	</array>
+	<!-- Push wake-ups (TASK-087). "development" here; distribution signing (TestFlight, App Store)
+	     takes the production value from the provisioning profile. The App ID needs Push
+	     Notifications, and Time Sensitive Notifications for the gateway's interruption level. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:clapandpay.com</string>

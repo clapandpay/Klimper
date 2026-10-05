@@ -434,6 +434,7 @@ mod tests {
             allow_unknown_contracts: false,
             origin_kid: None,
             revoked: false,
+            push: None,
         }
     }
 

@@ -90,3 +90,9 @@ dependencies {
 }
 
 apply(from = "tauri.build.gradle.kts")
+
+// Push wake-ups (TASK-087): Firebase reads google-services.json, which is not committed
+// (docs/push.md). Without it the app builds and polls instead.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
