@@ -1,5 +1,4 @@
 import { discoverThemes, resolveThemeImage } from '@/lib/themes';
-import '@/lib/klimperTheme';
 import { i18n } from '@lingui/core';
 import { I18nProvider } from '@lingui/react';
 import { useEffect, useState } from 'react';
@@ -35,7 +34,6 @@ import CollectionMetaData from './pages/CollectionMetaData';
 import CreateProfile from './pages/CreateProfile';
 import CreateWallet from './pages/CreateWallet';
 import { DidList } from './pages/DidList';
-import ClapAndPayConnect from './pages/ClapAndPayConnect';
 import ImportWallet from './pages/ImportWallet';
 import IssueToken from './pages/IssueToken';
 import Login from './pages/Login';
@@ -64,21 +62,8 @@ import { AppsProvider } from '@/contexts/AppsContext.tsx';
 import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
-import { PasskeyGate } from '@/klimper/PasskeyGate';
-import { XchonnectApprovalHost } from '@/klimper/XchonnectApprovalHost';
-import { scannerRoutes } from '@/klimper/Scanner';
-import { xchonnectRoutes } from '@/klimper/XchonnectRoutes';
-import { featureElement } from '@/lib/featureElement';
-import {
-  clapAndPayConnectEnabled,
-  nftsEnabled,
-  offersEnabled,
-  optionsEnabled,
-  profilesEnabled,
-  swapEnabled,
-  themeGalleryEnabled,
-  tokenIssuingEnabled,
-} from '@/lib/features';
+// Klimper's only import into this file (docs/UPSTREAM.md, "Hook points").
+import { KlimperRoot, klimperRouter } from '@/klimper/KlimperRoot';
 
 // Theme-aware toast container component
 function ThemeAwareToastContainer() {
@@ -113,25 +98,19 @@ const currentPlatform = platform();
 const supportsSageApps =
   currentPlatform !== 'android' && currentPlatform !== 'ios';
 
-const router = createHashRouter(
+const router = klimperRouter(createHashRouter)(
   createRoutesFromElements(
     <>
       <Route path='/' element={<Login />} />
       <Route path='/create' element={<CreateWallet />} />
       <Route path='/import' element={<ImportWallet />} />
-      {clapAndPayConnectEnabled && (
-        <Route path='/clapandpay' element={<ClapAndPayConnect />} />
-      )}
       <Route path='/wallet' element={<Wallet />}>
         <Route path='' element={<TokenList />} />
         <Route path='token/:asset_id' element={<Token />} />
-        <Route
-          path='issue-token'
-          element={featureElement(tokenIssuingEnabled, <IssueToken />)}
-        />
+        <Route path='issue-token' element={<IssueToken />} />
         <Route path='send/:asset_id' element={<Send />} />
       </Route>
-      <Route path='/nfts' element={featureElement(nftsEnabled, <Wallet />)}>
+      <Route path='/nfts' element={<Wallet />}>
         <Route path='' element={<NftList />} />
         <Route path=':launcher_id' element={<Nft />} />
         <Route path='collections/:collection_id' element={<NftList />} />
@@ -143,17 +122,14 @@ const router = createHashRouter(
         <Route path='minters/:minter_did' element={<NftList />} />
         <Route path='mint' element={<MintNft />} />
       </Route>
-      <Route path='/dids' element={featureElement(profilesEnabled, <Wallet />)}>
+      <Route path='/dids' element={<Wallet />}>
         <Route path='' element={<DidList />} />
         <Route path='create' element={<CreateProfile />} />
       </Route>
       <Route path='/addresses' element={<Wallet />}>
         <Route path='' element={<Addresses />} />
       </Route>
-      <Route
-        path='/options'
-        element={featureElement(optionsEnabled, <Wallet />)}
-      >
+      <Route path='/options' element={<Wallet />}>
         <Route path='' element={<OptionList />} />
         <Route path='mint' element={<MintOption />} />
         <Route path=':option_id' element={<Option />} />
@@ -162,13 +138,13 @@ const router = createHashRouter(
         <Route path='' element={<Transactions />} />
         <Route path=':height' element={<Transaction />} />
       </Route>
-      <Route path='/offers' element={featureElement(offersEnabled, <Wallet />)}>
+      <Route path='/offers' element={<Wallet />}>
         <Route path='' element={<Offers />} />
         <Route path='make' element={<MakeOffer />} />
         <Route path='view/:offer' element={<Offer />} />
         <Route path='view_saved/:offer_id' element={<SavedOffer />} />
       </Route>
-      <Route path='/swap' element={featureElement(swapEnabled, <Wallet />)}>
+      <Route path='/swap' element={<Wallet />}>
         <Route path='' element={<Swap />} />
       </Route>
       <Route path='/apps' element={<Wallet />}>
@@ -179,15 +155,10 @@ const router = createHashRouter(
           }
         />
       </Route>
-      {xchonnectRoutes}
-      {scannerRoutes}
       <Route path='/settings' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />
-      <Route
-        path='/themes'
-        element={featureElement(themeGalleryEnabled, <Themes />)}
-      />
+      <Route path='/themes' element={<Themes />} />
     </>,
   ),
 );
@@ -236,8 +207,7 @@ function AppInner() {
     initialized &&
     isLocaleInitialized && (
       <I18nProvider i18n={i18n}>
-        <PasskeyGate />
-        <XchonnectApprovalHost />
+        <KlimperRoot />
         <WalletProvider>
           <RustThemeSync />
           <PeerProvider>
