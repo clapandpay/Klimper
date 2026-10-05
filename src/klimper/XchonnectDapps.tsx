@@ -22,7 +22,9 @@ import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import {
   AlertTriangle,
+  BellOff,
   CheckCircle2,
+  KeyRound,
   Plus,
   Settings2,
   Wallet,
@@ -33,6 +35,7 @@ import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
+import { useXchonnectPush } from './useXchonnectPush';
 import { useXchonnectSessions } from './useXchonnectSessions';
 import { Fact, LivePill, SiteCoin } from './XchonnectUi';
 
@@ -52,15 +55,21 @@ function Dapp({
   session,
   fresh,
   onEnd,
+  onRotate,
 }: {
   readonly session: SessionSummary;
   readonly fresh: boolean;
   readonly onEnd: (id: string) => void;
+  readonly onRotate: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const limits = limitCount(session);
   const connected = new Date(session.createdAt * 1000).toLocaleDateString();
   const epoch = session.epoch;
+  // Renewing needs the message loop to carry the offer and the dApp to answer it.
+  const usable =
+    session.sasConfirmed && !session.needsRepair && !session.revoked;
+  const canRotate = usable && session.connected && !session.rotating;
   return (
     <Card data-testid='dapp-card' className={fresh ? 'xc-fresh' : undefined}>
       <CardHeader>
@@ -77,7 +86,31 @@ function Dapp({
         </div>
       </CardHeader>
       <CardContent className='space-y-4 text-sm'>
-        {session.needsRepair && (
+        {session.revoked && (
+          <div
+            className='rounded-lg border border-destructive p-3 text-destructive'
+            role='alert'
+            data-testid='revoked'
+          >
+            <div className='flex items-start gap-2 font-semibold'>
+              <AlertTriangle
+                className='h-4 w-4 mt-0.5 shrink-0'
+                aria-hidden='true'
+              />
+              <Trans>Klimper ended this connection</Trans>
+            </div>
+            <p className='pl-6 mt-1'>
+              <Trans>
+                The website withdrew the key this connection was made with,
+                which is what a website does when that key may have been stolen.
+                Nothing can be asked through it any more. Connect again if you
+                still use the website.
+              </Trans>
+            </p>
+          </div>
+        )}
+
+        {session.needsRepair && !session.revoked && (
           <div
             className='rounded-lg border border-destructive p-3 text-destructive'
             role='alert'
@@ -99,7 +132,7 @@ function Dapp({
           </div>
         )}
 
-        {!session.sasConfirmed && !session.needsRepair && (
+        {!session.sasConfirmed && !session.needsRepair && !session.revoked && (
           <div className='text-destructive' role='alert'>
             <Trans>
               The six digits were never confirmed, so this connection cannot be
@@ -150,32 +183,53 @@ function Dapp({
             </Fact>
           </div>
           {/*
-            Rotation is driven by the dApp and accepted automatically by the session
-            loop; the epoch is how the user sees it happen. A user-initiated rotation
-            needs a plugin command that does not exist yet (TASK-084 AC #3).
+            Either side may renew the keys (spec 9.2.1); the epoch counts how often
+            that has happened. "Being renewed" lasts until the website has answered
+            and the old mailbox has been read to the end.
           */}
           <Fact label={<Trans>Connection keys</Trans>}>
-            <Trans>renewed {epoch} times</Trans>
+            {session.rotating ? (
+              <Trans>being renewed</Trans>
+            ) : (
+              <Trans>renewed {epoch} times</Trans>
+            )}
           </Fact>
         </dl>
 
         <div className='flex flex-wrap gap-2'>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() =>
-              navigate(`${XCHONNECT_ROUTES.dapp}/${session.sessionId}`)
-            }
-          >
-            <Settings2 className='h-4 w-4 mr-2' aria-hidden='true' />
-            <Trans>What it may do</Trans>
-          </Button>
+          {!session.revoked && (
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() =>
+                navigate(`${XCHONNECT_ROUTES.dapp}/${session.sessionId}`)
+              }
+            >
+              <Settings2 className='h-4 w-4 mr-2' aria-hidden='true' />
+              <Trans>What it may do</Trans>
+            </Button>
+          )}
+          {usable && (
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={!canRotate}
+              onClick={() => onRotate(session.sessionId)}
+            >
+              <KeyRound className='h-4 w-4 mr-2' aria-hidden='true' />
+              <Trans>Renew keys</Trans>
+            </Button>
+          )}
           <Button
             variant='outline'
             size='sm'
             onClick={() => onEnd(session.sessionId)}
           >
-            <Trans>End connection</Trans>
+            {session.revoked ? (
+              <Trans>Remove</Trans>
+            ) : (
+              <Trans>End connection</Trans>
+            )}
           </Button>
         </div>
       </CardContent>
@@ -200,6 +254,18 @@ export default function XchonnectDapps() {
     await refresh();
   };
 
+  const rotate = async (sessionId: string) => {
+    try {
+      await xchonnect.rotateSessionKeys(sessionId);
+      setProblem(null);
+    } catch (failure) {
+      setProblem(String(failure));
+    }
+    // The loop reports `rotating` and then `rotated`; each refreshes the list.
+    await refresh();
+  };
+
+  const push = useXchonnectPush();
   const keyringService = status?.keyringService ?? '';
   const waiting = approvals.length;
   const fresh = sessions.find((session) => session.sessionId === justConnected);
@@ -214,6 +280,26 @@ export default function XchonnectDapps() {
         </Button>
       </Header>
       <Container className='max-w-2xl space-y-4'>
+        {push.denied && (
+          <div
+            className='rounded-lg border border-destructive p-3 text-sm text-destructive'
+            role='status'
+            data-testid='push-denied'
+          >
+            <div className='flex items-start gap-2 font-semibold'>
+              <BellOff className='h-4 w-4 mt-0.5 shrink-0' aria-hidden='true' />
+              <Trans>Notifications are off</Trans>
+            </div>
+            <p className='pl-6 mt-1'>
+              <Trans>
+                Klimper only sees a request from a website while it is open. To
+                be told when one arrives, turn notifications on for Klimper in
+                your phone&apos;s settings. Notifications never show amounts or
+                addresses.
+              </Trans>
+            </p>
+          </div>
+        )}
         {fresh !== undefined && (
           <Card className='xc-fresh' data-testid='connected-banner'>
             <CardHeader>
@@ -291,6 +377,7 @@ export default function XchonnectDapps() {
             session={session}
             fresh={session.sessionId === justConnected}
             onEnd={(id) => void end(id)}
+            onRotate={(id) => void rotate(id)}
           />
         ))}
 

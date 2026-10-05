@@ -202,9 +202,7 @@ function Welcome() {
 
   return (
     <Container>
-      <div className='text-center text-6xl'>
-        Sage <Trans>Wallet</Trans>
-      </div>
+      <div className='text-center text-6xl'>Klimper</div>
 
       <div className='text-center mt-4'>
         <Trans>

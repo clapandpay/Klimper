@@ -39,7 +39,13 @@ import { Switch } from '@/components/ui/switch';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { AlertTriangle } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { AlertTriangle, Info, KeyRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
@@ -47,22 +53,29 @@ import { AssetLimit, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { CAT_PRECISION, XCH_PRECISION } from './xchonnectPrompt';
 import { useXchonnectSessions } from './useXchonnectSessions';
+import { useTicker } from './useTicker';
+import './xchonnect.css';
 
-/** The CHIP-0002 methods a pairing grants by default (wallet-kit `DEFAULT_METHODS`). */
+/**
+ * The methods a pairing grants by default: wallet-kit's `DEFAULT_METHODS` and the ones
+ * Klimper builds itself (`execute::WALLET_BUILT_METHODS`). Every one still asks.
+ */
 export const DEFAULT_METHODS = [
   'chainId',
   'connect',
   'getPublicKeys',
   'signCoinSpends',
   'signMessage',
+  'xchonnect_submitCoinSpends',
+  'chia_send',
 ] as const;
 
 /** Methods that cannot be taken away: without them a session cannot even say hello. */
 const ESSENTIAL_METHODS = ['chainId', 'connect'] as const;
 
 /** `xch` or `cat:<64 hex>` (the plugin's `asset_key`). */
-function assetLabel(key: string): string {
-  if (key === 'xch') return 'XCH';
+function assetLabel(key: string, ticker: string): string {
+  if (key === 'xch') return ticker;
   const tail = key.startsWith('cat:') ? key.slice(4) : key;
   return `CAT ${tail.slice(0, 8)}…`;
 }
@@ -129,10 +142,62 @@ function draftOf(session: SessionSummary): Draft {
   return { methods: [...session.methods], limits };
 }
 
+/** `0x1234…cdef`: enough to recognise a key, short enough to read. */
+export function shortKey(key: string): string {
+  const hex = key.startsWith('0x') ? key.slice(2) : key;
+  return hex.length <= 12
+    ? `0x${hex}`
+    : `0x${hex.slice(0, 4)}…${hex.slice(-4)}`;
+}
+
+/** The keys this website was given, one line, the explanation in a tooltip. */
+function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
+  return (
+    <div
+      className='flex flex-wrap items-center gap-2 text-sm'
+      data-testid='shared-keys'
+    >
+      <KeyRound className='h-4 w-4 text-muted-foreground' aria-hidden='true' />
+      <span className='text-muted-foreground'>
+        {keys.length === 1 ? (
+          <Trans>Shared key</Trans>
+        ) : (
+          <Trans>Shared keys</Trans>
+        )}
+      </span>
+      {keys.map((key) => (
+        <span key={key} className='xc-chip font-mono' title={key}>
+          {shortKey(key)}
+        </span>
+      ))}
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground'
+              aria-label={t`What does the website see?`}
+            >
+              <Info className='h-4 w-4' aria-hidden='true' />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className='max-w-xs'>
+            <Trans>
+              The website sees only this key and the addresses made from it —
+              nothing else in your wallet.
+            </Trans>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
+
 type Dangerous = 'unsafe' | 'unknown';
 
 export default function XchonnectDappSettings() {
   const navigate = useNavigate();
+  const ticker = useTicker();
   const { sessionId } = useParams<{ sessionId: string }>();
   const { sessions, loading, refresh } = useXchonnectSessions();
   const session = useMemo(
@@ -328,12 +393,7 @@ export default function XchonnectDappSettings() {
                 </div>
               );
             })}
-            <div className='text-sm text-muted-foreground'>
-              <Trans>Address it can see</Trans>:{' '}
-              <span className='font-mono text-xs break-all'>
-                {session.exposedKeys.join(', ')}
-              </span>
-            </div>
+            <SharedKeys keys={session.exposedKeys} />
           </CardContent>
         </Card>
 
@@ -353,7 +413,7 @@ export default function XchonnectDappSettings() {
           <CardContent className='space-y-4'>
             {assetKeys.map((key) => (
               <div key={key} className='space-y-2'>
-                <div className='font-medium'>{assetLabel(key)}</div>
+                <div className='font-medium'>{assetLabel(key, ticker)}</div>
                 <div className='grid grid-cols-2 gap-3'>
                   <div className='space-y-1'>
                     <Label htmlFor={`per-request-${key}`}>

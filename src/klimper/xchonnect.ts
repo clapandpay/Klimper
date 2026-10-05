@@ -29,6 +29,16 @@ export interface XchonnectStatus {
   keyringService: string;
 }
 
+/** Whether wake-ups can reach this phone (clapandpay TASK-087). */
+export interface PushStatus {
+  /** False in a build without a push gateway: nothing could be woken. */
+  enabled: boolean;
+  /** What the phone's notification settings said when last asked; null before the first answer. */
+  permission: PushPermission | null;
+}
+
+export type PushPermission = 'granted' | 'denied' | 'undetermined';
+
 export interface PairingPreview {
   pairingId: string;
   /** The domain as the user reads it. */
@@ -82,6 +92,10 @@ export interface SessionSummary {
   sasConfirmed: boolean;
   /** Stored state was lost or rolled back: pair again. */
   needsRepair: boolean;
+  /** The website withdrew the key this connection was made with; Klimper ended it. */
+  revoked: boolean;
+  /** New keys were offered and are not in use yet. */
+  rotating: boolean;
   developerMode: boolean;
   methods: string[];
   exposedKeys: string[];
@@ -102,16 +116,18 @@ export interface DappPolicy {
 /** What wallet-kit computed, as JSON. See xchonnect docs/wallet-integration.md §5. */
 export type Prompt = Record<string, unknown>;
 
-export type Approval = {
+/** One request waiting for the user: one decision signs (and, if Klimper broadcasts, sends) it. */
+export interface Approval {
   id: string;
   sessionId: string;
   dapp: string;
   method: string;
+  /** The Xchonnect request it answers. */
+  requestId: string;
   expiresAt: number;
-} & (
-  | { kind: 'request'; prompt: Prompt }
-  | { kind: 'signature'; index: number; total: number; publicKey: string }
-);
+  kind: 'request';
+  prompt: Prompt;
+}
 
 export const xchonnect = {
   status: () => call<XchonnectStatus>('status'),
@@ -140,6 +156,10 @@ export const xchonnect = {
 
   endSession: (sessionId: string) => call<null>('end_session', { sessionId }),
 
+  /** Offer the website new connection keys. Rejects when the connection is not live. */
+  rotateSessionKeys: (sessionId: string) =>
+    call<null>('rotate_session_keys', { sessionId }),
+
   setDappPolicy: (sessionId: string, policy: DappPolicy) =>
     call<SessionSummary>('set_dapp_policy', { sessionId, policy }),
 
@@ -148,6 +168,10 @@ export const xchonnect = {
   /** Answer one approval. No answer within five minutes is a rejection. */
   resolveApproval: (approvalId: string, approved: boolean) =>
     call<null>('resolve_approval', { approvalId, approved }),
+  /** Withdraw a request: the website is told it was cancelled (4102), not rejected. */
+  cancelApproval: (approvalId: string) =>
+    call<null>('cancel_approval', { approvalId }),
+  pushStatus: () => call<PushStatus>('push_status'),
 };
 
 export const XCHONNECT_EVENTS = {
@@ -155,7 +179,7 @@ export const XCHONNECT_EVENTS = {
   pairing: 'klimper-xchonnect://pairing',
   /** `{}` — the list of connected dApps changed. */
   sessions: 'klimper-xchonnect://sessions',
-  /** `{ sessionId, state: 'ended' | 'rotated' | 'needsRepair', epoch?, dapp? }` */
+  /** `{ sessionId, state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair', epoch?, dapp? }` */
   session: 'klimper-xchonnect://session',
   /** `{ sessionId, dapp, method }` — a request arrived. */
   request: 'klimper-xchonnect://request',
@@ -163,7 +187,18 @@ export const XCHONNECT_EVENTS = {
   approval: 'klimper-xchonnect://approval',
   /** `{ id, approved }` — answered, withdrawn or timed out. */
   approvalResolved: 'klimper-xchonnect://approval-resolved',
+  /** `{ dapp, method, transactionId, status }` — Klimper broadcast a transaction. */
+  sent: 'klimper-xchonnect://sent',
+  /** `{ state: PushPermission }` — the user answered the notification prompt. */
+  push: 'klimper-xchonnect://push',
 } as const;
+
+export interface SentEvent {
+  dapp: string;
+  method: string;
+  transactionId: string;
+  status: string | null;
+}
 
 export interface PairingEvent {
   pairingId: string;
@@ -175,7 +210,7 @@ export interface PairingEvent {
 
 export interface SessionEvent {
   sessionId: string;
-  state: 'ended' | 'rotated' | 'needsRepair';
+  state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair';
   epoch?: number;
   dapp?: string;
 }

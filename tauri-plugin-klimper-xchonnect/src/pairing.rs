@@ -169,17 +169,19 @@ impl Attempt {
     }
 }
 
-/// The methods a new connection is granted: CHIP-0002's required set, plus the optional
-/// coin and balance reads, `sendTransaction` and `walletSwitchChain` (TASK-082). The reads
-/// are scoped by wallet-kit to the exposed receive keys, whose coins the dApp can read
-/// from the chain anyway; `sendTransaction` only broadcasts a bundle that is already
-/// signed, and every signature still needs its own approval. The pairing screen lists
-/// them, and `set_dapp_policy` can narrow them per dApp.
+/// The methods a new connection is granted: wallet-kit's defaults (`signCoinSpends`,
+/// `xchonnect_submitCoinSpends`, …), the optional coin and balance reads, `sendTransaction`
+/// and `walletSwitchChain` (TASK-082), and the methods Klimper builds itself (`chia_send`).
+/// The reads are scoped by wallet-kit to the exposed receive keys, whose coins the dApp
+/// can read from the chain anyway; `sendTransaction` only broadcasts a bundle that is
+/// already signed, and anything Klimper signs asks first. The pairing screen lists them,
+/// and `set_dapp_policy` can narrow them per dApp.
 pub fn granted_methods() -> Vec<String> {
     use xchonnect_wallet_kit::permissions::{DEFAULT_METHODS, OPTIONAL_METHODS};
     DEFAULT_METHODS
         .iter()
         .chain(&OPTIONAL_METHODS)
+        .chain(crate::execute::WALLET_BUILT_METHODS.iter())
         .map(|m| (*m).to_owned())
         .collect()
 }
@@ -344,6 +346,9 @@ pub async fn confirm(
             permissions: StoredPermissions::from_kit(&attempt.permissions),
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
+            origin_kid: Some(uri.kid.clone()),
+            revoked: false,
+            push: None,
         },
         session_hex: hex::encode(session.to_bytes().map_err(Error::protocol)?),
     };
@@ -351,8 +356,16 @@ pub async fn confirm(
     // whose `seq` the wallet would reuse (integration guide §2).
     store.save(&mut stored)?;
 
-    if let Some(ready) = ready {
-        attempt.relay.post(&ready).await?;
+    if let Some(ready) = ready
+        && let Err(error) = attempt.relay.post_retrying(&ready).await
+    {
+        // The dApp never learns the session exists, so keeping it would list a connection
+        // that cannot work and leave the website waiting. Undo it; the caller discards the
+        // attempt and its mailbox, and the user connects again.
+        if let Err(remove) = store.remove(stored.record.fingerprint, &stored.record.id) {
+            tracing::warn!("could not remove a half-made session: {remove}");
+        }
+        return Err(error);
     }
     // Tell the dApp what it may ask for, so it does not have to learn by being refused
     // (spec 9.3). This changes the session state, so it is persisted first as well.
@@ -437,8 +450,8 @@ mod tests {
         assert_eq!(preview.granted_key_count, 1);
     }
 
-    /// A new connection gets the required methods and the optional reads and broadcast
-    /// (TASK-082), each once.
+    /// A new connection gets the required methods, the optional reads and broadcast
+    /// (TASK-082) and the wallet-built methods, each once.
     #[test]
     fn a_new_connection_is_granted_the_required_and_the_optional_methods() {
         use xchonnect_wallet_kit::permissions::{DEFAULT_METHODS, OPTIONAL_METHODS};
@@ -446,6 +459,7 @@ mod tests {
         let expected: Vec<&str> = DEFAULT_METHODS
             .iter()
             .chain(&OPTIONAL_METHODS)
+            .chain(crate::execute::WALLET_BUILT_METHODS.iter())
             .copied()
             .collect();
         assert_eq!(granted, expected);

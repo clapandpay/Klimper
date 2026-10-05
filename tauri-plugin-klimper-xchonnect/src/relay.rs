@@ -26,6 +26,11 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Total timeout for a non-polling call.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Attempts [`RelayClient::post_retrying`] makes, and the pause before the first retry
+/// (doubled each time).
+const POST_ATTEMPTS: u32 = 3;
+const POST_RETRY_DELAY: Duration = Duration::from_millis(500);
+
 /// What `GET /v1/info` tells us. Only the fields Klimper acts on.
 #[derive(Debug, Clone)]
 pub struct RelayInfo {
@@ -141,17 +146,25 @@ impl RelayClient {
         {
             return Err(Error::Relay("the relay sent too much data".to_owned()));
         }
-        let text = response
-            .text()
+        // Read in chunks and stop at the cap: a chunked response has no length to check up
+        // front, and a relay is named by whoever made the pairing code (it is contacted on
+        // scan, before the user has agreed to anything).
+        let mut response = response;
+        let mut bytes = Vec::with_capacity(1024);
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|error| Error::Relay(describe(&error)))?;
-        if text.len() as u64 > MAX_RESPONSE_BYTES {
-            return Err(Error::Relay("the relay sent too much data".to_owned()));
+            .map_err(|error| Error::Relay(describe(&error)))?
+        {
+            if (bytes.len() + chunk.len()) as u64 > MAX_RESPONSE_BYTES {
+                return Err(Error::Relay("the relay sent too much data".to_owned()));
+            }
+            bytes.extend_from_slice(&chunk);
         }
-        let body = if text.trim().is_empty() {
+        let body = if bytes.iter().all(u8::is_ascii_whitespace) {
             Value::Null
         } else {
-            serde_json::from_str(&text).unwrap_or(Value::Null)
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
         };
         Ok(Reply { status, body })
     }
@@ -270,6 +283,27 @@ impl RelayClient {
         Ok(())
     }
 
+    /// [`Self::post`] for the messages the other side must not miss: `session.ready` and
+    /// `session.end`. A transient failure is retried with backoff; a `404` is not, because
+    /// the dApp's mailbox is gone and a retry cannot bring it back. Posting the same
+    /// envelope twice is harmless: the dApp drops the second as a replay.
+    pub async fn post_retrying(&self, outgoing: &Outgoing) -> Result<()> {
+        let mut delay = POST_RETRY_DELAY;
+        let mut attempt = 1;
+        loop {
+            match self.post(outgoing).await {
+                Ok(()) => return Ok(()),
+                Err(error @ Error::PairingCodeUsed) => return Err(error),
+                Err(error) if attempt == POST_ATTEMPTS => return Err(error),
+                Err(_) => {
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                    attempt += 1;
+                }
+            }
+        }
+    }
+
     /// Long-poll for messages. `wait` is clamped to the relay's `max_wait_s`, so
     /// foreground polling stays inside the limits the relay publishes (TASK-074 AC #4).
     pub async fn fetch(
@@ -318,6 +352,21 @@ impl RelayClient {
             &format!("/v1/mailboxes/{}/ack", mailbox.to_b64()),
             Some(read),
             Some(json!({ "msg_ids": ids })),
+            CALL_TIMEOUT,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Register (or replace) the sealed push token of a mailbox, `PUT /v1/mailboxes/{id}/push`.
+    /// `body` comes from [`crate::push::seal`]. The relay may refuse a gateway it has not
+    /// allowlisted; that is an error here, and the session carries on by polling.
+    pub async fn set_push(&self, mailbox: MailboxId, read: &Token, body: Value) -> Result<()> {
+        self.ok(
+            "PUT",
+            &format!("/v1/mailboxes/{}/push", mailbox.to_b64()),
+            Some(read),
+            Some(body),
             CALL_TIMEOUT,
         )
         .await?;

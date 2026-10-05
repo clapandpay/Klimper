@@ -35,10 +35,13 @@ engine change, meant for upstream but not yet proposed).
    Domains capability. The entitlement `webcredentials:clapandpay.com` is already in
    `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`.
 2. **`https://clapandpay.com/.well-known/apple-app-site-association`**, served as
-   `application/json` without redirects (TASK-005):
+   `application/json` without redirects (TASK-005). The file is
+   `green-envelope/apps/site/.well-known/apple-app-site-association`, served by the clapandpay-web
+   image; only the apex domain needs it, because the web wallet names `clapandpay.com` as its
+   relying party from every subdomain:
 
    ```json
-   { "webcredentials": { "apps": ["<TEAMID>.com.clapandpay.klimper"] } }
+   { "webcredentials": { "apps": ["HTP35W93ZF.com.clapandpay.klimper"] } }
    ```
 
 3. **iOS 18** or later on the device. On older iOS the settings entry shows, but creating

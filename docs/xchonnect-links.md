@@ -118,13 +118,12 @@ integration guide asks for. The plugin also needs the `deep-link:default` permis
 
 - **iOS.** `applinks:clapandpay.com` is in
   `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, next to the
-  `webcredentials` entry the passkey work added. `docs/well-known/apple-app-site-association`
-  is the file to serve from `https://clapandpay.com/.well-known/`, as
+  `webcredentials` entry the passkey work added. `green-envelope/apps/site/.well-known/apple-app-site-association`
+  is the file to serve from `https://clapandpay.com/.well-known/` (the clapandpay-web image does), as
   `application/json`, with no redirect. It covers `/pair` and `/req` and nothing else, so
-  every other path on the marketing site keeps opening in Safari. **`TEAMID` is a
-  placeholder**: the Apple team id arrives with clapandpay TASK-003, and the
-  `DEVELOPMENT_TEAM` in the Xcode project is still Sage's until then.
-- **Android.** `docs/well-known/assetlinks.json` needs the release signing certificate's
+  every other path on the marketing site keeps opening in Safari. The Apple team id is in
+  the file (TASK-005); check that the `DEVELOPMENT_TEAM` in the Xcode project is ours too.
+- **Android.** `green-envelope/apps/site/.well-known/assetlinks.json` needs the release signing certificate's
   SHA-256 fingerprint, and the manifest needs an `android:autoVerify="true"` intent filter
   for `https://clapandpay.com` with `pathPrefix` `/pair` and `/req`. Neither is done: there
   is no Android SDK on the development machine.

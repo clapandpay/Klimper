@@ -12,7 +12,7 @@ settingGroups:
     base:
       PRODUCT_NAME: Sage
       PRODUCT_BUNDLE_IDENTIFIER: com.clapandpay.klimper
-      DEVELOPMENT_TEAM: NQJQRYZZG3
+      DEVELOPMENT_TEAM: HTP35W93ZF
 targetTemplates:
   app:
     type: application

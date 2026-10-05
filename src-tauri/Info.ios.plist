@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Klimper's iOS-only Info.plist keys; Tauri merges this over Info.plist for iOS builds.
+     The scene manifest belongs to Sources/sage-tauri/KlimperScene.m in gen/apple. -->
+<plist version="1.0">
+    <dict>
+        <!-- No ITSAppUsesNonExemptEncryption yet (TASK-090). Klimper implements standard
+             algorithms itself, but `true` makes App Store Connect refuse every upload until
+             export documentation is approved and its code is in ITSEncryptionExportComplianceCode;
+             `false` claims an exemption nobody has confirmed. Until TASK-090 decides, each build
+             answers the export question in App Store Connect. -->
+        <key>UIApplicationSceneManifest</key>
+        <dict>
+            <key>UIApplicationSupportsMultipleScenes</key>
+            <false/>
+            <key>UISceneConfigurations</key>
+            <dict>
+                <key>UIWindowSceneSessionRoleApplication</key>
+                <array>
+                    <dict>
+                        <key>UISceneConfigurationName</key>
+                        <string>Default Configuration</string>
+                        <key>UISceneDelegateClassName</key>
+                        <string>KlimperSceneDelegate</string>
+                    </dict>
+                </array>
+            </dict>
+        </dict>
+    </dict>
+</plist>

@@ -36,10 +36,10 @@ import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { commands } from '../bindings';
-import { clearState, fetchState } from '../state';
+import { commands } from '@/bindings';
+import { clearState, fetchState } from '@/state';
 
-// The page this build talks to: clapandpay.com, or a Green Envelope dev server such as
+// The page this build talks to: envelope.clapandpay.com, or a Green Envelope dev server such as
 // localhost:5173 when VITE_CLAPANDPAY_ORIGIN says so (docs/clapandpay-connect.md).
 const pageHost = new URL(clapAndPayOrigin).host;
 

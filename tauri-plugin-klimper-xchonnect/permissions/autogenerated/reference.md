@@ -1,7 +1,7 @@
 ## Default Permission
 
 Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,
-list and end sessions, and answer signing approvals. Main webview only — app webviews must
+list, renew and end sessions, and answer signing approvals. Main webview only — app webviews must
 never reach this surface.
 
 #### This default permission set includes the following:
@@ -13,9 +13,12 @@ never reach this surface.
 - `allow-confirm-sas`
 - `allow-list-sessions`
 - `allow-end-session`
+- `allow-rotate-session-keys`
 - `allow-set-dapp-policy`
 - `allow-pending-approvals`
 - `allow-resolve-approval`
+- `allow-cancel-approval`
+- `allow-push-status`
 
 ## Permission Table
 
@@ -48,6 +51,32 @@ Enables the approve_pairing command without any pre-configured scope.
 <td>
 
 Denies the approve_pairing command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-cancel-approval`
+
+</td>
+<td>
+
+Enables the cancel_approval command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-cancel-approval`
+
+</td>
+<td>
+
+Denies the cancel_approval command without any pre-configured scope.
 
 </td>
 </tr>
@@ -211,6 +240,32 @@ Denies the pending_approvals command without any pre-configured scope.
 <tr>
 <td>
 
+`klimper-xchonnect:allow-push-status`
+
+</td>
+<td>
+
+Enables the push_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-push-status`
+
+</td>
+<td>
+
+Denies the push_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `klimper-xchonnect:allow-resolve-approval`
 
 </td>
@@ -230,6 +285,32 @@ Enables the resolve_approval command without any pre-configured scope.
 <td>
 
 Denies the resolve_approval command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-rotate-session-keys`
+
+</td>
+<td>
+
+Enables the rotate_session_keys command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-rotate-session-keys`
+
+</td>
+<td>
+
+Denies the rotate_session_keys command without any pre-configured scope.
 
 </td>
 </tr>

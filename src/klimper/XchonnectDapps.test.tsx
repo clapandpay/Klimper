@@ -21,7 +21,9 @@ vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 
 const listSessions = vi.fn();
 const endSession = vi.fn();
+const rotateSessionKeys = vi.fn();
 const pendingApprovals = vi.fn();
+const pushStatus = vi.fn();
 
 vi.mock('./xchonnect', () => ({
   xchonnect: {
@@ -35,13 +37,16 @@ vi.mock('./xchonnect', () => ({
       }),
     listSessions: () => listSessions(),
     endSession: (id: string) => endSession(id),
+    rotateSessionKeys: (id: string) => rotateSessionKeys(id),
     pendingApprovals: () => pendingApprovals(),
+    pushStatus: () => pushStatus(),
   },
   XCHONNECT_EVENTS: {
     sessions: 'sessions',
     session: 'session',
     approval: 'approval',
     approvalResolved: 'approval-resolved',
+    push: 'push',
   },
   onXchonnectEvent: () => Promise.resolve(() => undefined),
 }));
@@ -61,6 +66,8 @@ const session: SessionSummary = {
   epoch: 2,
   sasConfirmed: true,
   needsRepair: false,
+  revoked: false,
+  rotating: false,
   developerMode: false,
   methods: ['chainId', 'connect', 'signCoinSpends'],
   exposedKeys: [`0x${'a'.repeat(96)}`],
@@ -73,7 +80,9 @@ const session: SessionSummary = {
 beforeEach(() => {
   vi.clearAllMocks();
   pendingApprovals.mockResolvedValue([]);
+  pushStatus.mockResolvedValue({ enabled: false, permission: null });
   endSession.mockResolvedValue(null);
+  rotateSessionKeys.mockResolvedValue(null);
 });
 
 afterEach(cleanup);
@@ -158,6 +167,50 @@ it('ends a connection without asking twice', async () => {
   await waitFor(() => expect(screen.getByTestId('empty-state')).toBeDefined());
 });
 
+it('renews the keys of a live connection', async () => {
+  listSessions.mockResolvedValue([session]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => screen.getByRole('button', { name: 'Renew keys' }));
+  listSessions.mockResolvedValue([{ ...session, rotating: true }]);
+  fireEvent.click(screen.getByRole('button', { name: 'Renew keys' }));
+
+  await waitFor(() => expect(rotateSessionKeys).toHaveBeenCalledWith('sess-1'));
+  await waitFor(() => expect(screen.getByText('being renewed')).toBeDefined());
+  expect(
+    (screen.getByRole('button', { name: 'Renew keys' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it('cannot renew a connection that is not listening', async () => {
+  listSessions.mockResolvedValue([{ ...session, connected: false }]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => screen.getByRole('button', { name: 'Renew keys' }));
+  expect(
+    (screen.getByRole('button', { name: 'Renew keys' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it('marks a revoked connection and only offers to remove it', async () => {
+  listSessions.mockResolvedValue([
+    { ...session, revoked: true, connected: false },
+  ]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => expect(screen.getByTestId('revoked')).toBeDefined());
+  expect(screen.getByTestId('revoked').textContent).toMatch(
+    /withdrew the key this connection was made with/,
+  );
+  expect(screen.queryByRole('button', { name: 'Renew keys' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'What it may do' })).toBeNull();
+  listSessions.mockResolvedValue([]);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+  await waitFor(() => expect(endSession).toHaveBeenCalledWith('sess-1'));
+});
+
 it('points at the approval screen when something is waiting', async () => {
   listSessions.mockResolvedValue([session]);
   pendingApprovals.mockResolvedValue([
@@ -166,6 +219,7 @@ it('points at the approval screen when something is waiting', async () => {
       sessionId: 'sess-1',
       dapp: 'pengui.xyz',
       method: 'signCoinSpends',
+      requestId: 'r1',
       expiresAt: 0,
       kind: 'request',
       prompt: {},
@@ -214,3 +268,31 @@ it('shows no banner for a connection that is not in the list', async () => {
   await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
   expect(screen.queryByTestId('connected-banner')).toBeNull();
 });
+
+it('says so when notifications are refused and wake-ups are built in', async () => {
+  listSessions.mockResolvedValue([session]);
+  pushStatus.mockResolvedValue({ enabled: true, permission: 'denied' });
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => expect(screen.getByTestId('push-denied')).toBeDefined());
+  expect(screen.getByTestId('push-denied').textContent).toMatch(
+    /only sees a request from a website while it is open/,
+  );
+});
+
+it.each([
+  ['granted', true],
+  ['undetermined', true],
+  ['denied', false],
+])(
+  'stays quiet about notifications when they are %s (wake-ups built in: %s)',
+  async (permission, enabled) => {
+    listSessions.mockResolvedValue([session]);
+    pushStatus.mockResolvedValue({ enabled, permission });
+    renderScreen(<XchonnectDapps />);
+
+    await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
+    // A build without a gateway has no wake-ups to explain, whatever the phone says.
+    expect(screen.queryByTestId('push-denied')).toBeNull();
+  },
+);

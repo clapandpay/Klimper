@@ -26,9 +26,9 @@ command surface is `src/klimper/xchonnect.ts`.
    are not evidence and are not rendered — the one exception is the message of a
    `signMessage` request, which _is_ the object being signed and is shown inside a labelled
    quoted block, never as an amount or a recipient.
-4. **One confirmation per signature.** A `kind: 'signature'` approval is answered on its
-   own. They are never batched, never answered by one button, and never pre-answered by
-   approving the request.
+4. **One decision per request** (xchonnect-wiki 04). Approving answers the whole request:
+   every signature it needs is made after one unlock, and a request Klimper broadcasts
+   (`submit_coin_spends`) is sent by Klimper — the button says "Approve and send".
 
 ## Design language
 
@@ -66,12 +66,15 @@ hex value appears in any Xchonnect screen.
 | empty                 | "No dApps are connected." plus what a connection is and the one button that starts one                                                                |
 | a session             | verified domain (both forms when they differ), claimed name as claimed, when it was connected, key epoch, listening or not, methods, limits, switches |
 | `needsRepair`         | the card is marked unusable, with "Connect again" — no action that would use it                                                                       |
+| `revoked`             | the website withdrew its origin key: "Klimper ended this connection", why, and only **Remove**                                                        |
+| `rotating`            | the keys read "being renewed" and **Renew keys** is disabled until the website has answered                                                           |
 | `warnings`            | a danger line per warning, on the card                                                                                                                |
 | dangerous switches on | a warning line naming which one                                                                                                                       |
 | no wallet open        | the list is empty and says the wallet has to be unlocked first                                                                                        |
 
-Actions per session: **Permissions** (screen 5) and **End connection**. Ending is
-immediate and needs no confirmation dialog — it is the safe direction.
+Actions per session: **Permissions** (screen 5), **Renew keys** (spec 9.2.1, only while
+the connection is listening) and **End connection**. Ending is immediate and needs no
+confirmation dialog — it is the safe direction.
 
 ### 2. Connect a dApp — `/xchonnect/connect` (TASK-072, TASK-085)
 
@@ -96,16 +99,28 @@ new connection: a banner names the domain, its card is outlined in teal, and **B
 wallet** returns to the wallet. Shared pieces (site coin, step line, digit tiles, facts, the
 listening pill) are `XchonnectUi.tsx` and `xchonnect.css`, theme tokens only.
 
-### 3. Approval — `/xchonnect/request` (TASK-080)
+### 3. Approval — the overlay, and `/xchonnect/request` (TASK-080)
 
-Opened by the `approval` event, by a `/req` link, and rebuilt from `pendingApprovals()`
-after a reload. One approval is on screen at a time; the rest are counted ("2 more
-waiting") and never rendered in a way that could be answered by accident.
+One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
+
+- **The overlay** (`XchonnectApprovalHost`, mounted once next to the app in `App.tsx`)
+  opens it over whatever screen is open the moment the `approval` event arrives, oldest
+  first, and on the desktop brings the window to the front. It also resumes every stored
+  session's message loop when the app starts and comes back to the front, so requests are
+  fetched without the user opening an Xchonnect screen first. **Later** hides it without
+  answering: a sun pill in the corner counts down and reopens it, and a new request opens it
+  again. It never shows on the requests page.
+- **The requests page** (`/xchonnect/request`, `/xchonnect/request/:approvalId`) lists
+  everything waiting — domain, what kind of request, the countdown, no amount — and shows the
+  one picked in the same view: side by side on a wide window, list then view on a phone.
+  Any request can be picked, but **Approve exists only in the full view**, so nothing is
+  approved without everything below on screen. Opened by "See all requests", by a `/req`
+  link, and rebuilt from `pendingApprovals()` after a reload.
 
 ```
 ┌──────────────────────────────────────────┐
 │ pengui.xyz asks you to sign              │  verified domain, ASCII form too when it differs
-│ signCoinSpends · expires in 4:31         │
+│ [Sign a spend] signCoinSpends · ⏱ 4:31   │  refused by itself in 4:31; red in the last minute
 ├──────────────────────────────────────────┤
 │ You pay          − 1.5 XCH               │  the verdict line, per asset
 │ You receive        + 0 XCH               │
@@ -124,11 +139,13 @@ waiting") and never rendered in a way that could be answered by accident.
 
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve.
-- **Dismiss** (navigating away, closing) is a rejection, not a postponement: the plugin
-  treats five minutes of silence as a rejection, and the screen says so.
-- A `kind: 'signature'` approval is its own card: "Authorise signature 2 of 3", the public
-  key, and one Approve / Reject. The count is informational — the next signature asks
-  again.
+- **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
+  "Later" and navigating away only postpone within that time, and the countdown says
+  when it runs out.
+- A `submit_coin_spends` prompt also says who built the transaction (Klimper from the
+  wallet's own coins, or the website), that Klimper sends it, "checked twice" when the
+  wallet database and the simulation agreed, and the website's declared intent as verified
+  facts only: its `kind` label as "described by the website", each claim with a tick.
 
 ### 4. Lock screen and notifications
 
@@ -162,30 +179,30 @@ Every field the view may read, and nothing else. `src/klimper/xchonnectPrompt.ts
 exactly this list by explicit key and validated type; any other key in the prompt JSON —
 including anything a dApp managed to influence — is dropped before the view sees it.
 
-| Prompt field                                 | Shown as                                                                                 | Copy                                      |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `summary.assets[].asset`                     | asset name: `XCH`, or `CAT <first 8 hex of asset_id>…`; never a dApp-supplied name       | —                                         |
-| `summary.assets[].net` < 0                   | the verdict line, `text-destructive`, absolute value                                     | "You pay"                                 |
-| `summary.assets[].net` > 0                   | the verdict line                                                                         | "You receive"                             |
-| `summary.assets[].net` = 0                   | one line, soft                                                                           | "No change"                               |
-| `summary.assets[].conditional_received`      | its own soft line under the asset, **never summed into `net`** and never called received | "Only if the counterparty completes"      |
-| `summary.assets[].sent` / `received`         | inside the disclosure only — the gross figures mislead on their own                      | —                                         |
-| `summary.implied_fee`                        | a line under the assets                                                                  | "Network fee"                             |
-| `summary.reserve_fee`                        | a line under the assets, when non-zero                                                   | "Fee reserved by the spend"               |
-| `summary.unknown_puzzles[]`                  | danger panel, every puzzle hash in full and selectable; gates a second confirmation      | "Unknown contract"                        |
-| `summary.time_locks`                         | one line per lock, with the absolute time                                                | "Not spendable before" / "Expires"        |
-| `plan.ours[].is_unsafe` or `plan.has_unsafe` | the loudest danger panel on the screen, red, icon, never collapsed                       | "Unsafe signature"                        |
-| `plan.ours[].public_key`                     | in the per-signature approval, monospace, full                                           | "Signing key"                             |
-| `plan.ours.length`                           | a soft line                                                                              | "Signatures you would produce"            |
-| `plan.foreign`                               | count only, inside the disclosure                                                        | —                                         |
-| `partial`                                    | a panel explaining that this is one side of a multi-party spend                          | "This is one half of a trade"             |
-| `binding.all_bound` = true                   | inside that panel                                                                        | "Klimper checked the other side is bound" |
-| `binding.all_bound` = false                  | danger panel — this should have been refused upstream                                    | "Not bound — do not sign"                 |
-| `binding.bound_payments[]`                   | what the signature depends on receiving, per payment                                     | "Your signature only pays out if…"        |
-| `message_text` (signMessage)                 | a labelled quoted block, monospace, control characters escaped, length shown             | "The website asks you to sign this text"  |
-| `message_hex` (signMessage)                  | the same block when there is no text form                                                | "…this data"                              |
-| `public_key` (signMessage)                   | monospace, full                                                                          | "With this key"                           |
-| anything else                                | **dropped**                                                                              | —                                         |
+| Prompt field                                                    | Shown as                                                                                                                                                                                                                                                                                                                        | Copy                                      |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `summary.assets[].asset`                                        | asset name: `XCH`, or `CAT <first 8 hex of asset_id>…`; never a dApp-supplied name                                                                                                                                                                                                                                              | —                                         |
+| `summary.assets[].net` < 0                                      | the verdict line, `text-destructive`, absolute value                                                                                                                                                                                                                                                                            | "You pay"                                 |
+| `summary.assets[].net` > 0                                      | the verdict line                                                                                                                                                                                                                                                                                                                | "You receive"                             |
+| `summary.assets[].net` = 0                                      | one line, soft                                                                                                                                                                                                                                                                                                                  | "No change"                               |
+| `summary.assets[].conditional_received`                         | its own soft line under the asset, **never summed into `net`** and never called received                                                                                                                                                                                                                                        | "Only if the counterparty completes"      |
+| `summary.assets[].sent` / `received`                            | inside the disclosure only — the gross figures mislead on their own                                                                                                                                                                                                                                                             | —                                         |
+| `summary.outputs[]` (`amount`, `asset`, `recipient`, `to_user`) | "Sending": each output that is not `to_user`, amount in the display face → the address Klimper encodes itself from `recipient` (network prefix, shortened, whole address on hover); `to_user` outputs as one "Change back to you" line; when every output is `to_user`, the teal "Only to your own addresses" note listing them | "Sending", "Only to your own addresses"   |
+| `summary.implied_fee`                                           | a line under the assets                                                                                                                                                                                                                                                                                                         | "Network fee"                             |
+| `summary.reserve_fee`                                           | a line under the assets, when non-zero                                                                                                                                                                                                                                                                                          | "Fee reserved by the spend"               |
+| `summary.unknown_puzzles[]`                                     | danger panel, every puzzle hash in full and selectable; gates a second confirmation                                                                                                                                                                                                                                             | "Unknown contract"                        |
+| `summary.time_locks`                                            | one line per lock, with the absolute time                                                                                                                                                                                                                                                                                       | "Not spendable before" / "Expires"        |
+| `plan.ours[].is_unsafe` or `plan.has_unsafe`                    | the loudest danger panel on the screen, red, icon, never collapsed                                                                                                                                                                                                                                                              | "Unsafe signature"                        |
+| `plan.ours.length`                                              | a soft line                                                                                                                                                                                                                                                                                                                     | "Signatures you would produce"            |
+| `plan.foreign`                                                  | count only, inside the disclosure                                                                                                                                                                                                                                                                                               | —                                         |
+| `partial`                                                       | a panel explaining that this is one side of a multi-party spend                                                                                                                                                                                                                                                                 | "This is one half of a trade"             |
+| `binding.all_bound` = true                                      | inside that panel                                                                                                                                                                                                                                                                                                               | "Klimper checked the other side is bound" |
+| `binding.all_bound` = false                                     | danger panel — this should have been refused upstream                                                                                                                                                                                                                                                                           | "Not bound — do not sign"                 |
+| `binding.bound_payments[]`                                      | what the signature depends on receiving, per payment                                                                                                                                                                                                                                                                            | "Your signature only pays out if…"        |
+| `message_text` (signMessage)                                    | a labelled quoted block, monospace, control characters escaped, length shown                                                                                                                                                                                                                                                    | "The website asks you to sign this text"  |
+| `message_hex` (signMessage)                                     | the same block when there is no text form                                                                                                                                                                                                                                                                                       | "…this data"                              |
+| `public_key` (signMessage)                                      | monospace, full                                                                                                                                                                                                                                                                                                                 | "With this key"                           |
+| anything else                                                   | **dropped**                                                                                                                                                                                                                                                                                                                     | —                                         |
 
 The "Everything Klimper computed" disclosure prints the **parsed** view, not the prompt
 JSON. Printing the JSON would put every key the prompt happens to carry on the screen,
@@ -216,7 +233,6 @@ what a puzzle hash is.
 | unsafe signature       | This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed.       | Diese Signatur wäre in jeder Ausgabe gültig, nicht nur in dieser. Lehnen Sie ab, außer Sie wissen genau, warum sie nötig ist.                   |
 | unknown contract       | Klimper does not recognise this contract. Nobody can tell you what it does with your coins.                              | Klimper kennt diesen Vertrag nicht. Niemand kann Ihnen sagen, was er mit Ihren Coins macht.                                                     |
 | unbound partial        | Not bound — do not sign. Your signature would not be tied to the payment you are expecting.                              | Nicht gebunden — nicht signieren. Ihre Signatur wäre nicht an die erwartete Zahlung gebunden.                                                   |
-| per-signature          | Authorise signature {index} of {total}                                                                                   | Signatur {index} von {total} freigeben                                                                                                          |
 | dismiss is reject      | Leaving this screen rejects the request.                                                                                 | Wenn Sie diesen Bildschirm verlassen, wird die Anfrage abgelehnt.                                                                               |
 | notification           | A connected website is asking you to sign something. Open Klimper to see what it is.                                     | Eine verbundene Website möchte, dass Sie etwas signieren. Öffnen Sie Klimper, um zu sehen, was.                                                 |
 | limit refused          | A request over a limit is refused before it reaches you — you will not see a signing prompt for it.                      | Eine Anfrage über dem Limit wird abgelehnt, bevor sie bei Ihnen ankommt — dafür erscheint keine Signatur-Abfrage.                               |
@@ -230,10 +246,6 @@ _only_ the domain is; the word "website" rather than "dApp" wherever a user read
 
 Reported rather than faked. Each needs a plugin command that the transport does not expose:
 
-- **Wallet-initiated key rotation** (TASK-084 AC #3). `xchonnect-core` has
-  `Session::begin_rotation`, and the session loop accepts a dApp's offer, but there is no
-  command for the user to start one. The screen shows the key epoch and that rotation
-  happens automatically; a `rotate_session_keys` command would make the action real.
 - **Return to the dApp** (TASK-085 AC #1, #2). The verified `return_url` reaches the plugin
   as `VerifiedUri::return_url` and the core already refuses one that leaves the dApp's
   domain, but it is neither persisted with the session nor surfaced on `SessionSummary`.

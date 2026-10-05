@@ -6,16 +6,17 @@
 > paths into this folder; a trial merge of `upstream/main` on the day of the move touched 103
 > files, all inside `klimper/`, with no conflicts. Never merge upstream by hand without that
 > option, and never relocate files inside `klimper/`. Upstream's own workflows sit in
-> `klimper/.github/`, where GitHub does not run them; ours is `/.github/workflows/ci.yml`.
+> `klimper/.github/`, where GitHub does not run them; ours is `/.github/workflows/images.yml` (named `Images`, so the disable command below leaves it alone).
 
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
 
-|                     |                                |
-| ------------------- | ------------------------------ |
-| Merged version      | **v0.13.1**, merged 2026-09-20 |
-| Hotfix merges since | none                           |
-| Klimper version     | **0.13.1**, the merged tag     |
+|                     |                                                    |
+| ------------------- | -------------------------------------------------- |
+| Merged version      | **v0.13.1**, merged 2026-09-20                     |
+| Hotfix merges since | none                                               |
+| Last checked        | 2026-10-05: `upstream/main` = v0.13.1, nothing new |
+| Klimper version     | **0.13.1**, the merged tag                         |
 
 **Klimper's version is the version of the Sage release it is built on.** Sage's app system
 (`crates/sage-apps`) checks an app's minimum Sage version against the Tauri app version
@@ -133,11 +134,11 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    ```sh
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
    grep -h '"version"' src-tauri/tauri.*.conf.json  # the merged tag, every one (see the top)
-   grep -c '^VITE_' .env                            # 11
-   grep -c featureElement src/App.tsx               # 8
+   grep -c '^VITE_' .env.production                 # 13
+   grep -c 'klimperRouter\|KlimperRoot' src/App.tsx # 3: the import, the router, the root
    grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
                                                     # cleanly but pass the empty password
-   grep -c 'Passkey' src/App.tsx src/pages/Settings.tsx  # 2 each
+   grep -c 'Passkey' src/pages/Settings.tsx         # 2
    ```
 
 7. **Credit the people whose work this is.** `scripts/sync-upstream.sh --credits`, and update
@@ -148,19 +149,46 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    five `tauri.*.conf.json` files and `src-tauri/gen/apple/sage-tauri_iOS/Info.plist`; and any
    new row in the file tables below — `--diff` tells you if one is missing.
 
+## Hook points
+
+`src/App.tsx` is where every Klimper feature used to land — a flag around seven routes, three
+route groups, three elements, two imports — so any upstream change to Sage's route block was a
+merge conflict. Since 2026-10-05 it differs from Sage's in **four lines**, and Sage's route
+block is byte for byte upstream's:
+
+```tsx
+import { KlimperRoot, klimperRouter } from '@/klimper/KlimperRoot'; // + a comment line
+const router = klimperRouter(createHashRouter)(   // was: createHashRouter(
+        <KlimperRoot />                           // inside <I18nProvider>
+```
+
+- `src/klimper/routes.tsx` — `withKlimper(routes)`: a feature switched off in `features.ts`
+  turns its route into a redirect, looked up **by path** in one table (`GATED`,
+  `GATED_CHILDREN`); Klimper's own screens (`/clapandpay`, `/xchonnect/*`, `/scanner`) are
+  appended. A new upstream route needs nothing; a new gated feature is one table line.
+  `klimperRouter(create)` wraps Sage's own factory, so neither the indentation of the block
+  nor Sage's imports change. Tested in `routes.test.tsx`.
+- `src/klimper/KlimperRoot.tsx` — everything rendered next to the app (`PasskeyGate`, the
+  Xchonnect approval overlay) and the `klimperTheme` import.
+
+New Klimper screens and app-wide pieces go there, never into `App.tsx`. The rest of the shared
+frontend diff is single elements wrapped in a flag (`Nav.tsx`, `Settings.tsx`,
+`TokenList.tsx`, `Login.tsx`) and the @handle field in `Send.tsx` — all rows marked _propose
+upstream_ below, so they leave the diff once Sage takes the hiding points.
+
 ## Our files (the whole diff against upstream)
 
 New files never conflict. Files shared with Sage are kept to the lines listed here.
 
-| File                                                                                                                                         | Ours                                                  | Note                                                                                                                                                                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `README.md`, `LICENSE`                                                                                                                       | whole file                                            | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                              |
-| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                   |                                                                                                                                                                                                                                                                                        |
-| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `.github/workflows/ci.yml`                                                                   | new                                                   |                                                                                                                                                                                                                                                                                        |
-| `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                   | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                   |
-| `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added                                         | product name, version, identifier                                                                                                                                                                                                                                                      |
-| `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`, `sage-tauri_iOS/Info.plist`                                       | bundle id; iOS 15.0 minimum; product name and version | `DEVELOPMENT_TEAM` is still Sage's; ours arrives with TASK-003. Xcode 27 refuses the iOS 14.0 minimum. `tauri ios build` writes the product name and version from `tauri.ios.conf.json` into the pbxproj and Info.plist on every build, so those lines are committed as it writes them |
-| `src-tauri/gen/android/app/build.gradle.kts`, `.gitignore`, `res/values/strings.xml`, `MainActivity.kt` (moved to `com/clapandpay/klimper/`) | package and app name                                  | not yet built, no Android SDK on the dev machine (2026-09-17)                                                                                                                                                                                                                          |
+| File                                                                                                                                         | Ours                                                        | Note                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`, `LICENSE`                                                                                                                       | whole file                                                  | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
+| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                         |                                                                                                                                                                                                                                                                                                      |
+| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/images.yml`                                       | new                                                         |                                                                                                                                                                                                                                                                                                      |
+| `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                         | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
+| `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                             | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
+| `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`, `sage-tauri_iOS/Info.plist`                                       | bundle id; team; iOS 15.0 minimum; product name and version | `DEVELOPMENT_TEAM` is ours, `HTP35W93ZF` (TASK-003): take ours on a conflict. Xcode 27 refuses the iOS 14.0 minimum. `tauri ios build` writes the product name and version from `tauri.ios.conf.json` into the pbxproj and Info.plist on every build, so those lines are committed as it writes them |
+| `src-tauri/gen/android/app/build.gradle.kts`, `.gitignore`, `res/values/strings.xml`, `MainActivity.kt` (moved to `com/clapandpay/klimper/`) | package and app name                                        | not yet built, no Android SDK on the dev machine (2026-09-17)                                                                                                                                                                                                                                        |
 
 ### Reduced interface (TASK-007)
 
@@ -170,13 +198,13 @@ with build flags that extend Sage's own `VITE_DISABLE_OFFERS / OPTIONS / SWAP` p
 is deleted, the engine and the bridge keep every capability, and every flag defaults to Sage's
 behaviour.
 
-| File                                                                          | Ours                                       | Note                                                                              |
-| ----------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `.env`                                                                        | new, force-added (upstream ignores `.env`) | the nine `VITE_DISABLE_*` flags; no secrets, those go in `.env.local`             |
-| `src/lib/featureElement.tsx`                                                  | new                                        | route gate: a disabled feature redirects to `/wallet`                             |
-| `src/lib/features.ts`, `src/vite-env.d.ts`                                    | six flags appended                         | NFTs, profiles, token issuing, WalletConnect, RPC settings, theme gallery         |
-| `src/App.tsx`                                                                 | import block, seven route `element=` lines | offers, options and swap routes were reachable by URL upstream even when disabled |
-| `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks              |                                                                                   |
+| File                                                                          | Ours                          | Note                                                                                                                                                              |
+| ----------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.env.production`, `.env.example`                                             | new                           | the release flags (`vite build` reads `.env.production`, which wins over a developer's `.env`) and the development template; no secrets, those go in `.env.local` |
+| `src/lib/featureElement.tsx`                                                  | new                           | route gate: a disabled feature redirects to `/wallet`                                                                                                             |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                                    | six flags appended            | NFTs, profiles, token issuing, WalletConnect, RPC settings, theme gallery                                                                                         |
+| `src/klimper/routes.tsx` (`GATED`, `GATED_CHILDREN`)                          | new                           | offers, options, swap, NFTs, profiles, token issuing and the theme gallery redirect by path when off; `src/App.tsx` is only the hook point (see "Hook points")    |
+| `src/components/Nav.tsx`, `src/pages/TokenList.tsx`, `src/pages/Settings.tsx` | guards around existing blocks |                                                                                                                                                                   |
 
 These seven files are what `scripts/sync-upstream.sh --export` writes out, and they are meant to
 stop being ours: propose them to Sage as one pull request ("more build-time feature flags, and
@@ -193,7 +221,7 @@ behaviour.
 | ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
 | `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
-| `src/pages/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                     | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
+| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
 | `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
 | `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
@@ -209,9 +237,36 @@ upstream; the rest is files of our own and one-line hooks.
 | `tauri-plugin-klimper-passkey/`, `src/klimper/`, `src-tauri/capabilities/klimper.json`        | new                                      | envelope, commands, Swift; lock screen and settings entry                                                                                                                     |
 | `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                  | workspace member, dep, one plugin        |                                                                                                                                                                               |
 | `Cargo.lock`                                                                                  | the plugin, and `swift-rs` 1.0.7 → 1.0.8 | 1.0.7 builds Swift for macOS under Xcode 27, so no iOS build works; on a conflict take upstream's lock, then `cargo update -p swift-rs` unless upstream is already past 1.0.7 |
-| `src/App.tsx`, `src/pages/Settings.tsx`                                                       | one import and one element each          | `<PasskeyGate />`, `<PasskeySettings />`                                                                                                                                      |
+| `src/pages/Settings.tsx`                                                                      | one import and one element               | `<PasskeySettings />`; `<PasskeyGate />` is in `src/klimper/KlimperRoot.tsx`                                                                                                  |
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `src-tauri/gen/android/{build.gradle.kts,app/build.gradle.kts,app/.gitignore}` | 4 lines, 1 line, 4 lines, 1 line | push wake-ups (TASK-087): `aps-environment` and time-sensitive notifications; the `google-services` Gradle plugin, applied only when `google-services.json` exists. `docs/push.md` |
+
+### iOS build on Xcode 27 (TASK-003)
+
+Under Xcode 27 swift-rs makes each Swift package's own `@_cdecl` functions public again, but
+not its own runtime (`retain_object`, `release_object`, `string_from_bytes`, `data_from_bytes`),
+which every package archive embeds, so no iOS app links. Our copy of swift-rs promotes that
+runtime in the Tauri archive alone. `scripts/testflight.sh` carries the build settings Xcode 27
+needs on top (unstripped build-time macros, `llvm-tools`).
+
+| File                       | Ours                          | Note                                                                                                                                                   |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `vendor/swift-rs/`         | new: swift-rs 1.0.8, 1 change | `src-rs/build.rs`, the "Klimper patch" comment. Drop the directory and the patch line once a swift-rs release exports its runtime; propose it upstream |
+| `Cargo.toml`, `Cargo.lock` | 2 lines; swift-rs from a path | the `swift-rs` line under `[patch.crates-io]`; on a lock conflict keep the path source                                                                 |
+| `.prettierignore`          | 1 line                        | `vendor`                                                                                                                                               |
+
+### iOS release build (TASK-003)
+
+Apps linked against the iOS 27 SDK must use the UIScene life cycle or UIKit refuses to launch
+them; tao 0.34 (Sage's pinned Tauri) has none. A shim of our own bridges it until tao 0.37.
+
+| File                                                                                | Ours                   | Note                                                                                                |
+| ----------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `src-tauri/gen/apple/Sources/sage-tauri/KlimperScene.m`, `src-tauri/Info.ios.plist` | new                    | the scene delegate and its manifest; drop both once Sage's Tauri uses tao 0.37 or later             |
+| `src-tauri/gen/apple/sage-tauri.xcodeproj/project.pbxproj`                          | `KlimperScene.m`       | registered as a source                                                                              |
+| `src-tauri/tauri.ios.conf.json`                                                     | `bundle.iOS.infoPlist` | points Tauri at `Info.ios.plist`, which it does not pick up by itself                               |
+| `src/locales/*/messages.po`                                                         | regenerated            | `pnpm extract` after a merge: a production build shows a message id, not text, for anything missing |
 
 ### Look: Klimper Coin (TASK-062)
 
@@ -223,7 +278,7 @@ Sage's other themes stay selectable and unchanged, and no shared component is ed
 | ---------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `docs/design-guide.md`, `src/themes/klimper-light/`, `src/themes/klimper-dark/`                                  | new        | ordinary theme-o-rama themes named `light` and `dark`: theme-o-rama keys themes by name, so they replace its built-ins |
 | `src/lib/klimperTheme.ts`, `src/klimper.css`                                                                     | new        | default theme once per install; ink sidebar, pill buttons, coins, total band, focus, 44px controls, motion             |
-| `src/App.tsx`                                                                                                    | one import | `import '@/lib/klimperTheme'`, before the `ThemeProvider` reads the saved theme                                        |
+| `src/klimper/KlimperRoot.tsx`                                                                                    | new        | `import '@/lib/klimperTheme'`, evaluated before the `ThemeProvider` reads the saved theme                              |
 | `src/icon-dark.png`, `src/icon-light.png`, `src-tauri/icons/*`, the iOS `AppIcon.appiconset`, Android `mipmap-*` | replaced   | the Klimper logo; every app icon is regenerated by `scripts/update-logo.sh` (new, ours). Take ours on a conflict       |
 | `src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml`                                       | one colour | set by `scripts/update-logo.sh` from the logo's corner                                                                 |
 
@@ -233,20 +288,24 @@ Klimper answers CHIP-0002 requests from outside websites over Xchonnect (decisio
 milestone m-4). Same shape as the passkey work: one crate of our own, screens of our own,
 and single-line hooks in shared files. `docs/xchonnect.md` has the detail.
 
-| File                                                                                     | Ours                              | Note                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tauri-plugin-klimper-xchonnect/`, `src/klimper/xchonnect*.{ts,tsx}`, `useXchonnect*.ts` | new                               | the plugin, the typed command wrappers, the screens and their tests. `docs/xchonnect-screens.md` and `docs/xchonnect-links.md` are the design and the entry points |
-| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                             | workspace member, dep, one plugin | exactly the three lines the passkey plugin needed                                                                                                                  |
-| `src-tauri/capabilities/klimper.json`                                                    | one permission                    | `klimper-xchonnect:default`, main webview only — app webviews must never reach it                                                                                  |
-| `src/App.tsx`                                                                            | one import, one element           | `{xchonnectRoutes}` — the five routes live in `src/klimper/XchonnectRoutes.tsx`, each behind `featureElement`                                                      |
-| `src/pages/Settings.tsx`                                                                 | one import, one element           | `<XchonnectSettings />`, which renders nothing when the flag is off. The only entry point: before it, `/xchonnect` was reachable by typed URL alone                |
-| `src/components/Nav.tsx`                                                                 | one import, one element           | `<KlimperNavLinks />`: the Scan tab (`scanEnabled`) and Websites (`xchonnectEnabled`); every flag is checked inside it                                             |
-| `src/App.tsx`, `src/lib/features.ts`, `src/vite-env.d.ts`                                | one element, one flag             | `{scannerRoutes}` (`/scanner`, `src/klimper/Scanner.tsx`) and `VITE_DISABLE_SCAN`                                                                                  |
-| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`                         | 1 line                            | `applinks:clapandpay.com`, next to the passkey work's `webcredentials` entry. Serve `docs/well-known/apple-app-site-association` (TASK-040)                        |
-| `src-tauri/Info.plist`                                                                   | 2 lines                           | `NSCameraUsageDescription`: the desktop pairing screen reads QR codes from the camera (`src/klimper/QrCamera.tsx`)                                                 |
-| `src/lib/features.ts`, `src/vite-env.d.ts`, `.env`                                       | one flag                          | `VITE_ENABLE_XCHONNECT`, off, and commented out in `.env` until TASK-094 has reviewed the flow                                                                     |
-| `.prettierignore`                                                                        | 1 line                            | the plugin's generated permissions                                                                                                                                 |
-| `Cargo.lock`                                                                             | the plugin and its dependencies   | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check`       |
+| File                                                                                                                 | Ours                                            | Note                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tauri-plugin-klimper-xchonnect/`, `src/klimper/xchonnect*.{ts,tsx}`, `useXchonnect*.ts`                             | new                                             | the plugin, the typed command wrappers, the screens and their tests. `docs/xchonnect-screens.md` and `docs/xchonnect-links.md` are the design and the entry points                                                                           |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                                         | workspace member, dep, one plugin               | exactly the three lines the passkey plugin needed                                                                                                                                                                                            |
+| `src-tauri/capabilities/klimper.json`                                                                                | one permission                                  | `klimper-xchonnect:default`, main webview only — app webviews must never reach it                                                                                                                                                            |
+| `src/klimper/routes.tsx`                                                                                             | new                                             | `xchonnectRoutes` appended by `withKlimper`; the routes live in `src/klimper/XchonnectRoutes.tsx`, each behind `featureElement`; the approval overlay is in `KlimperRoot`                                                                    |
+| `src/pages/Settings.tsx`                                                                                             | one import, one element                         | `<XchonnectSettings />`, which renders nothing when the flag is off. The only entry point: before it, `/xchonnect` was reachable by typed URL alone                                                                                          |
+| `src/components/Nav.tsx`                                                                                             | one import, one element                         | `<KlimperNavLinks />`: the Scan tab (`scanEnabled`) and Websites (`xchonnectEnabled`); every flag is checked inside it                                                                                                                       |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                                                                           | one flag                                        | `{scannerRoutes}` (`/scanner`, `src/klimper/Scanner.tsx`) and `VITE_DISABLE_SCAN`                                                                                                                                                            |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`                                                     | 1 line                                          | `applinks:clapandpay.com`, next to the passkey work's `webcredentials` entry. Serve `docs/well-known/apple-app-site-association` (TASK-040)                                                                                                  |
+| `src-tauri/Info.plist`                                                                                               | 2 lines                                         | `NSCameraUsageDescription`: the desktop pairing screen reads QR codes from the camera (`src/klimper/QrCamera.tsx`)                                                                                                                           |
+| `src/lib/features.ts`, `src/vite-env.d.ts`, `.env`                                                                   | one flag                                        | `VITE_ENABLE_XCHONNECT`, on in `.env.production`, so release builds include it; unset means off                                                                                                                                              |
+| `src/pages/Login.tsx`, `index.html`                                                                                  | 1 line each                                     | the welcome headline and the page title say Klimper, not Sage (App Review 2.3: the name the user sees is the app's)                                                                                                                          |
+| `src-tauri/Info.plist`, `gen/apple/sage-tauri_iOS/{Info.plist,sage-tauri_iOS.entitlements}`, `PrivacyInfo.xcprivacy` | purpose strings, entitlements, privacy manifest | no photo-library string (nothing saves photos), no Group Activities entitlement (nothing uses it), specific Face ID and NFC strings, and the privacy manifest with its required-reason APIs; the manifest is registered in `project.pbxproj` |
+| `src/contexts/PriceContext.tsx`                                                                                      | 5 lines                                         | on testnet the TXCH price is 0 instead of Coingecko's XCH price, so testnet balances are not shown as dollars. Propose upstream; on a conflict keep upstream and re-add                                                                      |
+| `vite.preview.config.ts`, `preview-*.html`, `src/preview/`                                                           | new                                             | the approval screens rendered with mock data in a plain browser, for screenshots and headless checks; never part of `vite build` (own config)                                                                                                |
+| `.prettierignore`                                                                                                    | 1 line                                          | the plugin's generated permissions                                                                                                                                                                                                           |
+| `Cargo.lock`                                                                                                         | the plugin and its dependencies                 | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check`                                                                                 |
 
 The two xchonnect crates are deliberately unpublished (xchonnect TASK-67 publishes after
 its audit), so they are consumed by path:
@@ -283,4 +342,4 @@ Known leftovers, deliberately not patched:
 Upstream's workflows (`build.yml`, `npm.yml`) stay in the tree unchanged so they never conflict,
 but they need Sage's runners and secrets and would publish to npm. Disable them once in the
 GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours is
-`.github/workflows/ci.yml`.
+`.github/workflows/images.yml`, named `Images` so that command does not touch it.

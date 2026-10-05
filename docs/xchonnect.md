@@ -56,18 +56,65 @@ behind it. An entry whose `state_version` is below the index is restored state: 
 
 `crates/sage-keychain` is untouched. Nothing Xchonnect ever reaches `keys.bin`.
 
-## Per-signature approval on desktop
+## Connecting and disconnecting
 
-Spec 11.1 item 4 asks for biometrics on every signature. `tauri-plugin-klimper-passkey`
-reports `supported() == false` outside iOS 18+, so on the desktop target the gate is the
-two things desktop has:
+- **One loop per session, ever.** `live` holds each loop's handles; an entry counts only
+  while its loop still holds the `wake` receiver. Entries are never pruned by the open
+  wallet's list, which used to orphan another wallet's loops and let a second loop start on
+  the same session (two writers of one `seq`).
+- **Disconnect is immediate.** `end_session` rejects whatever the session is waiting on,
+  cuts the loop's long poll short (`end_signal`), and drops the session from
+  `list_sessions` while the loop posts `session.end` (retried, not on a `404`) and deletes
+  the mailboxes. A loop that already returned is not flagged and forgotten: the session is
+  ended through `end_without_loop`. `tests/live_relay.rs`
+  `a_disconnect_does_not_wait_for_the_long_poll` checks it against the reference relay.
+- **The dApp ending it** (`session.end`, or a `404` from the relay) runs the same clean-up,
+  including our own mailbox and any open prompt.
+- **Pairing attempts are locked one by one.** The `session.confirm` poll holds only its own
+  attempt, so cancelling, confirming or scanning another code never waits for it. If
+  `session.ready` cannot be posted, the stored session is undone and the attempt discarded,
+  rather than listing a connection the website never learned about.
+- **Renewing keys** (spec 9.2.1). `rotate_session_keys` asks the session's loop to offer
+  new keys: a fresh mailbox, then `session.rotate` under the current epoch. The loop also
+  offers on its own once `Session::needs_rotation` says so (30 days or 10 000 messages).
+  On the dApp's accept it switches, pings the dApp's new mailbox so the dApp may retire
+  its old one, then drains and deletes its own old mailbox. A dApp that never answers
+  leaves the offer pending; the session keeps working on the old keys, and a dApp offer
+  of its own still wins.
+- **Origin-key revocation** (spec 6.1). The record keeps the `kid` the pairing code was
+  signed with, and the loop re-fetches the origin document when it starts and every 24
+  hours. Only a document that was fetched, parsed and no longer lists the `kid` revokes:
+  the loop posts `session.end`, deletes the mailboxes, erases the session bytes and keeps
+  the record with `revoked: true`, which the screen shows until the user removes it. A
+  site that is down never revokes anything. Sessions paired before the `kid` was kept
+  cannot be checked.
+- **Still open:** an end the app quits in the middle of is not resumed at the next start
+  (the session comes back and can be ended again).
 
-1. **The keychain must be open.** With a passkey enrolled, `keychain.password()` fails with
-   `Locked` until the passkey has opened it, and the signer produces nothing.
-2. **One explicit confirmation per signature**, through the approval bridge, on top of the
-   approval of the request as a whole.
+## One decision per request; Klimper broadcasts
 
-Key material is fetched per signature, not per request, and dropped immediately. The
+Decided 2026-10-05 (xchonnect-wiki `04-wallet-side-execution.md`): spec 11.1 item 4 is one
+authentication per signing **request**, covering all of its signatures. The earlier
+desktop reading — one confirmation per signature — asked 1 + 5 times for a five-coin send
+and is gone.
+
+1. **One approval** of the whole request, on the overlay or the requests page.
+2. **One unlock**: `KlimperSigner::sign_all` opens the keychain once, derives every key the
+   approved plan needs, signs and verifies everything, and drops the key material. With a
+   passkey enrolled, `keychain.password()` fails with `Locked` until the passkey has opened
+   it, and nothing is signed. A fresh Touch ID prompt per request on macOS is a follow-up:
+   it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out here.
+3. **Klimper broadcasts** (`execute.rs`): `chia_send` is built by Sage from the wallet's
+   own coins, `xchonnect_submitCoinSpends` carries a bundle the website built; both are
+   signed once and sent through Klimper's own peers (`send_transaction_immediately`). The
+   website receives `{ transactionId, status }`.
+4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
+   wallet-kit's simulation must agree on the user's coins spent, the payments to others and
+   the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
+   is verified claim by claim against the simulation; `chia_send` carries one Klimper
+   derives from the request itself.
+
+Key material lives only inside one `sign_all` call. The
 keychain password is a `Zeroizing<Vec<u8>>`. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies
 `unsafe_code`, so that cannot be fixed from here. Worth proposing to chia-bls.
@@ -108,11 +155,5 @@ no environment variable that turns that on in a release build.
   (`WalletMeta.link`), and the verified `return_url` is not persisted with the session or
   surfaced on `SessionSummary`. Both are small plugin changes; the UI guard is written and
   tested (`src/klimper/xchonnectReturn.ts`).
-- **Wallet-initiated key rotation**: the session loop accepts a dApp's rotation offer, but
-  there is no command for the user to start one (`Session::begin_rotation` is unused).
-- **Origin-key revocation**: spec 6.1 asks the wallet to revoke sessions signed by an
-  origin key that has been removed, on the next fetch. Nothing re-fetches an origin
-  document after pairing, and the session record does not keep the `kid` it was signed
-  with.
 - **Coin and balance reads, `sendTransaction`**: TASK-082. Only the methods wallet-kit
   handles are answered; anything else returns the CHIP-0002 method-not-found code.
