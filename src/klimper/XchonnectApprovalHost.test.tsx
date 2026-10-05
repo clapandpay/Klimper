@@ -27,9 +27,8 @@ vi.mock('@/components/Header', () => ({
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 vi.mock('./useTicker', () => ({ useTicker: () => 'XCH' }));
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn().mockResolvedValue(undefined),
-}));
+const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'macos' }));
 const setFocus = vi.fn().mockResolvedValue(undefined);
 vi.mock('@tauri-apps/api/window', () => ({
@@ -63,6 +62,7 @@ vi.mock('./xchonnect', () => ({
   XCHONNECT_EVENTS: {
     approval: 'approval',
     approvalResolved: 'approval-resolved',
+    sent: 'sent',
   },
   // Two hooks can listen at once (overlay and page), so keep every handler.
   onXchonnectEvent: (event: string, handler: (payload: unknown) => void) => {
@@ -243,6 +243,30 @@ describe('the overlay', () => {
 
     handlers.get('approval')?.(request('a1', -1_000_000_000_000));
     await waitFor(() => expect(setFocus).toHaveBeenCalled());
+  });
+});
+
+describe('a transaction Klimper sent', () => {
+  it('is announced with a link to look it up on mempoolxch.space', async () => {
+    const { toast } = await import('react-toastify');
+    renderScreen(<XchonnectApprovalHost />);
+    await settle();
+
+    const id = 'ef'.repeat(32);
+    handlers.get('sent')?.({
+      dapp: 'pengui.space',
+      method: 'chia_send',
+      transactionId: `0x${id}`,
+      status: 'pending',
+    });
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    const element = vi.mocked(toast.success).mock.calls.at(-1)?.[0];
+    renderScreen(<>{element as React.ReactNode}</>);
+    expect(screen.getByTestId('sent-toast').textContent).toContain(
+      'pengui.space',
+    );
+    fireEvent.click(screen.getByTestId('sent-explorer-link'));
+    expect(openUrl).toHaveBeenCalledWith(`https://mempoolxch.space/tx/0x${id}`);
   });
 });
 

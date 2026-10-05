@@ -171,7 +171,16 @@ export const XCHONNECT_EVENTS = {
   approval: 'klimper-xchonnect://approval',
   /** `{ id, approved }` — answered, withdrawn or timed out. */
   approvalResolved: 'klimper-xchonnect://approval-resolved',
+  /** `{ dapp, method, transactionId, status }` — Klimper broadcast a transaction. */
+  sent: 'klimper-xchonnect://sent',
 } as const;
+
+export interface SentEvent {
+  dapp: string;
+  method: string;
+  transactionId: string;
+  status: string | null;
+}
 
 export interface PairingEvent {
   pairingId: string;

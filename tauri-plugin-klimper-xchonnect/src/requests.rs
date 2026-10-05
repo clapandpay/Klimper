@@ -282,6 +282,22 @@ fn run(
         }
         _ => kit::handle_with_host(&meta.method, params, &context, &host),
     };
+    // A transaction Klimper broadcast: the webview shows where to look it up.
+    if let Ok(result) = &outcome
+        && matches!(
+            canonical_method(&meta.method),
+            execute::CHIA_SEND | kit::SUBMIT_COIN_SPENDS
+        )
+        && let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(result)
+        && let Some(Value::String(transaction_id)) = fields.get("transactionId")
+    {
+        approvals.sent(serde_json::json!({
+            "dapp": record.dapp,
+            "method": meta.method,
+            "transactionId": transaction_id,
+            "status": fields.get("status").cloned().unwrap_or(Value::Null),
+        }));
+    }
     match &outcome {
         Ok(_) => tracing::info!(
             dapp = %record.dapp,

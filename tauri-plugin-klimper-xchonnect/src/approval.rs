@@ -32,6 +32,9 @@ pub const DECISION_TIMEOUT: Duration = Duration::from_mins(5);
 pub const EVENT_APPROVAL: &str = "klimper-xchonnect://approval";
 /// Event emitted when an approval is answered, times out or is withdrawn.
 pub const EVENT_APPROVAL_DONE: &str = "klimper-xchonnect://approval-resolved";
+/// Event emitted when Klimper broadcast a transaction for a website:
+/// `{ dapp, method, transactionId, status }`.
+pub const EVENT_SENT: &str = "klimper-xchonnect://sent";
 
 /// What the user is being asked.
 ///
@@ -98,6 +101,11 @@ impl ApprovalBridge {
             registry: Mutex::new(Registry::default()),
             emit,
         }
+    }
+
+    /// Tell the webview a transaction left the wallet, so it can show where to look it up.
+    pub fn sent(&self, payload: Value) {
+        (self.emit)(EVENT_SENT, payload);
     }
 
     /// Ask the user and block until the answer arrives. Called from a blocking thread
