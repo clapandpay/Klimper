@@ -552,6 +552,23 @@ mod tests {
         SessionStore::open(dir, Box::new(MemorySecrets::default())).unwrap()
     }
 
+    /// The real OS keyring, under the real service name. `#[ignore]` because it writes to
+    /// the developer's login keychain and may prompt; run it by hand with
+    /// `cargo test -p tauri-plugin-klimper-xchonnect -- --ignored os_keyring`.
+    #[test]
+    #[ignore = "writes to the OS keyring"]
+    fn the_os_keyring_round_trips_a_session() {
+        let keyring = OsKeyring;
+        let key = "session:0:keyring-self-test";
+        let secret = b"not a real session";
+        keyring.put(key, secret).expect("write to the keyring");
+        assert_eq!(keyring.get(key).unwrap().as_deref(), Some(&secret[..]));
+        keyring.delete(key).expect("delete from the keyring");
+        assert!(keyring.get(key).unwrap().is_none(), "gone after delete");
+        // Deleting what is not there is not an error: cleanup must be idempotent.
+        keyring.delete(key).unwrap();
+    }
+
     /// A backend sharing one `MemorySecrets`, so a test can plant an older blob behind
     /// the store's back — what a device restore does.
     #[derive(Debug)]
