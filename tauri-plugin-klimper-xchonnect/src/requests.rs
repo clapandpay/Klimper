@@ -69,14 +69,41 @@ pub fn check_usable(record: &SessionRecord) -> std::result::Result<(), RpcError>
     Ok(())
 }
 
+/// Where a request is, for the dApp (`rpc.status`, xchonnect spec 9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Progress {
+    /// The prompt is on the user's screen.
+    Shown,
+    /// The user approved it.
+    Approved,
+    /// Klimper submitted the transaction with this id.
+    Broadcast([u8; 32]),
+}
+
+/// Reports [`Progress`] to the session loop, which seals it as `rpc.status`.
+pub type ProgressSender = tokio::sync::mpsc::UnboundedSender<Progress>;
+
 /// Identity of the request, used to label its approvals.
 #[derive(Debug, Clone)]
 pub struct RequestMeta {
     pub session_id: String,
     pub dapp: String,
     pub method: String,
+    /// The Xchonnect request id (base64url), so `rpc.cancel` can find its approval.
+    pub request_id: String,
     /// Unix seconds after which the dApp will no longer accept an answer.
     pub expires_at: u64,
+    /// Where to report progress; `None` reports nothing.
+    pub progress: Option<ProgressSender>,
+}
+
+impl RequestMeta {
+    fn report(&self, progress: Progress) {
+        if let Some(sender) = &self.progress {
+            // The loop has gone away only if the session ended; nothing to tell then.
+            let _ = sender.send(progress);
+        }
+    }
 }
 
 /// Approval UI as wallet-kit's `Approver`: one approval per request.
@@ -124,14 +151,22 @@ impl Approver for UiApprover {
         {
             fields.insert("cross_checked".to_owned(), Value::Bool(true));
         }
-        self.bridge.ask(Approval {
-            id: new_id(),
-            session_id: self.meta.session_id.clone(),
-            dapp: self.meta.dapp.clone(),
-            method: self.meta.method.clone(),
-            expires_at: self.meta.expires_at,
-            kind: ApprovalKind::Request { prompt: payload },
-        })
+        let approved = self.bridge.ask_with(
+            Approval {
+                id: new_id(),
+                session_id: self.meta.session_id.clone(),
+                dapp: self.meta.dapp.clone(),
+                method: self.meta.method.clone(),
+                request_id: self.meta.request_id.clone(),
+                expires_at: self.meta.expires_at,
+                kind: ApprovalKind::Request { prompt: payload },
+            },
+            || self.meta.report(Progress::Shown),
+        );
+        if approved {
+            self.meta.report(Progress::Approved);
+        }
+        approved
     }
 }
 
@@ -291,6 +326,11 @@ fn run(
         && let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(result)
         && let Some(Value::String(transaction_id)) = fields.get("transactionId")
     {
+        if let Ok(bytes) = hex::decode(transaction_id.trim_start_matches("0x"))
+            && let Ok(id) = <[u8; 32]>::try_from(bytes.as_slice())
+        {
+            meta.report(Progress::Broadcast(id));
+        }
         approvals.sent(serde_json::json!({
             "dapp": record.dapp,
             "method": meta.method,

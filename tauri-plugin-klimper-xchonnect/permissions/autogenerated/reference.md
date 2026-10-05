@@ -17,6 +17,7 @@ never reach this surface.
 - `allow-set-dapp-policy`
 - `allow-pending-approvals`
 - `allow-resolve-approval`
+- `allow-cancel-approval`
 
 ## Permission Table
 
@@ -49,6 +50,32 @@ Enables the approve_pairing command without any pre-configured scope.
 <td>
 
 Denies the approve_pairing command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-cancel-approval`
+
+</td>
+<td>
+
+Enables the cancel_approval command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-cancel-approval`
+
+</td>
+<td>
+
+Denies the cancel_approval command without any pre-configured scope.
 
 </td>
 </tr>

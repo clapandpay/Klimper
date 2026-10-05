@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { Check, Clock, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
@@ -97,6 +98,8 @@ export interface ApprovalDetailProps {
   readonly waiting: number;
   /** Answer this approval. Resolves once the wallet has the answer. */
   readonly onAnswer: (approved: boolean) => void;
+  /** Withdraw the request instead of answering it; the website is told it was cancelled. */
+  readonly onCancel?: () => void;
   /** Extra controls for the header's right edge (the overlay's "Later"). */
   readonly aside?: ReactNode;
   /** Shown under the actions (the overlay's link to every request). */
@@ -109,6 +112,7 @@ export function XchonnectApprovalDetail({
   approval,
   waiting,
   onAnswer,
+  onCancel,
   aside,
   footer,
   titleId,
@@ -183,7 +187,22 @@ export function XchonnectApprovalDetail({
             <Trans>If you do nothing, this request is refused.</Trans>
           )}
         </p>
-        <div className='flex gap-2 sm:ml-auto'>
+        <div className='flex flex-wrap gap-2 sm:ml-auto'>
+          {onCancel && (
+            <Button
+              variant='ghost'
+              size='lg'
+              className='flex-1 sm:flex-none'
+              onClick={() => {
+                setConfirming(false);
+                onCancel();
+              }}
+              title={t`Withdraw it without answering. The website is told it was cancelled.`}
+              data-testid='approval-cancel'
+            >
+              <Trans>Cancel request</Trans>
+            </Button>
+          )}
           <Button
             variant='outline'
             size='lg'

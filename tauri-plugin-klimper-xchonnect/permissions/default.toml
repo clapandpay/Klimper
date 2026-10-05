@@ -16,4 +16,5 @@ permissions = [
   "allow-set-dapp-policy",
   "allow-pending-approvals",
   "allow-resolve-approval",
+  "allow-cancel-approval",
 ]

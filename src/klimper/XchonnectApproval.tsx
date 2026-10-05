@@ -73,7 +73,7 @@ function RequestRow({
 export default function XchonnectApproval() {
   const navigate = useNavigate();
   const { approvalId } = useParams();
-  const { approvals, error, answer, reload } = useXchonnectApprovals();
+  const { approvals, error, answer, cancel, reload } = useXchonnectApprovals();
   /** A `/req` link arrived with nothing pending: say so, neutrally. */
   const [cameFromLink, setCameFromLink] = useState(false);
   /** The domain of the last request answered here, for the "you can go back" state. */
@@ -114,6 +114,13 @@ export default function XchonnectApproval() {
         if (outcome !== 'opened') setAnswered(dapp);
       }),
     );
+    if (picked !== null) {
+      navigate(XCHONNECT_ROUTES.request, { replace: true });
+    }
+  };
+
+  const withdraw = (approval: Approval) => {
+    void cancel(approval.id);
     if (picked !== null) {
       navigate(XCHONNECT_ROUTES.request, { replace: true });
     }
@@ -220,6 +227,7 @@ export default function XchonnectApproval() {
                 approval={current}
                 waiting={count - 1}
                 onAnswer={(approved) => resolve(current, approved)}
+                onCancel={() => withdraw(current)}
               />
             </section>
           </div>

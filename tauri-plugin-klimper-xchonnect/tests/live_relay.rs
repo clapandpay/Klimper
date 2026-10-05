@@ -41,14 +41,17 @@ use xchonnect_core::rpc;
 use xchonnect_core::session::Session;
 use xchonnect_core::uri::{LocalSigner, ParseOptions};
 
-use tauri_plugin_klimper_xchonnect::approval::{ApprovalBridge, Emitter};
+use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Error;
 use tauri_plugin_klimper_xchonnect::origin;
 use tauri_plugin_klimper_xchonnect::relay::{RelayClient, RelayInfo};
-use tauri_plugin_klimper_xchonnect::session_loop::SessionLoop;
+use tauri_plugin_klimper_xchonnect::requests::{AnswerInputs, Progress};
+use tauri_plugin_klimper_xchonnect::session_loop::{Answerer, SessionLoop, default_answerer};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, SessionRecord, SessionStore, StoredPermissions, StoredSession,
 };
+use xchonnect_core::message::RpcOutcome;
+use xchonnect_wallet_kit::RpcError;
 
 fn relay_url() -> String {
     std::env::var("XCHONNECT_TEST_RELAY").unwrap_or_else(|_| "http://127.0.0.1:18788".to_owned())
@@ -390,6 +393,7 @@ struct Running {
     events: Arc<Mutex<Vec<String>>>,
     end_requested: Arc<AtomicBool>,
     interrupt: Arc<Notify>,
+    approvals: Arc<ApprovalBridge>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -403,6 +407,17 @@ fn start_loop(
     dapp: &str,
     origin_kid: Option<&str>,
     rotate: bool,
+) -> Running {
+    start_loop_with(wallet_session, dapp, origin_kid, rotate, default_answerer())
+}
+
+/// [`start_loop`] with requests answered by `answer`.
+fn start_loop_with(
+    wallet_session: &Session,
+    dapp: &str,
+    origin_kid: Option<&str>,
+    rotate: bool,
+    answer: Answerer,
 ) -> Running {
     let dir = tempfile::tempdir().unwrap();
     let store =
@@ -445,10 +460,11 @@ fn start_loop(
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
     });
+    let approvals = Arc::new(ApprovalBridge::new(emit.clone()));
     let message_loop = SessionLoop {
         state: Arc::new(tokio::sync::Mutex::new(sage::Sage::new(dir.path(), true))),
         store: store.clone(),
-        approvals: Arc::new(ApprovalBridge::new(emit.clone())),
+        approvals: approvals.clone(),
         emit,
         relay: RelayClient::new(&relay_url(), true).unwrap(),
         info: RelayInfo::default(),
@@ -456,6 +472,7 @@ fn start_loop(
         rotate_requested: Arc::new(AtomicBool::new(rotate)),
         interrupt: interrupt.clone(),
         wake,
+        answer,
     };
     let task = tokio::spawn(message_loop.run(stored));
     Running {
@@ -464,6 +481,7 @@ fn start_loop(
         events,
         end_requested,
         interrupt,
+        approvals,
         task,
     }
 }
@@ -843,4 +861,352 @@ async fn developer_mode_is_refused_when_it_is_not_allowed() {
         .await
         .unwrap_err();
     assert!(matches!(error, Error::DeveloperModeRefused), "{error}");
+}
+
+// ---------------------------------------------------------------------------------------
+// A request waiting for the user: rpc.cancel and rpc.status (TASK-100, xchonnect spec 9.1)
+// ---------------------------------------------------------------------------------------
+
+/// The transaction id the stand-in reports as broadcast.
+const TX_ID: [u8; 32] = [0xab; 32];
+
+/// Stands in for `requests::answer`, which needs an unlocked Sage wallet: the same approval
+/// bridge and the same progress reports, then a broadcast that only exists in this test.
+fn bridge_answerer() -> Answerer {
+    Arc::new(|inputs: AnswerInputs| {
+        Box::pin(async move {
+            let AnswerInputs {
+                approvals, meta, ..
+            } = inputs;
+            tokio::task::spawn_blocking(move || {
+                let report = |step| {
+                    if let Some(progress) = &meta.progress {
+                        progress.send(step).unwrap();
+                    }
+                };
+                let approved = approvals.ask_with(
+                    Approval {
+                        id: "a1".to_owned(),
+                        session_id: meta.session_id.clone(),
+                        dapp: meta.dapp.clone(),
+                        method: meta.method.clone(),
+                        request_id: meta.request_id.clone(),
+                        expires_at: meta.expires_at,
+                        kind: ApprovalKind::Request {
+                            prompt: serde_json::Value::Null,
+                        },
+                    },
+                    || report(Progress::Shown),
+                );
+                if !approved {
+                    return Err(RpcError {
+                        code: rpc::codes::USER_REJECTED,
+                        message: "user rejected request".to_owned(),
+                        data: None,
+                    });
+                }
+                report(Progress::Approved);
+                report(Progress::Broadcast(TX_ID));
+                Ok(format!(
+                    r#"{{"transactionId":"0x{}","status":"pending"}}"#,
+                    hex::encode(TX_ID)
+                ))
+            })
+            .await
+            .unwrap()
+        })
+    })
+}
+
+/// Everything the wallet sent the dApp until `stop` holds for the last message, in order.
+async fn read_dapp_until(paired: &mut Paired, stop: impl Fn(&Message) -> bool) -> Vec<Message> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut seen = Vec::new();
+    while Instant::now() < deadline {
+        let messages = paired
+            .relay
+            .fetch(paired.dapp_mailbox, &paired.dapp_read, 5, &paired.info)
+            .await
+            .unwrap();
+        for (id, envelope) in messages {
+            let inner = paired
+                .dapp_session
+                .open(now(), &paired.dapp_mailbox, &envelope)
+                .unwrap();
+            paired
+                .relay
+                .ack(paired.dapp_mailbox, &paired.dapp_read, &[id])
+                .await
+                .unwrap();
+            let done = stop(&inner.message);
+            seen.push(inner.message);
+            if done {
+                return seen;
+            }
+        }
+    }
+    panic!(
+        "the wallet never finished: {:?}",
+        seen.iter().map(Message::type_name).collect::<Vec<_>>()
+    );
+}
+
+/// Send a payment request from the dApp; returns its id.
+async fn post_send(paired: &mut Paired) -> [u8; 16] {
+    let request =
+        rpc::request("chia_send", r#"{"address":"txch1","amount":"1","fee":"0"}"#).unwrap();
+    let outgoing = paired
+        .dapp_session
+        .seal(&mut OsEntropy, now(), request, 600)
+        .unwrap();
+    paired.relay.post(&outgoing).await.unwrap();
+    outgoing.id
+}
+
+fn is_response(message: &Message) -> bool {
+    matches!(message, Message::RpcResponse { .. })
+}
+
+fn is_shown(message: &Message) -> bool {
+    matches!(message, Message::RpcStatus { state, .. } if state == "shown")
+}
+
+fn error_code(message: &Message) -> Option<i64> {
+    match message {
+        Message::RpcResponse {
+            outcome: RpcOutcome::Error(error),
+            ..
+        } => Some(error.code),
+        _ => None,
+    }
+}
+
+async fn stop(running: Running, paired: Paired) {
+    running.end_requested.store(true, Ordering::SeqCst);
+    running.interrupt.notify_one();
+    tokio::time::timeout(Duration::from_secs(10), running.task)
+        .await
+        .unwrap()
+        .unwrap();
+    paired
+        .relay
+        .delete(paired.dapp_mailbox, &paired.dapp_read)
+        .await;
+    paired
+        .relay
+        .delete(paired.pairing_mailbox, &paired.pairing_read)
+        .await;
+}
+
+/// The user approves: the dApp sees received, shown, approved and broadcast (with the
+/// transaction id), in that order, and then the answer.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn progress_reaches_the_dapp_before_the_answer() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    let request_id = post_send(&mut paired).await;
+
+    read_dapp_until(&mut paired, is_shown).await;
+    running.approvals.resolve("a1", true).unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+
+    let states: Vec<&str> = seen
+        .iter()
+        .filter_map(|m| match m {
+            Message::RpcStatus { state, .. } => Some(state.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(states, ["approved", "broadcast"]);
+    assert!(seen.iter().any(|m| matches!(
+        m,
+        Message::RpcStatus { request_id: id, tx_id: Some(tx), .. } if *id == request_id && *tx == TX_ID
+    )));
+    match seen.last().unwrap() {
+        Message::RpcResponse {
+            request_id: id,
+            outcome: RpcOutcome::Result(result),
+        } => {
+            assert_eq!(*id, request_id);
+            assert!(result.contains(&hex::encode(TX_ID)));
+        }
+        other => panic!("expected the result, got {}", other.type_name()),
+    }
+    stop(running, paired).await;
+}
+
+/// The dApp withdraws a request the user is looking at: the prompt goes away at once and
+/// the answer is 4102, not a rejection.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_dapp_cancel_withdraws_the_prompt_and_is_answered_4102() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    let request_id = post_send(&mut paired).await;
+
+    read_dapp_until(&mut paired, is_shown).await;
+    assert_eq!(running.approvals.outstanding().len(), 1);
+    let cancel = paired
+        .dapp_session
+        .seal(
+            &mut OsEntropy,
+            now(),
+            Message::RpcCancel { request_id },
+            600,
+        )
+        .unwrap();
+    paired.relay.post(&cancel).await.unwrap();
+
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert_eq!(
+        error_code(seen.last().unwrap()),
+        Some(rpc::codes::REQUEST_CANCELLED)
+    );
+    assert!(
+        running.approvals.outstanding().is_empty(),
+        "the prompt is gone"
+    );
+    assert!(
+        !seen.iter().any(|m| matches!(m, Message::RpcCancel { .. })),
+        "the dApp knows it cancelled"
+    );
+
+    // The session keeps working afterwards.
+    let ping = paired
+        .dapp_session
+        .seal(&mut OsEntropy, now(), Message::SessionPing, 60)
+        .unwrap();
+    paired.relay.post(&ping).await.unwrap();
+    read_dapp_until(&mut paired, |m| matches!(m, Message::SessionPong)).await;
+    stop(running, paired).await;
+}
+
+/// The user cancels from the requests page: the dApp is told with `rpc.cancel`, then 4102.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn the_user_cancelling_tells_the_dapp() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    let request_id = post_send(&mut paired).await;
+
+    read_dapp_until(&mut paired, is_shown).await;
+    running.approvals.cancel("a1").unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    let n = seen.len();
+    assert!(n >= 2);
+    assert!(matches!(seen[n - 2], Message::RpcCancel { request_id: id } if id == request_id));
+    assert_eq!(
+        error_code(&seen[n - 1]),
+        Some(rpc::codes::REQUEST_CANCELLED)
+    );
+    stop(running, paired).await;
+}
+
+/// A second request that arrives while the first waits is held, and a cancel for it is
+/// answered 4102 at once, without it ever reaching the user. The first is still answered.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_queued_request_can_be_cancelled_before_it_is_shown() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    let first = post_send(&mut paired).await;
+    read_dapp_until(&mut paired, is_shown).await;
+
+    let second = post_send(&mut paired).await;
+    let cancel = paired
+        .dapp_session
+        .seal(
+            &mut OsEntropy,
+            now(),
+            Message::RpcCancel { request_id: second },
+            600,
+        )
+        .unwrap();
+    paired.relay.post(&cancel).await.unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert!(
+        matches!(seen.last().unwrap(), Message::RpcResponse { request_id, .. } if *request_id == second)
+    );
+    assert_eq!(
+        error_code(seen.last().unwrap()),
+        Some(rpc::codes::REQUEST_CANCELLED)
+    );
+    assert_eq!(
+        running.approvals.outstanding().len(),
+        1,
+        "the first still waits"
+    );
+
+    running.approvals.resolve("a1", false).unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert!(
+        matches!(seen.last().unwrap(), Message::RpcResponse { request_id, .. } if *request_id == first)
+    );
+    assert_eq!(
+        error_code(seen.last().unwrap()),
+        Some(rpc::codes::USER_REJECTED)
+    );
+    stop(running, paired).await;
+}
+
+/// The dApp ends the session while the user is looking at its request: the prompt goes
+/// away and the loop ends, without trying to answer a session that no longer exists.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_session_ended_mid_prompt_closes_the_prompt_and_the_loop() {
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        bridge_answerer(),
+    );
+    post_send(&mut paired).await;
+    read_dapp_until(&mut paired, is_shown).await;
+
+    let end = paired
+        .dapp_session
+        .end(&mut OsEntropy, now(), Some("closed the tab".to_owned()))
+        .unwrap();
+    paired.relay.post(&end).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), running.task)
+        .await
+        .expect("the loop ends")
+        .unwrap();
+    assert!(
+        running.approvals.outstanding().is_empty(),
+        "the prompt is gone"
+    );
+    assert!(running.events.lock().unwrap().contains(&"ended".to_owned()));
+    assert!(running.store.list(1).unwrap().is_empty());
+    paired
+        .relay
+        .delete(paired.pairing_mailbox, &paired.pairing_read)
+        .await;
 }

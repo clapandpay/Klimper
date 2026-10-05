@@ -171,7 +171,7 @@ export function XchonnectApprovalHost() {
       void subscription.then((stop) => stop());
     };
   }, []);
-  const { approvals, answer } = useXchonnectApprovals();
+  const { approvals, answer, cancel } = useXchonnectApprovals();
   /** Ids the user put off with "Later"; a new arrival opens the overlay again. */
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
   const seen = useRef<Set<string>>(new Set());
@@ -223,6 +223,14 @@ export function XchonnectApprovalHost() {
     });
   };
 
+  const onCancel = () => {
+    const dapp = current.dapp;
+    void cancel(current.id).then(() => {
+      if (approvals.length > 1) return;
+      toast.info(t`You cancelled the request from ${dapp}.`);
+    });
+  };
+
   const seeAll = () => {
     putOff();
     goToXchonnectRoute(`${XCHONNECT_ROUTES.request}/${current.id}`);
@@ -252,6 +260,7 @@ export function XchonnectApprovalHost() {
               approval={current}
               waiting={waiting}
               onAnswer={onAnswer}
+              onCancel={onCancel}
               aside={
                 <button
                   type='button'

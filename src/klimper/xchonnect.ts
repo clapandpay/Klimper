@@ -112,6 +112,8 @@ export interface Approval {
   sessionId: string;
   dapp: string;
   method: string;
+  /** The Xchonnect request it answers. */
+  requestId: string;
   expiresAt: number;
   kind: 'request';
   prompt: Prompt;
@@ -156,6 +158,9 @@ export const xchonnect = {
   /** Answer one approval. No answer within five minutes is a rejection. */
   resolveApproval: (approvalId: string, approved: boolean) =>
     call<null>('resolve_approval', { approvalId, approved }),
+  /** Withdraw a request: the website is told it was cancelled (4102), not rejected. */
+  cancelApproval: (approvalId: string) =>
+    call<null>('cancel_approval', { approvalId }),
 };
 
 export const XCHONNECT_EVENTS = {

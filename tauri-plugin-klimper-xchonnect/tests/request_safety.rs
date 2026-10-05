@@ -43,7 +43,7 @@ use xchonnect_wallet_kit::{
 
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Result as KitResult;
-use tauri_plugin_klimper_xchonnect::requests::{RequestMeta, UiApprover};
+use tauri_plugin_klimper_xchonnect::requests::{Progress, ProgressSender, RequestMeta, UiApprover};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, PersistentLimits, SecretStore, SessionStore, StoredPermissions,
 };
@@ -163,6 +163,8 @@ struct Harness {
     keys: HashSet<PublicKey>,
     who: BlsPair,
     faulty: bool,
+    /// Where the approver reports progress, as the session loop would receive it.
+    progress: Option<ProgressSender>,
 }
 
 impl Harness {
@@ -181,6 +183,7 @@ impl Harness {
             keys: [who.pk].into_iter().collect(),
             who,
             faulty: false,
+            progress: None,
         }
     }
 
@@ -189,7 +192,9 @@ impl Harness {
             session_id: "s1".to_owned(),
             dapp: DAPP.to_owned(),
             method: method.to_owned(),
+            request_id: "r1".to_owned(),
             expires_at: NOW + 60,
+            progress: self.progress.clone(),
         }
     }
 
@@ -540,6 +545,28 @@ fn a_submitted_bundle_is_broadcast_by_the_wallet() {
     let ApprovalKind::Request { ref prompt } = prompts[0].kind;
     assert_eq!(prompt["type"], "submit_coin_spends");
     assert_eq!(prompt["wallet_built"], false);
+}
+
+/// The dApp is told where its request is (`rpc.status`): shown once the prompt is on
+/// screen, approved once the user said yes, and nothing more for a rejection.
+#[test]
+fn progress_is_reported_as_the_user_decides() {
+    let who = BlsPair::new(1);
+    for (approve, expected) in [
+        (true, vec![Progress::Shown, Progress::Approved]),
+        (false, vec![Progress::Shown]),
+    ] {
+        let mut harness = Harness::new(who.clone(), approve);
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        harness.progress = Some(sender);
+        let spends = send(&mut Simulator::new(), &who, 500);
+        let _ = harness.call("signCoinSpends", &params_for(&spends, false));
+        let mut seen = Vec::new();
+        while let Ok(step) = receiver.try_recv() {
+            seen.push(step);
+        }
+        assert_eq!(seen, expected, "approve: {approve}");
+    }
 }
 
 /// Spec 11.2: a `partialSign` request whose user spends do not assert the counterparty's

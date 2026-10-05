@@ -35,6 +35,7 @@ vi.mock('theme-o-rama', () => ({
 
 const pendingApprovals = vi.fn();
 const resolveApproval = vi.fn().mockResolvedValue(null);
+const cancelApproval = vi.fn().mockResolvedValue(null);
 const listSessions = vi.fn().mockResolvedValue([]);
 const handlers = new Map<string, (payload: unknown) => void>();
 
@@ -43,6 +44,7 @@ vi.mock('./xchonnect', () => ({
     pendingApprovals: () => pendingApprovals(),
     resolveApproval: (id: string, approved: boolean) =>
       resolveApproval(id, approved),
+    cancelApproval: (id: string) => cancelApproval(id),
     listSessions: () => listSessions(),
   },
   XCHONNECT_EVENTS: {
@@ -108,6 +110,7 @@ function request(prompt: unknown, id = 'a1'): Approval {
     sessionId: 's1',
     dapp: 'pengui.xyz',
     method: 'signCoinSpends',
+    requestId: `r-${id}`,
     expiresAt: Math.floor(Date.now() / 1000) + 300,
     kind: 'request',
     prompt: prompt as Record<string, unknown>,
@@ -119,6 +122,7 @@ beforeEach(() => {
   handlers.clear();
   vi.clearAllMocks();
   resolveApproval.mockResolvedValue(null);
+  cancelApproval.mockResolvedValue(null);
   listSessions.mockResolvedValue([]);
   pendingApprovals.mockResolvedValue([]);
 });
@@ -647,5 +651,19 @@ describe('where the money goes', () => {
       '0.000001 TXCH',
     );
     expect(document.body.textContent).not.toMatch(/\bXCH\b/);
+  });
+});
+
+describe('cancelling a request', () => {
+  it('withdraws it without approving or rejecting it', async () => {
+    pendingApprovals.mockResolvedValue([request(spendPrompt())]);
+    renderScreen(<XchonnectApproval />);
+    const cancel = await waitFor(() => screen.getByTestId('approval-cancel'));
+    fireEvent.click(cancel);
+    await waitFor(() => expect(cancelApproval).toHaveBeenCalledWith('a1'));
+    expect(resolveApproval).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByTestId('approval-detail')).toBeNull(),
+    );
   });
 });

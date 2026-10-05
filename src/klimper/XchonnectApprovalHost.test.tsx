@@ -113,6 +113,7 @@ function request(id: string, net: number, dapp = 'pengui.xyz'): Approval {
     sessionId: 's1',
     dapp,
     method: 'signCoinSpends',
+    requestId: `r-${id}`,
     expiresAt: Math.floor(Date.now() / 1000) + 300,
     kind: 'request',
     prompt: spend(net) as Record<string, unknown>,

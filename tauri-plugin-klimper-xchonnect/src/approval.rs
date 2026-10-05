@@ -14,6 +14,10 @@
 //!   webview is `serde_json::to_value(prompt)` of the exact `Prompt` wallet-kit built from
 //!   the local simulation, so a dApp's own labels and amounts never reach the screen
 //!   (spec 11.1 item 2, integration guide §5).
+//! * **A withdrawn request is never signed.** `rpc.cancel` from the dApp, or the user
+//!   cancelling it from the requests page, withdraws it (xchonnect spec 9.1): a prompt on
+//!   screen is answered "no", and a request still being simulated never opens one. The
+//!   session loop then answers 4102 instead of 4002.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, mpsc};
@@ -61,6 +65,8 @@ pub struct Approval {
     pub dapp: String,
     /// CHIP-0002 method.
     pub method: String,
+    /// The Xchonnect request this approval belongs to (base64url of its 16-byte id).
+    pub request_id: String,
     /// Unix seconds when this approval stops waiting.
     pub expires_at: u64,
     #[serde(flatten)]
@@ -70,6 +76,15 @@ pub struct Approval {
 struct Waiting {
     approval: Approval,
     answer: mpsc::Sender<bool>,
+}
+
+/// Who withdrew a request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Withdrawn {
+    /// The dApp sent `rpc.cancel`.
+    ByDapp,
+    /// The user cancelled it in Klimper; the dApp has to be told with `rpc.cancel`.
+    ByUser,
 }
 
 /// Emits a Tauri event. Injected so the bridge is testable without a webview.
@@ -87,6 +102,9 @@ struct Registry {
     /// Sessions that were withdrawn. Ids are random and never reused, so an entry only
     /// ever stops a request that was already on its way when the session ended.
     closed: BTreeSet<String>,
+    /// Requests withdrawn before their answer was sent, by `(session, request)`. The
+    /// session loop takes the entry when it answers the request, so nothing accumulates.
+    withdrawn: BTreeMap<(String, String), Withdrawn>,
 }
 
 impl std::fmt::Debug for ApprovalBridge {
@@ -111,6 +129,12 @@ impl ApprovalBridge {
     /// Ask the user and block until the answer arrives. Called from a blocking thread
     /// inside `handle()`; `false` means "do not sign".
     pub fn ask(&self, approval: Approval) -> bool {
+        self.ask_with(approval, || {})
+    }
+
+    /// [`ApprovalBridge::ask`], calling `on_shown` once the prompt is on screen (not when
+    /// the request was refused before it could be shown).
+    pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
         let (tx, rx) = mpsc::channel();
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
@@ -123,6 +147,11 @@ impl ApprovalBridge {
             if registry.closed.contains(&approval.session_id) {
                 return false;
             }
+            // Withdrawn while it was being simulated: never shown.
+            let key = (approval.session_id.clone(), approval.request_id.clone());
+            if registry.withdrawn.contains_key(&key) {
+                return false;
+            }
             registry.waiting.insert(
                 id.clone(),
                 Waiting {
@@ -132,6 +161,7 @@ impl ApprovalBridge {
             );
         }
         (self.emit)(EVENT_APPROVAL, payload);
+        on_shown();
 
         // A timeout and a closed channel are both rejections: the only path to `true` is
         // the user pressing approve.
@@ -164,6 +194,60 @@ impl ApprovalBridge {
             .lock()
             .map(|r| r.waiting.values().map(|x| x.approval.clone()).collect())
             .unwrap_or_default()
+    }
+
+    /// Withdraw one request (`rpc.cancel`, or the user cancelling it): a prompt on screen
+    /// is answered "no", and a prompt not yet shown never will be. Returns whether a prompt
+    /// was waiting.
+    pub fn withdraw_request(&self, session_id: &str, request_id: &str, by: Withdrawn) -> bool {
+        let senders: Vec<mpsc::Sender<bool>> = self
+            .registry
+            .lock()
+            .map(|mut r| {
+                r.withdrawn
+                    .entry((session_id.to_owned(), request_id.to_owned()))
+                    .or_insert(by);
+                r.waiting
+                    .values()
+                    .filter(|x| {
+                        x.approval.session_id == session_id && x.approval.request_id == request_id
+                    })
+                    .map(|x| x.answer.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let waiting = !senders.is_empty();
+        for sender in senders {
+            let _ = sender.send(false);
+        }
+        waiting
+    }
+
+    /// The user cancelled a waiting approval from the requests page. Unlike a rejection
+    /// (4002), the dApp is told the request was withdrawn (`rpc.cancel`, 4102).
+    pub fn cancel(&self, approval_id: &str) -> Result<()> {
+        let (session_id, request_id) = {
+            let registry = self.registry.lock().map_err(Error::internal)?;
+            let waiting = registry
+                .waiting
+                .get(approval_id)
+                .ok_or(Error::UnknownApproval)?;
+            (
+                waiting.approval.session_id.clone(),
+                waiting.approval.request_id.clone(),
+            )
+        };
+        self.withdraw_request(&session_id, &request_id, Withdrawn::ByUser);
+        Ok(())
+    }
+
+    /// Whether, and by whom, a request was withdrawn. Forgets it: called once, when the
+    /// session loop answers the request.
+    pub fn take_withdrawn(&self, session_id: &str, request_id: &str) -> Option<Withdrawn> {
+        self.registry.lock().ok().and_then(|mut r| {
+            r.withdrawn
+                .remove(&(session_id.to_owned(), request_id.to_owned()))
+        })
     }
 
     /// The session ended: reject everything it is waiting on, and anything it would still
@@ -208,6 +292,7 @@ mod tests {
             session_id: "s1".to_owned(),
             dapp: "pengui.xyz".to_owned(),
             method: "signCoinSpends".to_owned(),
+            request_id: format!("r-{id}"),
             expires_at: 0,
             kind: ApprovalKind::Request {
                 prompt: Value::Null,
@@ -271,6 +356,68 @@ mod tests {
         assert!(!bridge.ask(approval("d")));
         assert!(bridge.outstanding().is_empty());
         assert!(seen.lock().unwrap().is_empty());
+    }
+
+    fn wait_until_waiting(bridge: &ApprovalBridge) {
+        for _ in 0..200 {
+            if !bridge.outstanding().is_empty() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("the prompt never appeared");
+    }
+
+    #[test]
+    fn a_withdrawn_request_closes_its_prompt_and_is_remembered_once() {
+        let (bridge, _) = bridge();
+        let shown = Arc::new(Mutex::new(false));
+        let worker = {
+            let (bridge, shown) = (bridge.clone(), shown.clone());
+            std::thread::spawn(move || {
+                bridge.ask_with(approval("e"), || *shown.lock().unwrap() = true)
+            })
+        };
+        wait_until_waiting(&bridge);
+        // Another request of the same session is not touched.
+        assert!(!bridge.withdraw_request("s1", "r-other", Withdrawn::ByDapp));
+        assert!(bridge.withdraw_request("s1", "r-e", Withdrawn::ByDapp));
+        assert!(!worker.join().unwrap(), "withdrawn means do not sign");
+        assert!(*shown.lock().unwrap());
+        assert_eq!(bridge.take_withdrawn("s1", "r-e"), Some(Withdrawn::ByDapp));
+        assert_eq!(
+            bridge.take_withdrawn("s1", "r-e"),
+            None,
+            "forgotten once taken"
+        );
+        assert_eq!(
+            bridge.take_withdrawn("s1", "r-other"),
+            Some(Withdrawn::ByDapp)
+        );
+    }
+
+    #[test]
+    fn a_request_withdrawn_before_its_prompt_is_never_shown() {
+        let (bridge, seen) = bridge();
+        bridge.withdraw_request("s1", "r-f", Withdrawn::ByDapp);
+        let mut shown = false;
+        assert!(!bridge.ask_with(approval("f"), || shown = true));
+        assert!(!shown);
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_user_cancelling_withdraws_the_request_for_the_dapp() {
+        let (bridge, _) = bridge();
+        let worker = {
+            let bridge = bridge.clone();
+            std::thread::spawn(move || bridge.ask(approval("g")))
+        };
+        wait_until_waiting(&bridge);
+        bridge.cancel("g").unwrap();
+        assert!(!worker.join().unwrap());
+        assert_eq!(bridge.take_withdrawn("s1", "r-g"), Some(Withdrawn::ByUser));
+        assert!(matches!(bridge.cancel("g"), Err(Error::UnknownApproval)));
     }
 
     #[test]
