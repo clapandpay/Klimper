@@ -38,7 +38,7 @@ engine change, meant for upstream but not yet proposed).
    `application/json` without redirects (TASK-005):
 
    ```json
-   { "webcredentials": { "apps": ["<TEAMID>.com.clapandpay.klimper"] } }
+   { "webcredentials": { "apps": ["HTP35W93ZF.com.clapandpay.klimper"] } }
    ```
 
 3. **iOS 18** or later on the device. On older iOS the settings entry shows, but creating
