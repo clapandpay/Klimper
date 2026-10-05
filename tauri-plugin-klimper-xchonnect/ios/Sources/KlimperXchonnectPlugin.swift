@@ -109,7 +109,7 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
   }
 
   fileprivate func deviceToken(_ data: Data) {
-    send(["kind": "token", "token": data.map { String(format: "%02x", $0) }.joined()])
+    send(["kind": "token", "platform": "apns", "token": data.map { String(format: "%02x", $0) }.joined()])
   }
 
   private func send(_ event: JsonObject) {

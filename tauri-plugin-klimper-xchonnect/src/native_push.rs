@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The native side of push (clapandpay TASK-087): the Swift plugin in `ios/` asks for
-//! notification permission, registers with APNs and reports two things over a channel, the
-//! device token and "a notification arrived". Elsewhere there is no native side.
+//! The native side of push (clapandpay TASK-087): the Swift plugin in `ios/` (APNs) and the
+//! Kotlin plugin in `android/` (Firebase Cloud Messaging) ask for notification permission,
+//! register with their service and report two things over a channel, the device token and
+//! "a notification arrived". On a computer there is no native side.
 //!
 //! The channel is the only way in. It is not a webview command, so a page cannot hand the
 //! wallet a device token or fake a wake-up.
@@ -15,19 +16,14 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-use xchonnect_core::push::MAX_DEVICE_TOKEN;
+use crate::push::{Kind, PermissionState};
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_klimper_xchonnect);
 
-/// What the phone's notification settings say.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PermissionState {
-    Granted,
-    Denied,
-    Undetermined,
-}
+/// The Kotlin plugin (`android/`): its package is the Gradle namespace.
+#[cfg(target_os = "android")]
+const ANDROID_PLUGIN: &str = "com.clapandpay.klimper.xchonnect";
 
 #[cfg_attr(not(mobile), allow(dead_code))]
 #[derive(Debug, Deserialize)]
@@ -40,18 +36,16 @@ struct Reply {
 #[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum NativeEvent {
-    Token { token: String },
+    Token { platform: Kind, token: String },
     Wake,
 }
 
-/// Parse one event from the channel. A device token is hex and at most the length the
-/// protocol allows; anything else is dropped rather than sealed into a registration.
+/// Parse one event from the channel. A device token must look like its service's tokens
+/// ([`Kind::accepts`]); anything else is dropped rather than sealed into a registration.
 pub fn parse_event(json: &str) -> Option<NativeEvent> {
     let event: NativeEvent = serde_json::from_str(json).ok()?;
-    if let NativeEvent::Token { token } = &event
-        && (token.is_empty()
-            || token.len() > MAX_DEVICE_TOKEN
-            || !token.bytes().all(|b| b.is_ascii_hexdigit()))
+    if let NativeEvent::Token { platform, token } = &event
+        && !platform.accepts(token)
     {
         return None;
     }
@@ -78,7 +72,10 @@ struct StartArgs {
 }
 
 impl<R: Runtime> NativePush<R> {
-    #[cfg_attr(not(target_os = "ios"), allow(clippy::unnecessary_wraps))]
+    #[cfg_attr(
+        not(any(target_os = "ios", target_os = "android")),
+        allow(clippy::unnecessary_wraps)
+    )]
     pub fn init<C: serde::de::DeserializeOwned>(
         _app: &AppHandle<R>,
         _api: &PluginApi<R, C>,
@@ -87,7 +84,12 @@ impl<R: Runtime> NativePush<R> {
         return Ok(Self(Some(
             _api.register_ios_plugin(init_plugin_klimper_xchonnect)?,
         )));
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(target_os = "android")]
+        return Ok(Self(Some(_api.register_android_plugin(
+            ANDROID_PLUGIN,
+            "KlimperXchonnectPlugin",
+        )?)));
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         Ok(Self(None))
     }
 
@@ -139,9 +141,17 @@ mod tests {
     #[test]
     fn a_hex_token_and_a_wake_are_understood() {
         assert_eq!(
-            parse_event(r#"{"kind":"token","token":"ab01CD"}"#),
+            parse_event(r#"{"kind":"token","platform":"apns","token":"ab01CD"}"#),
             Some(NativeEvent::Token {
+                platform: Kind::Apns,
                 token: "ab01CD".to_owned()
+            })
+        );
+        assert_eq!(
+            parse_event(r#"{"kind":"token","platform":"fcm","token":"dXNl:APA91b-x_y"}"#),
+            Some(NativeEvent::Token {
+                platform: Kind::Fcm,
+                token: "dXNl:APA91b-x_y".to_owned()
             })
         );
         assert_eq!(parse_event(r#"{"kind":"wake"}"#), Some(NativeEvent::Wake));
@@ -150,8 +160,12 @@ mod tests {
     #[test]
     fn anything_else_is_dropped() {
         for bad in [
-            r#"{"kind":"token","token":""}"#,
-            r#"{"kind":"token","token":"not hex"}"#,
+            r#"{"kind":"token","platform":"apns","token":""}"#,
+            r#"{"kind":"token","platform":"apns","token":"not hex"}"#,
+            r#"{"kind":"token","platform":"apns","token":"dXNl:APA91b"}"#,
+            r#"{"kind":"token","platform":"fcm","token":"a b"}"#,
+            r#"{"kind":"token","platform":"web","token":"aa"}"#,
+            r#"{"kind":"token","token":"aa"}"#,
             r#"{"kind":"token"}"#,
             r#"{"kind":"preview","text":"1000 XCH"}"#,
             "[]",
@@ -159,7 +173,10 @@ mod tests {
         ] {
             assert_eq!(parse_event(bad), None, "{bad}");
         }
-        let long = format!(r#"{{"kind":"token","token":"{}"}}"#, "a".repeat(4097));
+        let long = format!(
+            r#"{{"kind":"token","platform":"apns","token":"{}"}}"#,
+            "a".repeat(4097)
+        );
         assert_eq!(parse_event(&long), None);
     }
 

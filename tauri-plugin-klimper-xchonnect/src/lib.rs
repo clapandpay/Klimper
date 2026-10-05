@@ -318,19 +318,23 @@ impl<R: Runtime> Xchonnect<R> {
             return;
         }
         let (native, app) = (self.native.clone(), self.app.clone());
+        let push = self.push.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            native.start(move |event| {
+            let state = native.start(move |event| {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     let this = app.state::<Xchonnect<R>>();
                     match event {
-                        native_push::NativeEvent::Token { token } => {
-                            this.set_device_token(&token).await;
+                        native_push::NativeEvent::Token { platform, token } => {
+                            this.set_device_token(platform, &token).await;
                         }
                         native_push::NativeEvent::Wake => this.wake_all().await,
                     }
                 });
             });
+            if let Some(state) = state {
+                push.set_permission(state);
+            }
         });
     }
 
@@ -341,9 +345,10 @@ impl<R: Runtime> Xchonnect<R> {
         if self.push.gateway().is_none() {
             return;
         }
-        let (native, emit) = (self.native.clone(), self.emit.clone());
+        let (native, emit, push) = (self.native.clone(), self.emit.clone(), self.push.clone());
         tauri::async_runtime::spawn_blocking(move || {
             if let Some(state) = native.request_permission() {
+                push.set_permission(state);
                 emit(push::EVENT_PUSH, json!({ "state": state }));
             }
         });
@@ -351,8 +356,8 @@ impl<R: Runtime> Xchonnect<R> {
 
     /// The native side hands over the phone's APNs device token (at launch and whenever iOS
     /// issues a new one). A new token makes every running loop register it at its next pass.
-    pub async fn set_device_token(&self, token: &str) {
-        if self.push.set_device_token(token) {
+    pub async fn set_device_token(&self, kind: push::Kind, token: &str) {
+        if self.push.set_device_token(kind, token) {
             self.wake_all().await;
         }
     }
@@ -538,6 +543,27 @@ async fn confirm_sas<R: Runtime>(
     (state.emit)(EVENT_SESSIONS, json!({}));
     state.ask_for_push_permission();
     Ok(Some(summary))
+}
+
+/// Whether wake-ups can reach this phone, for the screen that explains why they do not:
+/// `enabled` is false in a build without a push gateway, and `permission` is what the
+/// phone's notification settings said when last asked (`null` before the first answer).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PushStatus {
+    enabled: bool,
+    permission: Option<push::PermissionState>,
+}
+
+#[command]
+async fn push_status<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+) -> Result<PushStatus> {
+    Ok(PushStatus {
+        enabled: state.push.gateway().is_some(),
+        permission: state.push.permission(),
+    })
 }
 
 /// The connected dApps of the active wallet. Also resumes the message loop of every
@@ -787,7 +813,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             set_dapp_policy,
             pending_approvals,
             resolve_approval,
-            cancel_approval
+            cancel_approval,
+            push_status
         ])
         .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;

@@ -17,4 +17,5 @@ permissions = [
   "allow-pending-approvals",
   "allow-resolve-approval",
   "allow-cancel-approval",
+  "allow-push-status",
 ]

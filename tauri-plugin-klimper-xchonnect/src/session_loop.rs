@@ -247,7 +247,10 @@ impl SessionLoop {
             return;
         };
         let (mailbox, now) = (session.own_mailbox(), now());
-        let (mailbox_b64, tag) = (mailbox.to_b64(), crate::push::token_tag(&device_token));
+        let (mailbox_b64, tag) = (
+            mailbox.to_b64(),
+            crate::push::token_tag(device_token.kind, &device_token.token),
+        );
         let current = stored
             .record
             .push
