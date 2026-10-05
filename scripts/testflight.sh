@@ -46,7 +46,15 @@ if [ -n "$(git status --porcelain -- . ':!builtin-apps/build')" ]; then
 fi
 
 command -v bindgen >/dev/null || { echo "bindgen is missing: cargo install bindgen-cli --locked" >&2; exit 1; }
+# swift-rs needs llvm-objcopy under Xcode 27 to export the plugins' @_cdecl functions; without it
+# the link fails on undefined init_plugin_* symbols (docs/UPSTREAM.md, swift-rs 1.0.8).
+compgen -G "$(rustc --print sysroot)/lib/rustlib/*/bin/llvm-objcopy" >/dev/null ||
+  { echo "llvm-objcopy is missing: rustup component add llvm-tools" >&2; exit 1; }
 pnpm install --frozen-lockfile
+# Release builds strip debug info by default, and Xcode 27's strip leaves the build-time proc
+# macros (sqlx_macros first) with a LINKEDIT that macOS 27's dyld refuses to load ("mis-aligned
+# LINKEDIT string pool"). Leaving those host-only libraries unstripped costs nothing in the app.
+export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false
 pnpm tauri ios build --export-method app-store-connect --build-number "$build_number" --ci
 
 ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
