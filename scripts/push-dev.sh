@@ -103,9 +103,9 @@ Relay    $RELAY        log $LOGS/relay.log
 Gateway  $GATEWAY        log $LOGS/gateway.log   (public key $PUBLIC_KEY)
 Website  http://localhost:5173           log $LOGS/dapp.log
 
-1. Build Klimper for the simulator with this gateway compiled in (another terminal):
+1. Build Klimper for the simulator; the build reads this gateway from $ENV_FILE
+   (another terminal):
 
-     set -a; . $ENV_FILE; set +a
      pnpm tauri ios dev "$SIM"
 
 2. In the simulator: create or open a wallet, then Websites (or Settings) -> connect.

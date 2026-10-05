@@ -26,15 +26,21 @@ per session, with a fresh sealed token, so the relay cannot link two sessions of
 
 ## Build settings
 
-Both are read at compile time. Unset, push is off and the app polls.
+Both are compiled in. Unset, push is off and the app polls.
 
 | Variable                    | Meaning                                                           |
 | --------------------------- | ----------------------------------------------------------------- |
 | `KLIMPER_PUSH_GATEWAY_URL`  | the gateway's `https` wake URL, as the relay will call it         |
 | `KLIMPER_PUSH_GATEWAY_KEY`  | the gateway's X25519 public key, base64url (`GET /v1/keys`)       |
 
-`scripts/testflight.sh` reads them from `~/.appstoreconnect/klimper.env`. Keep one value pair
-per target: local (a tunnel to your Mac) and deployed. Nothing else differs between the two.
+`tauri-plugin-klimper-xchonnect/build.rs` takes them from the environment, else from the
+first of two files in `klimper/`, `KEY=VALUE` a line: `.push-dev.env` (gitignored; a local
+stack, written by `scripts/push-dev.sh`) and **`push-gateway.env`** (committed; the deployed
+gateway). The files exist because Xcode runs cargo without the caller's environment: a
+variable exported before `pnpm tauri ios dev` or `scripts/testflight.sh` never reaches the
+Rust build of a phone app, and the first simulator build was made with push off that way.
+Both values are public, so the deployed ones belong in `push-gateway.env`; fill it in once
+the gateway runs (TASK-086). The build prints a warning when it finds neither.
 
 ## iOS
 
