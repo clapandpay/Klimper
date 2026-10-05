@@ -27,6 +27,7 @@ dist-ssr
 target
 .env
 .env.local
+.push-dev.env
 /test.sqlite*
 
 /builtin-apps/build/*

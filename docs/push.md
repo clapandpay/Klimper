@@ -26,15 +26,21 @@ per session, with a fresh sealed token, so the relay cannot link two sessions of
 
 ## Build settings
 
-Both are read at compile time. Unset, push is off and the app polls.
+Both are compiled in. Unset, push is off and the app polls.
 
 | Variable                    | Meaning                                                           |
 | --------------------------- | ----------------------------------------------------------------- |
 | `KLIMPER_PUSH_GATEWAY_URL`  | the gateway's `https` wake URL, as the relay will call it         |
 | `KLIMPER_PUSH_GATEWAY_KEY`  | the gateway's X25519 public key, base64url (`GET /v1/keys`)       |
 
-`scripts/testflight.sh` reads them from `~/.appstoreconnect/klimper.env`. Keep one value pair
-per target: local (a tunnel to your Mac) and deployed. Nothing else differs between the two.
+`tauri-plugin-klimper-xchonnect/build.rs` takes them from the environment, else from the
+first of two files in `klimper/`, `KEY=VALUE` a line: `.push-dev.env` (gitignored; a local
+stack, written by `scripts/push-dev.sh`) and **`push-gateway.env`** (committed; the deployed
+gateway). The files exist because Xcode runs cargo without the caller's environment: a
+variable exported before `pnpm tauri ios dev` or `scripts/testflight.sh` never reaches the
+Rust build of a phone app, and the first simulator build was made with push off that way.
+Both values are public, so the deployed ones belong in `push-gateway.env`; fill it in once
+the gateway runs (TASK-086). The build prints a warning when it finds neither.
 
 ## iOS
 
@@ -52,6 +58,22 @@ per target: local (a tunnel to your Mac) and deployed. Nothing else differs betw
 - The gateway needs the project's service account JSON (`XCHONNECT_GATEWAY_FCM_SERVICE_ACCOUNT_FILE`).
 - Android 13 and later asks for the notification permission at the first pairing.
 - The Kotlin side has not been built yet (no Android SDK on the dev machine).
+
+## Testing it locally, without Apple
+
+`scripts/push-dev.sh` starts Xchonnect's relay and gateway on loopback and the example
+website, writes the two build settings to `.push-dev.env`, and prints the steps: build for
+the simulator with `pnpm tauri ios dev "iPhone 17"` (debug builds accept a loopback `http`
+gateway), pair with the website, send a request. The relay then calls the gateway, which
+opens the sealed token; without an Apple key it has nobody to hand it to, so the script
+delivers the same notification to the simulator with `xcrun simctl push`. With the key in
+the environment (`XCHONNECT_GATEWAY_APNS_TEAM_ID`, `_KEY_ID`, `_KEY_FILE`) the gateway sends
+to Apple's sandbox, which a simulator on an Apple-silicon Mac receives for real.
+
+The same chain without a screen is the live test
+`a_request_wakes_the_phone_through_the_gateway` in
+`tauri-plugin-klimper-xchonnect/tests/live_relay.rs`; `scripts/e2e.sh` in the Xchonnect
+repository runs it with the other Klimper live tests.
 
 ## Running the pieces
 

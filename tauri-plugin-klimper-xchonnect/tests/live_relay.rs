@@ -18,6 +18,18 @@
 //!
 //! `XCHONNECT_TEST_RELAY` overrides the relay URL.
 //!
+//! The push test also needs a gateway, and a relay that will call one on loopback:
+//!
+//! ```sh
+//! XCHONNECT_GATEWAY_KEYS=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
+//!   XCHONNECT_GATEWAY_LISTEN=127.0.0.1:18789 ./target/debug/xchonnect-gateway &
+//! # the relay as above, plus:
+//! #   XCHONNECT_GATEWAY_POLICY=open XCHONNECT_DEV_ALLOW_INSECURE_GATEWAYS=true
+//! XCHONNECT_TEST_GATEWAY=http://127.0.0.1:18789 cargo test ... a_request_wakes
+//! ```
+//!
+//! Without `XCHONNECT_TEST_GATEWAY` that one test passes without doing anything.
+//!
 //! The dApp half of the handshake is driven in-process with `xchonnect-core`'s
 //! `DappPairing`, so what is under test is Klimper's HTTP: proof-of-work mailbox creation,
 //! long polling, acknowledgement, deletion, the origin document rules, and a full pairing
@@ -44,6 +56,7 @@ use xchonnect_core::uri::{LocalSigner, ParseOptions};
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Error;
 use tauri_plugin_klimper_xchonnect::origin;
+use tauri_plugin_klimper_xchonnect::push::{GatewayConfig, Kind, PushHandle};
 use tauri_plugin_klimper_xchonnect::relay::{RelayClient, RelayInfo};
 use tauri_plugin_klimper_xchonnect::requests::{AnswerInputs, Progress};
 use tauri_plugin_klimper_xchonnect::session_loop::{Answerer, SessionLoop, default_answerer};
@@ -419,6 +432,25 @@ fn start_loop_with(
     rotate: bool,
     answer: Answerer,
 ) -> Running {
+    start_loop_push(
+        wallet_session,
+        dapp,
+        origin_kid,
+        rotate,
+        answer,
+        Arc::new(PushHandle::default()),
+    )
+}
+
+/// [`start_loop_with`] with the phone's push state, for the wake-up test.
+fn start_loop_push(
+    wallet_session: &Session,
+    dapp: &str,
+    origin_kid: Option<&str>,
+    rotate: bool,
+    answer: Answerer,
+    push: Arc<PushHandle>,
+) -> Running {
     let dir = tempfile::tempdir().unwrap();
     let store =
         Arc::new(SessionStore::open(dir.path(), Box::new(MemorySecrets::default())).unwrap());
@@ -473,7 +505,7 @@ fn start_loop_with(
         rotate_requested: Arc::new(AtomicBool::new(rotate)),
         interrupt: interrupt.clone(),
         wake,
-        push: Arc::new(tauri_plugin_klimper_xchonnect::push::PushHandle::default()),
+        push,
         answer,
     };
     let task = tokio::spawn(message_loop.run(stored));
@@ -1253,5 +1285,112 @@ async fn a_cancel_after_approval_does_not_undo_the_broadcast() {
             ..
         }
     ));
+    stop(running, paired).await;
+}
+
+/// One counter of the gateway's `/metrics` (`xchonnect_gateway_<name>_total`).
+async fn gateway_counter(gateway: &str, name: &str) -> u64 {
+    let text = reqwest::get(format!("{gateway}/metrics"))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let prefix = format!("xchonnect_gateway_{name}_total ");
+    text.lines()
+        .find_map(|line| line.strip_prefix(&prefix)?.trim().parse().ok())
+        .unwrap_or_else(|| panic!("no {name} counter in the gateway's metrics"))
+}
+
+/// Push without Apple, every hop but the last: the session loop seals the phone's device
+/// token to the gateway's key and registers it with the relay; a request from the dApp
+/// makes the relay call the gateway; the gateway opens the token with its secret key. A
+/// gateway without an Apple key has nobody to hand it to, so the wake-up is counted as
+/// `failed`, not `invalid`: that difference is the proof that what Klimper sealed is what
+/// the gateway can open. The last hop, Apple to the phone, needs the key and a device.
+#[tokio::test]
+#[ignore = "needs a relay on XCHONNECT_TEST_RELAY and a gateway on XCHONNECT_TEST_GATEWAY"]
+async fn a_request_wakes_the_phone_through_the_gateway() {
+    let Ok(gateway) = std::env::var("XCHONNECT_TEST_GATEWAY") else {
+        eprintln!("skipped: XCHONNECT_TEST_GATEWAY is not set");
+        return;
+    };
+    let keys = reqwest::get(format!("{gateway}/v1/keys"))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let keys: serde_json::Value = serde_json::from_str(&keys).unwrap();
+    let public_key: [u8; 32] = b64::decode(keys["keys"][0].as_str().unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let push = Arc::new(PushHandle::new(Some(GatewayConfig {
+        url: format!("{gateway}/v1/wake"),
+        public_key,
+    })));
+    // A fresh token each run: the gateway allows one wake-up per device in ten seconds.
+    let device_token = hex::encode(xchonnect_core::crypto::random_array::<32>(&mut OsEntropy));
+    assert!(push.set_device_token(Kind::Apns, &device_token));
+
+    let mut paired = pair_over_relay().await;
+    let running = start_loop_push(
+        &paired.wallet_session,
+        &paired.domain,
+        None,
+        false,
+        default_answerer(),
+        push,
+    );
+
+    // The loop registers on its first pass, and stores what it registered: the expiry and
+    // a tag of the token, never the token.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let registration = loop {
+        if let Some(registration) = running.store.load(1, SESSION_ID).unwrap().record.push {
+            break registration;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the loop never registered for push"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert!(registration.expires_at > now());
+    assert!(!registration.token_tag.is_empty());
+    assert_ne!(registration.token_tag, device_token);
+
+    let before = (
+        gateway_counter(&gateway, "requests").await,
+        gateway_counter(&gateway, "invalid").await,
+        gateway_counter(&gateway, "failed").await,
+        gateway_counter(&gateway, "delivered").await,
+    );
+    post_send(&mut paired).await;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while gateway_counter(&gateway, "requests").await == before.0 {
+        assert!(
+            Instant::now() < deadline,
+            "the relay never called the gateway"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    // Delivery runs after the gateway has answered the relay: give it a moment.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let handled = gateway_counter(&gateway, "failed").await
+            + gateway_counter(&gateway, "delivered").await;
+        if handled > before.2 + before.3 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the gateway took the wake-up but could not open the sealed token"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(gateway_counter(&gateway, "invalid").await, before.1);
+
     stop(running, paired).await;
 }
