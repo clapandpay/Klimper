@@ -83,8 +83,42 @@ export interface OutputView {
   readonly toUser: boolean;
 }
 
+/** One claim of the website's declared intent, verified by the wallet. */
+export type VerifiedFactView =
+  | {
+      readonly type: 'recipient';
+      readonly label: string;
+      readonly precision: number;
+      readonly amount: BigNumber;
+      readonly recipient: string;
+    }
+  | { readonly type: 'fee'; readonly amount: BigNumber }
+  | {
+      readonly type: 'net';
+      readonly label: string;
+      readonly precision: number;
+      readonly amount: BigNumber;
+    };
+
+/** The website's declared intent, as the wallet verified it. */
+export interface IntentView {
+  /** The website's label (`[a-z0-9._-]` only), shown as described by the website. */
+  readonly kind: string | null;
+  readonly verified: readonly VerifiedFactView[];
+  /** The website declared every payment to others; no undeclared payment exists. */
+  readonly recipientsComplete: boolean;
+}
+
 export interface SpendPromptView {
   readonly kind: 'spend';
+  /** Klimper signs **and sends** this (`submit_coin_spends`); otherwise it only signs. */
+  readonly broadcasts: boolean;
+  /** Klimper built the spend itself from the request (`chia_send`). */
+  readonly walletBuilt: boolean;
+  /** The wallet database and the independent simulation were compared and agree. */
+  readonly crossChecked: boolean;
+  /** The website's declared intent, every claim verified; `null` when none was given. */
+  readonly intent: IntentView | null;
   /** The network's own name for its coin: `XCH`, or `TXCH` on testnet. */
   readonly xchLabel: string;
   readonly assets: readonly AssetView[];
@@ -225,6 +259,50 @@ function outputViewOf(entry: unknown, xchLabel: string): OutputView | null {
   };
 }
 
+/** Only the characters the wallet itself accepts in a `kind`. Anything else is dropped. */
+function kindOf(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9._-]{1,48}$/.test(value)
+    ? value
+    : null;
+}
+
+function intentOf(value: unknown, xchLabel: string): IntentView | null {
+  if (!isRecord(value)) return null;
+  const verified: VerifiedFactView[] = [];
+  for (const entry of arrayOf(value.verified)) {
+    if (!isRecord(entry)) continue;
+    if (entry.type === 'fee') {
+      verified.push({ type: 'fee', amount: amountOf(entry.amount) });
+      continue;
+    }
+    const asset = assetOf(entry.asset, xchLabel);
+    const precision = asset.isXch ? XCH_PRECISION : CAT_PRECISION;
+    if (entry.type === 'recipient') {
+      const recipient = hexOf(entry.puzzle_hash, 32);
+      if (recipient === null) continue;
+      verified.push({
+        type: 'recipient',
+        label: asset.label,
+        precision,
+        amount: amountOf(entry.amount),
+        recipient,
+      });
+    } else if (entry.type === 'net') {
+      verified.push({
+        type: 'net',
+        label: asset.label,
+        precision,
+        amount: amountOf(entry.amount),
+      });
+    }
+  }
+  return {
+    kind: kindOf(value.kind),
+    verified,
+    recipientsComplete: boolOf(value.recipients_complete),
+  };
+}
+
 function timeLocksOf(value: unknown): TimeLockView {
   if (!isRecord(value)) {
     return {
@@ -348,7 +426,11 @@ export function readPrompt(
     };
   }
 
-  if (prompt.type !== 'sign_coin_spends') return { kind: 'unreadable' };
+  // `submit_coin_spends`: the same simulation and plan, and Klimper also broadcasts.
+  const broadcasts = prompt.type === 'submit_coin_spends';
+  if (prompt.type !== 'sign_coin_spends' && !broadcasts) {
+    return { kind: 'unreadable' };
+  }
 
   const summary = isRecord(prompt.summary) ? prompt.summary : {};
   const plan = isRecord(prompt.plan) ? prompt.plan : {};
@@ -388,6 +470,10 @@ export function readPrompt(
 
   return {
     kind: 'spend',
+    broadcasts,
+    walletBuilt: broadcasts && boolOf(prompt.wallet_built),
+    crossChecked: boolOf(prompt.cross_checked),
+    intent: intentOf(prompt.intent, xchLabel),
     xchLabel,
     assets,
     outputs,
@@ -400,7 +486,8 @@ export function readPrompt(
     // `has_unsafe` is the summary flag; a single `is_unsafe` requirement is enough on its
     // own, so the warning does not depend on both being written.
     hasUnsafe: boolOf(plan.has_unsafe) || signatures.some((s) => s.isUnsafe),
-    partial: boolOf(prompt.partial),
+    // A submitted bundle another party's signature completes is the binding case too.
+    partial: boolOf(prompt.partial) || (broadcasts && isRecord(prompt.binding)),
     binding: bindingOf(prompt.binding, xchLabel),
   };
 }

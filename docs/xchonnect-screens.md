@@ -26,9 +26,9 @@ command surface is `src/klimper/xchonnect.ts`.
    are not evidence and are not rendered — the one exception is the message of a
    `signMessage` request, which _is_ the object being signed and is shown inside a labelled
    quoted block, never as an amount or a recipient.
-4. **One confirmation per signature.** A `kind: 'signature'` approval is answered on its
-   own. They are never batched, never answered by one button, and never pre-answered by
-   approving the request.
+4. **One decision per request** (xchonnect-wiki 04). Approving answers the whole request:
+   every signature it needs is made after one unlock, and a request Klimper broadcasts
+   (`submit_coin_spends`) is sent by Klimper — the button says "Approve and send".
 
 ## Design language
 
@@ -142,9 +142,10 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
   "Later" and navigating away only postpone within that time, and the countdown says
   when it runs out.
-- A `kind: 'signature'` approval is its own card: "Authorise signature 2 of 3", the public
-  key, and one Approve / Reject. The count is informational — the next signature asks
-  again.
+- A `submit_coin_spends` prompt also says who built the transaction (Klimper from the
+  wallet's own coins, or the website), that Klimper sends it, "checked twice" when the
+  wallet database and the simulation agreed, and the website's declared intent as verified
+  facts only: its `kind` label as "described by the website", each claim with a tick.
 
 ### 4. Lock screen and notifications
 

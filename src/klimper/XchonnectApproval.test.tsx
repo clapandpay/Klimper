@@ -8,7 +8,8 @@
 //   * a conditional receipt is labelled as conditional and is not part of any total;
 //   * an unreadable contract needs a second confirmation that shows the puzzle hash, and
 //     `AGG_SIG_UNSAFE` is loud;
-//   * one confirmation per signature, and no control that answers two approvals.
+//   * one decision per request: approving answers the whole request, and a request Klimper
+//     broadcasts says so.
 
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +59,6 @@ const { renderScreen } = await import('./testHarness');
 const XchonnectApproval = (await import('./XchonnectApproval')).default;
 
 const KEY_A = `0x${'a'.repeat(96)}`;
-const KEY_B = `0x${'b'.repeat(96)}`;
 const PUZZLE = 'f'.repeat(64);
 const TAIL = '1a2b3c4d'.repeat(8);
 
@@ -111,20 +111,6 @@ function request(prompt: unknown, id = 'a1'): Approval {
     expiresAt: Math.floor(Date.now() / 1000) + 300,
     kind: 'request',
     prompt: prompt as Record<string, unknown>,
-  };
-}
-
-function signature(index: number, total: number, publicKey: string): Approval {
-  return {
-    id: `s${index}`,
-    sessionId: 's1',
-    dapp: 'pengui.xyz',
-    method: 'signCoinSpends',
-    expiresAt: Math.floor(Date.now() / 1000) + 300,
-    kind: 'signature',
-    index,
-    total,
-    publicKey,
   };
 }
 
@@ -404,61 +390,104 @@ describe('the dangerous cases', () => {
   });
 });
 
-describe('one confirmation per signature', () => {
-  it('renders one signature at a time and answers only that one', async () => {
-    pendingApprovals.mockResolvedValue([
-      signature(1, 2, KEY_A),
-      signature(2, 2, KEY_B),
-    ]);
+describe('one decision per request, and the wallet sends', () => {
+  const BOB = 'b0'.repeat(32);
+  function submitted(over: Record<string, unknown> = {}) {
+    const base = spendPrompt();
+    return {
+      ...base,
+      type: 'submit_coin_spends',
+      method: 'xchonnect_submitCoinSpends',
+      wallet_built: false,
+      cross_checked: true,
+      ...over,
+    };
+  }
+
+  it('says that Klimper sends it, and the button says so', async () => {
+    pendingApprovals.mockResolvedValue([request(submitted())]);
     renderScreen(<XchonnectApproval />);
 
+    await waitFor(() => screen.getByTestId('prompt-handling'));
+    expect(screen.getByTestId('prompt-handling').textContent).toMatch(
+      /website built this transaction/,
+    );
+    expect(screen.getByTestId('prompt-cross-checked').textContent).toMatch(
+      /Checked twice/,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and send' }));
     await waitFor(() =>
-      expect(screen.getByTestId('signature-approval')).toBeDefined(),
+      expect(resolveApproval).toHaveBeenCalledWith('a1', true),
     );
-    // The second signature is counted, not rendered: its key is nowhere on screen.
-    expect(screen.getAllByTestId('signature-approval')).toHaveLength(1);
-    expect(screen.getByTestId('signature-key').textContent).toBe(KEY_A);
-    expect(document.body.textContent).not.toContain(KEY_B);
-    expect(screen.getByTestId('queue-count').textContent).toContain(
-      '1 more waiting',
-    );
-
-    // Exactly one authorising control exists, and it names which signature it is.
-    const authorise = screen
-      .getAllByRole('button')
-      .filter((button) => /Authorise/.test(button.textContent ?? ''));
-    expect(authorise).toHaveLength(1);
-    expect(authorise[0].textContent).toBe('Authorise signature 1 of 2');
-
-    fireEvent.click(authorise[0]);
-    await waitFor(() =>
-      expect(resolveApproval).toHaveBeenCalledWith('s1', true),
-    );
+    // One approval answers the whole request: there is nothing else to confirm.
     expect(resolveApproval).toHaveBeenCalledTimes(1);
-
-    // The next one now asks on its own.
-    await waitFor(() =>
-      expect(screen.getByTestId('signature-key').textContent).toBe(KEY_B),
-    );
-    expect(
-      screen.getByRole('button', { name: 'Authorise signature 2 of 2' }),
-    ).toBeDefined();
   });
 
-  it('rejecting a signature answers only that signature', async () => {
+  it('names a send Klimper built itself as a send', async () => {
     pendingApprovals.mockResolvedValue([
-      signature(1, 2, KEY_A),
-      signature(2, 2, KEY_B),
+      request(submitted({ wallet_built: true, method: 'chia_send' })),
     ]);
     renderScreen(<XchonnectApproval />);
 
-    await waitFor(() => screen.getByTestId('signature-approval'));
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
-
-    await waitFor(() =>
-      expect(resolveApproval).toHaveBeenCalledWith('s1', false),
+    await waitFor(() => screen.getByTestId('prompt-handling'));
+    expect(screen.getByTestId('prompt-handling').textContent).toMatch(
+      /built this from your own coins/,
     );
-    expect(resolveApproval).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
+  });
+
+  it('shows the website’s claims only as facts the wallet verified', async () => {
+    pendingApprovals.mockResolvedValue([
+      request(
+        submitted({
+          intent: {
+            kind: 'option.buy',
+            verified: [
+              {
+                type: 'recipient',
+                asset: { type: 'xch' },
+                puzzle_hash: BOB,
+                amount: 100_000_000_000,
+              },
+              { type: 'fee', amount: 1_000_000 },
+            ],
+            recipients_complete: true,
+            // Anything else the website put here never reaches the screen.
+            title: 'Official Chia option — guaranteed profit',
+          },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    const intent = await waitFor(() => screen.getByTestId('prompt-intent'));
+    expect(screen.getByTestId('intent-kind').textContent).toBe('option.buy');
+    const facts = screen
+      .getAllByTestId('intent-fact')
+      .map((n) => n.textContent);
+    expect(facts[0]).toMatch(/0\.1 XCH to xch1/);
+    expect(facts[1]).toMatch(/Network fee 0\.000001 XCH/);
+    expect(intent.textContent).toMatch(/only payments to anyone else/);
+    expect(document.body.textContent).not.toContain('guaranteed profit');
+  });
+
+  it('drops a kind that is not a plain machine label', async () => {
+    pendingApprovals.mockResolvedValue([
+      request(
+        submitted({
+          intent: {
+            kind: 'Verified by Chia Network',
+            verified: [],
+            recipients_complete: false,
+          },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    await waitFor(() => screen.getByTestId('prompt-handling'));
+    expect(screen.queryByTestId('intent-kind')).toBeNull();
+    expect(document.body.textContent).not.toContain('Verified by Chia');
   });
 });
 

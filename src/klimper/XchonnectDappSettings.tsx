@@ -56,13 +56,18 @@ import { useXchonnectSessions } from './useXchonnectSessions';
 import { useTicker } from './useTicker';
 import './xchonnect.css';
 
-/** The CHIP-0002 methods a pairing grants by default (wallet-kit `DEFAULT_METHODS`). */
+/**
+ * The methods a pairing grants by default: wallet-kit's `DEFAULT_METHODS` and the ones
+ * Klimper builds itself (`execute::WALLET_BUILT_METHODS`). Every one still asks.
+ */
 export const DEFAULT_METHODS = [
   'chainId',
   'connect',
   'getPublicKeys',
   'signCoinSpends',
   'signMessage',
+  'xchonnect_submitCoinSpends',
+  'chia_send',
 ] as const;
 
 /** Methods that cannot be taken away: without them a session cannot even say hello. */

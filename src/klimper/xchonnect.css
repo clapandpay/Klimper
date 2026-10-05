@@ -471,3 +471,15 @@
   border: 1px solid
     color-mix(in srgb, var(--teal, var(--primary)) 35%, transparent);
 }
+
+/* Verified by the wallet: teal ticks and a teal-edged box for the website's checked claims. */
+.xc-verified {
+  color: var(--teal, var(--primary));
+}
+
+.xc-intent {
+  border-radius: 16px;
+  padding: 0.875rem 1rem;
+  border: 1px solid
+    color-mix(in srgb, var(--teal, var(--primary)) 35%, transparent);
+}

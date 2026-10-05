@@ -86,20 +86,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the defaults of a new connection', () => {
-  it('is the five required methods, one key, no limits and both switches off', async () => {
+  it('is the default methods, one key, no limits and both switches off', async () => {
     openSettings();
 
     await waitFor(() =>
       expect(screen.getByLabelText('signCoinSpends')).toBeDefined(),
     );
 
-    // Spec 9.1's required set, and nothing beyond it.
+    // Spec 9.1's required set, plus the two methods where Klimper signs and sends
+    // (xchonnect-wiki 04). Each still asks.
     expect([...DEFAULT_METHODS]).toEqual([
       'chainId',
       'connect',
       'getPublicKeys',
       'signCoinSpends',
       'signMessage',
+      'xchonnect_submitCoinSpends',
+      'chia_send',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(

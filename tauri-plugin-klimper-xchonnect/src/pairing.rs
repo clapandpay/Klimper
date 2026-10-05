@@ -188,8 +188,11 @@ pub async fn inspect(
     // how many addresses it will see). No limits are configured, so every request is
     // prompted; a per-dApp limit is set afterwards (TASK-083).
     let permissions = DappPermissions {
+        // wallet-kit's defaults (signCoinSpends, xchonnect_submitCoinSpends, …) and the
+        // methods Klimper builds itself (chia_send). Each asks before anything is signed.
         methods: xchonnect_wallet_kit::permissions::DEFAULT_METHODS
             .iter()
+            .chain(crate::execute::WALLET_BUILT_METHODS.iter())
             .map(|m| (*m).to_owned())
             .collect(),
         exposed_keys: receive_keys,

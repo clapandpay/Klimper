@@ -11,10 +11,19 @@
 import { toAddress } from '@/lib/utils';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { AlertTriangle, ArrowRight, Clock, Home } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BadgeCheck,
+  Clock,
+  Home,
+  Send,
+  ShieldCheck,
+} from 'lucide-react';
 import {
   AssetView,
   BindingView,
+  IntentView,
   formatAmount,
   formatMagnitude,
   MessagePromptView,
@@ -338,6 +347,157 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
   );
 }
 
+/** A recipient puzzle hash as the network's address, shortened, the whole on hover. */
+function Address({
+  puzzleHash,
+  prefix,
+}: {
+  readonly puzzleHash: string;
+  readonly prefix: string;
+}) {
+  let address: string;
+  try {
+    address = toAddress(puzzleHash, prefix);
+  } catch {
+    address = `0x${puzzleHash}`;
+  }
+  const short =
+    address.length > 22
+      ? `${address.slice(0, 12)}…${address.slice(-6)}`
+      : address;
+  return (
+    <span className='font-mono text-xs' title={address}>
+      {short}
+    </span>
+  );
+}
+
+/**
+ * What happens to the request and who built it, then the two-engine check. Shown before
+ * any amount, because it says whose figures follow.
+ */
+function Handling({ view }: { readonly view: SpendPromptView }) {
+  if (!view.broadcasts && !view.crossChecked) return null;
+  return (
+    <div className='space-y-1.5 text-sm' data-testid='prompt-handling'>
+      {view.broadcasts && (
+        <div className='flex items-start gap-2'>
+          <Send
+            className='h-4 w-4 mt-0.5 shrink-0 text-muted-foreground'
+            aria-hidden='true'
+          />
+          <span>
+            {view.walletBuilt ? (
+              <Trans>
+                Klimper built this from your own coins and sends it to the
+                network itself.
+              </Trans>
+            ) : (
+              <Trans>
+                The website built this transaction. Klimper checks it, signs it
+                and sends it to the network itself.
+              </Trans>
+            )}
+          </span>
+        </div>
+      )}
+      {view.crossChecked && (
+        <div
+          className='flex items-start gap-2 xc-verified'
+          data-testid='prompt-cross-checked'
+        >
+          <ShieldCheck className='h-4 w-4 mt-0.5 shrink-0' aria-hidden='true' />
+          <span>
+            <Trans>
+              Checked twice: your wallet’s records and an independent simulation
+              agree on what leaves your wallet.
+            </Trans>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The website's declared intent, as the wallet verified it. The label is the website's
+ * own words and says so; every line under it is a claim the simulation proved.
+ */
+function Intent({
+  intent,
+  prefix,
+  xchLabel,
+}: {
+  readonly intent: IntentView;
+  readonly prefix: string;
+  readonly xchLabel: string;
+}) {
+  if (intent.kind === null && intent.verified.length === 0) return null;
+  const kind = intent.kind;
+  return (
+    <div className='xc-intent space-y-2' data-testid='prompt-intent'>
+      {kind !== null && (
+        <div className='text-sm'>
+          <span className='text-muted-foreground'>
+            <Trans>Described by the website as</Trans>
+          </span>{' '}
+          <span className='font-mono' data-testid='intent-kind'>
+            {kind}
+          </span>
+        </div>
+      )}
+      {intent.verified.length > 0 && (
+        <ul className='space-y-1 text-sm'>
+          {intent.verified.map((fact, index) => (
+            <li
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              className='flex items-center gap-2'
+              data-testid='intent-fact'
+            >
+              <BadgeCheck
+                className='h-4 w-4 shrink-0 xc-verified'
+                aria-hidden='true'
+              />
+              {fact.type === 'recipient' ? (
+                <span>
+                  <span className='tabular-nums'>
+                    {formatAmount(fact.amount, fact.precision)} {fact.label}
+                  </span>{' '}
+                  <Trans>to</Trans>{' '}
+                  <Address puzzleHash={fact.recipient} prefix={prefix} />
+                </span>
+              ) : fact.type === 'fee' ? (
+                <span>
+                  <Trans>Network fee</Trans>{' '}
+                  <span className='tabular-nums'>
+                    {formatAmount(fact.amount, XCH_PRECISION)} {xchLabel}
+                  </span>
+                </span>
+              ) : (
+                <span>
+                  <Trans>Your balance changes by</Trans>{' '}
+                  <span className='tabular-nums'>
+                    {fact.amount.isNegative() ? '−' : '+'}
+                    {formatMagnitude(fact.amount, fact.precision)} {fact.label}
+                  </span>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {intent.recipientsComplete && (
+        <p className='text-xs text-muted-foreground'>
+          <Trans>
+            Verified by Klimper: these are the only payments to anyone else.
+          </Trans>
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
   const sendsToOthers = view.outputs.some((output) => !output.toUser);
   // The fee is one figure. Both readings are shown only when they disagree.
@@ -352,6 +512,16 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
           the website says it does.
         </Trans>
       </p>
+
+      <Handling view={view} />
+
+      {view.intent !== null && (
+        <Intent
+          intent={view.intent}
+          prefix={view.xchLabel.toLowerCase()}
+          xchLabel={view.xchLabel}
+        />
+      )}
 
       <Destinations view={view} />
 
@@ -570,6 +740,8 @@ export function XchonnectPromptView({ view }: { readonly view: PromptView }) {
 export function promptHeadline(view: PromptView): React.ReactNode {
   if (view.kind === 'message') return <Trans>Sign a message</Trans>;
   if (view.kind === 'unreadable') return <Trans>Unreadable request</Trans>;
+  if (view.walletBuilt) return <Trans>Send</Trans>;
+  if (view.broadcasts) return <Trans>Sign and send</Trans>;
   return view.partial ? (
     <Trans>Sign one half of a trade</Trans>
   ) : (

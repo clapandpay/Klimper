@@ -24,6 +24,7 @@ xchonnect-core = { path = "../../../../xchonnect/xchonnect/crates/core", feature
 xchonnect-wallet-kit = { path = "../../../../xchonnect/xchonnect/crates/wallet-kit" }
 
 sage = { workspace = true }
+sage-api = { workspace = true }
 sage-config = { workspace = true }
 sage-database = { workspace = true }
 sage-keychain = { workspace = true }

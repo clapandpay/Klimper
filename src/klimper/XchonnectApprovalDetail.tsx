@@ -7,15 +7,15 @@
 //
 //   * a `PromptView`, which can only be built by `readPrompt` from the wallet's own local
 //     simulation. The dApp's description of its request has no path here, and neither does
-//     the name it gave itself — only the verified domain is shown;
+//     the name it gave itself — only the verified domain is shown. A declared intent is
+//     shown only as the claims the wallet verified;
 //   * `conditional_received` is a line of its own with its own sentence, never part of a
 //     total (`XchonnectPromptView`);
 //   * an unrecognised puzzle needs a second, separate confirmation that shows the puzzle
 //     hash: approving a request and approving "I accept a contract nobody can read" are
 //     two different decisions;
-//   * a `kind: 'signature'` approval is answered on its own. There is deliberately no
-//     control that answers more than one approval, so a plan with three signatures asks
-//     three times (spec 11.1 item 4, the desktop form of it — see `docs/xchonnect.md`);
+//   * one decision per request (xchonnect-wiki 04): approving signs every signature the
+//     request needs, after one unlock, and — for a request Klimper broadcasts — sends it;
 //   * Approve exists only here. A list may show what is waiting, but nothing is approved
 //     without this whole view on screen;
 //   * doing nothing is a refusal. The approval bridge in Rust treats five minutes of
@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Trans } from '@lingui/react/macro';
-import { Check, Clock, KeyRound, X } from 'lucide-react';
+import { Check, Clock, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Approval } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
@@ -83,67 +83,12 @@ export function Countdown({ expiresAt }: { readonly expiresAt: number }) {
 
 /** What a waiting approval is, in a few words and with no amount in it. */
 export function approvalHeadline(approval: Approval): ReactNode {
-  if (approval.kind === 'signature') {
-    const index = approval.index;
-    const total = approval.total;
-    return (
-      <Trans>
-        Signature {index} of {total}
-      </Trans>
-    );
-  }
   return promptHeadline(readPrompt(approval.prompt));
-}
-
-function AuthoriseSignature({
-  index,
-  total,
-}: {
-  readonly index: number;
-  readonly total: number;
-}) {
-  return (
-    <Trans>
-      Authorise signature {index} of {total}
-    </Trans>
-  );
 }
 
 /** The verified domain, and only that: this line sits next to amounts. */
 function AsksYouToSign({ dapp }: { readonly dapp: string }) {
   return <Trans>{dapp} asks you to sign</Trans>;
-}
-
-/** One signature out of an approved plan. Its own decision, every time. */
-function SignatureBody({
-  approval,
-}: {
-  readonly approval: Approval & { kind: 'signature' };
-}) {
-  return (
-    <div className='space-y-4' data-testid='signature-approval'>
-      <p className='text-sm text-muted-foreground'>
-        <Trans>
-          You approved the request. Each signature it needs is authorised on its
-          own.
-        </Trans>
-      </p>
-      <div className='xc-verdict flex items-start gap-3'>
-        <KeyRound className='h-5 w-5 mt-0.5 shrink-0' aria-hidden='true' />
-        <div className='min-w-0'>
-          <div className='xc-label'>
-            <Trans>Signing key</Trans>
-          </div>
-          <div
-            className='font-mono text-xs break-all mt-1'
-            data-testid='signature-key'
-          >
-            {approval.publicKey}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export interface ApprovalDetailProps {
@@ -171,10 +116,7 @@ export function XchonnectApprovalDetail({
   const [confirming, setConfirming] = useState(false);
   const ticker = useTicker();
   const view = useMemo(
-    () =>
-      approval.kind === 'request'
-        ? readPrompt(approval.prompt, { xchLabel: ticker })
-        : null,
+    () => readPrompt(approval.prompt, { xchLabel: ticker }),
     [approval, ticker],
   );
 
@@ -186,14 +128,14 @@ export function XchonnectApprovalDetail({
   };
 
   const onApprove = () => {
-    if (view !== null && needsSecondConfirmation(view)) {
+    if (needsSecondConfirmation(view)) {
       setConfirming(true);
       return;
     }
     answer(true);
   };
 
-  const signature = approval.kind === 'signature';
+  const broadcasts = view.kind === 'spend' && view.broadcasts;
 
   return (
     <article className='xc-approval' data-testid='approval-detail'>
@@ -227,24 +169,18 @@ export function XchonnectApprovalDetail({
       </header>
 
       <div className='xc-approval-body'>
-        {signature ? (
-          <SignatureBody approval={approval} />
-        ) : (
-          view !== null && <XchonnectPromptView view={view} />
-        )}
+        <XchonnectPromptView view={view} />
       </div>
 
       <footer className='xc-approval-actions'>
         <p className='text-xs text-muted-foreground sm:max-w-[16rem]'>
-          {signature ? (
-            <Trans>If you do nothing, this signature is refused.</Trans>
-          ) : view?.kind === 'message' ? (
-            <Trans>If you do nothing, this request is refused.</Trans>
-          ) : (
+          {broadcasts ? (
             <Trans>
-              If you do nothing, this request is refused. Approving asks you
-              again for every signature it needs.
+              If you do nothing, this request is refused. Approving signs it and
+              Klimper sends it to the network.
             </Trans>
+          ) : (
+            <Trans>If you do nothing, this request is refused.</Trans>
           )}
         </p>
         <div className='flex gap-2 sm:ml-auto'>
@@ -257,28 +193,19 @@ export function XchonnectApprovalDetail({
             <X className='h-4 w-4 mr-1.5' aria-hidden='true' />
             <Trans>Reject</Trans>
           </Button>
-          {approval.kind === 'signature' ? (
-            <Button
-              size='lg'
-              className='flex-1 sm:flex-none'
-              onClick={() => answer(true)}
-            >
-              <AuthoriseSignature
-                index={approval.index}
-                total={approval.total}
-              />
-            </Button>
-          ) : (
-            <Button
-              size='lg'
-              className='flex-1 sm:flex-none'
-              onClick={onApprove}
-              disabled={view?.kind === 'unreadable'}
-            >
-              <Check className='h-4 w-4 mr-1.5' aria-hidden='true' />
+          <Button
+            size='lg'
+            className='flex-1 sm:flex-none'
+            onClick={onApprove}
+            disabled={view.kind === 'unreadable'}
+          >
+            <Check className='h-4 w-4 mr-1.5' aria-hidden='true' />
+            {broadcasts ? (
+              <Trans>Approve and send</Trans>
+            ) : (
               <Trans>Approve</Trans>
-            </Button>
-          )}
+            )}
+          </Button>
         </div>
       </footer>
       {footer}
@@ -301,7 +228,7 @@ export function XchonnectApprovalDetail({
               </Trans>
             </DialogDescription>
           </DialogHeader>
-          {view?.kind === 'spend' &&
+          {view.kind === 'spend' &&
             view.unknownPuzzles.map((hash) => (
               <div
                 key={hash}
