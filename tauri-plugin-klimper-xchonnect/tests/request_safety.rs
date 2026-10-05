@@ -215,6 +215,7 @@ impl Harness {
             keys: &self.keys,
             limits: &limits,
             now: NOW,
+            chain: None,
         };
         let outcome = kit::handle(method, params, &context, &signer, &approver);
         (outcome, signer.calls.load(Ordering::SeqCst))
@@ -454,6 +455,7 @@ fn declining_a_single_signature_cancels_the_request() {
         keys: &harness.keys,
         limits: &limits,
         now: NOW,
+        chain: None,
     };
     let outcome = kit::handle(
         "signCoinSpends",
@@ -663,6 +665,7 @@ fn a_request_for_another_network_is_refused() {
         keys: &harness.keys,
         limits: &limits,
         now: NOW,
+        chain: None,
     };
     let outcome = kit::handle(
         "signCoinSpends",

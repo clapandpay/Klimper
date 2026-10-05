@@ -169,6 +169,21 @@ impl Attempt {
     }
 }
 
+/// The methods a new connection is granted: CHIP-0002's required set, plus the optional
+/// coin and balance reads, `sendTransaction` and `walletSwitchChain` (TASK-082). The reads
+/// are scoped by wallet-kit to the exposed receive keys, whose coins the dApp can read
+/// from the chain anyway; `sendTransaction` only broadcasts a bundle that is already
+/// signed, and every signature still needs its own approval. The pairing screen lists
+/// them, and `set_dapp_policy` can narrow them per dApp.
+pub fn granted_methods() -> Vec<String> {
+    use xchonnect_wallet_kit::permissions::{DEFAULT_METHODS, OPTIONAL_METHODS};
+    DEFAULT_METHODS
+        .iter()
+        .chain(&OPTIONAL_METHODS)
+        .map(|m| (*m).to_owned())
+        .collect()
+}
+
 /// Step 1 and 2: verify, then describe what the user has to agree to.
 pub async fn inspect(
     uri_text: &str,
@@ -188,10 +203,7 @@ pub async fn inspect(
     // how many addresses it will see). No limits are configured, so every request is
     // prompted; a per-dApp limit is set afterwards (TASK-083).
     let permissions = DappPermissions {
-        methods: xchonnect_wallet_kit::permissions::DEFAULT_METHODS
-            .iter()
-            .map(|m| (*m).to_owned())
-            .collect(),
+        methods: granted_methods(),
         exposed_keys: receive_keys,
         limits: std::collections::BTreeMap::new(),
     };
@@ -423,6 +435,20 @@ mod tests {
         );
         assert!(preview.granted_key.is_some());
         assert_eq!(preview.granted_key_count, 1);
+    }
+
+    /// A new connection gets the required methods and the optional reads and broadcast
+    /// (TASK-082), each once.
+    #[test]
+    fn a_new_connection_is_granted_the_required_and_the_optional_methods() {
+        use xchonnect_wallet_kit::permissions::{DEFAULT_METHODS, OPTIONAL_METHODS};
+        let granted = granted_methods();
+        let expected: Vec<&str> = DEFAULT_METHODS
+            .iter()
+            .chain(&OPTIONAL_METHODS)
+            .copied()
+            .collect();
+        assert_eq!(granted, expected);
     }
 
     /// A homograph domain must reach the screen with both forms and a warning.

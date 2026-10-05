@@ -24,6 +24,7 @@ xchonnect-core = { path = "../../../../xchonnect/xchonnect/crates/core", feature
 xchonnect-wallet-kit = { path = "../../../../xchonnect/xchonnect/crates/wallet-kit" }
 
 sage = { workspace = true }
+sage-api = { workspace = true }
 sage-config = { workspace = true }
 sage-database = { workspace = true }
 sage-keychain = { workspace = true }
@@ -44,6 +45,8 @@ rand = { workspace = true }
 chia-bls = "0.36"
 chia-protocol = "0.36"
 chia-puzzle-types = "0.36"
+# Puzzle construction for coin reads, as Sage builds them for WalletConnect (TASK-082).
+chia-wallet-sdk = { workspace = true }
 
 # Session keys live in the OS keyring under their own service name, never in the Sage
 # signing keychain (clapandpay TASK-073, xchonnect spec 11.3).
@@ -62,6 +65,8 @@ keyring = { version = "3", features = [
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# A real Sage wallet database (schema and migrations) for the chain reads (TASK-082).
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 chia-puzzles = "0.20"
 chia-sdk-driver = "0.36"
 chia-sdk-test = "0.36"

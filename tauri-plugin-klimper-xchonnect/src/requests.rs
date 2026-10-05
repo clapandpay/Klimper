@@ -251,6 +251,9 @@ fn run(
         })
     };
     let signer = KlimperSigner::new(state.clone(), snapshot, gate);
+    // The optional reads and broadcast (TASK-082), scoped by wallet-kit to the keys this
+    // dApp was given.
+    let chain = crate::chain::KlimperChain::new(state.clone());
 
     let context = RequestContext {
         dapp: &record.dapp,
@@ -263,6 +266,7 @@ fn run(
         keys: &snapshot.keys,
         limits: &limits,
         now,
+        chain: Some(&chain),
     };
     let outcome = kit::handle(&meta.method, params, &context, &signer, &approver);
     match &outcome {
