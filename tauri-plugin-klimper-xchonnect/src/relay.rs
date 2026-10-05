@@ -358,6 +358,21 @@ impl RelayClient {
         Ok(())
     }
 
+    /// Register (or replace) the sealed push token of a mailbox, `PUT /v1/mailboxes/{id}/push`.
+    /// `body` comes from [`crate::push::seal`]. The relay may refuse a gateway it has not
+    /// allowlisted; that is an error here, and the session carries on by polling.
+    pub async fn set_push(&self, mailbox: MailboxId, read: &Token, body: Value) -> Result<()> {
+        self.ok(
+            "PUT",
+            &format!("/v1/mailboxes/{}/push", mailbox.to_b64()),
+            Some(read),
+            Some(body),
+            CALL_TIMEOUT,
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Delete a mailbox and everything in it. Failures are logged, not propagated: the
     /// local session is gone either way and the relay drops an unused mailbox after 30
     /// days.

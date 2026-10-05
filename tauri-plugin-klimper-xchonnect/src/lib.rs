@@ -57,8 +57,10 @@ use xchonnect_core::domain::display_domain;
 pub mod approval;
 pub mod error;
 pub mod execute;
+pub mod native_push;
 pub mod origin;
 pub mod pairing;
+pub mod push;
 pub mod relay;
 pub mod requests;
 pub mod session_loop;
@@ -139,6 +141,8 @@ pub struct Xchonnect<R: Runtime> {
     emit: Emitter,
     attempts: Mutex<BTreeMap<String, SharedAttempt>>,
     live: Mutex<BTreeMap<String, Live>>,
+    push: Arc<push::PushHandle>,
+    native: native_push::NativePush<R>,
 }
 
 impl<R: Runtime> std::fmt::Debug for Xchonnect<R> {
@@ -290,6 +294,7 @@ impl<R: Runtime> Xchonnect<R> {
             rotate_requested: rotate_requested.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
+            push: self.push.clone(),
             answer: session_loop::default_answerer(),
         };
         session_loop::spawn_ticker(wake_tx.clone());
@@ -304,6 +309,72 @@ impl<R: Runtime> Xchonnect<R> {
             },
         );
         Ok(true)
+    }
+
+    /// Listen to the native push side, which registers with APNs when the user already
+    /// allowed notifications. Off without a gateway: nothing could receive a wake-up.
+    fn start_push(&self) {
+        if self.push.gateway().is_none() {
+            return;
+        }
+        let (native, app) = (self.native.clone(), self.app.clone());
+        let push = self.push.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let state = native.start(move |event| {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let this = app.state::<Xchonnect<R>>();
+                    match event {
+                        native_push::NativeEvent::Token { platform, token } => {
+                            this.set_device_token(platform, &token).await;
+                        }
+                        native_push::NativeEvent::Wake => this.wake_all().await,
+                    }
+                });
+            });
+            if let Some(state) = state {
+                push.set_permission(state);
+            }
+        });
+    }
+
+    /// Ask for notification permission, at the first pairing and not at launch, so the
+    /// prompt comes with a reason. The answer goes to the screen as [`push::EVENT_PUSH`], so
+    /// a refusal can be explained: connections then update while Klimper is open.
+    fn ask_for_push_permission(&self) {
+        if self.push.gateway().is_none() {
+            return;
+        }
+        let (native, emit, push) = (self.native.clone(), self.emit.clone(), self.push.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Some(state) = native.request_permission() {
+                push.set_permission(state);
+                emit(push::EVENT_PUSH, json!({ "state": state }));
+            }
+        });
+    }
+
+    /// The native side hands over the phone's APNs device token (at launch and whenever iOS
+    /// issues a new one). A new token makes every running loop register it at its next pass.
+    pub async fn set_device_token(&self, kind: push::Kind, token: &str) {
+        if self.push.set_device_token(kind, token) {
+            self.wake_all().await;
+        }
+    }
+
+    /// A push wake-up arrived: every running loop reads its mailbox now instead of at the
+    /// next tick. What the notification carried is never looked at.
+    pub async fn wake_all(&self) {
+        for live in self
+            .live
+            .lock()
+            .await
+            .values()
+            .filter(|live| live.running())
+        {
+            live.interrupt.notify_one();
+            let _ = live.wake.try_send(());
+        }
     }
 
     /// Sessions the user has disconnected whose loop is still posting `session.end`.
@@ -470,7 +541,29 @@ async fn confirm_sas<R: Runtime>(
     let connected = state.ensure_loop(stored.clone()).await?;
     let summary = summary(&stored, keys, connected);
     (state.emit)(EVENT_SESSIONS, json!({}));
+    state.ask_for_push_permission();
     Ok(Some(summary))
+}
+
+/// Whether wake-ups can reach this phone, for the screen that explains why they do not:
+/// `enabled` is false in a build without a push gateway, and `permission` is what the
+/// phone's notification settings said when last asked (`null` before the first answer).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PushStatus {
+    enabled: bool,
+    permission: Option<push::PermissionState>,
+}
+
+#[command]
+async fn push_status<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+) -> Result<PushStatus> {
+    Ok(PushStatus {
+        enabled: state.push.gateway().is_some(),
+        permission: state.push.permission(),
+    })
 }
 
 /// The connected dApps of the active wallet. Also resumes the message loop of every
@@ -720,9 +813,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             set_dapp_policy,
             pending_approvals,
             resolve_approval,
-            cancel_approval
+            cancel_approval,
+            push_status
         ])
-        .setup(|app, _api| {
+        .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;
             let store = Arc::new(SessionStore::open(&data_dir, Box::new(OsKeyring))?);
             let handle = app.clone();
@@ -744,7 +838,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 emit,
                 attempts: Mutex::new(BTreeMap::new()),
                 live: Mutex::new(BTreeMap::new()),
+                push: Arc::new(push::PushHandle::new(push::GatewayConfig::from_build())),
+                native: native_push::NativePush::init(app, &api)?,
             });
+            app.state::<Xchonnect<R>>().start_push();
             Ok(())
         })
         .build()

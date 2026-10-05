@@ -19,12 +19,13 @@
 		6B1E5C2A9D4F4E7A8C3B1A02 /* KlimperScene.m in Sources */ = {isa = PBXBuildFile; fileRef = 6B1E5C2A9D4F4E7A8C3B1A01 /* KlimperScene.m */; };
 		DC8A7E7BC85CF72391F7DB06 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1272591EA92E9E93072C73F8 /* WebKit.framework */; };
 		ED56FD091A61C5EF0E4B49FB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D9D63B1548E841957A1E32 /* Assets.xcassets */; };
-		6B1E5C2A9D4F4E7A8C3B1A04 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */; };
+		61F7FC41BB68D3E8A72E6CAD /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 9048D035D09A0D2263DA5536 /* PrivacyInfo.xcprivacy */; };
 		FEF377FC1FC81BF2E0E465DF /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F9E557ADA88D73B10BF473F /* libapp.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		046EF1EBB621DCF40B92A2D8 /* sage-tauri_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "sage-tauri_iOS.entitlements"; sourceTree = "<group>"; };
+		9048D035D09A0D2263DA5536 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1272591EA92E9E93072C73F8 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		15FC168902390DCBEBF851A4 /* sage-tauri_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "sage-tauri_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		164E2E350268ED2A04513FEE /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -46,7 +47,6 @@
 		BCDAEB1DE5FD02983C866661 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		F7817F2DF56B54F478F55A1C /* error.rs */ = {isa = PBXFileReference; path = error.rs; sourceTree = "<group>"; };
 		FFAE4B03B84DF1CE0FF7B0B3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,8 +156,8 @@
 			isa = PBXGroup;
 			children = (
 				FFAE4B03B84DF1CE0FF7B0B3 /* Info.plist */,
-				6B1E5C2A9D4F4E7A8C3B1A03 /* PrivacyInfo.xcprivacy */,
 				046EF1EBB621DCF40B92A2D8 /* sage-tauri_iOS.entitlements */,
+				9048D035D09A0D2263DA5536 /* PrivacyInfo.xcprivacy */,
 			);
 			path = "sage-tauri_iOS";
 			sourceTree = "<group>";
@@ -225,7 +225,7 @@
 			files = (
 				ED56FD091A61C5EF0E4B49FB /* Assets.xcassets in Resources */,
 				1ACB1DFBDEB0809BFDA2C513 /* LaunchScreen.storyboard in Resources */,
-				6B1E5C2A9D4F4E7A8C3B1A04 /* PrivacyInfo.xcprivacy in Resources */,
+				61F7FC41BB68D3E8A72E6CAD /* PrivacyInfo.xcprivacy in Resources */,
 				88144AD19AA674BA2B248770 /* assets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

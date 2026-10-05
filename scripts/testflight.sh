@@ -3,8 +3,8 @@
 # Copyright 2026 the Klimper authors
 #
 # Build the signed iOS app and upload it to TestFlight. Runs on the Mac that holds the App Store
-# Connect API key, never in CI (see AGENTS.md: nothing that compiles Rust runs outside
-# release.yml, and the key stays on one machine).
+# Connect API key, never in CI (see AGENTS.md: CI builds the website and Green Envelope images and
+# nothing else, and the key stays on one machine).
 #
 #   scripts/testflight.sh                  # build number: minutes since the epoch
 #   scripts/testflight.sh --build-number 42
@@ -13,6 +13,9 @@
 # The API key is read from the environment, or from ~/.appstoreconnect/klimper.env:
 #   APPLE_API_KEY=<key id>
 #   APPLE_API_ISSUER=<issuer id>
+# Optional, same file: KLIMPER_PUSH_GATEWAY_URL and KLIMPER_PUSH_GATEWAY_KEY (the gateway's
+# https wake URL and its base64url X25519 public key) turn push wake-ups on in the build; without
+# them the app only updates while it is open.
 # with the key itself at ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8, where altool also
 # looks for it. The key needs the Admin role: xcodebuild uses it to create the distribution
 # certificate and provisioning profile when they are missing.
@@ -38,6 +41,12 @@ fi
 : "${APPLE_API_KEY:?set APPLE_API_KEY or write it to $env_file}"
 : "${APPLE_API_ISSUER:?set APPLE_API_ISSUER or write it to $env_file}"
 export APPLE_API_KEY APPLE_API_ISSUER
+if [ -n "${KLIMPER_PUSH_GATEWAY_URL:-}" ] && [ -n "${KLIMPER_PUSH_GATEWAY_KEY:-}" ]; then
+  export KLIMPER_PUSH_GATEWAY_URL KLIMPER_PUSH_GATEWAY_KEY
+else
+  unset KLIMPER_PUSH_GATEWAY_URL KLIMPER_PUSH_GATEWAY_KEY
+  echo "Push is off in this build: set KLIMPER_PUSH_GATEWAY_URL and KLIMPER_PUSH_GATEWAY_KEY." >&2
+fi
 export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
 [ -f "$APPLE_API_KEY_PATH" ] || { echo "No API key at $APPLE_API_KEY_PATH" >&2; exit 1; }
 

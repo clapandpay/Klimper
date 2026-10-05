@@ -337,6 +337,7 @@ pub async fn confirm(
             allow_unknown_contracts: false,
             origin_kid: Some(uri.kid.clone()),
             revoked: false,
+            push: None,
         },
         session_hex: hex::encode(session.to_bytes().map_err(Error::protocol)?),
     };

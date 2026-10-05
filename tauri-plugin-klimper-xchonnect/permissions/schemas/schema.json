@@ -391,6 +391,18 @@
           "markdownDescription": "Denies the pending_approvals command without any pre-configured scope."
         },
         {
+          "description": "Enables the push_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-push-status",
+          "markdownDescription": "Enables the push_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the push_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-push-status",
+          "markdownDescription": "Denies the push_status command without any pre-configured scope."
+        },
+        {
           "description": "Enables the resolve_approval command without any pre-configured scope.",
           "type": "string",
           "const": "allow-resolve-approval",
@@ -439,10 +451,10 @@
           "markdownDescription": "Denies the status command without any pre-configured scope."
         },
         {
-          "description": "Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,\nlist, renew and end sessions, and answer signing approvals. Main webview only — app webviews must\nnever reach this surface.\n\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-inspect-pairing-uri`\n- `allow-approve-pairing`\n- `allow-cancel-pairing`\n- `allow-confirm-sas`\n- `allow-list-sessions`\n- `allow-end-session`\n- `allow-rotate-session-keys`\n- `allow-set-dapp-policy`\n- `allow-pending-approvals`\n- `allow-resolve-approval`\n- `allow-cancel-approval`",
+          "description": "Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,\nlist, renew and end sessions, and answer signing approvals. Main webview only — app webviews must\nnever reach this surface.\n\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-inspect-pairing-uri`\n- `allow-approve-pairing`\n- `allow-cancel-pairing`\n- `allow-confirm-sas`\n- `allow-list-sessions`\n- `allow-end-session`\n- `allow-rotate-session-keys`\n- `allow-set-dapp-policy`\n- `allow-pending-approvals`\n- `allow-resolve-approval`\n- `allow-cancel-approval`\n- `allow-push-status`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,\nlist, renew and end sessions, and answer signing approvals. Main webview only — app webviews must\nnever reach this surface.\n\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-inspect-pairing-uri`\n- `allow-approve-pairing`\n- `allow-cancel-pairing`\n- `allow-confirm-sas`\n- `allow-list-sessions`\n- `allow-end-session`\n- `allow-rotate-session-keys`\n- `allow-set-dapp-policy`\n- `allow-pending-approvals`\n- `allow-resolve-approval`\n- `allow-cancel-approval`"
+          "markdownDescription": "Xchonnect dApp connections: inspect and approve a pairing URI, confirm the six-digit SAS,\nlist, renew and end sessions, and answer signing approvals. Main webview only — app webviews must\nnever reach this surface.\n\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-inspect-pairing-uri`\n- `allow-approve-pairing`\n- `allow-cancel-pairing`\n- `allow-confirm-sas`\n- `allow-list-sessions`\n- `allow-end-session`\n- `allow-rotate-session-keys`\n- `allow-set-dapp-policy`\n- `allow-pending-approvals`\n- `allow-resolve-approval`\n- `allow-cancel-approval`\n- `allow-push-status`"
         }
       ]
     }

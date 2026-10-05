@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Klimper's privacy manifest (ours, AGPL-3.0-or-later).
-
-  No tracking and no data collected: keys and wallet data stay on the device, and the network
-  traffic is the wallet's own (peers, nodes, the services the user turns to), none of it sent to
-  the developer. The required-reason APIs are the ones the binary links, checked with
-  `nm -u` on the release build: stat/fstat/lstat/fstatat (file timestamps, for the wallet's own
-  database and files in the app container; 3B52.1 for files the user picks in the file dialog) and statfs/fstatfs (disk space, which SQLite reads
-  before it writes). Re-check them when a dependency changes (docs/UPSTREAM.md).
+  Klimper's privacy manifest (App Store requirement since 2024-05). No tracking and no data
+  collected by the app's developer. The required-reason APIs are the ones the Rust core and the
+  bundled plugins call: file metadata (stat, the file picker), free disk space (statfs, before
+  writing the wallet database) and elapsed time (std::time::Instant). Keep this list in step with
+  `nm -u` on the iOS binary.
 -->
 <plist version="1.0">
 <dict>
@@ -35,6 +32,14 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>E174.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
 			</array>
 		</dict>
 	</array>
