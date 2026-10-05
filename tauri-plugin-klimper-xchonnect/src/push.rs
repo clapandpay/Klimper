@@ -79,7 +79,8 @@ impl GatewayConfig {
     }
 
     fn parse(url: &str, key: &str) -> Option<Self> {
-        if !url.starts_with("https://") {
+        let local = crate::developer_mode_allowed() && is_loopback_http(url);
+        if !url.starts_with("https://") && !local {
             return None;
         }
         let public_key = b64::decode(key).ok()?.try_into().ok()?;
@@ -88,6 +89,20 @@ impl GatewayConfig {
             public_key,
         })
     }
+}
+
+/// A plain-HTTP URL on this machine, which a debug build may use as its gateway: the
+/// relay of a local stack calls it over loopback (xchonnect
+/// `XCHONNECT_DEV_ALLOW_INSECURE_GATEWAYS`). A simulator shares the Mac's loopback.
+fn is_loopback_http(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host);
+    matches!(host, "127.0.0.1" | "localhost" | "[::1]")
 }
 
 /// What the app keeps per session: enough to know when to register again, and the hint key
@@ -396,6 +411,17 @@ mod tests {
         let key = b64::encode(&[1u8; 32]);
         assert!(GatewayConfig::parse("https://push.example/v1/wake", &key).is_some());
         assert!(GatewayConfig::parse("http://push.example/v1/wake", &key).is_none());
+        // A local stack's gateway, in a debug build only.
+        assert_eq!(
+            GatewayConfig::parse("http://127.0.0.1:18796/v1/wake", &key).is_some(),
+            cfg!(debug_assertions)
+        );
+        assert_eq!(
+            GatewayConfig::parse("http://localhost:8788/v1/wake", &key).is_some(),
+            cfg!(debug_assertions)
+        );
+        assert!(GatewayConfig::parse("http://127.0.0.1.evil.example/v1/wake", &key).is_none());
+        assert!(GatewayConfig::parse("http://evil.example@127.0.0.1/v1/wake", &key).is_none());
         assert!(GatewayConfig::parse("https://push.example", &b64::encode(&[1u8; 31])).is_none());
         assert!(GatewayConfig::parse("https://push.example", "not base64!").is_none());
     }
