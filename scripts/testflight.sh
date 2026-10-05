@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright 2026 the Klimper authors
+#
+# Build the signed iOS app and upload it to TestFlight. Runs on the Mac that holds the App Store
+# Connect API key, never in CI (see AGENTS.md: nothing that compiles Rust runs outside
+# release.yml, and the key stays on one machine).
+#
+#   scripts/testflight.sh                  # build number: minutes since the epoch
+#   scripts/testflight.sh --build-number 42
+#   scripts/testflight.sh --no-upload      # build and sign only
+#
+# The API key is read from the environment, or from ~/.appstoreconnect/klimper.env:
+#   APPLE_API_KEY=<key id>
+#   APPLE_API_ISSUER=<issuer id>
+# with the key itself at ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8, where altool also
+# looks for it. The key needs the Admin role: xcodebuild uses it to create the distribution
+# certificate and provisioning profile when they are missing.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+build_number="$(( $(date -u +%s) / 60 ))"
+upload=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --build-number) build_number="$2"; shift 2 ;;
+    --no-upload) upload=0; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+env_file="$HOME/.appstoreconnect/klimper.env"
+if [ -z "${APPLE_API_KEY:-}" ] && [ -f "$env_file" ]; then
+  # shellcheck disable=SC1090
+  . "$env_file"
+fi
+: "${APPLE_API_KEY:?set APPLE_API_KEY or write it to $env_file}"
+: "${APPLE_API_ISSUER:?set APPLE_API_ISSUER or write it to $env_file}"
+export APPLE_API_KEY APPLE_API_ISSUER
+export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+[ -f "$APPLE_API_KEY_PATH" ] || { echo "No API key at $APPLE_API_KEY_PATH" >&2; exit 1; }
+
+if [ -n "$(git status --porcelain -- . ':!builtin-apps/build')" ]; then
+  echo "Warning: uncommitted changes in klimper/ go into this build." >&2
+fi
+
+command -v bindgen >/dev/null || { echo "bindgen is missing: cargo install bindgen-cli --locked" >&2; exit 1; }
+pnpm install --frozen-lockfile
+pnpm tauri ios build --export-method app-store-connect --build-number "$build_number" --ci
+
+ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
+echo "Built $ipa ($(git rev-parse --short HEAD), build $build_number)"
+[ "$upload" = 1 ] || exit 0
+
+xcrun altool --upload-app --type ios --file "$ipa" \
+  --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
+echo "Uploaded. It appears in App Store Connect → TestFlight once Apple has processed it."
