@@ -64,6 +64,8 @@ import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
 import { PasskeyGate } from '@/klimper/PasskeyGate';
+import XchonnectPair from '@/klimper/XchonnectPair';
+import XchonnectSessions from '@/klimper/XchonnectSessions';
 import { featureElement } from '@/lib/featureElement';
 import {
   clapAndPayConnectEnabled,
@@ -74,6 +76,7 @@ import {
   swapEnabled,
   themeGalleryEnabled,
   tokenIssuingEnabled,
+  xchonnectEnabled,
 } from '@/lib/features';
 
 // Theme-aware toast container component
@@ -175,6 +178,14 @@ const router = createHashRouter(
           }
         />
       </Route>
+      <Route
+        path='/xchonnect'
+        element={featureElement(xchonnectEnabled, <XchonnectSessions />)}
+      />
+      <Route
+        path='/xchonnect/pair'
+        element={featureElement(xchonnectEnabled, <XchonnectPair />)}
+      />
       <Route path='/settings' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />

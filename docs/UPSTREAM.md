@@ -154,6 +154,35 @@ upstream; the rest is files of our own and one-line hooks.
 | `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
 | `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
 
+### Xchonnect dApp connections
+
+Klimper answers CHIP-0002 requests from outside websites over Xchonnect (decision-008,
+milestone m-4). Same shape as the passkey work: one crate of our own, screens of our own,
+and single-line hooks in shared files. `docs/xchonnect.md` has the detail.
+
+| File                                                                                                        | Ours                              | Note                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tauri-plugin-klimper-xchonnect/`, `src/klimper/xchonnect.ts`, `XchonnectPair.tsx`, `XchonnectSessions.tsx` | new                               | the plugin, the typed command wrappers, and the two minimum screens (TASK-080/083/084 replace the screens)                                                   |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                                | workspace member, dep, one plugin | exactly the three lines the passkey plugin needed                                                                                                            |
+| `src-tauri/capabilities/klimper.json`                                                                       | one permission                    | `klimper-xchonnect:default`, main webview only — app webviews must never reach it                                                                            |
+| `src/App.tsx`                                                                                               | two imports, two routes           | `/xchonnect` and `/xchonnect/pair`, both behind `featureElement`                                                                                             |
+| `src/lib/features.ts`, `src/vite-env.d.ts`, `.env`                                                          | one flag                          | `VITE_ENABLE_XCHONNECT`, off, and commented out in `.env` until TASK-094 has reviewed the flow                                                               |
+| `.prettierignore`                                                                                           | 1 line                            | the plugin's generated permissions                                                                                                                           |
+| `Cargo.lock`                                                                                                | the plugin and its dependencies   | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check` |
+
+The two xchonnect crates are deliberately unpublished (xchonnect TASK-67 publishes after
+its audit), so they are consumed by path:
+`../../../../xchonnect/xchonnect/crates/{core,wallet-kit}`, which resolves the same from
+this repository and from a `clapandpay-wt-*` worktree beside it. **That is a local
+development arrangement and a release blocker**: it must become a git-revision pin or a
+published version before anything ships (clapandpay TASK-071 AC #1). Nothing in CI
+compiles Rust, so the path does not break the pipeline; a `cargo` command on a machine
+without the xchonnect checkout will fail to resolve the workspace.
+
+Nothing under `crates/`, `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
+plugin reads the Sage database through `sage-database`'s public API and signs through
+`sage-keychain`, the same way `crates/sage/src/endpoints/wallet_connect.rs` does.
+
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
 
