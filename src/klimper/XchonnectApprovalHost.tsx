@@ -24,8 +24,17 @@ import { getCurrentWindow, UserAttentionType } from '@tauri-apps/api/window';
 import { platform } from '@tauri-apps/plugin-os';
 import { Bell } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { ExternalLink } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { xchonnect } from './xchonnect';
+import { mempoolTxUrl } from './explorer';
+import { useTicker } from './useTicker';
+import {
+  onXchonnectEvent,
+  SentEvent,
+  xchonnect,
+  XCHONNECT_EVENTS,
+} from './xchonnect';
 import { clock, XchonnectApprovalDetail } from './XchonnectApprovalDetail';
 import { goToXchonnectRoute, XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
@@ -110,8 +119,58 @@ function WaitingPill({
   );
 }
 
+/** "Sent to the network", with where to look the transaction up. */
+function SentToast({
+  event,
+  testnet,
+}: {
+  readonly event: SentEvent;
+  readonly testnet: boolean;
+}) {
+  const href = mempoolTxUrl(event.transactionId, testnet);
+  const dapp = event.dapp;
+  return (
+    <div className='space-y-1' data-testid='sent-toast'>
+      <div>
+        <Trans>Klimper sent the transaction for {dapp}.</Trans>
+      </div>
+      {href && (
+        <button
+          type='button'
+          className='inline-flex items-center gap-1 text-sm underline underline-offset-2'
+          onClick={() => void openUrl(href).catch(() => undefined)}
+          data-testid='sent-explorer-link'
+        >
+          <Trans>View on mempoolxch.space</Trans>
+          <ExternalLink className='h-3 w-3' aria-hidden='true' />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function XchonnectApprovalHost() {
   const route = useCurrentRoute();
+  const testnet = useTicker().toUpperCase().startsWith('T');
+  const testnetRef = useRef(testnet);
+  testnetRef.current = testnet;
+
+  // A transaction Klimper broadcast: say so, and where to look it up.
+  useEffect(() => {
+    if (!xchonnectEnabled) return;
+    const subscription = onXchonnectEvent<SentEvent>(
+      XCHONNECT_EVENTS.sent,
+      (event) => {
+        toast.success(
+          <SentToast event={event} testnet={testnetRef.current} />,
+          { autoClose: 12_000 },
+        );
+      },
+    );
+    return () => {
+      void subscription.then((stop) => stop());
+    };
+  }, []);
   const { approvals, answer } = useXchonnectApprovals();
   /** Ids the user put off with "Later"; a new arrival opens the overlay again. */
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
