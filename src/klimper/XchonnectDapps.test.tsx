@@ -215,6 +215,7 @@ it('points at the approval screen when something is waiting', async () => {
       sessionId: 'sess-1',
       dapp: 'pengui.xyz',
       method: 'signCoinSpends',
+      requestId: 'r1',
       expiresAt: 0,
       kind: 'request',
       prompt: {},

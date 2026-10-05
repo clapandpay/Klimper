@@ -85,6 +85,11 @@ export function PriceProvider({ children }: { children: ReactNode }) {
     };
 
     const fetchChiaPrice = async () => {
+      // Klimper: testnet coins have no market price; valuing TXCH at the XCH price is wrong.
+      if (isTestnet) {
+        setXchUsdPrice(0);
+        return;
+      }
       try {
         const response = await fetch(
           'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd',

@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "set_dapp_policy",
     "pending_approvals",
     "resolve_approval",
+    "cancel_approval",
 ];
 
 fn main() {
