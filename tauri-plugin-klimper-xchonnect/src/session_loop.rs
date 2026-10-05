@@ -73,6 +73,9 @@ pub const EVENT_REQUEST: &str = "klimper-xchonnect://request";
 const POLL_WAIT: u64 = 20;
 /// Pause after a relay failure before trying again.
 const BACKOFF: Duration = Duration::from_secs(5);
+/// Most messages held while a request waits for the user. Requests beyond it are refused
+/// with 4029; anything else beyond it (pings) is dropped.
+const MAX_DEFERRED: usize = 16;
 /// Spec 6.1: an origin document is cached for no more than 24 hours.
 const ORIGIN_RECHECK_S: u64 = 24 * 60 * 60;
 
@@ -461,12 +464,9 @@ impl SessionLoop {
                 self.send(session, stored, Message::SessionPong, 300)
                     .await?;
             }
-            Message::SessionEnd { reason } => {
-                tracing::info!(
-                    dapp = %stored.record.dapp,
-                    "the dApp ended the xchonnect session: {}",
-                    reason.unwrap_or_default()
-                );
+            Message::SessionEnd { .. } => {
+                // The reason is the dApp's own text: not logged.
+                tracing::info!(dapp = %stored.record.dapp, "the dApp ended the xchonnect session");
                 let _ = (mailbox, read);
                 return Ok((true, Vec::new()));
             }
@@ -702,6 +702,21 @@ impl SessionLoop {
                     self.approvals.withdraw_session(&stored.record.id);
                     deferred.push(inner);
                 }
+                // A request beyond the cap is refused at once rather than queued as yet
+                // another prompt: a dApp cannot line up prompts faster than the user answers.
+                Message::RpcRequest { .. } if deferred.len() >= MAX_DEFERRED => {
+                    if !session.is_ended() {
+                        let busy = rpc::error(
+                            inner.id,
+                            rpc::codes::LIMIT_EXCEEDED,
+                            "too many requests waiting",
+                            None,
+                        )
+                        .map_err(Error::protocol)?;
+                        self.send(session, stored, busy, 3600).await?;
+                    }
+                }
+                _ if deferred.len() >= MAX_DEFERRED => {}
                 _ => deferred.push(inner),
             }
         }

@@ -181,7 +181,12 @@ impl ApprovalBridge {
     pub fn resolve(&self, id: &str, approved: bool) -> Result<()> {
         let sender = {
             let registry = self.registry.lock().map_err(Error::internal)?;
-            registry.waiting.get(id).map(|w| w.answer.clone())
+            registry.waiting.get(id).and_then(|w| {
+                // Already withdrawn (and answered "no"): an approval now would be reported
+                // as given although nothing will be signed.
+                let key = (w.approval.session_id.clone(), w.approval.request_id.clone());
+                (!registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
+            })
         };
         let sender = sender.ok_or(Error::UnknownApproval)?;
         // The waiting thread removes its own entry; a send failure means it already gave
@@ -383,6 +388,11 @@ mod tests {
         // Another request of the same session is not touched.
         assert!(!bridge.withdraw_request("s1", "r-other", Withdrawn::ByDapp));
         assert!(bridge.withdraw_request("s1", "r-e", Withdrawn::ByDapp));
+        // Approving what was just withdrawn is refused, never reported as given.
+        assert!(matches!(
+            bridge.resolve("e", true),
+            Err(Error::UnknownApproval)
+        ));
         assert!(!worker.join().unwrap(), "withdrawn means do not sign");
         assert!(*shown.lock().unwrap());
         assert_eq!(bridge.take_withdrawn("s1", "r-e"), Some(Withdrawn::ByDapp));
