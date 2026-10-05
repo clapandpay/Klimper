@@ -1,4 +1,5 @@
 import { discoverThemes, resolveThemeImage } from '@/lib/themes';
+import '@/lib/klimperTheme';
 import { i18n } from '@lingui/core';
 import { I18nProvider } from '@lingui/react';
 import { useEffect, useState } from 'react';

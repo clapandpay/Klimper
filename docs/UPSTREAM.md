@@ -15,6 +15,15 @@ Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LIC
 | ------------------- | ------------------------------ |
 | Merged version      | **v0.13.1**, merged 2026-09-20 |
 | Hotfix merges since | none                           |
+| Klimper version     | **0.13.1**, the merged tag     |
+
+**Klimper's version is the version of the Sage release it is built on.** Sage's app system
+(`crates/sage-apps`) checks an app's minimum Sage version against the Tauri app version
+(`package_info().version`), not the engine's, so a Klimper version of its own made every app that
+needs Sage 0.13 refuse to run ("You are running Sage 0.1.0"; TASK-063). The version lives in
+`src-tauri/tauri.{macos,linux,windows,ios,android}.conf.json` and the committed iOS `Info.plist`;
+the upgrade below bumps it. Once upstream compares against the engine version instead, Klimper
+can number its own releases again.
 
 ## Routine
 
@@ -40,6 +49,51 @@ clean checkout of the merged tag with `git apply`.
 
 A fix that cannot be merged because the commits before it are not wanted yet:
 `git cherry-pick -x <commit>` on a `hotfix/` branch; the next tag merge resolves it.
+
+## Staying current
+
+Pulling from Sage comes before pushing to Sage. A patch we carry (the keychain password, the
+flags) costs some work at each merge; a Sage release we have not merged is a wallet, keychain
+or bridge fix our users do not have. So we accept carrying patches, and we never delay a merge
+waiting for upstream to take one.
+
+**How we find out.** No clock runs anywhere (AGENTS.md, "CI"), so it is people who look:
+
+- Watch `xch-dev/sage` on GitHub with _Custom → Releases_ and _Security alerts_. A release or an
+  advisory then arrives as a notification.
+- Run `scripts/sync-upstream.sh --check` at the start of every work week, and before every build
+  that leaves the team. It lists the new upstream commits touching the watched paths: the wallet,
+  keychain, apps and database crates, the engine, `src-tauri`, `tauri-plugin-sage` and the
+  lockfiles.
+
+**How fast.**
+
+| What is new upstream                                                      | Merge within    | How                                                                                                                       |
+| ------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| A security fix or advisory, or a fix in a watched path marked as security | the same day    | `scripts/sync-upstream.sh <commit>` on `hotfix/sage-<short sha>`; `cherry-pick -x` if the commits before it are not ready |
+| A release tag                                                             | one week        | "The upgrade, step by step" below, on `upstream/sage-<tag>`                                                               |
+| Other commits on `upstream/main`                                          | at the next tag | nothing; releases carry them                                                                                              |
+
+A hotfix goes through the same checks as an upgrade (step 5) and gets a row in "Hotfix merges
+since" above. When a store build is in review, the fix still merges; the build is replaced.
+
+**What makes a merge slow, and what to do about it.** Only the shared files in `--diff` can
+conflict. Keep that list short: new code goes in files of our own, a shared file gets one import
+and one element at most. The keychain password is the exception, because a flag cannot switch it
+off. It touches `crates/sage-keychain` and the places the empty password used to be passed
+(`crates/sage/src/sage.rs`, `error.rs`, `utils/spends.rs`, `endpoints/{actions,keys,offers,
+wallet_connect}.rs`). When one of those conflicts:
+
+1. Take upstream's version of the file.
+2. Re-apply our change, which is always the same: where Sage passes `b""` as the keychain
+   password, ask the keychain for it (`self.keychain.password()?`), and map a locked keychain to
+   `Unauthorized`.
+3. `cargo test -p sage-keychain -p tauri-plugin-klimper-passkey`, then
+   `grep -rn 'b""' crates/sage/src`. The grep must find no keychain call: a new call site from
+   upstream that still passes the empty password would fail silently once a passkey is set.
+
+Proposing the keychain change to Sage stays worth doing, because it would make those merges
+free. But it is optional, and no upgrade waits for it.
 
 ## The upgrade, step by step
 
@@ -78,16 +132,21 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
 
    ```sh
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
+   grep -h '"version"' src-tauri/tauri.*.conf.json  # the merged tag, every one (see the top)
    grep -c '^VITE_' .env                            # 11
    grep -c featureElement src/App.tsx               # 8
+   grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
+                                                    # cleanly but pass the empty password
+   grep -c 'Passkey' src/App.tsx src/pages/Settings.tsx  # 2 each
    ```
 
 7. **Credit the people whose work this is.** `scripts/sync-upstream.sh --credits`, and update
    `NOTICE` if the list moved. Apache-2.0 asks a fork to keep attribution, and since Sage ships
    no `NOTICE` of its own, ours is the only place its authors are named. A new contributor
    upstream is a name missing from ours until someone regenerates it.
-8. **Write it down.** The merged version in the table above, and any new row in the file tables
-   below — `--diff` tells you if one is missing.
+8. **Write it down.** The merged version in the table above; Klimper's version set to it in the
+   five `tauri.*.conf.json` files and `src-tauri/gen/apple/sage-tauri_iOS/Info.plist`; and any
+   new row in the file tables below — `--diff` tells you if one is missing.
 
 ## Our files (the whole diff against upstream)
 
@@ -187,6 +246,20 @@ Nothing under `crates/`, `crates/sage-apps` or `packages/sage-app-sdk` is touche
 plugin reads the Sage database through `sage-database`'s public API and signs through
 `sage-keychain`, the same way `crates/sage/src/endpoints/wallet_connect.rs` does.
 
+### Look: Klimper Coin (TASK-062)
+
+The design guide (Klimper Coin) is `docs/design-guide.md`. It is applied as two themes and one stylesheet scoped
+to them. The themes are named `light` and `dark`, so they replace Sage's core themes of that name;
+Sage's other themes stay selectable and unchanged, and no shared component is edited.
+
+| File                                                                                                             | Ours       | Note                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `docs/design-guide.md`, `src/themes/klimper-light/`, `src/themes/klimper-dark/`                                  | new        | ordinary theme-o-rama themes named `light` and `dark`: theme-o-rama keys themes by name, so they replace its built-ins |
+| `src/lib/klimperTheme.ts`, `src/klimper.css`                                                                     | new        | default theme once per install; ink sidebar, pill buttons, coins, total band, focus, 44px controls, motion             |
+| `src/App.tsx`                                                                                                    | one import | `import '@/lib/klimperTheme'`, before the `ThemeProvider` reads the saved theme                                        |
+| `src/icon-dark.png`, `src/icon-light.png`, `src-tauri/icons/*`, the iOS `AppIcon.appiconset`, Android `mipmap-*` | replaced   | the Klimper logo; every app icon is regenerated by `scripts/update-logo.sh` (new, ours). Take ours on a conflict       |
+| `src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml`                                       | one colour | set by `scripts/update-logo.sh` from the logo's corner                                                                 |
+
 Identifier: `com.clapandpay.klimper`. Klimper therefore has its own data directory and never
 opens a Sage wallet's data. Crate, package and binary names stay `sage-*`.
 
@@ -194,15 +267,14 @@ Known leftovers, deliberately not patched:
 
 - `crates/sage-cli` and `crates/sage-client` look for the RPC certificates in the
   `com.rigidnetwork.sage` data directory. Propose an override upstream before relying on the CLI.
-- App icons are still Sage's (`src-tauri/icons`, mobile asset catalogues). They must be replaced
-  before any build leaves the team (TASK-004, TASK-008; trademark).
 
 ## Conflict playbook
 
 1. Conflict in one of the files above: keep our lines, take everything else from upstream.
 2. Conflict anywhere else means we edited a shared file. Take upstream, then re-apply our change
    as a flag, a theme value or a file of our own; if the hiding point is missing, propose it
-   upstream first.
+   upstream first. The one exception is the keychain password, which cannot be a flag: re-apply
+   it as "Staying current" describes.
 3. Never resolve anything under `crates/sage-apps` or `packages/sage-app-sdk` in our favour.
 
 ## CI

@@ -1,0 +1,89 @@
+{
+  "name": "light",
+  "displayName": "Klimper Light",
+  "schemaVersion": 1,
+  "inherits": "light",
+  "mostLike": "light",
+  "backgroundImage": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201600%201000%22%20preserveAspectRatio%3D%22xMaxYMax%20slice%22%3E%20%3Cdefs%3E%3ClinearGradient%20id%3D%22s%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF3B1F%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23FF9A1F%22/%3E%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22t%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF3B1F%22%20stop-opacity%3D%220%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23FF5A1F%22/%3E%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22u%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%230F7C87%22%20stop-opacity%3D%220%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230F7C87%22/%3E%3C/linearGradient%3E%3C/defs%3E%20%3Crect%20width%3D%221600%22%20height%3D%221000%22%20fill%3D%22%23FFF7EC%22/%3E%20%3Cg%20opacity%3D%221%22%3E%20%3Ccircle%20cx%3D%221540%22%20cy%3D%221010%22%20r%3D%22250%22%20fill%3D%22url%28%23s%29%22/%3E%20%3Crect%20x%3D%221060%22%20y%3D%22846%22%20width%3D%22300%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22url%28%23t%29%22/%3E%20%3Crect%20x%3D%221140%22%20y%3D%22884%22%20width%3D%22220%22%20height%3D%2210%22%20rx%3D%225%22%20fill%3D%22url%28%23t%29%22/%3E%20%3Crect%20x%3D%221100%22%20y%3D%22930%22%20width%3D%22220%22%20height%3D%2214%22%20rx%3D%227%22%20fill%3D%22url%28%23u%29%22/%3E%20%3Ccircle%20cx%3D%221030%22%20cy%3D%22854%22%20r%3D%2214%22%20fill%3D%22%23FF3B1F%22/%3E%20%3Ccircle%20cx%3D%221070%22%20cy%3D%22937%22%20r%3D%2218%22%20fill%3D%22%230F7C87%22/%3E%20%3C/g%3E%3C/svg%3E",
+  "backgroundSize": "cover",
+  "backgroundPosition": "right bottom",
+  "backgroundRepeat": "no-repeat",
+  "colors": {
+    "themeColor": "#FFF7EC",
+    "background": "transparent",
+    "foreground": "#111217",
+    "card": "#FFFFFF",
+    "cardForeground": "#111217",
+    "popover": "#FFFFFF",
+    "popoverForeground": "#111217",
+    "primary": "#C73515",
+    "primaryForeground": "#FFFFFF",
+    "secondary": "#FFFFFF",
+    "secondaryForeground": "#111217",
+    "muted": "#FBEEDD",
+    "mutedForeground": "#5C606B",
+    "accent": "#FFEBD6",
+    "accentForeground": "#111217",
+    "destructive": "#B42318",
+    "destructiveForeground": "#FFFFFF",
+    "border": "#EFDCC4",
+    "input": "#E8D3B8",
+    "inputBackground": "#FFFFFF",
+    "ring": "#0F7C87"
+  },
+  "fonts": {
+    "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    "body": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    "heading": "ui-rounded, 'SF Pro Rounded', 'Nunito', 'Inter', system-ui, sans-serif",
+    "mono": "'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace"
+  },
+  "corners": {
+    "none": "0px",
+    "sm": "0.5rem",
+    "md": "0.875rem",
+    "lg": "1.25rem",
+    "xl": "1.5rem",
+    "full": "9999px"
+  },
+  "shadows": {
+    "sm": "0 1px 2px rgb(17 18 23 / 0.06)",
+    "card": "0 1px 0 rgb(17 18 23 / 0.04), 0 12px 32px -12px rgb(255 91 31 / 0.28)",
+    "button": "none",
+    "dropdown": "0 18px 40px -12px rgb(17 18 23 / 0.28)"
+  },
+  "sidebar": {
+    "background": "#111217",
+    "border": "none"
+  },
+  "tables": {
+    "background": "#FFFFFF",
+    "border": "1px solid #EFDCC4",
+    "header": {
+      "background": "transparent",
+      "color": "#5C606B",
+      "border": "1px solid #EFDCC4"
+    },
+    "row": {
+      "background": "transparent",
+      "color": "#111217",
+      "border": "1px solid #EFDCC4",
+      "hover": {
+        "background": "#FFEBD6"
+      },
+      "selected": {
+        "background": "#FFEBD6",
+        "color": "#111217"
+      }
+    }
+  },
+  "switches": {
+    "checked": {
+      "background": "#FF5A1F",
+      "thumbColor": "#FFFFFF"
+    },
+    "unchecked": {
+      "background": "#EFDCC4",
+      "thumbColor": "#FFFFFF"
+    }
+  }
+}

@@ -1,0 +1,275 @@
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright 2026 the Klimper authors
+ *
+ * Klimper Coin (docs/design-guide.md). Colours, radii, buttons and the sun backdrop live in
+ * src/themes/klimper-{light,dark}/theme.json; this file holds what a theme.json cannot say.
+ * The Klimper themes are named "light" and "dark", so they replace Sage's core themes of the same
+ * name; every rule is scoped to them, so any other Sage theme (Colorful, XCH, …) stays unchanged,
+ * and no shared component is edited. Selectors lean on structure and Sage's own class hooks, never
+ * on translated text.
+ */
+
+:root:is(.theme-light, .theme-dark) {
+  --sun-red: #ff3b1f;
+  --sun-orange: #ff7a1f;
+  --sun-yellow: #ffc21a;
+  --teal: #0f7c87;
+  --ink: #111217;
+  --cream: #fff4e6;
+  --sun: linear-gradient(135deg, #ff3b1f 0%, #ff7a1f 60%, #ff9a1f 100%);
+  --nav-active-background: rgb(255 122 31 / 0.16);
+
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root.theme-light {
+  --canvas: #fff7ec;
+}
+
+:root.theme-dark {
+  --canvas: #0f1014;
+}
+
+:root:is(.theme-light, .theme-dark),
+:root:is(.theme-light, .theme-dark) body {
+  background-color: var(--canvas);
+}
+
+/* Type: rounded, heavy display titles; the body stays plain. */
+:root:is(.theme-light, .theme-dark) :is(h1, h2) {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+:root:is(.theme-light, .theme-dark) thead th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root:is(.theme-light, .theme-dark) ::selection {
+  background: rgb(255 122 31 / 0.3);
+}
+
+/* Sidebar: ink in both themes, so the wallet frame reads as Klimper at a glance. The element is
+   found by the variable Sage's layout sets on it, which does not change with the language. */
+:root:is(.theme-light, .theme-dark) [style*='--sidebar-background'] {
+  --foreground: #fff4e6;
+  --muted-foreground: #9a9ea8;
+  --primary: #ffffff;
+  --border: #25272e;
+  --accent: #1e2027;
+  --accent-foreground: #ffffff;
+  color: var(--foreground);
+}
+
+:root:is(.theme-light, .theme-dark) nav a[aria-current='page'] {
+  font-weight: 600;
+}
+
+:root:is(.theme-light, .theme-dark) nav a[aria-current='page'] svg {
+  color: var(--sun-orange);
+}
+
+/* Cards: white (or graphite) tiles with a hairline and a warm glow; linked cards lift. */
+:root:is(.theme-light, .theme-dark) .bg-card.shadow-card {
+  border: 1px solid var(--border);
+}
+
+:root:is(.theme-light, .theme-dark) a > .bg-card.shadow-card {
+  transition:
+    transform 200ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root:is(.theme-light, .theme-dark) a > .bg-card.shadow-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgb(17 18 23 / 0.04),
+    0 18px 40px -14px rgb(255 91 31 / 0.45);
+}
+
+/* Coins: an asset without its own icon is a sun coin; one with an icon gets a brass rim. */
+:root:is(.theme-light, .theme-dark)
+  .bg-card
+  svg:is(.lucide-coins, .lucide-undo-dot) {
+  box-sizing: content-box;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0.5rem;
+  border-radius: 9999px;
+  background: var(--sun);
+  color: var(--ink);
+  stroke-width: 1.75;
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.35),
+    0 4px 10px -4px rgb(255 59 31 / 0.6);
+}
+
+:root:is(.theme-light, .theme-dark) .bg-card img[alt='Asset icon'] {
+  border-radius: 9999px;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--sun-yellow);
+}
+
+:root:is(.theme-light, .theme-dark) .bg-card .text-2xl {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Buttons: pills. Primary is the sun with ink text, secondary teal, outline a white pill.
+   (Sage applies a theme's button block only behind a buttonStyle flag, so they are set here.) */
+:root:is(.theme-light, .theme-dark)
+  [class*='btn-variant-']:not(.btn-variant-ghost, .btn-variant-link) {
+  border-radius: 9999px;
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-default {
+  border: 0;
+  background: var(--sun);
+  color: var(--ink);
+  box-shadow: 0 6px 16px -6px rgb(255 59 31 / 0.55);
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-default:hover {
+  background: var(--sun);
+  filter: saturate(1.15) brightness(1.03);
+  box-shadow: 0 10px 22px -8px rgb(255 59 31 / 0.6);
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-secondary {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-secondary:hover {
+  background: color-mix(in srgb, var(--teal) 85%, black);
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-outline {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+}
+
+:root:is(.theme-light, .theme-dark) .btn-variant-outline:hover {
+  border-color: var(--sun-orange);
+}
+
+/* The token page: the big balance in the display face, Send in sun and Receive in teal (they are
+   the first two buttons in the balance card's action row, outline buttons upstream). */
+:root:is(.theme-light, .theme-dark) .bg-card .font-mono.sm\:text-4xl {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+:root:is(.theme-light, .theme-dark)
+  .bg-card
+  .flex.gap-2.mt-2.flex-wrap
+  > .btn-variant-outline:nth-child(-n + 2) {
+  border: 0;
+  padding-inline: 1.25rem;
+}
+
+:root:is(.theme-light, .theme-dark)
+  .bg-card
+  .flex.gap-2.mt-2.flex-wrap
+  > .btn-variant-outline:nth-child(1) {
+  background: var(--sun);
+  color: var(--ink);
+  box-shadow: 0 6px 16px -6px rgb(255 59 31 / 0.55);
+}
+
+:root:is(.theme-light, .theme-dark)
+  .bg-card
+  .flex.gap-2.mt-2.flex-wrap
+  > .btn-variant-outline:nth-child(2) {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+:root:is(.theme-light, .theme-dark) thead :is(th, th button) {
+  color: var(--muted-foreground);
+}
+
+/* The estimated total under the asset grid: a sun band, the one bright surface on the page. */
+:root:is(.theme-light, .theme-dark) .mt-6.pt-4.border-t {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  border: 0;
+  border-radius: 1.5rem;
+  background: var(--sun);
+  color: var(--ink);
+  font-family: var(--font-heading);
+  box-shadow: 0 16px 36px -16px rgb(255 59 31 / 0.6);
+}
+
+:root:is(.theme-light, .theme-dark) .mt-6.pt-4.border-t .text-muted-foreground {
+  color: var(--ink);
+}
+
+/* On a phone the backdrop shrinks into the corner, clear of the content. theme-o-rama sets the
+   size inline on <body>, hence !important. */
+@media (max-width: 767px) {
+  :root:is(.theme-light, .theme-dark) body.has-background-image {
+    background-size: auto 38vh !important;
+  }
+}
+
+/* The passkey lock screen must stay opaque over the backdrop. */
+:root:is(.theme-light, .theme-dark)
+  .fixed.inset-0.bg-background[role='dialog'] {
+  background: var(--canvas);
+}
+
+/* Focus: a 2px teal ring, offset from the control. */
+:root:is(.theme-light, .theme-dark) :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  --tw-ring-shadow: 0 0 #0000;
+}
+
+/* Controls: 44px touch targets for text inputs and full-size buttons (not icon or small ones). */
+:root:is(.theme-light, .theme-dark)
+  :is(
+    input.h-9,
+    button[role='combobox'].h-9,
+    [class*='btn-variant-']:is(.h-9, .h-10):not(.w-9)
+  ) {
+  min-height: 44px;
+}
+
+:root:is(.theme-light, .theme-dark) [class*='btn-variant-']:not(.w-9) {
+  font-weight: 700;
+}
+
+/* Motion: 160–240ms for common transitions, and none when the system asks for less. */
+:root:is(.theme-light, .theme-dark)
+  :is(
+    .transition,
+    .transition-all,
+    .transition-colors,
+    .transition-opacity,
+    .transition-transform
+  ) {
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:is(.theme-light, .theme-dark) *,
+  :root:is(.theme-light, .theme-dark) *::before,
+  :root:is(.theme-light, .theme-dark) *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
