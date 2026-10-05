@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A live QR reader for the computer's camera.
+// A live QR reader for the webview's camera, on a phone and on a computer.
 //
-// On a phone the native scanner (`/scan`, `@tauri-apps/plugin-barcode-scanner`) reads
-// codes; it has no desktop implementation, so on a computer the webview's own camera is
-// read here, frame by frame, with the same `jsQR` decoder that reads pictures
-// (`src/lib/scanImage.ts`).
+// The camera is read here, frame by frame, with the open-source `jsQR` decoder that also
+// reads pictures (`src/lib/scanImage.ts`). The Scan tab uses nothing else; the native
+// scanner (`/scan`, `@tauri-apps/plugin-barcode-scanner`) is still used by other screens.
 //
 // Frames never leave this component: nothing is uploaded, stored or logged, and the
 // decoded text goes to `onCode` only — a pairing code is a secret (spec 6.2). The camera
@@ -15,6 +14,7 @@ import { Trans } from '@lingui/react/macro';
 import jsQR from 'jsqr';
 import { CameraOff, QrCode } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import './xchonnect.css';
 
 /** Longest edge a frame is scaled to before decoding: enough for a QR on a screen. */
 const DECODE_EDGE = 640;

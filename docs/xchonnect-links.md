@@ -63,9 +63,13 @@ remains for a code read aloud or typed.
 ### The Scan tab
 
 The pairing screen is no longer the only way in. **Scan** is a tab in the main navigation
-(`src/klimper/Scanner.tsx`, behind `scanEnabled`, on by default): one camera for every code.
-On a phone the tap opens the camera at once; on a computer the page offers the clipboard, a
-picture and a text field. What was read is sorted by `classifyScan` (`scanTarget.ts`):
+(`src/klimper/Scanner.tsx`, behind `scanEnabled`, on by default): one camera for every code,
+and nothing else: no clipboard, no picture, no text field. The camera opens as soon as the
+tab is shown, on a phone and on a computer alike. It is the webview's own camera
+(`getUserMedia`), decoded frame by frame by the open-source `jsQR` in `QrCamera.tsx`; the
+tab does not use the native barcode-scanner plugin. On iOS this needs
+`NSCameraUsageDescription` in `src-tauri/Info.plist`. What was read is sorted by
+`classifyScan` (`scanTarget.ts`):
 
 | Code                                            | Goes to                                     |
 | ----------------------------------------------- | ------------------------------------------- |
