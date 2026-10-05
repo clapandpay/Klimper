@@ -4,11 +4,11 @@
      The scene manifest belongs to Sources/sage-tauri/KlimperScene.m in gen/apple. -->
 <plist version="1.0">
     <dict>
-        <!-- Klimper implements standard algorithms itself (AES-256-GCM and Argon2 for the key
-             file, BLS, and X25519, Ed25519, HPKE and XChaCha20-Poly1305 for Xchonnect), beyond
-             the encryption in iOS: answered as such in App Store Connect (TASK-090). -->
-        <key>ITSAppUsesNonExemptEncryption</key>
-        <true/>
+        <!-- No ITSAppUsesNonExemptEncryption yet (TASK-090). Klimper implements standard
+             algorithms itself, but `true` makes App Store Connect refuse every upload until
+             export documentation is approved and its code is in ITSEncryptionExportComplianceCode;
+             `false` claims an exemption nobody has confirmed. Until TASK-090 decides, each build
+             answers the export question in App Store Connect. -->
         <key>UIApplicationSceneManifest</key>
         <dict>
             <key>UIApplicationSupportsMultipleScenes</key>
