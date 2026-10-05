@@ -7,22 +7,19 @@
 //! `policy::plan` refuses to sign for a key that is not in [`WalletSnapshot::keys`]
 //! (spec 11.1 item 2).
 //!
-//! ## Per-signature approval on desktop
+//! ## One decision, one unlock, every signature
 //!
-//! Spec 11.1 item 4 asks for biometrics on every signature. On iOS that is the passkey
-//! assertion in `tauri-plugin-klimper-passkey`, whose Swift side only exists for iOS 18+
-//! (`Passkeys::supported()` is `false` everywhere else), so on the desktop target the gate
-//! is the two things desktop actually has:
+//! Spec 11.1 item 4 is one authentication per signing **request**, covering all of its
+//! signatures (xchonnect-wiki 04): the user approves the request once, and
+//! [`KlimperSigner::sign_all`] then opens the keychain **once** and produces every
+//! signature of the approved plan. There is no prompt per signature.
 //!
-//! 1. **The keychain must be open.** `keys.bin` is opened by [`sage_keychain::Keychain`];
-//!    with a passkey enrolled, `keychain.password()` fails with `Locked` until the passkey
-//!    has unlocked it, and the signer then cannot produce anything.
-//! 2. **One explicit confirmation per signature**, through [`crate::approval`], in
-//!    addition to the approval of the request as a whole. Declining returns
-//!    [`SignerError::Cancelled`] and nothing is signed.
+//! With a passkey enrolled, `keychain.password()` fails with `Locked` until the passkey has
+//! unlocked it, and nothing is signed. A fresh platform authentication per request on the
+//! desktop (Touch ID) is a follow-up: it needs Objective-C calls the workspace's
+//! `unsafe_code = "forbid"` rules out here.
 //!
-//! Secret key material is fetched inside the smallest possible scope — per signature, not
-//! per request — and dropped immediately. The keychain password is a
+//! Secret key material lives only inside one `sign_all` call and is dropped at its end. The keychain password is a
 //! `Zeroizing<Vec<u8>>`; `chia_bls::SecretKey` has neither `Drop` nor `Zeroize` in
 //! chia-bls 0.36, so its bytes are not scrubbed. That is a chia-bls limitation, recorded
 //! as a follow-up rather than papered over (the workspace denies `unsafe_code`, so it
@@ -198,10 +195,6 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
     })
 }
 
-/// Asked once per planned signature, with that signature's 1-based position; `false`
-/// means the user declined and nothing is signed.
-pub type SignatureGate = Arc<dyn Fn(usize, &PublicKey) -> bool + Send + Sync>;
-
 /// Signs through Klimper's key storage.
 ///
 /// Lives for exactly one request. `sign` runs on the thread that drives
@@ -211,7 +204,6 @@ pub struct KlimperSigner {
     state: AppState,
     fingerprint: u32,
     derivations: HashMap<PublicKey, Derivation>,
-    gate: SignatureGate,
     done: AtomicUsize,
 }
 
@@ -224,12 +216,11 @@ impl std::fmt::Debug for KlimperSigner {
 }
 
 impl KlimperSigner {
-    pub fn new(state: AppState, snapshot: &WalletSnapshot, gate: SignatureGate) -> Self {
+    pub fn new(state: AppState, snapshot: &WalletSnapshot) -> Self {
         KlimperSigner {
             state,
             fingerprint: snapshot.fingerprint,
             derivations: snapshot.derivations.clone(),
-            gate,
             done: AtomicUsize::new(0),
         }
     }
@@ -246,54 +237,69 @@ impl Signer for KlimperSigner {
         public_key: &PublicKey,
         message: &[u8],
     ) -> std::result::Result<Signature, SignerError> {
-        let Some(derivation) = self.derivations.get(public_key).copied() else {
-            // Not one of this wallet's keys. `policy::plan` should already have refused,
-            // so this is the belt to that braces.
-            return Err(SignerError::KeyUnavailable);
-        };
-        let index = self.done.load(Ordering::SeqCst) + 1;
-        if !(self.gate)(index, public_key) {
-            return Err(SignerError::Cancelled);
-        }
+        let mut signatures = self.sign_all(&[(public_key, message)])?;
+        signatures.pop().ok_or(SignerError::KeyUnavailable)
+    }
 
-        // Smallest possible scope for key material: one signature.
-        let signature = {
-            let state = self.state.clone();
-            let fingerprint = self.fingerprint;
-            let result = tauri::async_runtime::block_on(async move {
-                let sage = state.lock().await;
-                // With a passkey enrolled this fails with `Locked` until the passkey has
-                // opened the keychain.
-                let password = sage.keychain.password()?;
-                let (_mnemonic, Some(master)) =
-                    sage.keychain.extract_secrets(fingerprint, &password)?
-                else {
-                    return Err(Error::WalletLocked);
-                };
-                Ok(derive(&master, derivation))
-            });
-            match result {
-                Ok(secret) => {
-                    let signature = chia_bls::sign(&secret, message);
-                    drop(secret);
-                    signature
-                }
-                Err(error) => {
-                    tracing::warn!("xchonnect signature refused: {error}");
-                    return Err(SignerError::KeyUnavailable);
-                }
+    /// The whole approved plan: the keychain is opened once, every key is derived once,
+    /// every signature is made and verified, and the key material is dropped.
+    fn sign_all(
+        &self,
+        requests: &[(&PublicKey, &[u8])],
+    ) -> std::result::Result<Vec<Signature>, SignerError> {
+        // Every key must be one of this wallet's. `policy::plan` already refused any other;
+        // this is the belt to that braces.
+        let mut wanted: Vec<(PublicKey, Derivation)> = Vec::new();
+        for (public_key, _) in requests {
+            let derivation = self
+                .derivations
+                .get(public_key)
+                .copied()
+                .ok_or(SignerError::KeyUnavailable)?;
+            if !wanted.iter().any(|(pk, _)| pk == *public_key) {
+                wanted.push((**public_key, derivation));
             }
-        };
-
-        // Verify before handing it back. `handle()` checks this too; doing it here means a
-        // wrong signature never leaves this module, whatever the caller does with it
-        // (xchonnect "wallet-kit: verify every signature returned by the host Signer").
-        if !chia_bls::verify(&signature, public_key, message) {
-            tracing::error!("a signature produced for an xchonnect request did not verify");
-            return Err(SignerError::KeyUnavailable);
         }
-        self.done.fetch_add(1, Ordering::SeqCst);
-        Ok(signature)
+
+        let state = self.state.clone();
+        let fingerprint = self.fingerprint;
+        let secrets = tauri::async_runtime::block_on(async move {
+            let sage = state.lock().await;
+            // With a passkey enrolled this fails with `Locked` until the passkey has
+            // opened the keychain.
+            let password = sage.keychain.password()?;
+            let (_mnemonic, Some(master)) =
+                sage.keychain.extract_secrets(fingerprint, &password)?
+            else {
+                return Err(Error::WalletLocked);
+            };
+            Ok(wanted
+                .into_iter()
+                .map(|(pk, derivation)| (pk, derive(&master, derivation)))
+                .collect::<Vec<_>>())
+        })
+        .map_err(|error| {
+            tracing::warn!("xchonnect signatures refused: {error}");
+            SignerError::KeyUnavailable
+        })?;
+
+        let mut signatures = Vec::with_capacity(requests.len());
+        for (public_key, message) in requests {
+            let Some((_, secret)) = secrets.iter().find(|(pk, _)| pk == *public_key) else {
+                return Err(SignerError::KeyUnavailable);
+            };
+            let signature = chia_bls::sign(secret, message);
+            // Verified before it is handed back: a wrong signature never leaves this
+            // module, whatever the caller does with it.
+            if !chia_bls::verify(&signature, public_key, message) {
+                tracing::error!("a signature produced for an xchonnect request did not verify");
+                return Err(SignerError::KeyUnavailable);
+            }
+            signatures.push(signature);
+        }
+        drop(secrets);
+        self.done.fetch_add(signatures.len(), Ordering::SeqCst);
+        Ok(signatures)
     }
 }
 

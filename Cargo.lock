@@ -8325,6 +8325,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.24",
  "sage",
+ "sage-api",
  "sage-config",
  "sage-database",
  "sage-keychain",

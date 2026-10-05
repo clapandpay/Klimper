@@ -71,9 +71,59 @@ export interface BindingView {
   readonly payments: readonly BoundPaymentView[];
 }
 
+/** One coin the user's signature creates: where the money goes. */
+export interface OutputView {
+  readonly label: string;
+  readonly isXch: boolean;
+  readonly precision: number;
+  readonly amount: BigNumber;
+  /** The recipient's p2 puzzle hash (what an address encodes), or null when unknown. */
+  readonly recipient: string | null;
+  /** To one of the user's own addresses: change, or a send to oneself. */
+  readonly toUser: boolean;
+}
+
+/** One claim of the website's declared intent, verified by the wallet. */
+export type VerifiedFactView =
+  | {
+      readonly type: 'recipient';
+      readonly label: string;
+      readonly precision: number;
+      readonly amount: BigNumber;
+      readonly recipient: string;
+    }
+  | { readonly type: 'fee'; readonly amount: BigNumber }
+  | {
+      readonly type: 'net';
+      readonly label: string;
+      readonly precision: number;
+      readonly amount: BigNumber;
+    };
+
+/** The website's declared intent, as the wallet verified it. */
+export interface IntentView {
+  /** The website's label (`[a-z0-9._-]` only), shown as described by the website. */
+  readonly kind: string | null;
+  readonly verified: readonly VerifiedFactView[];
+  /** The website declared every payment to others; no undeclared payment exists. */
+  readonly recipientsComplete: boolean;
+}
+
 export interface SpendPromptView {
   readonly kind: 'spend';
+  /** Klimper signs **and sends** this (`submit_coin_spends`); otherwise it only signs. */
+  readonly broadcasts: boolean;
+  /** Klimper built the spend itself from the request (`chia_send`). */
+  readonly walletBuilt: boolean;
+  /** The wallet database and the independent simulation were compared and agree. */
+  readonly crossChecked: boolean;
+  /** The website's declared intent, every claim verified; `null` when none was given. */
+  readonly intent: IntentView | null;
+  /** The network's own name for its coin: `XCH`, or `TXCH` on testnet. */
+  readonly xchLabel: string;
   readonly assets: readonly AssetView[];
+  /** Every coin the user's own spends create, in order. Empty from an older wallet-kit. */
+  readonly outputs: readonly OutputView[];
   /** Fee implied by the request. `null` means outputs exceed inputs (a partial spend). */
   readonly impliedFee: BigNumber | null;
   readonly reserveFee: BigNumber;
@@ -163,24 +213,27 @@ function hexOf(value: unknown, maxBytes: number): string | null {
  * The label is derived here, never read: a CAT's human name would be a string from
  * outside, and this screen shows no such string.
  */
-function assetOf(value: unknown): {
+function assetOf(
+  value: unknown,
+  xchLabel: string,
+): {
   label: string;
   isXch: boolean;
   assetId: string | null;
 } {
-  if (!isRecord(value)) return { label: 'XCH', isXch: true, assetId: null };
+  if (!isRecord(value)) return { label: xchLabel, isXch: true, assetId: null };
   if (value.type === 'cat') {
     const assetId = hexOf(value.asset_id, 32);
     return assetId === null
       ? { label: 'Unknown CAT', isXch: false, assetId: null }
       : { label: `CAT ${assetId.slice(0, 8)}…`, isXch: false, assetId };
   }
-  return { label: 'XCH', isXch: true, assetId: null };
+  return { label: xchLabel, isXch: true, assetId: null };
 }
 
-function assetViewOf(entry: unknown): AssetView | null {
+function assetViewOf(entry: unknown, xchLabel: string): AssetView | null {
   if (!isRecord(entry)) return null;
-  const asset = assetOf(entry.asset);
+  const asset = assetOf(entry.asset, xchLabel);
   return {
     label: asset.label,
     isXch: asset.isXch,
@@ -190,6 +243,63 @@ function assetViewOf(entry: unknown): AssetView | null {
     conditionalReceived: amountOf(entry.conditional_received),
     sent: amountOf(entry.sent),
     received: amountOf(entry.received),
+  };
+}
+
+function outputViewOf(entry: unknown, xchLabel: string): OutputView | null {
+  if (!isRecord(entry)) return null;
+  const asset = assetOf(entry.asset, xchLabel);
+  return {
+    label: asset.label,
+    isXch: asset.isXch,
+    precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
+    amount: amountOf(entry.amount),
+    recipient: hexOf(entry.recipient, 32),
+    toUser: boolOf(entry.to_user),
+  };
+}
+
+/** Only the characters the wallet itself accepts in a `kind`. Anything else is dropped. */
+function kindOf(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9._-]{1,48}$/.test(value)
+    ? value
+    : null;
+}
+
+function intentOf(value: unknown, xchLabel: string): IntentView | null {
+  if (!isRecord(value)) return null;
+  const verified: VerifiedFactView[] = [];
+  for (const entry of arrayOf(value.verified)) {
+    if (!isRecord(entry)) continue;
+    if (entry.type === 'fee') {
+      verified.push({ type: 'fee', amount: amountOf(entry.amount) });
+      continue;
+    }
+    const asset = assetOf(entry.asset, xchLabel);
+    const precision = asset.isXch ? XCH_PRECISION : CAT_PRECISION;
+    if (entry.type === 'recipient') {
+      const recipient = hexOf(entry.puzzle_hash, 32);
+      if (recipient === null) continue;
+      verified.push({
+        type: 'recipient',
+        label: asset.label,
+        precision,
+        amount: amountOf(entry.amount),
+        recipient,
+      });
+    } else if (entry.type === 'net') {
+      verified.push({
+        type: 'net',
+        label: asset.label,
+        precision,
+        amount: amountOf(entry.amount),
+      });
+    }
+  }
+  return {
+    kind: kindOf(value.kind),
+    verified,
+    recipientsComplete: boolOf(value.recipients_complete),
   };
 }
 
@@ -212,12 +322,12 @@ function timeLocksOf(value: unknown): TimeLockView {
   };
 }
 
-function bindingOf(value: unknown): BindingView | null {
+function bindingOf(value: unknown, xchLabel: string): BindingView | null {
   if (!isRecord(value)) return null;
   const payments: BoundPaymentView[] = [];
   for (const entry of arrayOf(value.bound_payments)) {
     if (!isRecord(entry)) continue;
-    const asset = assetOf(entry.asset);
+    const asset = assetOf(entry.asset, xchLabel);
     payments.push({
       label: asset.label,
       precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
@@ -294,7 +404,10 @@ export function claimedText(value: unknown): string {
  * the screen then offers only Reject, because a request the wallet cannot describe is
  * not a request a user can consent to.
  */
-export function readPrompt(prompt: unknown): PromptView {
+export function readPrompt(
+  prompt: unknown,
+  { xchLabel = 'XCH' }: { readonly xchLabel?: string } = {},
+): PromptView {
   if (!isRecord(prompt)) return { kind: 'unreadable' };
 
   if (prompt.type === 'sign_message') {
@@ -313,15 +426,25 @@ export function readPrompt(prompt: unknown): PromptView {
     };
   }
 
-  if (prompt.type !== 'sign_coin_spends') return { kind: 'unreadable' };
+  // `submit_coin_spends`: the same simulation and plan, and Klimper also broadcasts.
+  const broadcasts = prompt.type === 'submit_coin_spends';
+  if (prompt.type !== 'sign_coin_spends' && !broadcasts) {
+    return { kind: 'unreadable' };
+  }
 
   const summary = isRecord(prompt.summary) ? prompt.summary : {};
   const plan = isRecord(prompt.plan) ? prompt.plan : {};
 
   const assets: AssetView[] = [];
   for (const entry of arrayOf(summary.assets)) {
-    const view = assetViewOf(entry);
+    const view = assetViewOf(entry, xchLabel);
     if (view !== null) assets.push(view);
+  }
+
+  const outputs: OutputView[] = [];
+  for (const entry of arrayOf(summary.outputs)) {
+    const view = outputViewOf(entry, xchLabel);
+    if (view !== null) outputs.push(view);
   }
 
   const signatures: SignatureView[] = [];
@@ -347,7 +470,13 @@ export function readPrompt(prompt: unknown): PromptView {
 
   return {
     kind: 'spend',
+    broadcasts,
+    walletBuilt: broadcasts && boolOf(prompt.wallet_built),
+    crossChecked: boolOf(prompt.cross_checked),
+    intent: intentOf(prompt.intent, xchLabel),
+    xchLabel,
     assets,
+    outputs,
     impliedFee,
     reserveFee: amountOf(summary.reserve_fee),
     unknownPuzzles,
@@ -357,8 +486,9 @@ export function readPrompt(prompt: unknown): PromptView {
     // `has_unsafe` is the summary flag; a single `is_unsafe` requirement is enough on its
     // own, so the warning does not depend on both being written.
     hasUnsafe: boolOf(plan.has_unsafe) || signatures.some((s) => s.isUnsafe),
-    partial: boolOf(prompt.partial),
-    binding: bindingOf(prompt.binding),
+    // A submitted bundle another party's signature completes is the binding case too.
+    partial: boolOf(prompt.partial) || (broadcasts && isRecord(prompt.binding)),
+    binding: bindingOf(prompt.binding, xchLabel),
   };
 }
 

@@ -37,8 +37,8 @@ use serde_json::{Value, json};
 use xchonnect_core::crypto::sha256_parts;
 use xchonnect_core::rpc::codes;
 use xchonnect_wallet_kit::{
-    self as kit, AssetId, AssetLimit, DailySpend, DappPermissions, LimitStore, Network, Ownership,
-    RequestContext, RpcError, Signer, SignerError,
+    self as kit, AssetId, AssetLimit, Broadcast, Broadcaster, DailySpend, DappPermissions, Host,
+    LimitStore, Network, Ownership, RequestContext, RpcError, Signer, SignerError,
 };
 
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
@@ -106,21 +106,44 @@ impl Drop for Webview {
     }
 }
 
-/// Counts calls and can be made faulty: `.faulty` returns a signature by an unrelated key.
+/// Counts signatures and batches, and can be made faulty (`.faulty` returns a signature
+/// by an unrelated key) or cancelled (`.cancel`: the user dismissed the authentication).
 struct CountingSigner {
     secret: SecretKey,
     public: PublicKey,
     calls: AtomicUsize,
+    batches: AtomicUsize,
     faulty: bool,
-    gate: Arc<dyn Fn(usize, &PublicKey) -> bool + Send + Sync>,
+    cancel: bool,
+}
+
+impl CountingSigner {
+    fn new(who: &BlsPair) -> Self {
+        CountingSigner {
+            secret: who.sk.clone(),
+            public: who.pk,
+            calls: AtomicUsize::new(0),
+            batches: AtomicUsize::new(0),
+            faulty: false,
+            cancel: false,
+        }
+    }
 }
 
 impl Signer for CountingSigner {
-    fn sign(&self, public_key: &PublicKey, message: &[u8]) -> Result<Signature, SignerError> {
-        let index = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
-        if !(self.gate)(index, public_key) {
+    fn sign_all(&self, requests: &[(&PublicKey, &[u8])]) -> Result<Vec<Signature>, SignerError> {
+        self.batches.fetch_add(1, Ordering::SeqCst);
+        if self.cancel {
             return Err(SignerError::Cancelled);
         }
+        requests
+            .iter()
+            .map(|(pk, msg)| self.sign(pk, msg))
+            .collect()
+    }
+
+    fn sign(&self, public_key: &PublicKey, message: &[u8]) -> Result<Signature, SignerError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
         if *public_key != self.public {
             return Err(SignerError::KeyUnavailable);
         }
@@ -170,39 +193,18 @@ impl Harness {
         }
     }
 
-    /// Run one request the way `requests::answer` does: the same approver, the same
-    /// per-signature gate, the same persistent limit store.
-    fn call(&self, method: &str, params: &str) -> (Result<String, RpcError>, usize) {
-        let plan_len = Arc::new(AtomicUsize::new(0));
-        let approver = UiApprover::new(
-            self.webview.bridge.clone(),
-            self.meta(method),
-            plan_len.clone(),
-        );
-        let bridge = self.webview.bridge.clone();
-        let meta = self.meta(method);
-        let gate_len = plan_len.clone();
-        let gate = Arc::new(move |index: usize, public_key: &PublicKey| {
-            bridge.ask(Approval {
-                id: format!("sig-{index}-{}", rand_suffix()),
-                session_id: meta.session_id.clone(),
-                dapp: meta.dapp.clone(),
-                method: meta.method.clone(),
-                expires_at: meta.expires_at,
-                kind: ApprovalKind::Signature {
-                    index,
-                    total: gate_len.load(Ordering::SeqCst),
-                    public_key: format!("0x{}", hex::encode(public_key.to_bytes())),
-                },
-            })
-        });
-        let signer = CountingSigner {
-            secret: self.who.sk.clone(),
-            public: self.who.pk,
-            calls: AtomicUsize::new(0),
-            faulty: self.faulty,
-            gate,
-        };
+    /// Run one request the way `requests::answer` does: the same approver and the same
+    /// persistent limit store, through `handle_with_host` with a broadcaster that is a
+    /// simulated chain. Returns the outcome, signatures made and signing batches.
+    fn run(
+        &self,
+        method: &str,
+        params: &str,
+        chain: &SimChain,
+    ) -> (Result<String, RpcError>, usize, usize) {
+        let approver = UiApprover::new(self.webview.bridge.clone(), self.meta(method));
+        let mut signer = CountingSigner::new(&self.who);
+        signer.faulty = self.faulty;
         let limits = PersistentLimits::new(self.store.clone(), 1, "s1".to_owned());
         let context = RequestContext {
             dapp: DAPP,
@@ -216,8 +218,53 @@ impl Harness {
             limits: &limits,
             now: NOW,
         };
-        let outcome = kit::handle(method, params, &context, &signer, &approver);
-        (outcome, signer.calls.load(Ordering::SeqCst))
+        let host = Host {
+            signer: &signer,
+            approver: &approver,
+            broadcaster: Some(chain),
+        };
+        let outcome = kit::handle_with_host(method, params, &context, &host);
+        (
+            outcome,
+            signer.calls.load(Ordering::SeqCst),
+            signer.batches.load(Ordering::SeqCst),
+        )
+    }
+
+    fn call(&self, method: &str, params: &str) -> (Result<String, RpcError>, usize) {
+        let (outcome, calls, _) = self.run(method, params, &SimChain::default());
+        (outcome, calls)
+    }
+}
+
+/// A broadcaster that is a simulated chain: what it accepts, a full node would.
+#[derive(Default)]
+struct SimChain {
+    sim: Mutex<Simulator>,
+    accepted: Mutex<Vec<SpendBundle>>,
+}
+
+impl SimChain {
+    fn on(sim: Simulator) -> Self {
+        SimChain {
+            sim: Mutex::new(sim),
+            accepted: Mutex::default(),
+        }
+    }
+}
+
+impl Broadcaster for SimChain {
+    fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
+        self.sim
+            .lock()
+            .unwrap()
+            .new_transaction(bundle.clone())
+            .map_err(|e| e.to_string())?;
+        self.accepted.lock().unwrap().push(bundle.clone());
+        Ok(Broadcast {
+            transaction_id: format!("0x{}", hex::encode(bundle.name())),
+            status: "pending".to_owned(),
+        })
     }
 }
 
@@ -236,12 +283,6 @@ impl SecretStore for Shared {
     fn delete(&self, key: &str) -> KitResult<()> {
         self.0.delete(key)
     }
-}
-
-fn rand_suffix() -> String {
-    use std::sync::atomic::AtomicU64;
-    static N: AtomicU64 = AtomicU64::new(0);
-    N.fetch_add(1, Ordering::SeqCst).to_string()
 }
 
 fn signature_of(result: &str) -> Signature {
@@ -383,21 +424,12 @@ fn an_approved_spend_is_signed_and_recorded() {
     assert_eq!(calls, 1);
 
     let prompts = harness.webview.prompts();
-    // The request prompt, then one confirmation for the single signature.
+    // One prompt for the whole request; no confirmation per signature.
+    assert_eq!(prompts.len(), 1);
     assert!(matches!(prompts[0].kind, ApprovalKind::Request { .. }));
-    let ApprovalKind::Request { ref prompt } = prompts[0].kind else {
-        panic!("expected a request prompt")
-    };
+    let ApprovalKind::Request { ref prompt } = prompts[0].kind;
     let shown = prompt.to_string();
     assert!(shown.contains("\"net\":-500"), "{shown}");
-    assert!(matches!(
-        prompts[1].kind,
-        ApprovalKind::Signature {
-            index: 1,
-            total: 1,
-            ..
-        }
-    ));
 
     // The loss was committed to the persistent limit store.
     let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
@@ -419,29 +451,20 @@ fn a_rejected_request_signs_nothing() {
     assert!(limits.load().unwrap().spent.is_empty());
 }
 
-/// Declining one individual signature cancels the whole request, even though the request
-/// as a whole was approved.
+/// Dismissing the authentication cancels the whole request: nothing is signed or recorded,
+/// even though the request itself was approved.
 #[test]
-fn declining_a_single_signature_cancels_the_request() {
+fn a_cancelled_authentication_cancels_the_request() {
     let who = BlsPair::new(1);
-    let mut harness = Harness::new(who.clone(), true);
-    // A gate that always refuses, whatever the webview says about the request.
-    harness.permissions = DappPermissions::new_default(who.pk);
+    let harness = Harness::new(who.clone(), true);
     let spends = send(&mut Simulator::new(), &who, 500);
 
-    let plan_len = Arc::new(AtomicUsize::new(0));
     let approver = UiApprover::new(
         harness.webview.bridge.clone(),
         harness.meta("signCoinSpends"),
-        plan_len,
     );
-    let signer = CountingSigner {
-        secret: who.sk.clone(),
-        public: who.pk,
-        calls: AtomicUsize::new(0),
-        faulty: false,
-        gate: Arc::new(|_, _| false),
-    };
+    let mut signer = CountingSigner::new(&who);
+    signer.cancel = true;
     let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
     let context = RequestContext {
         dapp: DAPP,
@@ -463,7 +486,60 @@ fn declining_a_single_signature_cancels_the_request() {
         &approver,
     );
     assert_eq!(outcome.unwrap_err().code, codes::USER_REJECTED);
+    assert_eq!(signer.calls.load(Ordering::SeqCst), 0, "nothing signed");
     assert!(limits.load().unwrap().spent.is_empty(), "nothing committed");
+}
+
+/// A five-coin send is one prompt and one signing batch — one key unlock — not one per
+/// coin (the 1 + 5 prompts of the first testnet runs).
+#[test]
+fn a_five_coin_request_is_one_prompt_and_one_batch() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let mut spends = send(&mut sim, &who, 500);
+    for _ in 0..4 {
+        let coin = sim.new_coin(who.puzzle_hash, 100);
+        let mut ctx = SpendContext::new();
+        StandardLayer::new(who.pk)
+            .spend(&mut ctx, coin, Conditions::new())
+            .unwrap();
+        spends.extend(ctx.take());
+    }
+    let (outcome, calls, batches) = harness.run(
+        "signCoinSpends",
+        &params_for(&spends, false),
+        &SimChain::default(),
+    );
+    let signature = signature_of(&outcome.unwrap());
+    sim.new_transaction(SpendBundle::new(spends, signature))
+        .unwrap();
+    assert_eq!(harness.webview.prompts().len(), 1);
+    assert_eq!((calls, batches), (5, 1));
+}
+
+/// `xchonnect_submitCoinSpends`: Klimper signs once and broadcasts; the chain accepts it,
+/// the dApp gets the transaction id, and the screen was told what the wallet will do.
+#[test]
+fn a_submitted_bundle_is_broadcast_by_the_wallet() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let chain = SimChain::on(sim);
+    let (outcome, _, batches) =
+        harness.run(kit::SUBMIT_COIN_SPENDS, &params_for(&spends, false), &chain);
+    let result: Value = serde_json::from_str(&outcome.unwrap()).unwrap();
+    assert_eq!(result["status"], "pending");
+    assert!(result["transactionId"].as_str().unwrap().starts_with("0x"));
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert_eq!(batches, 1);
+
+    let prompts = harness.webview.prompts();
+    assert_eq!(prompts.len(), 1);
+    let ApprovalKind::Request { ref prompt } = prompts[0].kind;
+    assert_eq!(prompt["type"], "submit_coin_spends");
+    assert_eq!(prompt["wallet_built"], false);
 }
 
 /// Spec 11.2: a `partialSign` request whose user spends do not assert the counterparty's
@@ -494,9 +570,7 @@ fn an_unbound_partial_spend_is_refused_without_a_prompt() {
         let harness = Harness::new(who, true);
         let (outcome, _) = harness.call("signCoinSpends", &params_for(&bound.spends, true));
         let prompts = harness.webview.prompts();
-        let ApprovalKind::Request { ref prompt } = prompts[0].kind else {
-            panic!("expected a request prompt")
-        };
+        let ApprovalKind::Request { ref prompt } = prompts[0].kind;
         (signature_of(&outcome.unwrap()), prompt.to_string())
     };
     let (sig_alice, prompt_alice) = sign_as(bound.alice.clone());
@@ -638,19 +712,11 @@ fn a_request_for_another_network_is_refused() {
     let harness = Harness::new(who.clone(), true);
     let spends = send(&mut Simulator::new(), &who, 500);
     let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
-    let plan_len = Arc::new(AtomicUsize::new(0));
     let approver = UiApprover::new(
         harness.webview.bridge.clone(),
         harness.meta("signCoinSpends"),
-        plan_len,
     );
-    let signer = CountingSigner {
-        secret: who.sk.clone(),
-        public: who.pk,
-        calls: AtomicUsize::new(0),
-        faulty: false,
-        gate: Arc::new(|_, _| true),
-    };
+    let signer = CountingSigner::new(&who);
     let context = RequestContext {
         dapp: DAPP,
         network: Network::Testnet11,

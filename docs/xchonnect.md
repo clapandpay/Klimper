@@ -91,18 +91,30 @@ behind it. An entry whose `state_version` is below the index is restored state: 
 - **Still open:** an end the app quits in the middle of is not resumed at the next start
   (the session comes back and can be ended again).
 
-## Per-signature approval on desktop
+## One decision per request; Klimper broadcasts
 
-Spec 11.1 item 4 asks for biometrics on every signature. `tauri-plugin-klimper-passkey`
-reports `supported() == false` outside iOS 18+, so on the desktop target the gate is the
-two things desktop has:
+Decided 2026-10-05 (xchonnect-wiki `04-wallet-side-execution.md`): spec 11.1 item 4 is one
+authentication per signing **request**, covering all of its signatures. The earlier
+desktop reading — one confirmation per signature — asked 1 + 5 times for a five-coin send
+and is gone.
 
-1. **The keychain must be open.** With a passkey enrolled, `keychain.password()` fails with
-   `Locked` until the passkey has opened it, and the signer produces nothing.
-2. **One explicit confirmation per signature**, through the approval bridge, on top of the
-   approval of the request as a whole.
+1. **One approval** of the whole request, on the overlay or the requests page.
+2. **One unlock**: `KlimperSigner::sign_all` opens the keychain once, derives every key the
+   approved plan needs, signs and verifies everything, and drops the key material. With a
+   passkey enrolled, `keychain.password()` fails with `Locked` until the passkey has opened
+   it, and nothing is signed. A fresh Touch ID prompt per request on macOS is a follow-up:
+   it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out here.
+3. **Klimper broadcasts** (`execute.rs`): `chia_send` is built by Sage from the wallet's
+   own coins, `xchonnect_submitCoinSpends` carries a bundle the website built; both are
+   signed once and sent through Klimper's own peers (`send_transaction_immediately`). The
+   website receives `{ transactionId, status }`.
+4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
+   wallet-kit's simulation must agree on the user's coins spent, the payments to others and
+   the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
+   is verified claim by claim against the simulation; `chia_send` carries one Klimper
+   derives from the request itself.
 
-Key material is fetched per signature, not per request, and dropped immediately. The
+Key material lives only inside one `sign_all` call. The
 keychain password is a `Zeroizing<Vec<u8>>`. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies
 `unsafe_code`, so that cannot be fixed from here. Worth proposing to chia-bls.

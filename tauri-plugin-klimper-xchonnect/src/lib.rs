@@ -55,6 +55,7 @@ use xchonnect_core::domain::display_domain;
 
 pub mod approval;
 pub mod error;
+pub mod execute;
 pub mod origin;
 pub mod pairing;
 pub mod relay;

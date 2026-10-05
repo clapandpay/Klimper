@@ -10,9 +10,12 @@
 //! counterparty's payment (spec 11.2 — there is no override), applies the per-dApp
 //! permissions and limits, and verifies every signature the host signer returns.
 //!
-//! This module supplies the four things it needs from Klimper and nothing else: the
-//! request context, the approval UI, the signer and the limit store. Two checks are made
-//! here, before `handle` is reached:
+//! This module supplies what it needs from Klimper: the request context, the approval UI,
+//! the signer, the limit store and — since the wallet broadcasts (xchonnect-wiki 04) — the
+//! broadcaster. It also routes the methods Klimper builds itself (`chia_send`, see
+//! [`crate::execute`]) and, for a dApp-built bundle, compares Sage's summary with
+//! wallet-kit's simulation before anything is shown. Two checks are made here, before any
+//! of that:
 //!
 //! * **The SAS gate.** A session whose six digits the user never confirmed, or whose
 //!   stored state was rolled back, answers nothing at all (spec 6.3 step 8, 5.3).
@@ -20,13 +23,15 @@
 //!   is shown, for every method and not only for `signCoinSpends` (TASK-079 AC #2).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use xchonnect_core::rpc::codes;
-use xchonnect_wallet_kit::{self as kit, Approver, Prompt, RequestContext, RpcError};
+use serde_json::Value;
+use xchonnect_core::rpc::{canonical_method, codes};
+use xchonnect_wallet_kit::{self as kit, Approver, Host, Prompt, RequestContext, RpcError};
 
 use crate::approval::{Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
 use crate::error::Error;
+use crate::execute::{self, SageBroadcaster};
 use crate::store::{PersistentLimits, SessionRecord, SessionStore};
 use crate::wallet::{AppState, KlimperSigner, WalletSnapshot};
 
@@ -74,12 +79,13 @@ pub struct RequestMeta {
     pub expires_at: u64,
 }
 
-/// Approval UI as wallet-kit's `Approver`. Records the size of the signing plan so each
-/// per-signature prompt can say "2 of 3".
+/// Approval UI as wallet-kit's `Approver`: one approval per request.
 pub struct UiApprover {
     bridge: Arc<ApprovalBridge>,
     meta: RequestMeta,
-    plan_len: Arc<AtomicUsize>,
+    /// Sage's summary and wallet-kit's simulation were compared and agree; the screen says
+    /// so.
+    cross_checked: AtomicBool,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -91,30 +97,33 @@ impl std::fmt::Debug for UiApprover {
 }
 
 impl UiApprover {
-    /// `plan_len` is shared with the per-signature gate, which reads it to label its
-    /// prompts.
-    pub fn new(bridge: Arc<ApprovalBridge>, meta: RequestMeta, plan_len: Arc<AtomicUsize>) -> Self {
+    pub fn new(bridge: Arc<ApprovalBridge>, meta: RequestMeta) -> Self {
         UiApprover {
             bridge,
             meta,
-            plan_len,
+            cross_checked: AtomicBool::new(false),
         }
+    }
+
+    /// Record that the two engines agreed on this request.
+    pub fn mark_cross_checked(&self) {
+        self.cross_checked.store(true, Ordering::SeqCst);
     }
 }
 
 impl Approver for UiApprover {
     fn approve(&self, prompt: &Prompt<'_>) -> bool {
-        if let Prompt::SignCoinSpends { plan, .. } = prompt {
-            self.plan_len.store(plan.ours.len(), Ordering::SeqCst);
-        } else {
-            self.plan_len.store(1, Ordering::SeqCst);
-        }
         // The prompt is serialised exactly as wallet-kit built it from the local
         // simulation. Nothing the dApp wrote is passed to the screen.
-        let Ok(payload) = serde_json::to_value(prompt) else {
+        let Ok(mut payload) = serde_json::to_value(prompt) else {
             tracing::error!("an approval prompt could not be serialised; refusing");
             return false;
         };
+        if self.cross_checked.load(Ordering::SeqCst)
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("cross_checked".to_owned(), Value::Bool(true));
+        }
         self.bridge.ask(Approval {
             id: new_id(),
             session_id: self.meta.session_id.clone(),
@@ -232,31 +241,10 @@ fn run(
 ) -> std::result::Result<String, RpcError> {
     let permissions = record.permissions.to_kit();
     let limits = PersistentLimits::new(store.clone(), record.fingerprint, record.id.clone());
-    let plan_len = Arc::new(AtomicUsize::new(0));
-    let approver = UiApprover::new(approvals.clone(), meta.clone(), plan_len.clone());
-
-    // One confirmation per individual signature, on top of the approval of the request as
-    // a whole (spec 11.1 item 4; see `crate::wallet` for what this is on desktop).
-    let gate = {
-        let bridge = approvals.clone();
-        let meta = meta.clone();
-        let plan_len = plan_len.clone();
-        Arc::new(move |index: usize, public_key: &chia_bls::PublicKey| {
-            bridge.ask(Approval {
-                id: new_id(),
-                session_id: meta.session_id.clone(),
-                dapp: meta.dapp.clone(),
-                method: meta.method.clone(),
-                expires_at: meta.expires_at,
-                kind: ApprovalKind::Signature {
-                    index,
-                    total: plan_len.load(Ordering::SeqCst),
-                    public_key: format!("0x{}", hex::encode(public_key.to_bytes())),
-                },
-            })
-        })
-    };
-    let signer = KlimperSigner::new(state.clone(), snapshot, gate);
+    let approver = UiApprover::new(approvals.clone(), meta.clone());
+    // One approval per request, one key unlock per request (xchonnect-wiki 04).
+    let signer = KlimperSigner::new(state.clone(), snapshot);
+    let broadcaster = SageBroadcaster::new(state.clone());
 
     let context = RequestContext {
         dapp: &record.dapp,
@@ -270,7 +258,30 @@ fn run(
         limits: &limits,
         now,
     };
-    let outcome = kit::handle(&meta.method, params, &context, &signer, &approver);
+    let host = Host {
+        signer: &signer,
+        approver: &approver,
+        broadcaster: Some(&broadcaster),
+    };
+    let outcome = match canonical_method(&meta.method) {
+        execute::CHIA_SEND => {
+            if permissions.allows_method(execute::CHIA_SEND) {
+                approver.mark_cross_checked();
+                execute::send(state, &context, &signer, &approver, &broadcaster, params)
+            } else {
+                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
+            }
+        }
+        kit::SUBMIT_COIN_SPENDS => {
+            // A dApp-built bundle: the wallet database's reading and the simulation must
+            // agree before the user is asked anything.
+            pre_check_submit(state, &context, params).and_then(|()| {
+                approver.mark_cross_checked();
+                kit::handle_with_host(&meta.method, params, &context, &host)
+            })
+        }
+        _ => kit::handle_with_host(&meta.method, params, &context, &host),
+    };
     match &outcome {
         Ok(_) => tracing::info!(
             dapp = %record.dapp,
@@ -288,6 +299,22 @@ fn run(
         ),
     }
     outcome
+}
+
+/// For `xchonnect_submitCoinSpends`: parse the spends and compare Sage's summary with
+/// wallet-kit's simulation. Malformed params are left to wallet-kit to refuse.
+fn pre_check_submit(
+    state: &AppState,
+    context: &RequestContext<'_>,
+    params: &str,
+) -> std::result::Result<(), RpcError> {
+    let Ok(value) = serde_json::from_str::<Value>(params) else {
+        return Ok(());
+    };
+    let Ok(spends) = kit::parse_coin_spends(value.get("coinSpends").unwrap_or(&Value::Null)) else {
+        return Ok(());
+    };
+    execute::check_spends(state, context, &spends)
 }
 
 /// Deadline for a prompt: the request's own expiry, or the bridge's cap, whichever is

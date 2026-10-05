@@ -45,15 +45,6 @@ pub enum ApprovalKind {
         /// `Prompt` as JSON. Render `summary` and `plan`; never anything the dApp sent.
         prompt: Value,
     },
-    /// One individual signature out of the approved plan (TASK-078 AC #1).
-    Signature {
-        /// 1-based position in the plan.
-        index: usize,
-        /// Number of signatures in the plan.
-        total: usize,
-        /// Key that would sign, hex `0x…`.
-        public_key: String,
-    },
 }
 
 /// An approval the webview has to answer.

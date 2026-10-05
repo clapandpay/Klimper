@@ -38,6 +38,11 @@ export function setXchonnectNavigator(navigate: (route: string) => void) {
   navigateTo = navigate;
 }
 
+/** Go to an Xchonnect route from outside the router (the approval overlay). */
+export function goToXchonnectRoute(route: string) {
+  navigateTo(route);
+}
+
 type Listener = (link: XchonnectLink) => void;
 const listeners = new Set<Listener>();
 
