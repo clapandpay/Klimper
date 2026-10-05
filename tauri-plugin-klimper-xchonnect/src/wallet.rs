@@ -19,11 +19,11 @@
 //! desktop (Touch ID) is a follow-up: it needs Objective-C calls the workspace's
 //! `unsafe_code = "forbid"` rules out here.
 //!
-//! Secret key material lives only inside one `sign_all` call and is dropped at its end. The keychain password is a
-//! `Zeroizing<Vec<u8>>`; `chia_bls::SecretKey` has neither `Drop` nor `Zeroize` in
-//! chia-bls 0.36, so its bytes are not scrubbed. That is a chia-bls limitation, recorded
-//! as a follow-up rather than papered over (the workspace denies `unsafe_code`, so it
-//! cannot be scrubbed from here).
+//! Secret key material lives only inside one `sign_all` call and is dropped at its end.
+//! The keychain password is a `Zeroizing<Vec<u8>>`; `chia_bls::SecretKey` has neither
+//! `Drop` nor `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed. That is a
+//! chia-bls limitation, recorded as a follow-up rather than papered over (the workspace
+//! denies `unsafe_code`, so it cannot be scrubbed from here).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

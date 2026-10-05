@@ -67,6 +67,9 @@ mod testing;
 pub mod wallet;
 
 use approval::{Approval, ApprovalBridge, Emitter};
+
+/// The webview the Klimper capability grants this plugin to (`capabilities/klimper.json`).
+const MAIN_WEBVIEW: &str = "main";
 use error::{Error, Result};
 use pairing::{Attempt, EVENT_PAIRING, EVENT_SESSIONS, PairingPreview, PairingSas};
 use session_loop::SessionLoop;
@@ -265,7 +268,10 @@ impl<R: Runtime> Xchonnect<R> {
         if live.get(&id).is_some_and(Live::running) {
             return Ok(true);
         }
-        let relay = relay::RelayClient::new(&stored.record.relay, stored.record.developer_mode)?;
+        // A session paired by a development build keeps its flag in the store; a release
+        // build never honours it (plain-HTTP relays are a development affordance only).
+        let developer_mode = stored.record.developer_mode && developer_mode_allowed();
+        let relay = relay::RelayClient::new(&stored.record.relay, developer_mode)?;
         let end_requested = Arc::new(AtomicBool::new(false));
         let rotate_requested = Arc::new(AtomicBool::new(false));
         let interrupt = Arc::new(tokio::sync::Notify::new());
@@ -591,20 +597,22 @@ async fn set_dapp_policy<R: Runtime>(
     policy: DappPolicy,
 ) -> Result<SessionSummary> {
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
-    let mut stored = state.store.load(snapshot.fingerprint, &session_id)?;
-    if let Some(limits) = policy.limits {
-        stored.record.permissions.limits = limits;
-    }
-    if let Some(methods) = policy.methods {
-        stored.record.permissions.methods = methods;
-    }
-    if let Some(allow) = policy.allow_agg_sig_unsafe {
-        stored.record.allow_agg_sig_unsafe = allow;
-    }
-    if let Some(allow) = policy.allow_unknown_contracts {
-        stored.record.allow_unknown_contracts = allow;
-    }
-    state.store.save(&mut stored)?;
+    let stored = state
+        .store
+        .update_policy(snapshot.fingerprint, &session_id, |record| {
+            if let Some(limits) = policy.limits {
+                record.permissions.limits = limits;
+            }
+            if let Some(methods) = policy.methods {
+                record.permissions.methods = methods;
+            }
+            if let Some(allow) = policy.allow_agg_sig_unsafe {
+                record.allow_agg_sig_unsafe = allow;
+            }
+            if let Some(allow) = policy.allow_unknown_contracts {
+                record.allow_unknown_contracts = allow;
+            }
+        })?;
     let keys = KeyState::stored(&stored);
     let connected = state
         .live
@@ -718,9 +726,14 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let data_dir = app.path().app_data_dir()?;
             let store = Arc::new(SessionStore::open(&data_dir, Box::new(OsKeyring))?);
             let handle = app.clone();
+            // Addressed to the main webview. Not a boundary on its own: Tauri delivers an
+            // event to every listener registered for any target, so an installed app's
+            // webview (`core:event:allow-listen`) can still hear it. Mini-apps have no entry
+            // point on iOS; on desktop, events that carry no data (details fetched through
+            // the commands only `main` may call) are clapandpay TASK-102.
             let emit: Emitter = Arc::new(move |event, payload| {
                 use tauri::Emitter as _;
-                if let Err(error) = handle.emit(event, payload) {
+                if let Err(error) = handle.emit_to(MAIN_WEBVIEW, event, payload) {
                     tracing::warn!("could not emit {event}: {error}");
                 }
             });

@@ -118,16 +118,23 @@ export function XchonnectApprovalDetail({
   titleId,
 }: ApprovalDetailProps) {
   const [confirming, setConfirming] = useState(false);
+  // One answer per request: after a press, every button waits for the next request.
+  const [busy, setBusy] = useState(false);
   const ticker = useTicker();
   const view = useMemo(
     () => readPrompt(approval.prompt, { xchLabel: ticker }),
     [approval, ticker],
   );
 
-  useEffect(() => setConfirming(false), [approval.id]);
+  useEffect(() => {
+    setConfirming(false);
+    setBusy(false);
+  }, [approval.id]);
 
   const answer = (approved: boolean) => {
+    if (busy) return;
     setConfirming(false);
+    setBusy(true);
     onAnswer(approved);
   };
 
@@ -193,8 +200,11 @@ export function XchonnectApprovalDetail({
               variant='ghost'
               size='lg'
               className='flex-1 sm:flex-none'
+              disabled={busy}
               onClick={() => {
+                if (busy) return;
                 setConfirming(false);
+                setBusy(true);
                 onCancel();
               }}
               title={t`Withdraw it without answering. The website is told it was cancelled.`}
@@ -208,6 +218,7 @@ export function XchonnectApprovalDetail({
             size='lg'
             className='flex-1 sm:flex-none'
             onClick={() => answer(false)}
+            disabled={busy}
           >
             <X className='h-4 w-4 mr-1.5' aria-hidden='true' />
             <Trans>Reject</Trans>
@@ -216,7 +227,7 @@ export function XchonnectApprovalDetail({
             size='lg'
             className='flex-1 sm:flex-none'
             onClick={onApprove}
-            disabled={view.kind === 'unreadable'}
+            disabled={busy || view.kind === 'unreadable'}
           >
             <Check className='h-4 w-4 mr-1.5' aria-hidden='true' />
             {broadcasts ? (

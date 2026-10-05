@@ -126,14 +126,15 @@ impl ApprovalBridge {
         (self.emit)(EVENT_SENT, payload);
     }
 
-    /// Ask the user and block until the answer arrives. Called from a blocking thread
-    /// inside `handle()`; `false` means "do not sign".
+    /// [`ApprovalBridge::ask_with`] without a callback.
+    #[cfg(test)]
     pub fn ask(&self, approval: Approval) -> bool {
         self.ask_with(approval, || {})
     }
 
-    /// [`ApprovalBridge::ask`], calling `on_shown` once the prompt is on screen (not when
-    /// the request was refused before it could be shown).
+    /// Ask the user and block until the answer arrives. Called from a blocking thread
+    /// inside `handle()`; `false` means "do not sign". `on_shown` runs once the prompt is
+    /// on screen (not when the request was refused before it could be shown).
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
         let (tx, rx) = mpsc::channel();
@@ -180,7 +181,12 @@ impl ApprovalBridge {
     pub fn resolve(&self, id: &str, approved: bool) -> Result<()> {
         let sender = {
             let registry = self.registry.lock().map_err(Error::internal)?;
-            registry.waiting.get(id).map(|w| w.answer.clone())
+            registry.waiting.get(id).and_then(|w| {
+                // Already withdrawn (and answered "no"): an approval now would be reported
+                // as given although nothing will be signed.
+                let key = (w.approval.session_id.clone(), w.approval.request_id.clone());
+                (!registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
+            })
         };
         let sender = sender.ok_or(Error::UnknownApproval)?;
         // The waiting thread removes its own entry; a send failure means it already gave
@@ -382,6 +388,11 @@ mod tests {
         // Another request of the same session is not touched.
         assert!(!bridge.withdraw_request("s1", "r-other", Withdrawn::ByDapp));
         assert!(bridge.withdraw_request("s1", "r-e", Withdrawn::ByDapp));
+        // Approving what was just withdrawn is refused, never reported as given.
+        assert!(matches!(
+            bridge.resolve("e", true),
+            Err(Error::UnknownApproval)
+        ));
         assert!(!worker.join().unwrap(), "withdrawn means do not sign");
         assert!(*shown.lock().unwrap());
         assert_eq!(bridge.take_withdrawn("s1", "r-e"), Some(Withdrawn::ByDapp));

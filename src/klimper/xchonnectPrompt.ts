@@ -188,14 +188,22 @@ function intOf(value: unknown): number | null {
  * the screens changing.
  */
 function amountOf(value: unknown): BigNumber {
-  if (typeof value === 'number' && Number.isFinite(value)) {
+  // Absent is zero (an optional field the simulation left out).
+  if (value === undefined || value === null) return BigNumber(0);
+  // A number is exact only up to 2^53: past that, or with a fraction, the figure on screen
+  // would differ from the one signed.
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
     return BigNumber(value);
   }
   if (typeof value === 'string' && /^-?\d+$/.test(value)) {
     return BigNumber(value);
   }
-  return BigNumber(0);
+  // Anything else cannot be shown truthfully: the whole prompt becomes unreadable.
+  throw new UnreadableAmount();
 }
+
+/** A present amount that is not an exact integer; `readPrompt` turns it into `unreadable`. */
+class UnreadableAmount extends Error {}
 
 /** Lower-case hex of any length, with or without `0x`. Anything else is dropped. */
 function hexOf(value: unknown, maxBytes: number): string | null {
@@ -406,7 +414,20 @@ export function claimedText(value: unknown): string {
  */
 export function readPrompt(
   prompt: unknown,
-  { xchLabel = 'XCH' }: { readonly xchLabel?: string } = {},
+  options: { readonly xchLabel?: string } = {},
+): PromptView {
+  try {
+    return readPromptStrict(prompt, options);
+  } catch (problem) {
+    // An amount that cannot be shown exactly: nothing a user could consent to.
+    if (problem instanceof UnreadableAmount) return { kind: 'unreadable' };
+    throw problem;
+  }
+}
+
+function readPromptStrict(
+  prompt: unknown,
+  { xchLabel = 'XCH' }: { readonly xchLabel?: string },
 ): PromptView {
   if (!isRecord(prompt)) return { kind: 'unreadable' };
 

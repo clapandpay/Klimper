@@ -213,7 +213,13 @@ export function XchonnectApprovalHost() {
 
   const onAnswer = (approved: boolean) => {
     const dapp = current.dapp;
-    void answer(current.id, approved).then(() => {
+    void answer(current.id, approved).then((taken) => {
+      if (!taken) {
+        toast.error(
+          t`The request from ${dapp} was no longer waiting. Nothing was signed.`,
+        );
+        return;
+      }
       if (approvals.length > 1) return;
       if (approved) {
         toast.success(t`${dapp} has your approval.`);
@@ -225,8 +231,8 @@ export function XchonnectApprovalHost() {
 
   const onCancel = () => {
     const dapp = current.dapp;
-    void cancel(current.id).then(() => {
-      if (approvals.length > 1) return;
+    void cancel(current.id).then((taken) => {
+      if (!taken || approvals.length > 1) return;
       toast.info(t`You cancelled the request from ${dapp}.`);
     });
   };

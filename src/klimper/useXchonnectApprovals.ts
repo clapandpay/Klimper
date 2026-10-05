@@ -27,10 +27,13 @@ export interface ApprovalQueue {
   /** The one being decided. */
   readonly current: Approval | null;
   readonly error: string | null;
-  /** Answer one approval. The queue drops it either way. */
-  readonly answer: (id: string, approved: boolean) => Promise<void>;
-  /** Withdraw one approval; the website is told it was cancelled. */
-  readonly cancel: (id: string) => Promise<void>;
+  /**
+   * Answer one approval. The queue drops it either way; `false` means the wallet no longer
+   * had it (timed out, withdrawn, session ended), so nothing was signed.
+   */
+  readonly answer: (id: string, approved: boolean) => Promise<boolean>;
+  /** Withdraw one approval; the website is told it was cancelled. `false` as for `answer`. */
+  readonly cancel: (id: string) => Promise<boolean>;
   readonly reload: () => Promise<void>;
 }
 
@@ -73,24 +76,30 @@ export function useXchonnectApprovals(): ApprovalQueue {
   }, [reload]);
 
   const answer = useCallback(async (id: string, approved: boolean) => {
+    let taken = true;
     try {
       await xchonnect.resolveApproval(id, approved);
     } catch (problem) {
-      // The approval timed out or the session ended while the screen was open. Either
-      // way it is no longer waiting, and both of those are refusals.
+      // The approval timed out, was withdrawn or the session ended while the screen was
+      // open. It is no longer waiting, and nothing was signed.
       setError(String(problem));
+      taken = false;
     }
     setApprovals((current) => current.filter((item) => item.id !== id));
+    return taken;
   }, []);
 
   const cancel = useCallback(async (id: string) => {
+    let taken = true;
     try {
       await xchonnect.cancelApproval(id);
     } catch (problem) {
       // Already answered, timed out or ended: it is no longer waiting either way.
       setError(String(problem));
+      taken = false;
     }
     setApprovals((current) => current.filter((item) => item.id !== id));
+    return taken;
   }, []);
 
   return {
