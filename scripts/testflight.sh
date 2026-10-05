@@ -3,8 +3,8 @@
 # Copyright 2026 the Klimper authors
 #
 # Build the signed iOS app and upload it to TestFlight. Runs on the Mac that holds the App Store
-# Connect API key, never in CI (see AGENTS.md: nothing that compiles Rust runs outside
-# release.yml, and the key stays on one machine).
+# Connect API key, never in CI (see AGENTS.md: CI builds the website and Green Envelope images and
+# nothing else, and the key stays on one machine).
 #
 #   scripts/testflight.sh                  # build number: minutes since the epoch
 #   scripts/testflight.sh --build-number 42
