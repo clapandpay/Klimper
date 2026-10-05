@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Klimper's iOS-only Info.plist keys; Tauri merges this over Info.plist for iOS builds.
+     The scene manifest belongs to Sources/sage-tauri/KlimperScene.m in gen/apple. -->
+<plist version="1.0">
+    <dict>
+        <key>UIApplicationSceneManifest</key>
+        <dict>
+            <key>UIApplicationSupportsMultipleScenes</key>
+            <false/>
+            <key>UISceneConfigurations</key>
+            <dict>
+                <key>UIWindowSceneSessionRoleApplication</key>
+                <array>
+                    <dict>
+                        <key>UISceneConfigurationName</key>
+                        <string>Default Configuration</string>
+                        <key>UISceneDelegateClassName</key>
+                        <string>KlimperSceneDelegate</string>
+                    </dict>
+                </array>
+            </dict>
+        </dict>
+    </dict>
+</plist>
