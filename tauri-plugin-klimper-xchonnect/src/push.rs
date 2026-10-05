@@ -18,6 +18,10 @@ use xchonnect_core::push::{MAX_LIFETIME_S, Platform, PushToken};
 
 use crate::error::{Error, Result};
 
+/// Event for the screen: what the user answered when asked for notification permission
+/// (`{ "state": "granted" | "denied" | "undetermined" }`).
+pub const EVENT_PUSH: &str = "klimper-xchonnect://push";
+
 /// Re-register once less than this is left on the token (it lives at most 90 days).
 pub const RENEW_BEFORE_S: u64 = 30 * 24 * 3600;
 

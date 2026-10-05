@@ -57,6 +57,7 @@ use xchonnect_core::domain::display_domain;
 pub mod approval;
 pub mod error;
 pub mod execute;
+pub mod native_push;
 pub mod origin;
 pub mod pairing;
 pub mod push;
@@ -141,6 +142,7 @@ pub struct Xchonnect<R: Runtime> {
     attempts: Mutex<BTreeMap<String, SharedAttempt>>,
     live: Mutex<BTreeMap<String, Live>>,
     push: Arc<push::PushHandle>,
+    native: native_push::NativePush<R>,
 }
 
 impl<R: Runtime> std::fmt::Debug for Xchonnect<R> {
@@ -307,6 +309,44 @@ impl<R: Runtime> Xchonnect<R> {
             },
         );
         Ok(true)
+    }
+
+    /// Listen to the native push side, which registers with APNs when the user already
+    /// allowed notifications. Off without a gateway: nothing could receive a wake-up.
+    fn start_push(&self) {
+        if self.push.gateway().is_none() {
+            return;
+        }
+        let (native, app) = (self.native.clone(), self.app.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            native.start(move |event| {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let this = app.state::<Xchonnect<R>>();
+                    match event {
+                        native_push::NativeEvent::Token { token } => {
+                            this.set_device_token(&token).await;
+                        }
+                        native_push::NativeEvent::Wake => this.wake_all().await,
+                    }
+                });
+            });
+        });
+    }
+
+    /// Ask for notification permission, at the first pairing and not at launch, so the
+    /// prompt comes with a reason. The answer goes to the screen as [`push::EVENT_PUSH`], so
+    /// a refusal can be explained: connections then update while Klimper is open.
+    fn ask_for_push_permission(&self) {
+        if self.push.gateway().is_none() {
+            return;
+        }
+        let (native, emit) = (self.native.clone(), self.emit.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Some(state) = native.request_permission() {
+                emit(push::EVENT_PUSH, json!({ "state": state }));
+            }
+        });
     }
 
     /// The native side hands over the phone's APNs device token (at launch and whenever iOS
@@ -496,6 +536,7 @@ async fn confirm_sas<R: Runtime>(
     let connected = state.ensure_loop(stored.clone()).await?;
     let summary = summary(&stored, keys, connected);
     (state.emit)(EVENT_SESSIONS, json!({}));
+    state.ask_for_push_permission();
     Ok(Some(summary))
 }
 
@@ -748,7 +789,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             resolve_approval,
             cancel_approval
         ])
-        .setup(|app, _api| {
+        .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;
             let store = Arc::new(SessionStore::open(&data_dir, Box::new(OsKeyring))?);
             let handle = app.clone();
@@ -771,7 +812,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 attempts: Mutex::new(BTreeMap::new()),
                 live: Mutex::new(BTreeMap::new()),
                 push: Arc::new(push::PushHandle::new(push::GatewayConfig::from_build())),
+                native: native_push::NativePush::init(app, &api)?,
             });
+            app.state::<Xchonnect<R>>().start_push();
             Ok(())
         })
         .build()
