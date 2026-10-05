@@ -97,7 +97,10 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
   }
 
   private func registerWithApns() {
-    onMain { UIApplication.shared.registerForRemoteNotifications() }
+    onMain {
+      self.installApplicationDelegateHooks()
+      UIApplication.shared.registerForRemoteNotifications()
+    }
   }
 
   fileprivate func wake() {
@@ -120,9 +123,19 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
     if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
   }
 
+  private var hooksInstalled = false
+
+  // Tauri creates plugins before UIApplicationMain runs, so at init there is no application
+  // and no delegate object yet. tao has already registered its delegate class by then, under
+  // the name "AppDelegate": the methods go onto the class, before UIKit ever looks at it.
+  // Called again before registering with APNs, in case the class was not there the first time.
   private func installApplicationDelegateHooks() {
-    guard let delegate = UIApplication.shared.delegate else { return }
-    let target: AnyClass = type(of: delegate)
+    if hooksInstalled { return }
+    guard let target: AnyClass = NSClassFromString("AppDelegate") else {
+      NSLog("klimper push: no AppDelegate class yet; the device token cannot reach us")
+      return
+    }
+    hooksInstalled = true
 
     let registered: @convention(block) (AnyObject, UIApplication, Data) -> Void = { _, _, token in
       KlimperXchonnectPlugin.current?.deviceToken(token)
