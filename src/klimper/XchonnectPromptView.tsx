@@ -208,7 +208,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         </Trans>
       </p>
 
-      <div className='space-y-3'>
+      <div className='xc-verdict space-y-3'>
         {view.assets.length === 0 ? (
           <p className='text-sm'>
             <Trans>No change to your assets.</Trans>

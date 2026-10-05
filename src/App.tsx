@@ -65,6 +65,7 @@ import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
 import { platform } from '@tauri-apps/plugin-os';
 import { PasskeyGate } from '@/klimper/PasskeyGate';
+import { XchonnectApprovalHost } from '@/klimper/XchonnectApprovalHost';
 import { scannerRoutes } from '@/klimper/Scanner';
 import { xchonnectRoutes } from '@/klimper/XchonnectRoutes';
 import { featureElement } from '@/lib/featureElement';
@@ -236,6 +237,7 @@ function AppInner() {
     isLocaleInitialized && (
       <I18nProvider i18n={i18n}>
         <PasskeyGate />
+        <XchonnectApprovalHost />
         <WalletProvider>
           <RustThemeSync />
           <PeerProvider>

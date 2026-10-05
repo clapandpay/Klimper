@@ -99,16 +99,28 @@ new connection: a banner names the domain, its card is outlined in teal, and **B
 wallet** returns to the wallet. Shared pieces (site coin, step line, digit tiles, facts, the
 listening pill) are `XchonnectUi.tsx` and `xchonnect.css`, theme tokens only.
 
-### 3. Approval — `/xchonnect/request` (TASK-080)
+### 3. Approval — the overlay, and `/xchonnect/request` (TASK-080)
 
-Opened by the `approval` event, by a `/req` link, and rebuilt from `pendingApprovals()`
-after a reload. One approval is on screen at a time; the rest are counted ("2 more
-waiting") and never rendered in a way that could be answered by accident.
+One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
+
+- **The overlay** (`XchonnectApprovalHost`, mounted once next to the app in `App.tsx`)
+  opens it over whatever screen is open the moment the `approval` event arrives, oldest
+  first, and on the desktop brings the window to the front. It also resumes every stored
+  session's message loop when the app starts and comes back to the front, so requests are
+  fetched without the user opening an Xchonnect screen first. **Later** hides it without
+  answering: a sun pill in the corner counts down and reopens it, and a new request opens it
+  again. It never shows on the requests page.
+- **The requests page** (`/xchonnect/request`, `/xchonnect/request/:approvalId`) lists
+  everything waiting — domain, what kind of request, the countdown, no amount — and shows the
+  one picked in the same view: side by side on a wide window, list then view on a phone.
+  Any request can be picked, but **Approve exists only in the full view**, so nothing is
+  approved without everything below on screen. Opened by "See all requests", by a `/req`
+  link, and rebuilt from `pendingApprovals()` after a reload.
 
 ```
 ┌──────────────────────────────────────────┐
 │ pengui.xyz asks you to sign              │  verified domain, ASCII form too when it differs
-│ signCoinSpends · expires in 4:31         │
+│ [Sign a spend] signCoinSpends · ⏱ 4:31   │  refused by itself in 4:31; red in the last minute
 ├──────────────────────────────────────────┤
 │ You pay          − 1.5 XCH               │  the verdict line, per asset
 │ You receive        + 0 XCH               │
@@ -127,8 +139,9 @@ waiting") and never rendered in a way that could be answered by accident.
 
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve.
-- **Dismiss** (navigating away, closing) is a rejection, not a postponement: the plugin
-  treats five minutes of silence as a rejection, and the screen says so.
+- **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
+  "Later" and navigating away only postpone within that time, and the countdown says
+  when it runs out.
 - A `kind: 'signature'` approval is its own card: "Authorise signature 2 of 3", the public
   key, and one Approve / Reject. The count is informational — the next signature asks
   again.
