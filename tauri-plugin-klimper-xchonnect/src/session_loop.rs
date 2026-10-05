@@ -146,9 +146,7 @@ impl SessionLoop {
                     stored.session_hex = encoded;
                     let _ = self.store.save(stored);
                 }
-                if let Err(error) = self.relay.post(&outgoing).await {
-                    tracing::warn!("could not tell the dApp the session ended: {error}");
-                }
+                post_end(&self.relay, &outgoing).await;
             }
             Err(error) => tracing::warn!("could not build session.end: {error}"),
         }
@@ -323,9 +321,13 @@ impl SessionLoop {
                 "method": method,
             }),
         );
-        // Delivery receipt, so the dApp can stop guessing whether the wallet is awake.
-        self.send(session, stored, Message::RpcReceived { request_id }, 3600)
-            .await?;
+        // Delivery receipt, so the dApp can stop guessing whether the wallet is awake while
+        // the user decides. A request answered at once needs none: the answer is the
+        // receipt, and skipping it saves a relay round trip before the answer.
+        if !answers_without_prompt(method) {
+            self.send(session, stored, Message::RpcReceived { request_id }, 3600)
+                .await?;
+        }
 
         let outcome = requests::answer(AnswerInputs {
             state: self.state.clone(),
@@ -406,6 +408,76 @@ impl SessionLoop {
     }
 }
 
+/// Methods wallet-kit answers without asking the user (spec 9.1: `connect` is answered
+/// without a prompt; `chainId` and the exposed keys are read straight from the session).
+fn answers_without_prompt(method: &str) -> bool {
+    matches!(
+        rpc::canonical_method(method),
+        "chainId" | "connect" | "getPublicKeys"
+    )
+}
+
+/// Attempts at posting `session.end` before giving up. A disconnect is the one message the
+/// user explicitly asked to reach the dApp, so a relay hiccup must not leave the website
+/// believing it is still paired.
+const END_ATTEMPTS: u32 = 3;
+
+async fn post_end(relay: &RelayClient, outgoing: &xchonnect_core::session::Outgoing) {
+    let mut delay = Duration::from_millis(500);
+    for attempt in 1..=END_ATTEMPTS {
+        match relay.post(outgoing).await {
+            Ok(()) => return,
+            Err(error) if attempt == END_ATTEMPTS => {
+                tracing::warn!("could not tell the dApp the session ended: {error}");
+            }
+            Err(_) => {
+                tokio::time::sleep(delay).await;
+                delay *= 2;
+            }
+        }
+    }
+}
+
+/// End a session whose loop is not running (the wallet was locked when it started, the
+/// loop stopped, the session needs re-pairing). The website is told all the same:
+/// `session.end` is sealed from the stored state and posted, and this side's mailboxes are
+/// deleted, so even a website that missed the message finds the session gone on its next
+/// request instead of waiting on a mailbox nobody reads. Only a session whose stored state
+/// cannot be read at all can end locally alone.
+pub async fn end_without_loop(store: &SessionStore, stored: &mut StoredSession) {
+    let Ok(relay) = RelayClient::new(&stored.record.relay, stored.record.developer_mode) else {
+        return;
+    };
+    let Some(mut session) = stored
+        .session_bytes()
+        .ok()
+        .and_then(|bytes| Session::from_bytes(&bytes).ok())
+    else {
+        tracing::info!("session state unreadable; it ends on this device only");
+        return;
+    };
+    match session.end(&mut OsEntropy, now(), Some("ended by the user".to_owned())) {
+        Ok(outgoing) => {
+            // Seal, persist, post: the advanced `seq` is saved before anything is sent.
+            if let Ok(encoded) = encode(&session) {
+                stored.session_hex = encoded;
+                let _ = store.save(stored);
+            }
+            post_end(&relay, &outgoing).await;
+        }
+        Err(error) => tracing::warn!("could not build session.end: {error}"),
+    }
+    if let Some((mailbox, read)) = session.draining_mailbox() {
+        relay.delete(mailbox, read).await;
+    }
+    if let Some((mailbox, read)) = session.pending_rotation_mailbox() {
+        relay.delete(mailbox, read).await;
+    }
+    relay
+        .delete(session.own_mailbox(), session.own_read_token())
+        .await;
+}
+
 fn encode(session: &Session) -> Result<String> {
     Ok(hex::encode(session.to_bytes().map_err(Error::protocol)?))
 }
@@ -439,6 +511,26 @@ pub fn spawn_ticker(sender: tokio::sync::mpsc::Sender<()>) {
 mod tests {
     use super::*;
     use crate::testing;
+
+    #[test]
+    fn only_instant_answers_skip_the_delivery_receipt() {
+        for method in [
+            "chainId",
+            "connect",
+            "getPublicKeys",
+            "chip0002_getPublicKeys",
+        ] {
+            assert!(answers_without_prompt(method), "{method}");
+        }
+        for method in [
+            "signCoinSpends",
+            "chip0002_signCoinSpends",
+            "signMessage",
+            "getAssetBalance",
+        ] {
+            assert!(!answers_without_prompt(method), "{method}");
+        }
+    }
 
     /// The security requirement: a wallet that has reached the point of sending
     /// `session.ready` must still be unusable until the user confirmed the six digits.
