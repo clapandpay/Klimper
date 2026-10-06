@@ -10620,7 +10620,7 @@ dependencies = [
 
 [[package]]
 name = "xchonnect-core"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -10640,7 +10640,7 @@ dependencies = [
 
 [[package]]
 name = "xchonnect-wallet-kit"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "chia-bls 0.36.1",
  "chia-protocol",
