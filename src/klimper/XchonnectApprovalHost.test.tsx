@@ -13,6 +13,7 @@ import {
   act,
   cleanup,
   fireEvent,
+  render,
   screen,
   waitFor,
 } from '@testing-library/react';
@@ -262,7 +263,9 @@ describe('a transaction Klimper sent', () => {
     });
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
     const element = vi.mocked(toast.success).mock.calls.at(-1)?.[0];
-    renderScreen(<>{element as React.ReactNode}</>);
+    // As Sage's toast container renders it: outside I18nProvider, where `Trans` throws
+    // and blacked out the app (TASK-105).
+    render(<>{element as React.ReactNode}</>);
     expect(screen.getByTestId('sent-toast').textContent).toContain(
       'pengui.space',
     );
