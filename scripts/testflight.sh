@@ -13,12 +13,13 @@
 # The API key is read from the environment, or from ~/.appstoreconnect/klimper.env:
 #   APPLE_API_KEY=<key id>
 #   APPLE_API_ISSUER=<issuer id>
-# Optional, same file: KLIMPER_PUSH_GATEWAY_URL and KLIMPER_PUSH_GATEWAY_KEY (the gateway's
-# https wake URL and its base64url X25519 public key) turn push wake-ups on in the build; without
-# them the app only updates while it is open.
 # with the key itself at ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8, where altool also
 # looks for it. The key needs the Admin role: xcodebuild uses it to create the distribution
 # certificate and provisioning profile when they are missing.
+#
+# Push wake-ups come from the committed push-gateway.env (the gateway's https wake URL and its
+# base64url X25519 public key, docs/push.md) and from nowhere else: the script prints the
+# gateway the build gets, and refuses to build while .push-dev.env is here.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -33,6 +34,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# The plugin's build (tauri-plugin-klimper-xchonnect/build.rs) takes the push gateway from the
+# environment, then from .push-dev.env, then from push-gateway.env. .push-dev.env is a local
+# stack's loopback gateway (scripts/push-dev.sh): a TestFlight build made with it wakes nobody.
+if [ -f .push-dev.env ]; then
+  echo "klimper/.push-dev.env is here and would replace push-gateway.env in this build: move it away first." >&2
+  exit 1
+fi
+
 env_file="$HOME/.appstoreconnect/klimper.env"
 if [ -z "${APPLE_API_KEY:-}" ] && [ -f "$env_file" ]; then
   # shellcheck disable=SC1090
@@ -41,11 +50,16 @@ fi
 : "${APPLE_API_KEY:?set APPLE_API_KEY or write it to $env_file}"
 : "${APPLE_API_ISSUER:?set APPLE_API_ISSUER or write it to $env_file}"
 export APPLE_API_KEY APPLE_API_ISSUER
-if [ -n "${KLIMPER_PUSH_GATEWAY_URL:-}" ] && [ -n "${KLIMPER_PUSH_GATEWAY_KEY:-}" ]; then
-  export KLIMPER_PUSH_GATEWAY_URL KLIMPER_PUSH_GATEWAY_KEY
+# Out of the environment too, so that the committed file alone decides.
+unset KLIMPER_PUSH_GATEWAY_URL KLIMPER_PUSH_GATEWAY_KEY
+push_setting() {
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" push-gateway.env 2>/dev/null | tail -1 | tr -d '[:space:]'
+}
+push_url="$(push_setting KLIMPER_PUSH_GATEWAY_URL)"
+if [ -n "$push_url" ] && [ -n "$(push_setting KLIMPER_PUSH_GATEWAY_KEY)" ]; then
+  echo "Push gateway in this build: $push_url (push-gateway.env)" >&2
 else
-  unset KLIMPER_PUSH_GATEWAY_URL KLIMPER_PUSH_GATEWAY_KEY
-  echo "Push is off in this build: set KLIMPER_PUSH_GATEWAY_URL and KLIMPER_PUSH_GATEWAY_KEY." >&2
+  echo "Push is off in this build: push-gateway.env has no KLIMPER_PUSH_GATEWAY_URL and KLIMPER_PUSH_GATEWAY_KEY." >&2
 fi
 export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
 [ -f "$APPLE_API_KEY_PATH" ] || { echo "No API key at $APPLE_API_KEY_PATH" >&2; exit 1; }
