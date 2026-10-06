@@ -119,7 +119,13 @@ function WaitingPill({
   );
 }
 
-/** "Sent to the network", with where to look the transaction up. */
+/**
+ * "Sent to the network", with where to look the transaction up.
+ *
+ * Rendered by Sage's toast container, which `App.tsx` mounts outside `I18nProvider`: the
+ * `Trans` component throws there, and before TASK-105 that blacked out the whole app right
+ * after a transaction went out. So `t`, which reads the global catalogue, not `Trans`.
+ */
 function SentToast({
   event,
   testnet,
@@ -131,9 +137,7 @@ function SentToast({
   const dapp = event.dapp;
   return (
     <div className='space-y-1' data-testid='sent-toast'>
-      <div>
-        <Trans>Klimper sent the transaction for {dapp}.</Trans>
-      </div>
+      <div>{t`Klimper sent the transaction for ${dapp}.`}</div>
       {href && (
         <button
           type='button'
@@ -141,7 +145,7 @@ function SentToast({
           onClick={() => void openUrl(href).catch(() => undefined)}
           data-testid='sent-explorer-link'
         >
-          <Trans>View on mempoolxch.space</Trans>
+          {t`View on mempoolxch.space`}
           <ExternalLink className='h-3 w-3' aria-hidden='true' />
         </button>
       )}

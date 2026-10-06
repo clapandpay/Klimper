@@ -170,6 +170,17 @@ const router = klimperRouter(createHashRouter)(   // was: createHashRouter(
   nor Sage's imports change. Tested in `routes.test.tsx`.
 - `src/klimper/KlimperRoot.tsx` — everything rendered next to the app (`PasskeyGate`, the
   Xchonnect approval overlay) and the `klimperTheme` import.
+- `src/main.tsx` — two lines (TASK-105): `<App />` is wrapped in `AppRecovery`
+  (`src/klimper/KlimperErrorBoundary.tsx`). Sage has no error boundary, so one component
+  that throws while rendering unmounts everything and leaves a black window. With it, a
+  thrown render shows a recovery screen with "Back to my wallet" and "Reload";
+  `withKlimper` gives every route the same screen as its `errorElement`, and `KlimperRoot`
+  puts the approval overlay behind a boundary of its own (the passkey gate deliberately not:
+  a failed gate must not leave the wallet open).
+
+Sage's toast container is outside `I18nProvider`: content passed to `toast.*` uses the `t`
+macro, never the `Trans` component, which throws there (TASK-105: the "sent" toast blacked
+out the app after every transaction a website asked for).
 
 New Klimper screens and app-wide pieces go there, never into `App.tsx`. The rest of the shared
 frontend diff is single elements wrapped in a flag (`Nav.tsx`, `Settings.tsx`,

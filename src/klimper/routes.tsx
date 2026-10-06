@@ -27,6 +27,7 @@ import {
 import { ReactElement } from 'react';
 import { createRoutesFromElements, Route, RouteObject } from 'react-router-dom';
 import ClapAndPayConnect from './ClapAndPayConnect';
+import { RouteRecovery } from './KlimperErrorBoundary';
 import { scannerRoutes } from './Scanner';
 import { xchonnectRoutes } from './XchonnectRoutes';
 
@@ -81,6 +82,16 @@ function withoutIds(route: RouteObject): RouteObject {
   return next as RouteObject;
 }
 
+/**
+ * A screen that throws while rendering shows the recovery screen, with the way back to the
+ * wallet, instead of React Router's developer page (TASK-105, `KlimperErrorBoundary.tsx`).
+ * Only top-level routes: an error bubbles up to the nearest one.
+ */
+function recoverable(route: RouteObject): RouteObject {
+  if (route.errorElement !== undefined) return route;
+  return { ...route, errorElement: <RouteRecovery /> } as RouteObject;
+}
+
 /** Sage's routes, with Klimper's feature flags applied and Klimper's screens added. */
 export function withKlimper(routes: RouteObject[]): RouteObject[] {
   return [
@@ -94,7 +105,9 @@ export function withKlimper(routes: RouteObject[]): RouteObject[] {
         {scannerRoutes}
       </>,
     ),
-  ].map(withoutIds);
+  ]
+    .map(withoutIds)
+    .map(recoverable);
 }
 
 /**
