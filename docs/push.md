@@ -41,6 +41,8 @@ variable exported before `pnpm tauri ios dev` or `scripts/testflight.sh` never r
 Rust build of a phone app, and the first simulator build was made with push off that way.
 Both values are public, so the deployed ones belong in `push-gateway.env`; fill it in once
 the gateway runs (TASK-086). The build prints a warning when it finds neither.
+`scripts/testflight.sh` refuses to build while `.push-dev.env` exists (it comes first, and a
+TestFlight build with a loopback gateway wakes nobody) and prints the gateway the build gets.
 
 ## iOS
 
