@@ -1,6 +1,6 @@
 {
   "productName": "Klimper",
-  "version": "0.13.1",
+  "version": "0.1.0",
   "identifier": "com.clapandpay.klimper",
   "app": {
     "windows": [

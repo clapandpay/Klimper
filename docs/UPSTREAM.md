@@ -16,15 +16,23 @@ Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LIC
 | Merged version      | **v0.13.1**, merged 2026-09-20                     |
 | Hotfix merges since | none                                               |
 | Last checked        | 2026-10-05: `upstream/main` = v0.13.1, nothing new |
-| Klimper version     | **0.13.1**, the merged tag                         |
+| Klimper version     | **0.1.0**, its own (`scripts/set-version.sh`)      |
 
-**Klimper's version is the version of the Sage release it is built on.** Sage's app system
-(`crates/sage-apps`) checks an app's minimum Sage version against the Tauri app version
-(`package_info().version`), not the engine's, so a Klimper version of its own made every app that
-needs Sage 0.13 refuse to run ("You are running Sage 0.1.0"; TASK-063). The version lives in
-`src-tauri/tauri.{macos,linux,windows,ios,android}.conf.json` and the committed iOS `Info.plist`;
-the upgrade below bumps it. Once upstream compares against the engine version instead, Klimper
-can number its own releases again.
+**Klimper numbers its own releases; the version is not Sage's** (TASK-106).
+`scripts/set-version.sh <major.minor.patch>` writes it to
+`src-tauri/tauri.{macos,linux,windows,ios,android}.conf.json`, the committed iOS project
+(`gen/apple/project.yml`, `Info.plist`) and `src/klimper/version.json`, and
+`scripts/set-version.sh --check` fails when they disagree. That number is what the bundle, the
+stores and TestFlight show. A Sage merge does not touch it.
+
+Sage's app system (`crates/sage-apps`) checks an app's minimum Sage version against the running
+app's version (`package_info().version`), not the engine's, so a Klimper number there made every
+app that needs Sage 0.13 refuse to run ("You are running Sage 0.1.0"; TASK-063). So the running
+app reports Sage's version instead: `context()` at the end of `src-tauri/src/lib.rs` sets it to
+the version of the `sage-tauri` crate (`src-tauri/Cargo.toml`), which is upstream's line and
+moves with each merge. `getVersion()` in the webview therefore answers with the Sage version;
+Settings shows both, from `src/klimper/version.ts` ("Version 0.1.0 (Sage 0.13.1)"). Once
+upstream compares against the engine version, `context()` can go.
 
 ## Routine
 
@@ -133,7 +141,8 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
 
    ```sh
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
-   grep -h '"version"' src-tauri/tauri.*.conf.json  # the merged tag, every one (see the top)
+   scripts/set-version.sh --check                   # Klimper's version, not the merged tag
+   grep -c 'fn context' src-tauri/src/lib.rs        # 1: apps are told the Sage version
    grep -c '^VITE_' .env.production                 # 13
    grep -c 'klimperRouter\|KlimperRoot' src/App.tsx # 3: the import, the router, the root
    grep -rn 'b""' crates/sage/src                   # nothing: new upstream call sites merge
@@ -145,9 +154,9 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    `NOTICE` if the list moved. Apache-2.0 asks a fork to keep attribution, and since Sage ships
    no `NOTICE` of its own, ours is the only place its authors are named. A new contributor
    upstream is a name missing from ours until someone regenerates it.
-8. **Write it down.** The merged version in the table above; Klimper's version set to it in the
-   five `tauri.*.conf.json` files and `src-tauri/gen/apple/sage-tauri_iOS/Info.plist`; and any
-   new row in the file tables below — `--diff` tells you if one is missing.
+8. **Write it down.** The merged version in the table above (Klimper's own version stays as it
+   is: a merge is not a Klimper release) and any new row in the file tables below — `--diff`
+   tells you if one is missing.
 
 ## Hook points
 
@@ -191,15 +200,17 @@ upstream_ below, so they leave the diff once Sage takes the hiding points.
 
 New files never conflict. Files shared with Sage are kept to the lines listed here.
 
-| File                                                                                                                                         | Ours                                                        | Note                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `README.md`, `LICENSE`                                                                                                                       | whole file                                                  | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
-| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                         |                                                                                                                                                                                                                                                                                                      |
-| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/images.yml`                                       | new                                                         |                                                                                                                                                                                                                                                                                                      |
-| `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                         | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
-| `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                             | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
-| `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`, `sage-tauri_iOS/Info.plist`                                       | bundle id; team; iOS 15.0 minimum; product name and version | `DEVELOPMENT_TEAM` is ours, `HTP35W93ZF` (TASK-003): take ours on a conflict. Xcode 27 refuses the iOS 14.0 minimum. `tauri ios build` writes the product name and version from `tauri.ios.conf.json` into the pbxproj and Info.plist on every build, so those lines are committed as it writes them |
-| `src-tauri/gen/android/app/build.gradle.kts`, `.gitignore`, `res/values/strings.xml`, `MainActivity.kt` (moved to `com/clapandpay/klimper/`) | package and app name                                        | not yet built, no Android SDK on the dev machine (2026-09-17)                                                                                                                                                                                                                                        |
+| File                                                                                                                                         | Ours                                                          | Note                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`, `LICENSE`                                                                                                                       | whole file                                                    | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
+| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                           |                                                                                                                                                                                                                                                                                                      |
+| `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/images.yml`                                      | new                                                           |                                                                                                                                                                                                                                                                                                      |
+| `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                           | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
+| `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                               | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
+| `src-tauri/gen/apple/project.yml`, `sage-tauri.xcodeproj/project.pbxproj`, `sage-tauri_iOS/Info.plist`                                       | bundle id; team; iOS 15.0 minimum; product name and version   | `DEVELOPMENT_TEAM` is ours, `HTP35W93ZF` (TASK-003): take ours on a conflict. Xcode 27 refuses the iOS 14.0 minimum. `tauri ios build` writes the product name and version from `tauri.ios.conf.json` into the pbxproj and Info.plist on every build, so those lines are committed as it writes them |
+| `src-tauri/gen/android/app/build.gradle.kts`, `.gitignore`, `res/values/strings.xml`, `MainActivity.kt` (moved to `com/clapandpay/klimper/`) | package and app name                                          | not yet built, no Android SDK on the dev machine (2026-09-17)                                                                                                                                                                                                                                        |
+| `scripts/set-version.sh`, `src/klimper/version.json`, `src/klimper/version.ts`                                                               | new                                                           | Klimper's own version (TASK-106, see the top): the script writes it, Settings reads it                                                                                                                                                                                                               |
+| `src-tauri/src/lib.rs`, `src/pages/Settings.tsx`                                                                                             | `context()` appended and one call changed; one import changed | the running app reports Sage's version, which the app system checks apps against; Settings takes `getVersion` from `src/klimper/version.ts`                                                                                                                                                          |
 
 ### Reduced interface (TASK-007)
 
@@ -242,16 +253,16 @@ behaviour.
 Klimper opens the keychain with a passkey (see `docs/passkey.md`). One engine change, proposed
 upstream; the rest is files of our own and one-line hooks.
 
-| File                                                                                          | Ours                                     | Note                                                                                                                                                                          |
-| --------------------------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `crates/sage-keychain`, `crates/sage/src/{sage.rs,error.rs,endpoints/*,utils/spends.rs}`      | keychain password                        | the one engine change: lock, unlock, re-key instead of the empty password                                                                                                     |
-| `tauri-plugin-klimper-passkey/`, `src/klimper/`, `src-tauri/capabilities/klimper.json`        | new                                      | envelope, commands, Swift; lock screen and settings entry                                                                                                                     |
-| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                  | workspace member, dep, one plugin        |                                                                                                                                                                               |
-| `Cargo.lock`                                                                                  | the plugin, and `swift-rs` 1.0.7 → 1.0.8 | 1.0.7 builds Swift for macOS under Xcode 27, so no iOS build works; on a conflict take upstream's lock, then `cargo update -p swift-rs` unless upstream is already past 1.0.7 |
-| `src/pages/Settings.tsx`                                                                      | one import and one element               | `<PasskeySettings />`; `<PasskeyGate />` is in `src/klimper/KlimperRoot.tsx`                                                                                                  |
-| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`           | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                           |
-| `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                              |
-| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `src-tauri/gen/android/{build.gradle.kts,app/build.gradle.kts,app/.gitignore}` | 4 lines, 1 line, 4 lines, 1 line | push wake-ups (TASK-087): `aps-environment` and time-sensitive notifications; the `google-services` Gradle plugin, applied only when `google-services.json` exists. `docs/push.md` |
+| File                                                                                                                                             | Ours                                     | Note                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crates/sage-keychain`, `crates/sage/src/{sage.rs,error.rs,endpoints/*,utils/spends.rs}`                                                         | keychain password                        | the one engine change: lock, unlock, re-key instead of the empty password                                                                                                          |
+| `tauri-plugin-klimper-passkey/`, `src/klimper/`, `src-tauri/capabilities/klimper.json`                                                           | new                                      | envelope, commands, Swift; lock screen and settings entry                                                                                                                          |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`                                                                                     | workspace member, dep, one plugin        |                                                                                                                                                                                    |
+| `Cargo.lock`                                                                                                                                     | the plugin, and `swift-rs` 1.0.7 → 1.0.8 | 1.0.7 builds Swift for macOS under Xcode 27, so no iOS build works; on a conflict take upstream's lock, then `cargo update -p swift-rs` unless upstream is already past 1.0.7      |
+| `src/pages/Settings.tsx`                                                                                                                         | one import and one element               | `<PasskeySettings />`; `<PasskeyGate />` is in `src/klimper/KlimperRoot.tsx`                                                                                                       |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `.prettierignore`                                                              | 4 lines, 1 line                          | `webcredentials:clapandpay.com`; the plugin's generated permissions                                                                                                                |
+| `src-tauri/gen/android/app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`                                                    | 2 attributes, new                        | no backup, no device transfer: the wallet data never leaves the phone (TASK-057)                                                                                                   |
+| `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, `src-tauri/gen/android/{build.gradle.kts,app/build.gradle.kts,app/.gitignore}` | 4 lines, 1 line, 4 lines, 1 line         | push wake-ups (TASK-087): `aps-environment` and time-sensitive notifications; the `google-services` Gradle plugin, applied only when `google-services.json` exists. `docs/push.md` |
 
 ### iOS build on Xcode 27 (TASK-003)
 

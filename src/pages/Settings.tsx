@@ -65,7 +65,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { getVersion } from '@tauri-apps/api/app';
+import { getVersion } from '@/klimper/version';
 import { platform } from '@tauri-apps/plugin-os';
 import {
   DownloadIcon,
