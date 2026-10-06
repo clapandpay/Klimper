@@ -316,16 +316,15 @@ and single-line hooks in shared files. `docs/xchonnect.md` has the detail.
 | `src/contexts/PriceContext.tsx`                                                                                      | 5 lines                                         | on testnet the TXCH price is 0 instead of Coingecko's XCH price, so testnet balances are not shown as dollars. Propose upstream; on a conflict keep upstream and re-add                                                                      |
 | `vite.preview.config.ts`, `preview-*.html`, `src/preview/`                                                           | new                                             | the approval screens rendered with mock data in a plain browser, for screenshots and headless checks; never part of `vite build` (own config)                                                                                                |
 | `.prettierignore`                                                                                                    | 1 line                                          | the plugin's generated permissions                                                                                                                                                                                                           |
-| `Cargo.lock`                                                                                                         | the plugin and its dependencies                 | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` as **path** dependencies (see below). On a conflict take upstream's lock and re-run `cargo check`                                                                                 |
+| `Cargo.lock`                                                                                                         | the plugin and its dependencies                 | `keyring` 3, and `xchonnect-core` / `xchonnect-wallet-kit` from crates.io (see below). On a conflict take upstream's lock and re-run `cargo check`                                                                                           |
 
-The two xchonnect crates are deliberately unpublished (xchonnect TASK-67 publishes after
-its audit), so they are consumed by path:
-`../../../../xchonnect/xchonnect/crates/{core,wallet-kit}`, which resolves the same from
-this repository and from a `clapandpay-wt-*` worktree beside it. **That is a local
-development arrangement and a release blocker**: it must become a git-revision pin or a
-published version before anything ships (clapandpay TASK-071 AC #1). Nothing in CI
-compiles Rust, so the path does not break the pipeline; a `cargo` command on a machine
-without the xchonnect checkout will fail to resolve the workspace.
+The two xchonnect crates come from crates.io at an exact pre-release version
+(`=0.1.0-rc.2`, clapandpay TASK-071 AC #1), so the workspace resolves on a machine without
+an xchonnect checkout. Cargo never selects a pre-release for a plain requirement, and the
+kit requires the core at exactly its own version: bump both lines in
+`tauri-plugin-klimper-xchonnect/Cargo.toml` together, then `cargo check` to refresh
+`Cargo.lock`. The xchonnect checkout is still needed for the development relay and
+gateway (`scripts/push-dev.sh`, `docs/xchonnect.md`), not for building Klimper.
 
 Nothing under `crates/`, `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
 plugin reads the Sage database through `sage-database`'s public API and signs through
