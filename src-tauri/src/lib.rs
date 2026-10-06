@@ -334,6 +334,37 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(context())
         .expect("error while running tauri application");
+}
+
+// Klimper numbers its own releases: the version in tauri.<platform>.conf.json is what the bundle
+// and the stores show (scripts/set-version.sh). Sage's app system reads the running app's version
+// as the Sage version when it checks an app's minimum, so the running app reports the version
+// of this crate, which is Sage's and moves with each merge (docs/UPSTREAM.md, "Klimper version").
+fn context() -> tauri::Context<tauri::Wry> {
+    let mut context = tauri::generate_context!();
+    context.package_info_mut().version = env!("CARGO_PKG_VERSION")
+        .parse()
+        .expect("the crate version is a semantic version");
+    context
+}
+
+#[cfg(test)]
+mod tests {
+    use super::context;
+
+    #[test]
+    fn the_running_app_reports_sages_version_and_the_bundle_keeps_klimpers() {
+        let context = context();
+
+        assert_eq!(
+            context.package_info().version.to_string(),
+            env!("CARGO_PKG_VERSION")
+        );
+        // The config is what the bundle is made from, and Settings reads the same number.
+        let klimper = context.config().version.clone().expect("a version");
+        let shown = include_str!("../../src/klimper/version.json");
+        assert!(shown.contains(&format!("\"{klimper}\"")));
+    }
 }

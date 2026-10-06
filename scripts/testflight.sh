@@ -64,6 +64,10 @@ fi
 export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
 [ -f "$APPLE_API_KEY_PATH" ] || { echo "No API key at $APPLE_API_KEY_PATH" >&2; exit 1; }
 
+# One version in every file that carries it (docs/UPSTREAM.md, "Klimper version"): TestFlight
+# groups the builds of a version together and tells them apart by the build number.
+version="$(scripts/set-version.sh --check)"
+
 if [ -n "$(git status --porcelain -- . ':!builtin-apps/build')" ]; then
   echo "Warning: uncommitted changes in klimper/ go into this build." >&2
 fi
@@ -79,12 +83,12 @@ pnpm install --frozen-lockfile
 # LINKEDIT string pool"). Leaving those host-only libraries unstripped costs nothing in the app.
 export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false
 # CFBundleVersion is the build number alone: tauri's --build-number appends it to the version
-# (0.13.1.N), four parts where Apple allows three, and the export then drops it back to 0.13.1.
+# (0.1.0.N), four parts where Apple allows three, and the export then drops it back to 0.1.0.
 pnpm tauri ios build --export-method app-store-connect --ci \
   --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$build_number\"}}}"
 
 ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
-echo "Built $ipa ($(git rev-parse --short HEAD), build $build_number)"
+echo "Built $ipa (Klimper $version, build $build_number, $(git rev-parse --short HEAD))"
 [ "$upload" = 1 ] || exit 0
 
 xcrun altool --upload-app --type ios --file "$ipa" \
