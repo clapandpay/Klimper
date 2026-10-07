@@ -16,8 +16,8 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
 
 - The only thing it reads is the balance Sage already shows on screen (the wallet store, and
   the dollar value a page already computed for display).
-- The only thing it sends anywhere is the price lookup Sage's own price display makes
-  (`get_xch_usd_price`; no wallet data in the request), at most once in ten minutes.
+- It sends nothing anywhere: the XCH price is the one Sage's price display already fetched
+  (`src/klimper/price.ts`: nodexch on mainnet, 0 on testnet).
 - It touches no keys, no transactions, no database, nothing in the send or receive path, and
   cannot block or delay them: everything is asynchronous and fails quietly (one `console.warn`
   per run at most, never a toast).

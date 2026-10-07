@@ -1,5 +1,5 @@
 import { useNetwork } from '@/hooks/useNetwork';
-import { dexieApiUrl } from '@/lib/urls';
+import { fetchPrices as fetchKlimperPrices } from '@/klimper/price';
 import {
   createContext,
   ReactNode,
@@ -13,18 +13,6 @@ import {
 interface CatPriceData {
   lastPrice: number | null;
   askPrice: number | null;
-}
-
-interface DexieTicker {
-  base_currency: string;
-  base_name: string;
-  base_code: string;
-  last_price: string | null;
-  ask: string | null;
-}
-
-interface DexieResponse {
-  tickers: DexieTicker[];
 }
 
 export interface PriceContextType {
@@ -56,68 +44,14 @@ export function PriceProvider({ children }: { children: ReactNode }) {
       intervalRef.current = null;
     }
 
-    const fetchCatPrices = async () => {
-      try {
-        const response = await fetch(
-          dexieApiUrl('v3/prices/tickers', isTestnet),
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data: DexieResponse = await response.json();
-        const tickers = data.tickers.reduce(
-          (acc: Record<string, CatPriceData>, ticker: DexieTicker) => {
-            acc[ticker.base_currency.toLowerCase()] = {
-              lastPrice: ticker.last_price ? Number(ticker.last_price) : null,
-              askPrice: ticker.ask ? Number(ticker.ask) : null,
-            };
-            return acc;
-          },
-          {},
-        );
-        setCatPrices(tickers);
-      } catch (error) {
-        console.error('Failed to fetch CAT prices:', error);
-        setCatPrices({});
-      }
-    };
-
-    const fetchChiaPrice = async () => {
-      // Klimper: testnet coins have no market price; valuing TXCH at the XCH price is wrong.
-      if (isTestnet) {
-        setXchUsdPrice(0);
-        return;
-      }
-      try {
-        const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd',
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const newPrice = data.chia?.usd;
-
-        if (newPrice && newPrice >= 0) {
-          setXchUsdPrice(newPrice);
-        } else {
-          console.warn('Invalid XCH price received:', newPrice);
-          // Don't update the price if it's invalid, keep the previous value
-        }
-      } catch (error) {
-        console.error('Failed to fetch Chia price:', error);
-        // Don't set to 0, keep the previous value
-      }
-    };
-
+    // Klimper: one price source for every asset (src/klimper/price.ts, TASK-113): nodexch on
+    // mainnet with CoinGecko and dexie as the fallback, zero dollars on testnet.
     const fetchPrices = async () => {
       setIsPriceLoading(true);
       try {
-        await Promise.all([fetchCatPrices(), fetchChiaPrice()]);
+        const prices = await fetchKlimperPrices(isTestnet);
+        setXchUsdPrice(prices.xchUsd);
+        setCatPrices(prices.cats);
       } finally {
         setIsPriceLoading(false);
       }

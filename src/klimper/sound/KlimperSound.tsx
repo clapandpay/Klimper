@@ -12,16 +12,16 @@
 //
 // Cost when on: one subscription to the wallet store (a few comparisons per update), one to
 // the page value, and on the phone an accelerometer stream at 40 Hz while the app is active.
-// The XCH price is asked for at most once in ten minutes, and only when something is about to
-// play or the wallet's tier is sent. Cost when the switch is off: nothing, and the
-// accelerometer is stopped.
+// No network: the XCH price is the one Sage's price display already fetched. Cost when the
+// switch is off: nothing, and the accelerometer is stopped.
 //
-// Privacy and safety (docs/sound.md): reads the balance already on screen, sends nothing but
-// the price lookup Sage's own price display makes, touches no keys, no transactions, nothing in
-// the send or receive path, and cannot block them: all asynchronous, all failing quietly.
+// Privacy and safety (docs/sound.md): reads the balance already on screen and the price
+// already fetched, sends nothing, touches no keys, no transactions, nothing in the send or
+// receive path, and cannot block them: all asynchronous, all failing quietly.
 
 import { commands } from '@/bindings';
 import { pageValue, subscribePageValue } from '@/klimper/pageValue';
+import { lastPrices } from '@/klimper/price';
 import { useWalletState } from '@/state';
 import { useEffect } from 'react';
 import { onPhone, playDing, setShake } from './player';
@@ -31,25 +31,13 @@ import { Tier, tierOf, usdOf } from './tiers';
 
 /** Increases closer than this are one ding. */
 export const COALESCE_MS = 1500;
-const PRICE_TTL_MS = 10 * 60_000;
 
-let price: { usd: number; at: number } | null = null;
-
-/** Tests only: forget the cached price between cases. */
-export function forgetPrice() {
-  price = null;
-}
-
-/** The XCH price, cached; null when there is none (testnet, offline). */
-async function xchPrice(): Promise<number | null> {
-  if (price && Date.now() - price.at < PRICE_TTL_MS) return price.usd;
-  try {
-    const { usd } = await commands.getXchUsdPrice({});
-    price = { usd, at: Date.now() };
-    return usd;
-  } catch {
-    return null;
-  }
+/**
+ * The XCH price Sage's price display last fetched (src/klimper/price.ts): no request of our
+ * own. Null before the first fetch; 0 on testnet, which the tier rule reads as silence.
+ */
+function xchPrice(): number | null {
+  return lastPrices()?.xchUsd ?? null;
 }
 
 async function currentFingerprint(): Promise<number | null> {
@@ -83,7 +71,7 @@ export function KlimperSound() {
         return;
       }
       fingerprint ??= now;
-      const tier = tierOf(usdOf(mojos, await xchPrice()));
+      const tier = tierOf(usdOf(mojos, xchPrice()));
       if (alive && tier !== null) void playDing(tier);
     });
     const look = (sync: Sync) => {
@@ -126,7 +114,7 @@ export function KlimperSound() {
         const { sync } = useWalletState.getState();
         if (sync.receive_address === 'Unknown') return;
         const { balance } = sampleOf(sync);
-        usd = usdOf(balance, await xchPrice());
+        usd = usdOf(balance, xchPrice());
       }
       const tier = tierOf(usd);
       if (!alive || tier === sent) return;
