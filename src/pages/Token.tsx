@@ -21,6 +21,7 @@ import {
   TokenRecord,
   TransactionResponse,
 } from '../bindings';
+import { usePageValue } from '@/klimper/pageValue';
 
 interface EnhancedTransactionResponse extends TransactionResponse {
   additionalData?: {
@@ -92,6 +93,7 @@ export default function Token() {
       toDecimal(asset.balance, asset.precision),
     );
   }, [asset, getBalanceInUsd]);
+  usePageValue(asset ? Number(balanceInUsd) : null); // Klimper: the shake weighs this token
 
   const redownload = () => {
     if (!assetId) return;

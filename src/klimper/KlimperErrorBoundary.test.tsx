@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
   clapAndPayConnectEnabled: false,
+  klimperSoundEnabled: false,
   nftsEnabled: true,
   offersEnabled: true,
   optionsEnabled: true,

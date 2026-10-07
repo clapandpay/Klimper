@@ -34,6 +34,11 @@ export const clapAndPayOrigin =
 // in, but it only does anything once a screen calls it.
 export const xchonnectEnabled =
   import.meta.env.VITE_ENABLE_XCHONNECT === 'true';
+// Opt-in: the Klimper sound (decision-009, TASK-111), a coin jingle on receive and on shake.
+// Off unless set to true; then it is also a switch in Settings. Everything about it lives in
+// src/klimper/sound/ and is loaded only when the flag is on.
+export const klimperSoundEnabled =
+  import.meta.env.VITE_ENABLE_KLIMPER_SOUND === 'true';
 // On by default: the Scan tab (src/klimper/Scanner.tsx), one camera for every code — a
 // website's Xchonnect code, an offer, an address. `VITE_DISABLE_SCAN=true` turns it off.
 export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';

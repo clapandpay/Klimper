@@ -10,6 +10,8 @@ tauri-plugin-sage/dist-js
 tauri-plugin-sage/ios
 tauri-plugin-sage/android
 tauri-plugin-klimper-passkey/permissions
+tauri-plugin-klimper-jingle/permissions
+tauri-plugin-klimper-jingle/ios/.build
 tauri-plugin-klimper-xchonnect/permissions
 src/lib/clapandpayHandoff.ts
 vendor
