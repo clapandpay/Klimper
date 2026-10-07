@@ -63,7 +63,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         private const val JOLT_G = 1.3
         private const val WINDOW_MS = 450L
         private const val STILL_MS = 350L
-        private const val TAP_SPACING_MS = 70L
+        // About one tap per turn of the hand: faster is a buzz, not coins.
+        private const val TAP_SPACING_MS = 160L
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -237,10 +238,12 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         main.postDelayed(r, STILL_MS)
     }
 
+    // One tap per turn of the hand, with the knock riding on it.
     private fun tap(force: Double) {
         val now = System.currentTimeMillis()
         if (now - lastTap < TAP_SPACING_MS) return
         lastTap = now
+        knock(force)
         val vibrator = vibrator() ?: return
         if (!vibrator.hasVibrator()) return
         val weight = when (shakeTier) { "pouch" -> 1.0; "handful" -> 0.85; "few" -> 0.7; else -> 0.55 }
@@ -301,13 +304,11 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         if (rattleStream != 0) {
             keepRattling()
             follow(force)
-            knock(force)
             tap(force)
         } else if (jolts.size >= 2) {
             startRattle()
             keepRattling()
             follow(force)
-            knock(force)
             tap(force)
         }
     }
