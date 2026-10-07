@@ -28,6 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { commands, events, TokenRecord } from '../bindings';
 import { useWalletState } from '../state';
+import { usePageValue } from '@/klimper/pageValue';
 
 export function TokenList() {
   const navigate = useNavigate();
@@ -110,6 +111,7 @@ export function TokenList() {
       return total + (token.balanceInUsd || 0);
     }, 0);
   }, [pricedTokens]);
+  usePageValue(totalUsdBalance); // Klimper: the shake weighs what the page shows
 
   const updateCats = useCallback(
     () =>

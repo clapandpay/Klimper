@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Playing a tier (clapandpay TASK-111.03): on the phone through the jingle plugin (native
-// playback under the ambient session, haptics, nothing in the background); on the desktop
-// through the web audio API, decoded once per tier. The files are the same four WAVs.
+// The two calls into the native side (clapandpay TASK-111.03): ring the ding of a tier once
+// (coins arrived), and arm or disarm the shake with the wallet's tier (the native side loops
+// the rattle and taps the haptics for as long as the shaking lasts). On the desktop the ding
+// goes through the web audio API, decoded once per tier; a desk cannot be shaken.
 //
 // Everything here fails quietly: a sound that did not play is not an error the user needs.
 
 import { invoke } from '@tauri-apps/api/core';
 import { platform } from '@tauri-apps/plugin-os';
-import { HAPTICS, type Tier } from './tiers';
+import type { Tier } from './tiers';
 
 export function onPhone(): boolean {
   try {
@@ -18,27 +19,39 @@ export function onPhone(): boolean {
   }
 }
 
-/** Play a tier. `haptics` false plays the sound alone (a receive is heard, a shake is felt). */
-export async function playJingle(tier: Tier, haptics: boolean): Promise<void> {
+let warned = false;
+function quiet(error: unknown) {
+  // Once per run is enough to notice in a log; never a toast.
+  if (warned) return;
+  warned = true;
+  console.warn('klimper sound:', error);
+}
+
+/** Coins arrived: ring the tier's ding once. */
+export async function playDing(tier: Tier): Promise<void> {
   try {
     if (onPhone()) {
-      await invoke('plugin:klimper-jingle|play', {
-        tier,
-        impacts: haptics ? HAPTICS[tier] : [],
-      });
+      await invoke('plugin:klimper-jingle|play', { tier });
     } else {
       await playOnDesktop(tier);
     }
   } catch (error) {
-    // Once per run is enough to notice in a log; never a toast.
-    if (!warned) {
-      warned = true;
-      console.warn('klimper sound:', error);
-    }
+    quiet(error);
   }
 }
 
-let warned = false;
+/**
+ * Arm the shake with the wallet's tier, or disarm it. Phone only; on the desktop this does
+ * nothing. Call again when the tier changes so a shake answers with the right weight.
+ */
+export async function setShake(enabled: boolean, tier: Tier): Promise<void> {
+  if (!onPhone()) return;
+  try {
+    await invoke('plugin:klimper-jingle|set_shake', { enabled, tier });
+  } catch (error) {
+    quiet(error);
+  }
+}
 
 // Desktop: one AudioContext, buffers decoded on first use and kept.
 let context: AudioContext | null = null;
@@ -51,7 +64,7 @@ async function playOnDesktop(tier: Tier) {
   let buffer = buffers.get(tier);
   if (!buffer) {
     // Vite resolves the four files from this template at build time (docs/sound.md).
-    buffer = fetch(new URL(`./klimper-${tier}.wav`, import.meta.url))
+    buffer = fetch(new URL(`./klimper-ding-${tier}.wav`, import.meta.url))
       .then((r) => r.arrayBuffer())
       .then((bytes) => audio.decodeAudioData(bytes));
     buffers.set(tier, buffer);
@@ -61,17 +74,4 @@ async function playOnDesktop(tier: Tier) {
   source.buffer = await buffer;
   source.connect(audio.destination);
   source.start();
-}
-
-/** Watch the accelerometer (phone only). On the desktop this does nothing. */
-export async function setShakeEnabled(enabled: boolean): Promise<void> {
-  if (!onPhone()) return;
-  try {
-    await invoke('plugin:klimper-jingle|set_shake_enabled', { enabled });
-  } catch (error) {
-    if (!warned) {
-      warned = true;
-      console.warn('klimper sound:', error);
-    }
-  }
 }

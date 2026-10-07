@@ -24,16 +24,23 @@ describe('the receive detector', () => {
     expect(d.observe(wallet(60n))).toEqual({ kind: 'received', mojos: 20n });
   });
 
-  it('follows a catching-up wallet silently', () => {
+  it('ignores a catching-up wallet, and hears the coin once it is synced', () => {
     const d = new ReceiveDetector();
+    // Launch: catching up, then synced. Nothing is announced.
     d.observe(wallet(0n, false));
     expect(d.observe(wallet(500n, false))).toEqual({ kind: 'quiet' });
-    expect(d.observe(wallet(900n, false))).toEqual({ kind: 'quiet' });
-    // Synced now: only what came after the catch-up counts.
     expect(d.observe(wallet(900n, true))).toEqual({ kind: 'quiet' });
+    // A coin arrives: Sage sees it before it has its puzzle. Whether the balance
+    // rises in the unsynced update or in the synced one, it is heard once, when synced.
+    expect(d.observe(wallet(1000n, false))).toEqual({ kind: 'quiet' });
     expect(d.observe(wallet(1000n, true))).toEqual({
       kind: 'received',
       mojos: 100n,
+    });
+    expect(d.observe(wallet(1000n, false))).toEqual({ kind: 'quiet' });
+    expect(d.observe(wallet(1300n, true))).toEqual({
+      kind: 'received',
+      mojos: 300n,
     });
   });
 

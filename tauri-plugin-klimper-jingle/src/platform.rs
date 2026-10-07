@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The Swift side (`AVAudioPlayer`, `UIImpactFeedbackGenerator`, `CMMotionManager`) and the
-//! Kotlin side (`SoundPool`, `Vibrator`, `SensorManager`); elsewhere unsupported. The jingle bytes cross the bridge base64-encoded, once per tier per run (Swift
-//! keeps the decoded player).
+//! Kotlin side (`SoundPool`, `Vibrator`, `SensorManager`); elsewhere unsupported. Sound bytes
+//! cross the bridge base64-encoded, once per sound per run (the native side keeps the player).
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use serde::{Serialize, de::DeserializeOwned};
 use tauri::{
     AppHandle, Runtime,
-    ipc::{Channel, InvokeResponseBody},
     plugin::{PluginApi, PluginHandle},
 };
 
-use crate::{Error, Impact, Result, Shake, Tier};
+use crate::{Error, Result, Tier};
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_klimper_jingle);
@@ -22,10 +24,25 @@ tauri::ios_plugin_binding!(init_plugin_klimper_jingle);
 #[cfg(target_os = "android")]
 const ANDROID_PLUGIN: &str = "com.clapandpay.klimper.jingle";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Sound {
+    Ding(Tier),
+    Rattle(Tier),
+}
+
+impl Sound {
+    fn bytes(self) -> &'static [u8] {
+        match self {
+            Sound::Ding(tier) => tier.ding(),
+            Sound::Rattle(tier) => tier.rattle(),
+        }
+    }
+}
+
 pub struct Native<R: Runtime> {
     handle: Option<PluginHandle<R>>,
-    /// Tiers whose bytes Swift already holds, so they cross the bridge once.
-    sent: Arc<Mutex<Vec<Tier>>>,
+    /// Sounds the native side already holds, so each crosses the bridge once.
+    sent: Arc<Mutex<HashSet<Sound>>>,
 }
 
 impl<R: Runtime> Clone for Native<R> {
@@ -39,18 +56,19 @@ impl<R: Runtime> Clone for Native<R> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PlayArgs<'a> {
+struct PlayArgs {
     tier: Tier,
-    /// The WAV, base64; `None` once Swift has it.
+    /// The WAV, base64; `None` once the native side has it.
     wav: Option<String>,
-    impacts: &'a [Impact],
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ShakeArgs {
     enabled: bool,
-    channel: Option<Channel<InvokeResponseBody>>,
+    tier: Tier,
+    /// The rattle loop of `tier`, base64; `None` once the native side has it.
+    wav: Option<String>,
 }
 
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
@@ -71,54 +89,50 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 }
 
 impl<R: Runtime> Native<R> {
-    pub fn play(&self, tier: Tier, impacts: &[Impact]) -> Result<()> {
-        let wav = {
-            let mut sent = self
-                .sent
-                .lock()
-                .map_err(|_| Error::Platform("lock".into()))?;
-            if sent.contains(&tier) {
-                None
-            } else {
-                sent.push(tier);
-                Some(B64.encode(tier.wav()))
-            }
+    pub fn play(&self, tier: Tier) -> Result<()> {
+        let sound = Sound::Ding(tier);
+        let wav = self.bytes_unless_sent(sound)?;
+        let result = self.run("play", PlayArgs { tier, wav });
+        self.forget_if_failed(sound, &result);
+        result
+    }
+
+    pub fn set_shake(&self, enabled: bool, tier: Tier) -> Result<()> {
+        let sound = Sound::Rattle(tier);
+        let wav = if enabled {
+            self.bytes_unless_sent(sound)?
+        } else {
+            None
         };
-        let result = self.run::<_, serde::de::IgnoredAny>("play", PlayArgs { tier, wav, impacts });
+        let result = self.run("setShake", ShakeArgs { enabled, tier, wav });
+        self.forget_if_failed(sound, &result);
+        result
+    }
+
+    fn bytes_unless_sent(&self, sound: Sound) -> Result<Option<String>> {
+        let mut sent = self
+            .sent
+            .lock()
+            .map_err(|_| Error::Platform("lock".into()))?;
+        Ok(sent.insert(sound).then(|| B64.encode(sound.bytes())))
+    }
+
+    /// The native side may not have kept the bytes: send them again next time.
+    fn forget_if_failed(&self, sound: Sound, result: &Result<()>) {
         if result.is_err()
             && let Ok(mut sent) = self.sent.lock()
         {
-            // Swift may not have kept it: send it again next time.
-            sent.retain(|t| *t != tier);
+            sent.remove(&sound);
         }
-        result.map(|_| ())
-    }
-
-    pub fn set_shake_enabled(
-        &self,
-        enabled: bool,
-        on_shake: impl Fn(Shake) + Send + Sync + 'static,
-    ) -> Result<()> {
-        let channel = enabled.then(|| {
-            Channel::new(move |body| {
-                if let InvokeResponseBody::Json(json) = body
-                    && let Ok(shake) = serde_json::from_str::<Shake>(&json)
-                {
-                    on_shake(shake);
-                }
-                Ok(())
-            })
-        });
-        self.run::<_, serde::de::IgnoredAny>("setShakeEnabled", ShakeArgs { enabled, channel })
-            .map(|_| ())
     }
 
     #[cfg_attr(not(mobile), allow(unused_variables, clippy::unused_self))]
-    fn run<Q: Serialize, S: DeserializeOwned>(&self, method: &str, args: Q) -> Result<S> {
+    fn run<Q: Serialize>(&self, method: &str, args: Q) -> Result<()> {
         #[cfg(mobile)]
         if let Some(handle) = &self.handle {
             return handle
-                .run_mobile_plugin(method, args)
+                .run_mobile_plugin::<serde::de::IgnoredAny>(method, args)
+                .map(|_| ())
                 .map_err(|error| Error::Platform(error.to_string()));
         }
         Err(Error::Unsupported)

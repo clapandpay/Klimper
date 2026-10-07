@@ -1,11 +1,11 @@
 ## Default Permission
 
-Play the Klimper coin jingle with haptics, and turn shake detection on or off.
+Play the Klimper coin ding, and turn the shake rattle (with haptics) on or off.
 
 #### This default permission set includes the following:
 
 - `allow-play`
-- `allow-set-shake-enabled`
+- `allow-set-shake`
 
 ## Permission Table
 
@@ -45,12 +45,12 @@ Denies the play command without any pre-configured scope.
 <tr>
 <td>
 
-`klimper-jingle:allow-set-shake-enabled`
+`klimper-jingle:allow-set-shake`
 
 </td>
 <td>
 
-Enables the set_shake_enabled command without any pre-configured scope.
+Enables the set_shake command without any pre-configured scope.
 
 </td>
 </tr>
@@ -58,12 +58,12 @@ Enables the set_shake_enabled command without any pre-configured scope.
 <tr>
 <td>
 
-`klimper-jingle:deny-set-shake-enabled`
+`klimper-jingle:deny-set-shake`
 
 </td>
 <td>
 
-Denies the set_shake_enabled command without any pre-configured scope.
+Denies the set_shake command without any pre-configured scope.
 
 </td>
 </tr>

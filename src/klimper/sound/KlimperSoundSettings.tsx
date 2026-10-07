@@ -27,14 +27,16 @@ export function KlimperSoundSettings() {
             <div className='text-sm text-muted-foreground'>
               {phone ? (
                 <Trans>
-                  A jingle when coins arrive, and when you shake the phone: the
-                  more they are worth, the heavier it sounds and feels. Silent
-                  mode mutes it.
+                  A coin rings when coins arrive. Shake the phone and the coins
+                  on the open page rattle in your hand for as long as you shake:
+                  the more they are worth, the heavier it sounds and feels.
+                  Silent mode mutes the sound. Off means no sound and no
+                  vibration.
                 </Trans>
               ) : (
                 <Trans>
-                  A jingle when coins arrive: the more they are worth, the
-                  heavier it sounds. Shaking is for the phone.
+                  A coin rings when coins arrive: the more they are worth, the
+                  richer it sounds. Shaking is for the phone.
                 </Trans>
               )}
             </div>

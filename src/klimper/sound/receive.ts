@@ -10,8 +10,11 @@
 //   was closed are not announced, like a wallet that was filled while you were out.
 // - Sage's default state (`receive_address === 'Unknown'`) means logged out or switching
 //   wallets: the baseline is dropped and the next real sample starts over, silently.
-// - While the wallet is catching up (`synced_coins < total_coins`) the baseline follows the
-//   balance silently: the catch-up is not a receive.
+// - A sample of a wallet that is catching up (`synced_coins < total_coins`) is ignored: a new
+//   coin is unsynced until Sage has its puzzle, and the balance and the flag do not change in
+//   the same store update, so the baseline is only ever a synced sample and the delta is taken
+//   between synced samples. The launch catch-up is therefore silent (its first synced sample
+//   is the baseline) and a receive is heard once its coin is synced.
 // - A decrease is a spend, and silent.
 // - An increase of a synced wallet is a receive; the caller confirms the wallet is still the
 //   same one (`fingerprint`) before anything plays, because an address alone does not tell.
@@ -62,9 +65,10 @@ export class ReceiveDetector {
       this.baseline = null;
       return had ? { kind: 'reset' } : { kind: 'quiet' };
     }
+    if (!sample.synced) return { kind: 'quiet' };
     const before = this.baseline;
     this.baseline = sample;
-    if (before === null || !sample.synced || sample.balance <= before.balance) {
+    if (before === null || sample.balance <= before.balance) {
       return { kind: 'quiet' };
     }
     return { kind: 'received', mojos: sample.balance - before.balance };

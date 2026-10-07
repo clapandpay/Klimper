@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import {
-  HAPTICS,
-  TIER_BOUNDS_USD,
-  TIERS,
-  soundFileOf,
-  tierOf,
-  usdOf,
-} from './tiers';
+import { soundFilesOf, TIER_BOUNDS_USD, TIERS, tierOf, usdOf } from './tiers';
 
 describe('the tier of an amount', () => {
   it('is a coin below a dollar and when there is no price', () => {
@@ -39,27 +32,14 @@ describe('the tier of an amount', () => {
     expect(usdOf(1_000_000_000_000n, 0)).toBeNull();
     expect(tierOf(usdOf(25_000_000_000_000n, 10))).toBe('pouch');
   });
-});
 
-describe('the files and the haptics', () => {
-  it('have one entry per tier, in ascending weight', () => {
+  it('names two files per tier, in ascending weight', () => {
     expect(TIERS).toEqual(['coin', 'few', 'handful', 'pouch']);
     for (const tier of TIERS) {
-      expect(soundFileOf(tier)).toBe(`klimper-${tier}.wav`);
-      const impacts = HAPTICS[tier];
-      expect(impacts.length).toBeGreaterThan(0);
-      expect(impacts[0].atMs).toBe(0);
-      for (const { atMs, strength } of impacts) {
-        expect(atMs).toBeGreaterThanOrEqual(0);
-        expect(strength).toBeGreaterThan(0);
-        expect(strength).toBeLessThanOrEqual(1);
-      }
+      expect(soundFilesOf(tier)).toEqual({
+        ding: `klimper-ding-${tier}.wav`,
+        rattle: `klimper-rattle-${tier}.wav`,
+      });
     }
-    // Heavier tiers hit more and harder.
-    const weight = (tier: (typeof TIERS)[number]) =>
-      HAPTICS[tier].reduce((sum, i) => sum + i.strength, 0);
-    expect(weight('coin')).toBeLessThan(weight('few'));
-    expect(weight('few')).toBeLessThan(weight('handful'));
-    expect(weight('handful')).toBeLessThan(weight('pouch'));
   });
 });

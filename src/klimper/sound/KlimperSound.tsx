@@ -3,24 +3,34 @@
 // `KlimperRoot`, only when `VITE_ENABLE_KLIMPER_SOUND` is on, and loaded lazily so a build
 // without the flag ships none of this. Renders nothing.
 //
-// Cost when on: one subscription to the wallet store (a few comparisons per update), one
-// event listener, and on the phone an accelerometer stream at 30 Hz while the app is active.
-// The XCH price is asked for at most once in ten minutes, and only when something is about
-// to play. Cost when the switch is off: nothing, and the accelerometer is stopped.
+// Two moments. Coins arrive: the balance Sage keeps goes up on a synced wallet, and the ding
+// of the received value rings once (several coins landing together ring once, for their sum).
+// The phone is shaken: the native side does all of it, in real time; the webview only tells
+// it the tier of what is on the page (a token page: that token; the wallet page: the total;
+// anything else: the whole wallet), and again whenever that changes.
+//
+// Cost when on: one subscription to the wallet store (a few comparisons per update), one to
+// the page value, and on the phone an accelerometer stream at 40 Hz while the app is active.
+// The XCH price is asked for at most once in ten minutes, and only when something is about to
+// play or the wallet's tier is sent. Cost when the switch is off: nothing, and the
+// accelerometer is stopped.
+//
+// Privacy and safety (docs/sound.md): reads the balance already on screen, sends nothing but
+// the price lookup Sage's own price display makes, touches no keys, no transactions, nothing in
+// the send or receive path, and cannot block them: all asynchronous, all failing quietly.
 
 import { commands } from '@/bindings';
+import { pageValue, subscribePageValue } from '@/klimper/pageValue';
 import { useWalletState } from '@/state';
-import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
-import { onPhone, playJingle, setShakeEnabled } from './player';
+import { onPhone, playDing, setShake } from './player';
 import { Coalescer, ReceiveDetector, sampleOf } from './receive';
 import { useKlimperSoundSetting } from './setting';
-import { tierOf, usdOf } from './tiers';
+import { Tier, tierOf, usdOf } from './tiers';
 
-/** Increases closer than this are one jingle. */
+/** Increases closer than this are one ding. */
 export const COALESCE_MS = 1500;
 const PRICE_TTL_MS = 10 * 60_000;
-const SHAKE_EVENT = 'klimper-jingle://shake';
 
 let price: { usd: number; at: number } | null = null;
 
@@ -50,10 +60,12 @@ async function currentFingerprint(): Promise<number | null> {
   }
 }
 
+type Sync = ReturnType<typeof useWalletState.getState>['sync'];
+
 export function KlimperSound() {
   const [on] = useKlimperSoundSetting();
 
-  // Receives: watch the balance Sage keeps.
+  // Coins arrive: watch the balance Sage keeps.
   useEffect(() => {
     if (!on) return;
     let alive = true;
@@ -71,9 +83,9 @@ export function KlimperSound() {
       }
       fingerprint ??= now;
       const tier = tierOf(usdOf(mojos, await xchPrice()));
-      if (alive) void playJingle(tier, false);
+      if (alive) void playDing(tier);
     });
-    const look = (sync: ReturnType<typeof useWalletState.getState>['sync']) => {
+    const look = (sync: Sync) => {
       const outcome = detector.observe(sampleOf(sync));
       if (outcome.kind === 'reset') {
         fingerprint = null;
@@ -97,28 +109,41 @@ export function KlimperSound() {
     };
   }, [on]);
 
-  // Shakes: the whole wallet, felt and heard. Phone only.
+  // The phone is shaken: arm the native side with the tier of what the page shows, and keep
+  // it current. The page's own dollar value wins (Token.tsx, TokenList.tsx publish it); a
+  // page without one shakes the whole wallet.
   useEffect(() => {
-    // Off: nothing to do. The watch was never started, or the previous run of this
-    // effect stopped it on its way out.
+    // Off: nothing to do. The watch was never armed, or the previous run of this effect
+    // disarmed it on its way out.
     if (!onPhone() || !on) return;
-    let stopped = false;
-    let unlisten: (() => void) | null = null;
-    void listen(SHAKE_EVENT, async () => {
-      const { sync } = useWalletState.getState();
-      if (sync.receive_address === 'Unknown') return;
-      const balance = sampleOf(sync).balance;
-      const tier = tierOf(usdOf(balance, await xchPrice()));
-      if (!stopped) void playJingle(tier, true);
-    }).then((stop) => {
-      if (stopped) stop();
-      else unlisten = stop;
+    let alive = true;
+    let sent: Tier | null = null;
+    const arm = async () => {
+      const page = pageValue();
+      let usd = page;
+      if (page === null) {
+        const { sync } = useWalletState.getState();
+        if (sync.receive_address === 'Unknown') return;
+        const { balance } = sampleOf(sync);
+        usd = usdOf(balance, await xchPrice());
+      }
+      const tier = tierOf(usd);
+      if (!alive || tier === sent) return;
+      sent = tier;
+      void setShake(true, tier);
+    };
+    // Arm at once with the lightest tier, so the first shake answers even before the price.
+    void setShake(true, 'coin').then(() => {
+      sent = 'coin';
+      return arm();
     });
-    void setShakeEnabled(true);
+    const unsubscribeWallet = useWalletState.subscribe(() => void arm());
+    const unsubscribePage = subscribePageValue(() => void arm());
     return () => {
-      stopped = true;
-      unlisten?.();
-      void setShakeEnabled(false);
+      alive = false;
+      unsubscribeWallet();
+      unsubscribePage();
+      void setShake(false, sent ?? 'coin');
     };
   }, [on]);
 

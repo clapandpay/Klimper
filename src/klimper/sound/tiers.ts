@@ -5,7 +5,8 @@
 // sound is for the holder of the phone, not a readout, and four weights are enough to feel
 // the difference between a coin and a pouch. Bounds are in US dollars so a tier means the same
 // on every network; where there is no price (testnet, or none fetched yet) everything is one
-// coin. The files are written by scripts/klimper-sound.py; docs/sound.md quotes this table.
+// coin. Two sounds per tier, written by scripts/klimper-sound.py: the ding (coins arrive) and
+// the rattle (the phone is shaken). docs/sound.md quotes this table.
 
 export type Tier = 'coin' | 'few' | 'handful' | 'pouch';
 
@@ -49,43 +50,10 @@ export function usdOf(
   return (Number(mojos / 1_000_000n) / 1_000_000) * xchPriceUsd;
 }
 
-/** The bundled file of a tier, as the plugin and the web both resolve it. */
-export function soundFileOf(tier: Tier): string {
-  return `klimper-${tier}.wav`;
+/** The two bundled files of a tier, as the plugin and the web both name them. */
+export function soundFilesOf(tier: Tier): { ding: string; rattle: string } {
+  return {
+    ding: `klimper-ding-${tier}.wav`,
+    rattle: `klimper-rattle-${tier}.wav`,
+  };
 }
-
-/** One haptic impact: when, how hard (0 to 1). The native side maps strength to a style. */
-export interface Impact {
-  atMs: number;
-  strength: number;
-}
-
-/**
- * What the hand feels on a shake, per tier: a coin is one light tap; a pouch is a heavy thud
- * followed by a rattle that settles. Timings follow the sound's strikes roughly, not exactly:
- * the hand is slower than the ear.
- */
-export const HAPTICS: Readonly<Record<Tier, readonly Impact[]>> = {
-  coin: [{ atMs: 0, strength: 0.35 }],
-  few: [
-    { atMs: 0, strength: 0.45 },
-    { atMs: 90, strength: 0.35 },
-    { atMs: 210, strength: 0.3 },
-  ],
-  handful: [
-    { atMs: 0, strength: 0.65 },
-    { atMs: 70, strength: 0.5 },
-    { atMs: 150, strength: 0.5 },
-    { atMs: 260, strength: 0.4 },
-    { atMs: 400, strength: 0.3 },
-  ],
-  pouch: [
-    { atMs: 0, strength: 1 },
-    { atMs: 60, strength: 0.8 },
-    { atMs: 130, strength: 0.7 },
-    { atMs: 220, strength: 0.6 },
-    { atMs: 330, strength: 0.5 },
-    { atMs: 470, strength: 0.4 },
-    { atMs: 650, strength: 0.3 },
-  ],
-};

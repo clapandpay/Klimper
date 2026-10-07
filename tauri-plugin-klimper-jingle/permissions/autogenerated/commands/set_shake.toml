@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-shake"
+description = "Enables the set_shake command without any pre-configured scope."
+commands.allow = ["set_shake"]
+
+[[permission]]
+identifier = "deny-set-shake"
+description = "Denies the set_shake command without any pre-configured scope."
+commands.deny = ["set_shake"]
