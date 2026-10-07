@@ -31,10 +31,13 @@ enum Sound {
 }
 
 impl Sound {
-    fn bytes(self) -> &'static [u8] {
+    fn encoded(self) -> Vec<String> {
         match self {
-            Sound::Ding(tier) => tier.ding(),
-            Sound::Rattle(tier) => tier.rattle(),
+            Sound::Ding(tier) => vec![B64.encode(tier.ding())],
+            Sound::Rattle(tier) => {
+                let [a, b] = tier.rattles();
+                vec![B64.encode(a), B64.encode(b), B64.encode(tier.knock())]
+            }
         }
     }
 }
@@ -67,8 +70,10 @@ struct PlayArgs {
 struct ShakeArgs {
     enabled: bool,
     tier: Tier,
-    /// The rattle loop of `tier`, base64; `None` once the native side has it.
-    wav: Option<String>,
+    /// The two rattle loops of `tier`, base64; `None` once the native side has them.
+    loops: Option<Vec<String>>,
+    /// The knock of `tier`, base64; `None` once the native side has it.
+    knock: Option<String>,
 }
 
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
@@ -91,7 +96,7 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 impl<R: Runtime> Native<R> {
     pub fn play(&self, tier: Tier) -> Result<()> {
         let sound = Sound::Ding(tier);
-        let wav = self.bytes_unless_sent(sound)?;
+        let wav = self.unless_sent(sound)?.map(|mut v| v.remove(0));
         let result = self.run("play", PlayArgs { tier, wav });
         self.forget_if_failed(sound, &result);
         result
@@ -99,22 +104,37 @@ impl<R: Runtime> Native<R> {
 
     pub fn set_shake(&self, enabled: bool, tier: Tier) -> Result<()> {
         let sound = Sound::Rattle(tier);
-        let wav = if enabled {
-            self.bytes_unless_sent(sound)?
+        let fresh = if enabled {
+            self.unless_sent(sound)?
         } else {
             None
         };
-        let result = self.run("setShake", ShakeArgs { enabled, tier, wav });
+        let (loops, knock) = match fresh {
+            Some(mut v) => {
+                let knock = v.pop();
+                (Some(v), knock)
+            }
+            None => (None, None),
+        };
+        let result = self.run(
+            "setShake",
+            ShakeArgs {
+                enabled,
+                tier,
+                loops,
+                knock,
+            },
+        );
         self.forget_if_failed(sound, &result);
         result
     }
 
-    fn bytes_unless_sent(&self, sound: Sound) -> Result<Option<String>> {
+    fn unless_sent(&self, sound: Sound) -> Result<Option<Vec<String>>> {
         let mut sent = self
             .sent
             .lock()
             .map_err(|_| Error::Platform("lock".into()))?;
-        Ok(sent.insert(sound).then(|| B64.encode(sound.bytes())))
+        Ok(sent.insert(sound).then(|| sound.encoded()))
     }
 
     /// The native side may not have kept the bytes: send them again next time.

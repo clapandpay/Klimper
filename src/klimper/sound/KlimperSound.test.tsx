@@ -144,7 +144,7 @@ describe('the Klimper sound, running', () => {
     expect(ding).not.toHaveBeenCalled();
   });
 
-  it('is a coin without a price', async () => {
+  it('is silent without a price, and for less than a cent', async () => {
     price.mockRejectedValue(new Error('offline'));
     render(<KlimperSound />);
     await act(async () => {
@@ -155,15 +155,23 @@ describe('the Klimper sound, running', () => {
       wallet().setState({ sync: sync('900000000000000') });
     });
     await settle();
-    expect(ding).toHaveBeenCalledExactlyOnceWith('coin');
+    expect(ding).not.toHaveBeenCalled();
+    // A price, but dust: still nothing.
+    price.mockResolvedValue({ usd: 10 });
+    forgetPrice();
+    await act(async () => {
+      wallet().setState({ sync: sync('900000000100000') }); // +100000 mojos
+    });
+    await settle();
+    expect(ding).not.toHaveBeenCalled();
   });
 
   it('on the phone, arms the shake with the wallet tier and keeps it current', async () => {
     phone.value = true;
     const { unmount } = render(<KlimperSound />);
     await settle();
-    // Armed at once with the lightest tier, before any balance is known.
-    expect(shake).toHaveBeenCalledWith(true, 'coin');
+    // No wallet yet: nothing is armed.
+    expect(shake).not.toHaveBeenCalled();
     await act(async () => {
       wallet().setState({ sync: sync('30000000000000') }); // 30 XCH = $300
     });
@@ -183,8 +191,13 @@ describe('the Klimper sound, running', () => {
     });
     await settle();
     expect(shake).toHaveBeenLastCalledWith(true, 'handful');
+    // Nothing left: disarmed, so a shake is silent.
+    await act(async () => {
+      wallet().setState({ sync: sync('100000') });
+    });
+    await settle();
+    expect(shake).toHaveBeenLastCalledWith(false, 'coin');
     unmount();
-    expect(shake).toHaveBeenLastCalledWith(false, 'handful');
   });
 
   it('on the phone, the open page sets the weight; without one, the wallet does', async () => {

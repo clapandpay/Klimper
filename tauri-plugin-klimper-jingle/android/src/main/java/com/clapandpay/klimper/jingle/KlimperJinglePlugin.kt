@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Klimper sound on Android (clapandpay TASK-111.02), the same two moments as the Swift:
 // `play` rings the tier's ding once (SoundPool; skipped when the ringer is on silent or vibrate,
-// like the iOS silent switch); `setShake` arms the accelerometer, and a shake loops the tier's
-// rattle for as long as jolts keep coming, with a vibration pulse per jolt, stopping after a
-// few hundred milliseconds of stillness. Nothing plays or vibrates unless the app is resumed.
+// like the iOS silent switch); `setShake` arms the accelerometer, and a shake loops one of the
+// tier's two rattles (picked at random, at a slightly random rate) for as long as jolts keep
+// coming, with a vibration pulse and a knock at a random pitch per jolt, the loop's volume and
+// rate following how hard the hand shakes, stopping after a few hundred milliseconds of
+// stillness. Nothing plays or vibrates unless the app is resumed.
 //
 // Sound bytes arrive from Rust base64-encoded once per sound per run and are written to the
 // app's cache directory, because SoundPool loads from a path.
@@ -49,7 +51,8 @@ class PlayArgs {
 class ShakeArgs {
     var enabled: Boolean = false
     lateinit var tier: String
-    var wav: String? = null
+    var loops: List<String>? = null
+    var knock: String? = null
 }
 
 @TauriPlugin
@@ -66,7 +69,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private val main = Handler(Looper.getMainLooper())
     private var pool: SoundPool? = null
     private val dings = HashMap<String, Int>()
-    private val rattles = HashMap<String, Int>()
+    private val rattles = HashMap<String, List<Int>>()
+    private val knocks = HashMap<String, Int>()
     private val loaded = HashSet<Int>()
 
     private var shakeTier = "coin"
@@ -74,6 +78,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private var rattleStream = 0
     private var stopRattle: Runnable? = null
     private var lastTap = 0L
+    // How hard the hand is shaking, smoothed, 0 to 1; drives the loop's volume and rate.
+    private var effort = 0.0
 
     private var sensors: SensorManager? = null
     private var listening = false
@@ -121,7 +127,11 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         val args = invoke.parseArgs(ShakeArgs::class.java)
         main.post {
             try {
-                args.wav?.let { rattles[args.tier] = load(args.tier, "rattle", it) }
+                args.loops?.let { loops ->
+                    rattles[args.tier]?.forEach { pool().unload(it) }
+                    rattles[args.tier] = loops.mapIndexed { i, wav -> load("${args.tier}-$i", "rattle", wav) }
+                }
+                args.knock?.let { knocks[args.tier] = load(args.tier, "knock", it) }
                 val tierChanged = shakeTier != args.tier
                 shakeTier = args.tier
                 shakeEnabled = args.enabled
@@ -162,12 +172,12 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
 
     private val pending = HashMap<Int, (SoundPool) -> Unit>()
 
-    private fun load(tier: String, kind: String, base64: String): Int {
+    private fun load(name: String, kind: String, base64: String): Int {
         val bytes = Base64.decode(base64, Base64.DEFAULT)
-        val file = File(activity.cacheDir, "klimper-$kind-$tier.wav")
+        val file = File(activity.cacheDir, "klimper-$kind-$name.wav")
         file.writeBytes(bytes)
-        val map = if (kind == "ding") dings else rattles
-        map[tier]?.let { pool().unload(it) }
+        if (kind == "ding") dings[name]?.let { pool().unload(it) }
+        if (kind == "knock") knocks[name]?.let { pool().unload(it) }
         return pool().load(file.path, 1)
     }
 
@@ -186,10 +196,30 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
 
     private fun startRattle() {
         if (rattleStream != 0 || !resumed) return
-        val id = rattles[shakeTier] ?: return
+        val id = rattles[shakeTier]?.randomOrNull() ?: return
+        effort = 0.4
         if (!ringerNormal()) { rattleStream = -1; return } // felt, not heard
-        whenLoaded(id) { p -> if (rattleStream == -1 || rattleStream == 0) rattleStream = p.play(id, 1f, 1f, 1, -1, 1f) }
+        val rate = (0.96 + Math.random() * 0.08).toFloat() // never quite the same twice
+        whenLoaded(id) { p -> if (rattleStream == -1 || rattleStream == 0) rattleStream = p.play(id, 0.7f, 0.7f, 1, -1, rate) }
         if (rattleStream == 0) rattleStream = -1 // marks "rattling" until the stream id arrives
+    }
+
+    // Harder shaking: louder and faster coins, following a smoothed force.
+    private fun follow(force: Double) {
+        effort = effort * 0.6 + force * 0.4
+        if (rattleStream <= 0) return
+        val volume = (0.55 + 0.45 * effort).toFloat()
+        pool?.setVolume(rattleStream, volume, volume)
+        pool?.setRate(rattleStream, (0.92 + 0.33 * effort).toFloat())
+    }
+
+    // One knock per jolt on top of the loop, at a random pitch, louder the harder the jolt.
+    private fun knock(force: Double) {
+        if (!ringerNormal()) return
+        val id = knocks[shakeTier] ?: return
+        val volume = (0.35 + 0.65 * force).toFloat()
+        val rate = (0.85 + Math.random() * 0.4).toFloat()
+        whenLoaded(id) { p -> p.play(id, volume, volume, 0, 0, rate) }
     }
 
     private fun stopRattle() {
@@ -270,10 +300,14 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         if (!resumed) return
         if (rattleStream != 0) {
             keepRattling()
+            follow(force)
+            knock(force)
             tap(force)
         } else if (jolts.size >= 2) {
             startRattle()
             keepRattling()
+            follow(force)
+            knock(force)
             tap(force)
         }
     }

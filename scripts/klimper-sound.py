@@ -6,8 +6,11 @@
 # seeds, pure Python, no dependencies. `python3 scripts/klimper-sound.py` always writes
 # byte-identical files into src/klimper/sound/:
 #
-#   klimper-ding-<tier>.wav     coins arrive: one bright coin "ding", richer per tier (one shot)
-#   klimper-rattle-<tier>.wav   the phone is shaken: coins rattling, heavier per tier (a loop)
+#   klimper-ding-<tier>.wav        coins arrive: one bright coin "ding", richer per tier (one shot)
+#   klimper-rattle-<tier>-{a,b}.wav the phone is shaken: coins rattling, heavier per tier (loops;
+#                                  two variants, the phone picks one at random each shake)
+#   klimper-knock-<tier>.wav       one jolt: a couple of coins knocking, played on top of the
+#                                  loop at a random pitch, louder the harder the jolt
 #
 # Two sounds, two moments. The ding is the old "money arrived" coin sound of the first mobile
 # wallets, made ours: a struck coin with a long bright ring and a second, higher coin a moment
@@ -52,11 +55,20 @@ DINGS = {
 }
 
 RATTLES = {
-    # base pitch Hz, pitch spread, knocks per loop, hiss grains per loop, knock decay s, rumble
-    "coin": dict(seed=201, base=5600.0, spread=0.10, knocks=5, grains=3, decay=0.06, rumble=0.0),
-    "few": dict(seed=203, base=4900.0, spread=0.25, knocks=14, grains=12, decay=0.05, rumble=0.0),
-    "handful": dict(seed=207, base=4200.0, spread=0.32, knocks=30, grains=30, decay=0.045, rumble=0.12),
-    "pouch": dict(seed=209, base=3400.0, spread=0.38, knocks=60, grains=70, decay=0.04, rumble=0.3),
+    # base pitch Hz, pitch spread, knocks per loop, hiss grains per loop, knock decay s, rumble;
+    # seeds: one per variant
+    "coin": dict(seeds=(201, 211), base=5600.0, spread=0.10, knocks=5, grains=3, decay=0.06, rumble=0.0),
+    "few": dict(seeds=(203, 213), base=4900.0, spread=0.25, knocks=14, grains=12, decay=0.05, rumble=0.0),
+    "handful": dict(seeds=(207, 217), base=4200.0, spread=0.32, knocks=30, grains=30, decay=0.045, rumble=0.12),
+    "pouch": dict(seeds=(209, 219), base=3400.0, spread=0.38, knocks=60, grains=70, decay=0.04, rumble=0.3),
+}
+
+KNOCKS = {
+    # base pitch Hz, how many coins touch in the jolt
+    "coin": dict(seed=301, base=5600.0, coins=1),
+    "few": dict(seed=303, base=4900.0, coins=2),
+    "handful": dict(seed=307, base=4200.0, coins=3),
+    "pouch": dict(seed=309, base=3400.0, coins=5),
 }
 
 
@@ -139,8 +151,23 @@ def render_ding(spec):
     return out[: min(len(out), last + int(0.03 * RATE))]
 
 
-def render_rattle(spec):
+def render_knock(spec):
+    """One jolt: a couple of coins knocking, 0.12 s, played over the loop at a random pitch."""
     rng = random.Random(spec["seed"])
+    buf = [0.0] * int(0.14 * RATE)
+    for k in range(spec["coins"]):
+        at = k * 0.006 + rng.random() * 0.012
+        f = spec["base"] * math.exp((rng.random() * 2 - 1) * 0.3)
+        strike(buf, at, f, 0.9 * (0.8 ** k), 0.045 * (0.7 + 0.6 * rng.random()), DISC, rng)
+    if spec["coins"] >= 3:
+        grain(buf, 0.01, 0.25, rng)
+    out = normalise(buf)
+    last = max(i for i, x in enumerate(out) if abs(x) > 0.006)
+    return out[: min(len(out), last + int(0.02 * RATE))]
+
+
+def render_rattle(spec, seed):
+    rng = random.Random(seed)
     n = int(LOOP_SECONDS * RATE)
     buf = [0.0] * n
     base, spread = spec["base"], spec["spread"]
@@ -191,20 +218,29 @@ def write(path, samples):
 def main():
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "klimper", "sound")
     os.makedirs(out, exist_ok=True)
-    for kind, table, render in (("ding", DINGS, render_ding), ("rattle", RATTLES, render_rattle)):
-        for name, spec in table.items():
-            samples = render(spec)
-            path = os.path.join(out, f"klimper-{kind}-{name}.wav")
-            write(path, samples)
-            seconds = len(samples) / RATE
-            print(f"{os.path.relpath(path):50} {seconds:5.2f} s  {os.path.getsize(path) // 1024:4} kB")
-            if not 0.3 <= seconds <= 1.6:
-                print("  duration out of bounds", file=sys.stderr)
-                sys.exit(1)
+    jobs = []
+    for name, spec in DINGS.items():
+        jobs.append((f"klimper-ding-{name}.wav", lambda s=spec: render_ding(s), (0.3, 1.6)))
+    for name, spec in RATTLES.items():
+        for variant, seed in zip("ab", spec["seeds"]):
+            jobs.append((f"klimper-rattle-{name}-{variant}.wav",
+                         lambda s=spec, sd=seed: render_rattle(s, sd), (0.3, 1.6)))
+    for name, spec in KNOCKS.items():
+        jobs.append((f"klimper-knock-{name}.wav", lambda s=spec: render_knock(s), (0.03, 0.2)))
+    for filename, render, (lo, hi) in jobs:
+        samples = render()
+        path = os.path.join(out, filename)
+        write(path, samples)
+        seconds = len(samples) / RATE
+        print(f"{os.path.relpath(path):50} {seconds:5.2f} s  {os.path.getsize(path) // 1024:4} kB")
+        if not lo <= seconds <= hi:
+            print("  duration out of bounds", file=sys.stderr)
+            sys.exit(1)
     for stale in ("coin", "few", "handful", "pouch"):
-        path = os.path.join(out, f"klimper-{stale}.wav")
-        if os.path.exists(path):
-            os.remove(path)
+        for old in (f"klimper-{stale}.wav", f"klimper-rattle-{stale}.wav"):
+            path = os.path.join(out, old)
+            if os.path.exists(path):
+                os.remove(path)
 
 
 if __name__ == "__main__":

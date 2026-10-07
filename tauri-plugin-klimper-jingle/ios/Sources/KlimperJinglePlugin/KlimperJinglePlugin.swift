@@ -4,10 +4,12 @@
 // - Coins arrive: `play` rings the tier's ding once (AVAudioPlayer under the ambient session,
 //   so the silent switch mutes it and music keeps playing). No haptics: nobody is holding the
 //   phone for it.
-// - The phone is shaken: `setShake` arms the accelerometer. A shake starts the tier's rattle
-//   loop and keeps it going for as long as jolts keep coming; every jolt is a haptic tap whose
-//   strength follows the jolt and the tier; a few hundred milliseconds of stillness stops the
-//   loop. The webview sends the wallet's tier up front, so a shake answers at once.
+// - The phone is shaken: `setShake` arms the accelerometer. A shake starts one of the tier's
+//   two rattle loops (picked at random, at a slightly random rate) and keeps it going for as
+//   long as jolts keep coming. Every jolt is a haptic tap and a knock on top of the loop at a
+//   random pitch, and the loop's volume and speed follow how hard the hand shakes; a few
+//   hundred milliseconds of stillness stops it. The webview sends the page's tier up front,
+//   so a shake answers at once.
 //
 // Nothing plays or vibrates unless the app is active. Motion state lives on the motion queue;
 // players and haptics on main.
@@ -25,19 +27,25 @@ struct PlayArgs: Decodable {
 struct ShakeArgs: Decodable {
   let enabled: Bool
   let tier: String
-  let wav: String?
+  let loops: [String]?
+  let knock: String?
 }
 
 class KlimperJinglePlugin: Plugin {
   // Main queue.
   private var dings: [String: AVAudioPlayer] = [:]
-  private var rattles: [String: AVAudioPlayer] = [:]
+  private var rattles: [String: [AVAudioPlayer]] = [:]
+  // Three players per tier, so knocks can overlap.
+  private var knocks: [String: [AVAudioPlayer]] = [:]
+  private var nextKnock = 0
   private var sessionReady = false
   private var shakeTier = "coin"
   private var shakeEnabled = false
-  private var rattling = false
+  private var rattling: AVAudioPlayer?
   private var stopTimer: Timer?
   private var lastTap: TimeInterval = 0
+  // How hard the hand is shaking, smoothed, 0 to 1; drives the loop's volume and rate.
+  private var effort: Double = 0
   private let taps: [UIImpactFeedbackGenerator.FeedbackStyle: UIImpactFeedbackGenerator] = [
     .rigid: UIImpactFeedbackGenerator(style: .rigid),
     .medium: UIImpactFeedbackGenerator(style: .medium),
@@ -106,12 +114,17 @@ class KlimperJinglePlugin: Plugin {
     let args = try invoke.parseArgs(ShakeArgs.self)
     DispatchQueue.main.async {
       do {
-        if let wav = args.wav { self.rattles[args.tier] = try self.player(wav, loops: -1) }
+        if let loops = args.loops {
+          self.rattles[args.tier] = try loops.map { try self.player($0, loops: -1) }
+        }
+        if let knock = args.knock {
+          self.knocks[args.tier] = try (0..<3).map { _ in try self.player(knock, loops: 0) }
+        }
         let tierChanged = self.shakeTier != args.tier
         self.shakeTier = args.tier
         self.shakeEnabled = args.enabled
         if args.enabled {
-          if tierChanged, self.rattling { self.stopRattle(); self.startRattle() }
+          if tierChanged, self.rattling != nil { self.stopRattle(); self.startRattle() }
           self.startMotionIfWanted()
         } else {
           self.stopMotion()
@@ -132,6 +145,7 @@ class KlimperJinglePlugin: Plugin {
     }
     let player = try AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
     player.numberOfLoops = loops
+    player.enableRate = true
     player.prepareToPlay()
     return player
   }
@@ -153,27 +167,28 @@ class KlimperJinglePlugin: Plugin {
   // MARK: Rattle (main queue)
 
   private func startRattle() {
-    guard !rattling, UIApplication.shared.applicationState == .active,
-      let player = rattles[shakeTier]
+    guard rattling == nil, UIApplication.shared.applicationState == .active,
+      let variants = rattles[shakeTier], let player = variants.randomElement()
     else { return }
     do { try readySession() } catch { return }
-    rattling = true
+    rattling = player
+    effort = 0.4
     player.currentTime = 0
-    player.volume = 1
+    player.rate = Float(0.96 + Double.random(in: 0...0.08))  // never quite the same twice
+    player.volume = 0.7
     player.play()
   }
 
   private func stopRattle() {
     stopTimer?.invalidate()
     stopTimer = nil
-    guard rattling else { return }
-    rattling = false
+    guard let player = rattling else { return }
+    rattling = nil
     // A short fade: coins do not stop dead.
-    rattles[shakeTier]?.setVolume(0, fadeDuration: 0.12)
-    let player = rattles[shakeTier]
+    player.setVolume(0, fadeDuration: 0.12)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
-      guard let self, !self.rattling else { return }
-      player?.stop()
+      guard let self, self.rattling !== player else { return }
+      player.stop()
     }
   }
 
@@ -182,6 +197,27 @@ class KlimperJinglePlugin: Plugin {
     stopTimer = Timer.scheduledTimer(withTimeInterval: still, repeats: false) { [weak self] _ in
       self?.stopRattle()
     }
+  }
+
+  // Harder shaking: louder and faster coins. `force` is this jolt's, 0 to 1; the loop follows
+  // a smoothed version so it swells and settles rather than jumping.
+  private func follow(force: Double) {
+    guard let player = rattling else { return }
+    effort = effort * 0.6 + force * 0.4
+    player.setVolume(Float(0.55 + 0.45 * effort), fadeDuration: 0.08)
+    player.rate = Float(0.92 + 0.33 * effort)  // 0.92 to 1.25
+  }
+
+  // One knock per jolt on top of the loop, at a random pitch, louder the harder the jolt.
+  private func knock(force: Double) {
+    guard let pool = knocks[shakeTier], !pool.isEmpty else { return }
+    let player = pool[nextKnock % pool.count]
+    nextKnock += 1
+    player.stop()
+    player.currentTime = 0
+    player.rate = Float(0.85 + Double.random(in: 0...0.4))
+    player.volume = Float(0.35 + 0.65 * force)
+    player.play()
   }
 
   // One tap per jolt, no closer than `tapSpacing`: the hand feels the coins it moves. Light
@@ -230,12 +266,16 @@ class KlimperJinglePlugin: Plugin {
     let force = min(1, max(0, (magnitude - jolt) / (4.0 - jolt)))
     DispatchQueue.main.async { [weak self] in
       guard let self, UIApplication.shared.applicationState == .active else { return }
-      if self.rattling {
+      if self.rattling != nil {
         self.keepRattling()
+        self.follow(force: force)
+        self.knock(force: force)
         self.tap(force: force)
       } else if starting {
         self.startRattle()
         self.keepRattling()
+        self.follow(force: force)
+        self.knock(force: force)
         self.tap(force: force)
       }
     }

@@ -5,6 +5,7 @@
 //
 // Two moments. Coins arrive: the balance Sage keeps goes up on a synced wallet, and the ding
 // of the received value rings once (several coins landing together ring once, for their sum).
+// Nothing worth a cent, or no price at all (testnet, offline): silence, on both moments.
 // The phone is shaken: the native side does all of it, in real time; the webview only tells
 // it the tier of what is on the page (a token page: that token; the wallet page: the total;
 // anything else: the whole wallet), and again whenever that changes.
@@ -83,7 +84,7 @@ export function KlimperSound() {
       }
       fingerprint ??= now;
       const tier = tierOf(usdOf(mojos, await xchPrice()));
-      if (alive) void playDing(tier);
+      if (alive && tier !== null) void playDing(tier);
     });
     const look = (sync: Sync) => {
       const outcome = detector.observe(sampleOf(sync));
@@ -130,20 +131,17 @@ export function KlimperSound() {
       const tier = tierOf(usd);
       if (!alive || tier === sent) return;
       sent = tier;
-      void setShake(true, tier);
+      // Nothing worth a cent on the page, or no price: the shake is silent.
+      void setShake(tier !== null, tier ?? 'coin');
     };
-    // Arm at once with the lightest tier, so the first shake answers even before the price.
-    void setShake(true, 'coin').then(() => {
-      sent = 'coin';
-      return arm();
-    });
+    void arm();
     const unsubscribeWallet = useWalletState.subscribe(() => void arm());
     const unsubscribePage = subscribePageValue(() => void arm());
     return () => {
       alive = false;
       unsubscribeWallet();
       unsubscribePage();
-      void setShake(false, sent ?? 'coin');
+      if (sent !== null) void setShake(false, sent);
     };
   }, [on]);
 

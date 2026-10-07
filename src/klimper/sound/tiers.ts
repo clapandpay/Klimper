@@ -4,9 +4,10 @@
 // A real wallet is heard and felt by how much is in it. The tiers are coarse on purpose: the
 // sound is for the holder of the phone, not a readout, and four weights are enough to feel
 // the difference between a coin and a pouch. Bounds are in US dollars so a tier means the same
-// on every network; where there is no price (testnet, or none fetched yet) everything is one
-// coin. Two sounds per tier, written by scripts/klimper-sound.py: the ding (coins arrive) and
-// the rattle (the phone is shaken). docs/sound.md quotes this table.
+// on every network. No value (no price: testnet, offline) or nothing worth a cent is silence,
+// not a coin: a wallet with nothing in it makes no sound. Two sounds per tier, written by
+// scripts/klimper-sound.py: the ding (coins arrive) and the rattle (the phone is shaken).
+// docs/sound.md quotes this table.
 
 export type Tier = 'coin' | 'few' | 'handful' | 'pouch';
 
@@ -20,12 +21,18 @@ export const TIER_BOUNDS_USD: readonly (readonly [Tier, number])[] = [
 export const TIERS: readonly Tier[] = ['coin', 'few', 'handful', 'pouch'];
 
 /**
- * The tier of an amount of money. `usd` is the value of the coins involved: what was received,
- * or the whole wallet for a shake. `null` or anything not a positive finite number is a coin.
+ * The tier of an amount of money, or `null` for silence. `usd` is the value of the coins
+ * involved: what was received, or what the open page shows for a shake. No value, or less
+ * than a cent, is `null`: nothing plays, nothing taps.
  */
-export function tierOf(usd: number | null | undefined): Tier {
-  if (usd === null || usd === undefined || !Number.isFinite(usd) || usd <= 0) {
-    return 'coin';
+export function tierOf(usd: number | null | undefined): Tier | null {
+  if (
+    usd === null ||
+    usd === undefined ||
+    !Number.isFinite(usd) ||
+    usd < 0.01
+  ) {
+    return null;
   }
   let tier: Tier = 'coin';
   for (const [name, bound] of TIER_BOUNDS_USD) {
@@ -50,10 +57,15 @@ export function usdOf(
   return (Number(mojos / 1_000_000n) / 1_000_000) * xchPriceUsd;
 }
 
-/** The two bundled files of a tier, as the plugin and the web both name them. */
-export function soundFilesOf(tier: Tier): { ding: string; rattle: string } {
+/** The bundled files of a tier, as the plugin and the web both name them. */
+export function soundFilesOf(tier: Tier): {
+  ding: string;
+  rattles: [string, string];
+  knock: string;
+} {
   return {
     ding: `klimper-ding-${tier}.wav`,
-    rattle: `klimper-rattle-${tier}.wav`,
+    rattles: [`klimper-rattle-${tier}-a.wav`, `klimper-rattle-${tier}-b.wav`],
+    knock: `klimper-knock-${tier}.wav`,
   };
 }

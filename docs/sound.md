@@ -36,7 +36,7 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
 | Everything in the webview     | `src/klimper/sound/` (loaded lazily, only with the flag)                                                                                                                                                                                |
 | What the open page is worth   | `src/klimper/pageValue.ts` (a few lines, outside the lazy chunk so pages can import it)                                                                                                                                                 |
 | Native side (iOS, Android)    | `tauri-plugin-klimper-jingle/` (Rust + Swift + Kotlin)                                                                                                                                                                                  |
-| The files and their generator | `src/klimper/sound/klimper-{ding,rattle}-<tier>.wav`, `scripts/klimper-sound.py`                                                                                                                                                        |
+| The files and their generator | `src/klimper/sound/klimper-{ding,rattle-a,rattle-b,knock}-<tier>.wav`, `scripts/klimper-sound.py`                                                                                                                                       |
 | Hook points in Sage's code    | `KlimperRoot.tsx` (one lazy element), `pages/Settings.tsx` (one element), `pages/Token.tsx` and `pages/TokenList.tsx` (one `usePageValue` line each), `src-tauri/src/lib.rs` (one plugin), `capabilities/klimper.json` (one permission) |
 
 Flag off: the chunk is never loaded, Settings has no card, the plugin sits unused, and
@@ -58,7 +58,14 @@ Four weights, by the US-dollar value of the coins involved. The table is
 What is weighed: for the ding, what arrived (several coins landing within 1.5 s are one ding,
 for their sum). For the shake, **what the open page shows**: a token page rattles with that
 token's value, the wallet page with the total, any other page with the whole wallet in XCH.
-No price (testnet, offline, not fetched yet) means `coin`.
+**No price (testnet, offline, not fetched yet), or less than a cent, means silence**: no ding,
+no rattle, no taps. A wallet with nothing in it makes no sound (owner's rule, 2026-10-07).
+
+**Harder shaking sounds harder, and no two shakes are alike.** Each rattle starts from one of
+the tier's two loop variants at a slightly random rate (0.96 to 1.04); each jolt adds a knock
+(a couple of coins, 0.14 s) on top at a random pitch (rate 0.85 to 1.25), louder the harder the
+jolt; and the loop's volume (0.55 to 1) and rate (0.92 to 1.25) follow a smoothed measure of
+how hard the hand is shaking, so the coins swell and settle with the hand.
 
 Haptics on a shake: one tap per jolt, no closer than 70 ms, `rigid` for the light tiers,
 `medium` for a handful, `heavy` for a pouch, intensity from the tier's weight and the jolt's
@@ -67,9 +74,10 @@ force (never below what a hand notices). Android: one `VibrationEffect` pulse pe
 
 ## The sounds
 
-`scripts/klimper-sound.py` (pure Python, no dependencies, fixed seeds) writes all eight files,
+`scripts/klimper-sound.py` (pure Python, no dependencies, fixed seeds) writes all sixteen
+files (a ding, two rattle loops and a knock per tier),
 44.1 kHz 16-bit mono, peak at -1 dBFS. Running it twice gives byte-identical files, so a change
-to the sound is a change to the script, reviewed like code. Sizes 72 to 114 kB.
+to the sound is a change to the script, reviewed like code. 12 to 114 kB each, 1.1 MB in all, baked into the binary.
 
 **The ding.** A coin that rings: a strong fundamental with a few clean partials (1, 2.0, 2.76,
 3.4, 5.2), a 0.2 to 0.26 s decay, a soft noisy edge and a small pitch bend at contact. A second,
@@ -115,16 +123,17 @@ with the real tier, and again whenever it changes); off disarms it. Everything e
 in real time:
 
 - iOS: `CMMotionManager` user acceleration at 40 Hz (gravity removed, no permission) while
-  the app is active. A jolt is 1.3 g or more; two jolts within 0.45 s start the tier's rattle
-  loop (`AVAudioPlayer`, `numberOfLoops = -1`); every jolt while it runs is a haptic tap and
-  pushes the stop back; 0.35 s without a jolt fades the loop out in 120 ms. Resigning active
+  the app is active. A jolt is 1.3 g or more; two jolts within 0.45 s start one of the tier's
+  rattle loops (`AVAudioPlayer`, `numberOfLoops = -1`, `enableRate`); every jolt while it runs
+  is a haptic tap, a knock (three players per tier so knocks overlap), a nudge to the loop's
+  volume and rate, and pushes the stop back; 0.35 s without a jolt fades the loop out in 120 ms. Resigning active
   stops both. Motion state lives on the motion queue, players and haptics on main.
 - Android: `TYPE_LINEAR_ACCELERATION` (or the raw accelerometer with 1 g removed) at game
   rate while resumed, the same thresholds; `SoundPool` loop (`-1`), `stop` on stillness; a
   `VibrationEffect` pulse per jolt. Skipped when the ringer is silent or vibrate (the hand still
   feels it). Written to the same shape as the Swift, **not compiled**: no Android SDK here.
 
-**Playback.** The eight WAVs are baked into the Rust library (`include_bytes!`) and handed to
+**Playback.** The sixteen WAVs are baked into the Rust library (`include_bytes!`) and handed to
 the native side base64 once per sound per run, which keeps Xcode and Gradle resource plumbing
 out of it. iOS plays under the `.ambient` session with `mixWithOthers`: the silent switch mutes
 it, music keeps playing. Desktop: the ding through the web audio API, decoded once per tier

@@ -3,7 +3,7 @@
 //! and coins rattling, felt as well as heard, for as long as the phone is shaken; heavier the
 //! more the coins are worth.
 //!
-//! The eight sounds are baked into this library (`include_bytes!` of the files that
+//! The sixteen sounds are baked into this library (`include_bytes!` of the files that
 //! `scripts/klimper-sound.py` writes) and handed to the native side once per tier per run, so
 //! nothing is fetched and no Xcode or Gradle resource plumbing is needed. On the phone the
 //! native side plays them under an audio session that the silent switch mutes, loops the
@@ -60,13 +60,35 @@ impl Tier {
         }
     }
 
-    /// The phone is shaken: a seamless loop.
-    pub fn rattle(self) -> &'static [u8] {
+    /// The phone is shaken: two seamless loops; the phone picks one at random each shake.
+    pub fn rattles(self) -> [&'static [u8]; 2] {
         match self {
-            Tier::Coin => include_bytes!("../../src/klimper/sound/klimper-rattle-coin.wav"),
-            Tier::Few => include_bytes!("../../src/klimper/sound/klimper-rattle-few.wav"),
-            Tier::Handful => include_bytes!("../../src/klimper/sound/klimper-rattle-handful.wav"),
-            Tier::Pouch => include_bytes!("../../src/klimper/sound/klimper-rattle-pouch.wav"),
+            Tier::Coin => [
+                include_bytes!("../../src/klimper/sound/klimper-rattle-coin-a.wav"),
+                include_bytes!("../../src/klimper/sound/klimper-rattle-coin-b.wav"),
+            ],
+            Tier::Few => [
+                include_bytes!("../../src/klimper/sound/klimper-rattle-few-a.wav"),
+                include_bytes!("../../src/klimper/sound/klimper-rattle-few-b.wav"),
+            ],
+            Tier::Handful => [
+                include_bytes!("../../src/klimper/sound/klimper-rattle-handful-a.wav"),
+                include_bytes!("../../src/klimper/sound/klimper-rattle-handful-b.wav"),
+            ],
+            Tier::Pouch => [
+                include_bytes!("../../src/klimper/sound/klimper-rattle-pouch-a.wav"),
+                include_bytes!("../../src/klimper/sound/klimper-rattle-pouch-b.wav"),
+            ],
+        }
+    }
+
+    /// One jolt: a couple of coins knocking, played over the loop, louder the harder the jolt.
+    pub fn knock(self) -> &'static [u8] {
+        match self {
+            Tier::Coin => include_bytes!("../../src/klimper/sound/klimper-knock-coin.wav"),
+            Tier::Few => include_bytes!("../../src/klimper/sound/klimper-knock-few.wav"),
+            Tier::Handful => include_bytes!("../../src/klimper/sound/klimper-knock-handful.wav"),
+            Tier::Pouch => include_bytes!("../../src/klimper/sound/klimper-knock-pouch.wav"),
         }
     }
 }
@@ -115,9 +137,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_eight_sounds_are_baked_in_and_are_wav_files() {
+    fn the_sixteen_sounds_are_baked_in_and_are_wav_files() {
         for tier in Tier::ALL {
-            for wav in [tier.ding(), tier.rattle()] {
+            let [a, b] = tier.rattles();
+            for wav in [tier.ding(), a, b, tier.knock()] {
                 assert_eq!(&wav[..4], b"RIFF", "{tier:?}");
                 assert_eq!(&wav[8..12], b"WAVE", "{tier:?}");
                 assert!(wav.len() < 200 * 1024, "{tier:?} is {} bytes", wav.len());

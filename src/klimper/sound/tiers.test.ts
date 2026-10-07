@@ -3,13 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { soundFilesOf, TIER_BOUNDS_USD, TIERS, tierOf, usdOf } from './tiers';
 
 describe('the tier of an amount', () => {
-  it('is a coin below a dollar and when there is no price', () => {
+  it('is a coin below a dollar, and silence without a value or below a cent', () => {
     expect(tierOf(0.99)).toBe('coin');
-    expect(tierOf(0)).toBe('coin');
-    expect(tierOf(null)).toBe('coin');
-    expect(tierOf(undefined)).toBe('coin');
-    expect(tierOf(Number.NaN)).toBe('coin');
-    expect(tierOf(-5)).toBe('coin');
+    expect(tierOf(0.01)).toBe('coin');
+    expect(tierOf(0.009)).toBeNull();
+    expect(tierOf(0)).toBeNull();
+    expect(tierOf(null)).toBeNull();
+    expect(tierOf(undefined)).toBeNull();
+    expect(tierOf(Number.NaN)).toBeNull();
+    expect(tierOf(-5)).toBeNull();
   });
 
   it('changes exactly at the bounds', () => {
@@ -33,12 +35,16 @@ describe('the tier of an amount', () => {
     expect(tierOf(usdOf(25_000_000_000_000n, 10))).toBe('pouch');
   });
 
-  it('names two files per tier, in ascending weight', () => {
+  it('names four files per tier, in ascending weight', () => {
     expect(TIERS).toEqual(['coin', 'few', 'handful', 'pouch']);
     for (const tier of TIERS) {
       expect(soundFilesOf(tier)).toEqual({
         ding: `klimper-ding-${tier}.wav`,
-        rattle: `klimper-rattle-${tier}.wav`,
+        rattles: [
+          `klimper-rattle-${tier}-a.wav`,
+          `klimper-rattle-${tier}-b.wav`,
+        ],
+        knock: `klimper-knock-${tier}.wav`,
       });
     }
   });
