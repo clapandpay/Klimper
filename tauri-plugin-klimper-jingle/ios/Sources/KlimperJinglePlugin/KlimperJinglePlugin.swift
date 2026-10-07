@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The Klimper sound on iOS (clapandpay TASK-111). Two moments, both small:
+// The Klimper sound on iOS (clapandpay TASK-111). Two moments:
 //
-// - Coins arrive: `play` rings the tier's ding once.
-// - The phone is shaken: `setShake` arms the accelerometer. Every turn of the hand (a jolt, at
-//   most one every `turn` seconds) is one knock of a few coins and one haptic tap, together, so
-//   the sound and the feel follow the hand and stop when it does. Heavy wallets tap twice, a
-//   thud and a clack, like a pouch landing; a near-empty one ticks once.
+// - Coins arrive: `play` rings the tier's ding once (AVAudioPlayer).
+// - The phone is shaken: every turn of the hand is a few coins landing in it, heard and felt at
+//   the same instant. One Core Haptics pattern per turn holds both: each coin is a single coin
+//   hit (one of eight recordings, at its own pitch and loudness) and, where the hand can tell
+//   them apart, a tap. The first tap is the dull weight of the wallet, the rest are the sharp
+//   clicks of coin on coin. How many coins, which, in what order, how far apart, how high and
+//   how loud are drawn fresh every turn, so no two turns are alike; the tier sets the ranges. A
+//   near-empty wallet is one coin.
 //
-// Sounds play under the ambient session (the silent switch mutes them, music keeps playing).
-// Nothing plays or taps unless the app is active.
+// Sound follows the ambient audio session (the silent switch mutes it; the taps stay). Nothing
+// runs unless the shake is armed and the app is active.
 
 import AVFoundation
+import CoreHaptics
 import CoreMotion
 import Tauri
 import UIKit
@@ -23,30 +27,45 @@ struct PlayArgs: Decodable {
 struct ShakeArgs: Decodable {
   let enabled: Bool
   let tier: String
-  let knocks: [String]?
+  let grains: [String]?
 }
 
 class KlimperJinglePlugin: Plugin {
-  private var dings: [String: AVAudioPlayer] = [:]
-  private var knocks: [String: [AVAudioPlayer]] = [:]
-  private var tier = "coin"
-  private var lastTurn: TimeInterval = 0
-  private let motion = CMMotionManager()
-  private let heavy = UIImpactFeedbackGenerator(style: .heavy)
-  private let rigid = UIImpactFeedbackGenerator(style: .rigid)
+  // How each tier lands: coins per turn, the weight of the first tap, how dull it is (Core
+  // Haptics sharpness), the pitch range of the coins and their loudness.
+  private static let tiers: [String: (coins: ClosedRange<Int>, weight: Double, dull: Double,
+    pitch: ClosedRange<Double>, loud: Double)] = [
+      "coin": (1...1, 0.65, 0.55, 0.05...0.25, 0.6),
+      "few": (2...4, 0.8, 0.45, -0.1...0.15, 0.7),
+      "handful": (3...6, 0.9, 0.35, -0.15...0.1, 0.85),
+      "pouch": (5...8, 1.0, 0.25, -0.2...0.05, 1.0),
+    ]
+  private let jolt = 1.3  // g that counts as a turn of the hand
+  private let calm = 0.6  // g below which the hand has turned and the next jolt counts
+  private let turn = 0.30  // seconds: at most one turn this often
 
-  private let jolt = 1.3  // g of user acceleration that counts as a turn of the hand
-  private let turn = 0.28  // seconds: slower than this is a shake, faster is a buzz
+  private var dings: [String: AVAudioPlayer] = [:]
+  private var grainFiles: [URL] = []
+  private var grains: [CHHapticAudioResourceID] = []
+  private var engine: CHHapticEngine?
+  private var current: CHHapticPatternPlayer?
+  private let motion = CMMotionManager()
+  private var tier = "coin"
+  private var armed = false
+  private var turned = true
+  private var lastTurn: TimeInterval = 0
+  private var lastFirst = -1
+  private var sessionReady = false
 
   override init() {
     super.init()
-    try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-    NotificationCenter.default.addObserver(
-      forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.motion.stopDeviceMotionUpdates() }
-    NotificationCenter.default.addObserver(
-      forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.watch() }
+    let center = NotificationCenter.default
+    center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) {
+      [weak self] _ in self?.rest()
+    }
+    center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) {
+      [weak self] _ in self?.watch()
+    }
   }
 
   // MARK: Commands
@@ -54,7 +73,12 @@ class KlimperJinglePlugin: Plugin {
   @objc public func play(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(PlayArgs.self)
     DispatchQueue.main.async {
-      if let wav = args.wav, let player = Self.player(wav) { self.dings[args.tier] = player }
+      self.readySession()
+      if let wav = args.wav, let data = Data(base64Encoded: wav) {
+        let player = try? AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
+        player?.prepareToPlay()
+        self.dings[args.tier] = player
+      }
       if UIApplication.shared.applicationState == .active { self.dings[args.tier]?.play() }
       invoke.resolve()
     }
@@ -63,60 +87,147 @@ class KlimperJinglePlugin: Plugin {
   @objc public func setShake(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(ShakeArgs.self)
     DispatchQueue.main.async {
-      if let wavs = args.knocks { self.knocks[args.tier] = wavs.compactMap(Self.player) }
+      if let wavs = args.grains {
+        let dir = FileManager.default.temporaryDirectory
+        self.grainFiles = wavs.enumerated().compactMap { i, wav in
+          let url = dir.appendingPathComponent("klimper-grain-\(i + 1).wav")
+          guard let data = Data(base64Encoded: wav), (try? data.write(to: url)) != nil else { return nil }
+          return url
+        }
+        self.register()
+      }
       self.tier = args.tier
-      if args.enabled { self.watch() } else { self.motion.stopDeviceMotionUpdates() }
+      self.armed = args.enabled
+      if args.enabled { self.watch() } else { self.rest() }
       invoke.resolve()
     }
   }
 
-  // MARK: Shake
+  // MARK: Arming
+
+  private func readySession() {
+    guard !sessionReady else { return }
+    // Ambient: muted by the silent switch, mixes with music. Set only once the feature is used.
+    let session = AVAudioSession.sharedInstance()
+    do {
+      try session.setCategory(.ambient)
+      try session.setActive(true)
+      sessionReady = true
+    } catch {}
+  }
+
+  private func register() {
+    guard let engine else { return }
+    for id in grains { try? engine.unregisterAudioResource(id) }
+    // No volume envelope: a coin hit keeps its edge (iOS 15; the app's minimum anyway).
+    var options: [AnyHashable: Any] = [:]
+    if #available(iOS 15.0, *) { options[CHHapticAudioResourceKeyUseVolumeEnvelope] = false }
+    grains = grainFiles.compactMap { try? engine.registerAudioResource($0, options: options) }
+  }
 
   private func watch() {
-    guard knocks[tier] != nil, motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive
+    let can = CHHapticEngine.capabilitiesForHardware()
+    guard armed, !grainFiles.isEmpty, UIApplication.shared.applicationState == .active,
+      can.supportsHaptics || can.supportsAudio,
+      motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive
     else { return }
+    readySession()
+    if engine == nil, let made = try? CHHapticEngine(audioSession: .sharedInstance()) {
+      // After a reset the sounds must be registered again; restart only while wanted.
+      made.resetHandler = { [weak self] in
+        DispatchQueue.main.async {
+          self?.register()
+          self?.restartIfWanted()
+        }
+      }
+      // Stopped by the system (a call, Siri, another app's audio) while the app stays active.
+      made.stoppedHandler = { [weak self] _ in
+        DispatchQueue.main.async { self?.restartIfWanted() }
+      }
+      engine = made
+      register()
+    }
+    engine?.start { _ in }
+    turned = true
     motion.deviceMotionUpdateInterval = 1.0 / 40.0
     motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
       guard let self, let a = data?.userAcceleration else { return }
       let g = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
+      if g < self.calm { self.turned = true }
       let now = CACurrentMediaTime()
-      guard g >= self.jolt, now - self.lastTurn >= self.turn,
-        UIApplication.shared.applicationState == .active
-      else { return }
+      // Once per reversal of the hand: above `jolt` after having come back below `calm`.
+      guard self.turned, g >= self.jolt, now - self.lastTurn >= self.turn else { return }
+      self.turned = false
       self.lastTurn = now
       self.turnOfTheHand(force: min(1, (g - self.jolt) / 2.5))
     }
   }
 
-  // One knock and one tap, together. The harder the hand, the louder; the heavier the wallet,
-  // the heavier the tap.
-  private func turnOfTheHand(force: Double) {
-    if let player = knocks[tier]?.randomElement() {
-      player.currentTime = 0
-      player.rate = Float(0.9 + 0.15 * Double.random(in: 0...1))
-      player.volume = Float(0.6 + 0.4 * force)
-      player.play()
-    }
-    switch tier {
-    case "coin":
-      rigid.impactOccurred(intensity: 0.7)
-    case "few":
-      heavy.impactOccurred(intensity: 0.8)
-    default:
-      heavy.impactOccurred(intensity: 1.0)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-        self.rigid.impactOccurred(intensity: self.tier == "pouch" ? 0.9 : 0.6)
-      }
-    }
+  private func restartIfWanted() {
+    guard armed, UIApplication.shared.applicationState == .active else { return }
+    engine?.start { _ in }
   }
 
-  private static func player(_ base64: String) -> AVAudioPlayer? {
-    guard let data = Data(base64Encoded: base64),
-      let player = try? AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
-    else { return nil }
-    player.enableRate = true
-    player.prepareToPlay()
-    return player
+  private func rest() {
+    motion.stopDeviceMotionUpdates()
+    try? current?.stop(atTime: CHHapticTimeImmediate)
+    engine?.stop(completionHandler: nil)
+  }
+
+  // MARK: A turn of the hand
+
+  private func turnOfTheHand(force: Double) {
+    guard let engine, !grains.isEmpty, let t = Self.tiers[tier] else { return }
+    var order = Array(grains.indices).shuffled()
+    if order.count > 1, order[0] == lastFirst { order.swapAt(0, 1) }  // never the same opener
+    lastFirst = order[0]
+    var coins = min(Int.random(in: t.coins), order.count)
+    let base = max(0.6, t.loud * (0.6 + 0.4 * force))
+    var events: [CHHapticEvent] = []
+    var at = 0.0
+    var lastTap = -1.0
+    var taps = 0
+    // A lone coin sometimes has a faint neighbour: the wallet is not quite empty.
+    if coins == 1, order.count > 1, Double.random(in: 0...1) < 0.3 { coins = 2 }
+    for k in 0..<coins {
+      if k > 0 {
+        // Coins settle in a cluster: gaps mostly short, now and then longer.
+        let gap = -log(Double.random(in: 0.05...1)) * 0.022 * (0.8 + 0.6 * force)
+        at += min(0.06, max(0.008, gap))
+      }
+      let volume = k == 0 ? base : base * .random(in: 0.2...0.7) * pow(0.85, Double(k))
+      events.append(CHHapticEvent(audioResourceID: grains[order[k]], parameters: [
+        CHHapticEventParameter(parameterID: .audioVolume, value: Float(min(1, volume))),
+        CHHapticEventParameter(parameterID: .audioPitch, value: Float(.random(in: t.pitch))),
+      ], relativeTime: at))
+      // The hand feels separate coins only some 45 ms apart; at most four.
+      guard at - lastTap >= 0.045, taps < 4 else { continue }
+      let intensity = k == 0
+        ? t.weight * (0.8 + 0.2 * force)
+        : max(0.35, t.weight * pow(0.82, Double(taps)) * .random(in: 0.88...1.12))
+      lastTap = at
+      taps += 1
+      let sharpness = k == 0 ? t.dull + .random(in: -0.05...0.05) : .random(in: 0.6...0.85)
+      events.append(Self.tap(at, intensity, sharpness))
+    }
+    // Now and then one coin slides off a moment later.
+    if Double.random(in: 0...1) < 0.25 { events.append(Self.tap(at + .random(in: 0.06...0.1), 0.3, 0.9)) }
+
+    guard let pattern = try? CHHapticPattern(events: events, parameters: []) else { return }
+    try? current?.stop(atTime: CHHapticTimeImmediate)  // a new turn cuts the last one's settle
+    func go() throws {
+      current = try engine.makePlayer(with: pattern)
+      try current?.start(atTime: CHHapticTimeImmediate)
+    }
+    // Not running (stopped and not yet back): skip this turn, the stopped handler restarts it.
+    try? go()
+  }
+
+  private static func tap(_ at: Double, _ intensity: Double, _ sharpness: Double) -> CHHapticEvent {
+    CHHapticEvent(eventType: .hapticTransient, parameters: [
+      CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(min(1, intensity))),
+      CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(min(1, max(0, sharpness)))),
+    ], relativeTime: at)
   }
 }
 

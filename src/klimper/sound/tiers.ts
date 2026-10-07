@@ -57,10 +57,10 @@ export function usdOf(
   return (Number(mojos / 1_000_000n) / 1_000_000) * xchPriceUsd;
 }
 
-/** The bundled files of a tier, as the plugin and the web both name them. */
-export function soundFilesOf(tier: Tier): { ding: string; knocks: string[] } {
+/** The bundled files: a ding per tier, and the coin hits every turn of a shake is built from. */
+export function soundFilesOf(tier: Tier): { ding: string; grains: string[] } {
   return {
     ding: `klimper-ding-${tier}.wav`,
-    knocks: ['a', 'b', 'c'].map((v) => `klimper-knock-${tier}-${v}.wav`),
+    grains: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `klimper-grain-${n}.wav`),
   };
 }

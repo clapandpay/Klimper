@@ -27,14 +27,14 @@ const ANDROID_PLUGIN: &str = "com.clapandpay.klimper.jingle";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Sound {
     Ding(Tier),
-    Knocks(Tier),
+    Grains,
 }
 
 impl Sound {
     fn encoded(self) -> Vec<String> {
         match self {
             Sound::Ding(tier) => vec![B64.encode(tier.ding())],
-            Sound::Knocks(tier) => tier.knocks().iter().map(|w| B64.encode(w)).collect(),
+            Sound::Grains => crate::grains().iter().map(|w| B64.encode(w)).collect(),
         }
     }
 }
@@ -67,8 +67,8 @@ struct PlayArgs {
 struct ShakeArgs {
     enabled: bool,
     tier: Tier,
-    /// The three knocks of `tier`, base64; `None` once the native side has them.
-    knocks: Option<Vec<String>>,
+    /// The coin hits, base64; `None` once the native side has them.
+    grains: Option<Vec<String>>,
 }
 
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
@@ -98,8 +98,8 @@ impl<R: Runtime> Native<R> {
     }
 
     pub fn set_shake(&self, enabled: bool, tier: Tier) -> Result<()> {
-        let sound = Sound::Knocks(tier);
-        let knocks = if enabled {
+        let sound = Sound::Grains;
+        let grains = if enabled {
             self.unless_sent(sound)?
         } else {
             None
@@ -109,7 +109,7 @@ impl<R: Runtime> Native<R> {
             ShakeArgs {
                 enabled,
                 tier,
-                knocks,
+                grains,
             },
         );
         self.forget_if_failed(sound, &result);

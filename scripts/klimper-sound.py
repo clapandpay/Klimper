@@ -127,10 +127,6 @@ def trim(x, floor=0.006, air=0.03):
 
 import random
 
-# How many coins knock in one turn of the hand, how slowed (lower, calmer), and how much of the
-# pouch's low body is under them. One coin barely moves: a near-empty wallet sounds empty.
-LOUDNESS = {"coin": 0.4, "few": 0.6, "handful": 0.8, "pouch": 1.0}
-KNOCKS = {"coin": (1, 0.9, 0.0), "few": (3, 0.86, 0.0), "handful": (5, 0.82, 0.25), "pouch": (8, 0.78, 0.6)}
 
 
 def build():
@@ -156,28 +152,61 @@ def build():
         ),
         0, 0.18,
     )
-    # One turn of the hand: `count` coins within a few tens of milliseconds, three variants a tier.
-    for t, (tier, (count, rate, weight)) in enumerate(KNOCKS.items()):
-        for v, variant in enumerate("abc"):
-            rng = random.Random(100 * t + v)
-            layers = [
-                (gain(speed(rng.choice([clink, tick]), rate * rng.uniform(0.95, 1.05)), rng.uniform(0.5, 1.0)),
-                 rng.uniform(0, 0.025 * count))
-                for _ in range(count)
-            ]
-            if weight:
-                layers.append((gain(body, weight), 0.0))
-            out[f"knock-{tier}-{variant}"] = fade(mix(layers), 0, 0.08)
+    # The shake: single coin hits, one contact each, at their own pitch. The phone builds every
+    # turn of the hand out of these, at random (count, choice, order, spacing, pitch, loudness),
+    # so no two turns are alike; the tiers differ only in those numbers.
+    for i, (src, ms) in enumerate(GRAINS, 1):
+        x = coins if src == "coins" else toss
+        onsets = hits(x)
+        t = min(onsets, key=lambda o: abs(o - ms / 1000))
+        later = [o for o in onsets if o > t + 0.01]
+        out[f"grain-{i}"] = grain(x, t, later[0] if later else None)
     return out
 
 
+# The hits picked from the two recordings: (recording, onset in ms). Each is one coin touching
+# another, about 0.04 to 0.14 s, cut at its own onset and before the next one.
+GRAINS = [("coins", 54), ("coins", 154), ("coins", 270), ("coins", 484),
+          ("toss", 68), ("toss", 114), ("toss", 168), ("toss", 252)]
+
+
+def hits(x, frame=0.002, rise=6.0, floor=-30, gap=0.018):
+    """Onsets in seconds: where the energy of the signal's slope jumps by `rise` dB."""
+    h = int(frame * RATE)
+    d = [x[i] - x[i - 1] for i in range(1, len(x))]
+    e = [sum(v * v for v in d[i:i + h]) / h + 1e-12 for i in range(0, len(d) - h, h)]
+    top = max(e)
+    out = []
+    for i in range(3, len(e)):
+        if (10 * math.log10(e[i] / max(e[i - 3:i])) >= rise and 10 * math.log10(e[i] / top) >= floor
+                and (not out or i * frame - out[-1] >= gap)):
+            out.append(i * frame)
+    return out
+
+
+def grain(x, t, nxt, longest=0.14):
+    """One hit: from 1 ms before `t` to the next onset (or `longest`), raised-cosine edges, equal
+    peak (loudness is the phone's business)."""
+    a = max(0, int((t - 0.001) * RATE))
+    end = min(t + longest, nxt - 0.002 if nxt else t + longest)
+    g = list(x[a:int(end * RATE)])
+    ni, no = int(0.001 * RATE), min(len(g) // 2, int(0.025 * RATE))
+    g = [v * (0.5 - 0.5 * math.cos(math.pi * i / ni)) if i < ni else v for i, v in enumerate(g)]
+    for i in range(no):
+        g[-1 - i] *= 0.5 - 0.5 * math.cos(math.pi * i / no)
+    p = max(abs(v) for v in g) or 1.0
+    return [v / p * 0.89 for v in g]
+
+
 def main():
-    bounds = {"ding": (0.15, 1.6), "knock": (0.03, 0.8)}
+    bounds = {"ding": (0.15, 1.6), "grain": (0.02, 0.16)}
+    for stale in os.listdir(SOUND):
+        if stale.startswith(("klimper-knock-", "klimper-rattle-")):
+            os.remove(os.path.join(SOUND, stale))
     for name, samples in build().items():
         kind = name.split("-")[0]
-        samples = trim(normalise(samples))
-        if kind == "knock":  # a lighter wallet is a quieter one
-            samples = gain(samples, LOUDNESS[name.split("-")[1]])
+        if kind == "ding":  # trim, then fade, so the file ends on silence
+            samples = fade(trim(normalise(samples)), 0, 0.03)
         path = os.path.join(SOUND, f"klimper-{name}.wav")
         write(path, samples)
         seconds = len(samples) / RATE

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The two calls into the native side (clapandpay TASK-111.03): ring the ding of a tier once
-// (coins arrived), and arm or disarm the shake with the wallet's tier (the native side loops
-// the rattle and taps the haptics for as long as the shaking lasts). On the desktop the ding
+// (coins arrived), and arm or disarm the shake with the page's tier (the native side turns every
+// turn of the hand into a few coins, heard and felt). Calls go out one after the other, so a quick
+// off-and-on cannot arrive in the wrong order. On the desktop the ding
 // goes through the web audio API, decoded once per tier; a desk cannot be shaken.
 //
 // Everything here fails quietly: a sound that did not play is not an error the user needs.
@@ -27,17 +28,17 @@ function quiet(error: unknown) {
   console.warn('klimper sound:', error);
 }
 
+let queue: Promise<unknown> = Promise.resolve();
+function inOrder(call: () => Promise<unknown>): Promise<void> {
+  const next = queue.then(call).catch(quiet);
+  queue = next;
+  return next.then(() => undefined);
+}
+
 /** Coins arrived: ring the tier's ding once. */
 export async function playDing(tier: Tier): Promise<void> {
-  try {
-    if (onPhone()) {
-      await invoke('plugin:klimper-jingle|play', { tier });
-    } else {
-      await playOnDesktop(tier);
-    }
-  } catch (error) {
-    quiet(error);
-  }
+  if (!onPhone()) return playOnDesktop(tier).catch(quiet);
+  return inOrder(() => invoke('plugin:klimper-jingle|play', { tier }));
 }
 
 /**
@@ -46,11 +47,9 @@ export async function playDing(tier: Tier): Promise<void> {
  */
 export async function setShake(enabled: boolean, tier: Tier): Promise<void> {
   if (!onPhone()) return;
-  try {
-    await invoke('plugin:klimper-jingle|set_shake', { enabled, tier });
-  } catch (error) {
-    quiet(error);
-  }
+  return inOrder(() =>
+    invoke('plugin:klimper-jingle|set_shake', { enabled, tier }),
+  );
 }
 
 // Desktop: one AudioContext, buffers decoded on first use and kept.
