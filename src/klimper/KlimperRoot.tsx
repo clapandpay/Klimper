@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { KlimperErrorBoundary } from './KlimperErrorBoundary';
 import { PasskeyGate } from './PasskeyGate';
 import { XchonnectApprovalHost } from './XchonnectApprovalHost';
+import { listenForXchonnectLinks } from './xchonnectDeepLink';
 import { goToXchonnectRoute, XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 
 export { klimperRouter } from './routes';
@@ -42,6 +43,22 @@ function OverlayFailed() {
   );
 }
 
+/** Links the OS hands the app (`xchonnect:` scheme, clapandpay.com universal links). */
+function useDeepLinks() {
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let unmounted = false;
+    void listenForXchonnectLinks().then((unlisten) => {
+      if (unmounted) unlisten();
+      else stop = unlisten;
+    });
+    return () => {
+      unmounted = true;
+      stop?.();
+    };
+  }, []);
+}
+
 /**
  * The passkey gate over the app, and the approval overlay over every screen. The overlay
  * has a boundary of its own (`KlimperErrorBoundary`), cleared on the next route; the gate
@@ -49,6 +66,7 @@ function OverlayFailed() {
  */
 export function KlimperRoot() {
   const hash = useHash();
+  useDeepLinks();
   return (
     <>
       <PasskeyGate />

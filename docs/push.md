@@ -14,12 +14,12 @@ request". Only the relay's answer is acted on.
 
 ## What is where
 
-| Part                                               | Where                                                                                                       |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Sealing the token, registering it, renewing it     | `tauri-plugin-klimper-xchonnect/src/push.rs`, `session_loop.rs` (`ensure_push`)                             |
-| iOS: permission, APNs token, wake-ups              | `tauri-plugin-klimper-xchonnect/ios/Sources/KlimperXchonnectPlugin.swift`                                   |
-| Android: permission, Firebase token, notification  | `tauri-plugin-klimper-xchonnect/android/` (`KlimperXchonnectPlugin.kt`, `KlimperMessagingService.kt`)       |
-| What the user sees when notifications are refused  | `src/klimper/useXchonnectPush.ts`, `XchonnectDapps.tsx`                                                     |
+| Part                                              | Where                                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Sealing the token, registering it, renewing it    | `tauri-plugin-klimper-xchonnect/src/push.rs`, `session_loop.rs` (`ensure_push`)                       |
+| iOS: permission, APNs token, wake-ups             | `tauri-plugin-klimper-xchonnect/ios/Sources/KlimperXchonnectPlugin.swift`                             |
+| Android: permission, Firebase token, notification | `tauri-plugin-klimper-xchonnect/android/` (`KlimperXchonnectPlugin.kt`, `KlimperMessagingService.kt`) |
+| What the user sees when notifications are refused | `src/klimper/useXchonnectPush.ts`, `XchonnectDapps.tsx`                                               |
 
 The permission is asked at the **first confirmed pairing**, not at launch. Registration is
 per session, with a fresh sealed token, so the relay cannot link two sessions of one phone.
@@ -28,10 +28,10 @@ per session, with a fresh sealed token, so the relay cannot link two sessions of
 
 Both are compiled in. Unset, push is off and the app polls.
 
-| Variable                    | Meaning                                                           |
-| --------------------------- | ----------------------------------------------------------------- |
-| `KLIMPER_PUSH_GATEWAY_URL`  | the gateway's `https` wake URL, as the relay will call it         |
-| `KLIMPER_PUSH_GATEWAY_KEY`  | the gateway's X25519 public key, base64url (`GET /v1/keys`)       |
+| Variable                   | Meaning                                                     |
+| -------------------------- | ----------------------------------------------------------- |
+| `KLIMPER_PUSH_GATEWAY_URL` | the gateway's `https` wake URL, as the relay will call it   |
+| `KLIMPER_PUSH_GATEWAY_KEY` | the gateway's X25519 public key, base64url (`GET /v1/keys`) |
 
 `tauri-plugin-klimper-xchonnect/build.rs` takes them from the environment, else from the
 first of two files in `klimper/`, `KEY=VALUE` a line: `.push-dev.env` (gitignored; a local
