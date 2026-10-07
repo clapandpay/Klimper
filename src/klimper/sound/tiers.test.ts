@@ -35,12 +35,12 @@ describe('the tier of an amount', () => {
     expect(tierOf(usdOf(25_000_000_000_000n, 10))).toBe('pouch');
   });
 
-  it('names a ding and three knocks per tier, in ascending weight', () => {
+  it('names a ding per tier and the eight coin hits, in ascending weight', () => {
     expect(TIERS).toEqual(['coin', 'few', 'handful', 'pouch']);
     for (const tier of TIERS) {
       expect(soundFilesOf(tier)).toEqual({
         ding: `klimper-ding-${tier}.wav`,
-        knocks: ['a', 'b', 'c'].map((v) => `klimper-knock-${tier}-${v}.wav`),
+        grains: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `klimper-grain-${n}.wav`),
       });
     }
   });

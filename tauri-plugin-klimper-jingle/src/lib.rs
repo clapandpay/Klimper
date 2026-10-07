@@ -3,12 +3,12 @@
 //! and coins rattling, felt as well as heard, for as long as the phone is shaken; heavier the
 //! more the coins are worth.
 //!
-//! The sixteen sounds are baked into this library (`include_bytes!` of the files that
+//! The sounds (a ding per tier, eight single coin hits) are baked into this library (`include_bytes!` of the files that
 //! `scripts/klimper-sound.py` writes) and handed to the native side once per tier per run, so
 //! nothing is fetched and no Xcode or Gradle resource plumbing is needed. On the phone the
 //! native side plays them under an audio session that the silent switch mutes; while shaking is
-//! on, every turn of the hand is one knock and one haptic tap together, so it stops when the hand
-//! does. Everywhere else the commands do nothing and say so: the desktop
+//! on, every turn of the hand is a few coins, each heard and felt at the same moment, built at
+//! random from the coin hits, so it stops when the hand does and no two turns are alike. Everywhere else the commands do nothing and say so: the desktop
 //! plays the ding through the web audio API, and a desk cannot be shaken.
 
 use serde::{Deserialize, Serialize, Serializer};
@@ -59,37 +59,6 @@ impl Tier {
             Tier::Pouch => include_bytes!("../../src/klimper/sound/klimper-ding-pouch.wav"),
         }
     }
-
-    /// One turn of a shaking hand: three variants, the phone picks one at random each turn.
-    pub fn knocks(self) -> [&'static [u8]; 3] {
-        macro_rules! three {
-            ($t:literal) => {
-                [
-                    include_bytes!(concat!(
-                        "../../src/klimper/sound/klimper-knock-",
-                        $t,
-                        "-a.wav"
-                    )),
-                    include_bytes!(concat!(
-                        "../../src/klimper/sound/klimper-knock-",
-                        $t,
-                        "-b.wav"
-                    )),
-                    include_bytes!(concat!(
-                        "../../src/klimper/sound/klimper-knock-",
-                        $t,
-                        "-c.wav"
-                    )),
-                ]
-            };
-        }
-        match self {
-            Tier::Coin => three!("coin"),
-            Tier::Few => three!("few"),
-            Tier::Handful => three!("handful"),
-            Tier::Pouch => three!("pouch"),
-        }
-    }
 }
 
 /// Play the ding of a tier once. Nothing plays while the app is not in the foreground.
@@ -105,8 +74,8 @@ async fn play<R: Runtime>(
         .map_err(|error| Error::Platform(error.to_string()))?
 }
 
-/// Watch for shaking, or stop. While on, every turn of the hand plays a knock of `tier` with a
-/// haptic tap. Call again with a new tier when the wallet's value changes tier.
+/// Watch for shaking, or stop. While on, every turn of the hand is a few coins, as many and as
+/// heavy as `tier` says. Call again with a new tier when the wallet's value changes tier.
 #[command]
 async fn set_shake<R: Runtime>(
     _app: AppHandle<R>,
@@ -118,6 +87,30 @@ async fn set_shake<R: Runtime>(
     tauri::async_runtime::spawn_blocking(move || native.set_shake(enabled, tier))
         .await
         .map_err(|error| Error::Platform(error.to_string()))?
+}
+
+/// Single coin hits, one contact each, shared by every tier: the phone builds every turn of a
+/// shaking hand out of these at random.
+pub fn grains() -> [&'static [u8]; 8] {
+    macro_rules! g {
+        ($n:literal) => {
+            include_bytes!(concat!(
+                "../../src/klimper/sound/klimper-grain-",
+                $n,
+                ".wav"
+            ))
+        };
+    }
+    [
+        g!("1"),
+        g!("2"),
+        g!("3"),
+        g!("4"),
+        g!("5"),
+        g!("6"),
+        g!("7"),
+        g!("8"),
+    ]
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -136,14 +129,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_sixteen_sounds_are_baked_in_and_are_wav_files() {
-        for tier in Tier::ALL {
-            let [a, b, c] = tier.knocks();
-            for wav in [tier.ding(), a, b, c] {
-                assert_eq!(&wav[..4], b"RIFF", "{tier:?}");
-                assert_eq!(&wav[8..12], b"WAVE", "{tier:?}");
-                assert!(wav.len() < 200 * 1024, "{tier:?} is {} bytes", wav.len());
-            }
+    fn the_sounds_are_baked_in_and_are_wav_files() {
+        let dings = Tier::ALL.map(Tier::ding);
+        for wav in dings.iter().chain(grains().iter()) {
+            assert_eq!(&wav[..4], b"RIFF");
+            assert_eq!(&wav[8..12], b"WAVE");
+            assert!(wav.len() < 200 * 1024, "{} bytes", wav.len());
         }
     }
 
