@@ -3,7 +3,10 @@ import { AssetCoin } from '@/components/AssetCoin';
 import Container from '@/components/Container';
 import Header from '@/components/Header';
 import { LabeledItem } from '@/components/LabeledItem';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useNetwork } from '@/hooks/useNetwork';
+import { mempoolBlockUrl } from '@/klimper/explorer';
 import { formatTimestamp } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -13,8 +16,10 @@ import {
   ArrowUp,
   Calendar,
   CheckCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { useParams } from 'react-router-dom';
 
 export default function Transaction() {
@@ -58,6 +63,9 @@ export default function Transaction() {
   }, [updateTransaction]);
 
   const heightLabel = height ?? '';
+  // Look the spends up on mempoolxch.space (Klimper).
+  const { isTestnet } = useNetwork();
+  const explorerUrl = mempoolBlockUrl(height, isTestnet);
 
   return (
     <>
@@ -78,6 +86,18 @@ export default function Transaction() {
                   <Trans>Confirmed</Trans>
                 </div>
               </div>
+              {explorerUrl && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() =>
+                    void openUrl(explorerUrl).catch(() => undefined)
+                  }
+                >
+                  {t`View on mempoolxch.space`}
+                  <ExternalLink className='h-4 w-4' aria-hidden='true' />
+                </Button>
+              )}
             </div>
 
             <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
