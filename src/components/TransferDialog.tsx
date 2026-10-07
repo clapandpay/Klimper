@@ -1,5 +1,13 @@
+import {
+  HandleResolution,
+  handleErrorMessage,
+} from '@/components/HandleResolution';
+import { useHandle } from '@/hooks/useHandle';
+import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
+import { handlesEnabled } from '@/lib/features';
 import { amount } from '@/lib/formTypes';
+import { HandleError, isHandleInput, resolveHandle } from '@/lib/handles';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
@@ -67,8 +75,38 @@ export function TransferDialog({
     },
   );
 
-  const handler = (values: z.infer<typeof schema>) => {
-    onSubmit(values.address, values.fee);
+  // "@anna" instead of an address, as on the Send page. The registry lives on mainnet only.
+  const { network } = useNetwork();
+  const handlePrefix = handlesEnabled && network === 'mainnet' ? 'xch' : null;
+  const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
+
+  const handler = async (values: z.infer<typeof schema>) => {
+    let address = values.address;
+    if (handlePrefix && isHandleInput(address)) {
+      // Resolve again: the address on screen is the one the user agreed to. If the handle now
+      // points somewhere else, stop and let them look again.
+      try {
+        address = (await resolveHandle(address, handlePrefix)).address;
+      } catch (error) {
+        form.setError('address', {
+          message: handleErrorMessage(
+            error instanceof HandleError ? error.code : 'unavailable',
+          ),
+        });
+        return;
+      }
+      const shown =
+        handleLookup.status === 'resolved'
+          ? handleLookup.resolved.address
+          : null;
+      if (shown !== address) {
+        form.setError('address', {
+          message: t`This handle just changed. Check the address and try again`,
+        });
+        return;
+      }
+    }
+    onSubmit(address, values.fee);
   };
 
   return (
@@ -96,11 +134,19 @@ export function TransferDialog({
                   <FormControl>
                     <PasteInput
                       {...field}
-                      placeholder={t`Enter address`}
+                      autoCorrect='off'
+                      autoCapitalize='off'
+                      autoComplete='off'
+                      placeholder={
+                        handlePrefix
+                          ? t`Enter address or @handle`
+                          : t`Enter address`
+                      }
                       onEndIconClick={handleScanOrPaste}
                       onScanImage={handleScanImage}
                     />
                   </FormControl>
+                  <HandleResolution lookup={handleLookup} />
                   <FormMessage />
                 </FormItem>
               )}
