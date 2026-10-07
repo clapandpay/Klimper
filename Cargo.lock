@@ -7078,6 +7078,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-klimper-jingle",
  "tauri-plugin-klimper-passkey",
  "tauri-plugin-klimper-xchonnect",
  "tauri-plugin-opener",
@@ -8372,6 +8373,19 @@ dependencies = [
  "thiserror 2.0.17",
  "toml 1.1.0+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-klimper-jingle"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

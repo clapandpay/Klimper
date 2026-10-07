@@ -1,0 +1,3 @@
+[default]
+description = "Play the Klimper coin jingle with haptics, and turn shake detection on or off."
+permissions = ["allow-play", "allow-set-shake-enabled"]
