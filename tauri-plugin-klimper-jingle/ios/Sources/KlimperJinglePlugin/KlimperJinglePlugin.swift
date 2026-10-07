@@ -63,7 +63,8 @@ class KlimperJinglePlugin: Plugin {
   private let jolt: Double = 1.3
   private let window: TimeInterval = 0.45
   private let still: TimeInterval = 0.35
-  private let tapSpacing: TimeInterval = 0.07
+  // About one tap per turn of the hand: faster is a buzz, not coins.
+  private let tapSpacing: TimeInterval = 0.16
 
   override init() {
     super.init()
@@ -220,12 +221,14 @@ class KlimperJinglePlugin: Plugin {
     player.play()
   }
 
-  // One tap per jolt, no closer than `tapSpacing`: the hand feels the coins it moves. Light
-  // tiers tap rigid and sharp, heavy ones heavy; the jolt's own force sets the intensity.
+  // One tap per turn of the hand, no closer than `tapSpacing`, and the knock rides on it, so a
+  // turn is one thing felt and heard. Light tiers tap rigid and sharp, heavy ones heavy; the
+  // jolt's own force sets the intensity.
   private func tap(force: Double) {
     let now = CACurrentMediaTime()
     guard now - lastTap >= tapSpacing else { return }
     lastTap = now
+    knock(force: force)
     let style: UIImpactFeedbackGenerator.FeedbackStyle
     switch shakeTier {
     case "pouch": style = .heavy
@@ -269,13 +272,11 @@ class KlimperJinglePlugin: Plugin {
       if self.rattling != nil {
         self.keepRattling()
         self.follow(force: force)
-        self.knock(force: force)
         self.tap(force: force)
       } else if starting {
         self.startRattle()
         self.keepRattling()
         self.follow(force: force)
-        self.knock(force: force)
         self.tap(force: force)
       }
     }

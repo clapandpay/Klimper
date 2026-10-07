@@ -153,14 +153,20 @@ def trim(x, floor=0.006, air=0.03):
 import random
 
 
+# A hand shakes about 2.4 times a second, and the coins knock when it turns, not in between: two
+# bursts a loop, each a quarter second, with a pause after each. Pauses are what make it coins.
+BURSTS = ((0.0, 0.24), (0.42, 0.66))
+
+
 def scatter(grains, count, length, seed, speeds=(0.9, 1.12), gains=(0.5, 1.0)):
-    """`count` grains across `length` seconds, wrapping, each at its own speed and gain."""
+    """`count` grains across the loop's bursts, wrapping, each at its own speed and gain."""
     rng = random.Random(seed)
     layers = []
-    for _ in range(count):
+    for i in range(count):
         g = rng.choice(grains)
+        start, end = BURSTS[i % len(BURSTS)]
         layers.append(
-            (gain(speed(g, rng.uniform(*speeds)), rng.uniform(*gains)), rng.uniform(0, length))
+            (gain(speed(g, rng.uniform(*speeds)), rng.uniform(*gains)), rng.uniform(start, end))
         )
     return wrap_mix(layers, length)
 
@@ -197,15 +203,15 @@ def build():
     )
 
     # Shaken: loops. The count of grains is the weight; speed sets the size of the coins.
-    out["rattle-coin-a"] = scatter([tick, speed(clink, 1.15)], 3, LOOP_SECONDS, 11, (1.0, 1.2), (0.6, 1.0))
-    out["rattle-coin-b"] = scatter([tick, speed(clink, 1.15)], 3, LOOP_SECONDS, 12, (1.0, 1.2), (0.6, 1.0))
-    out["rattle-few-a"] = scatter(grains, 8, LOOP_SECONDS, 21, (0.95, 1.12))
-    out["rattle-few-b"] = scatter(grains, 8, LOOP_SECONDS, 22, (0.95, 1.12))
-    out["rattle-handful-a"] = scatter(grains, 16, LOOP_SECONDS, 31, (0.9, 1.08))
-    out["rattle-handful-b"] = scatter(grains, 16, LOOP_SECONDS, 32, (0.9, 1.08))
+    out["rattle-coin-a"] = scatter([tick, speed(clink, 1.15)], 2, LOOP_SECONDS, 11, (1.0, 1.2), (0.6, 1.0))
+    out["rattle-coin-b"] = scatter([tick, speed(clink, 1.15)], 2, LOOP_SECONDS, 12, (1.0, 1.2), (0.6, 1.0))
+    out["rattle-few-a"] = scatter(grains, 5, LOOP_SECONDS, 21, (0.95, 1.12))
+    out["rattle-few-b"] = scatter(grains, 5, LOOP_SECONDS, 22, (0.95, 1.12))
+    out["rattle-handful-a"] = scatter(grains, 9, LOOP_SECONDS, 31, (0.9, 1.08))
+    out["rattle-handful-b"] = scatter(grains, 9, LOOP_SECONDS, 32, (0.9, 1.08))
     for v, seed in (("a", 41), ("b", 42)):
-        rattle = scatter(grains, 28, LOOP_SECONDS, seed, (0.82, 1.02))
-        rumble = scatter([body], 5, LOOP_SECONDS, seed + 100, (0.8, 1.1), (0.3, 0.5))
+        rattle = scatter(grains, 16, LOOP_SECONDS, seed, (0.82, 1.02))
+        rumble = scatter([body], 2, LOOP_SECONDS, seed + 100, (0.8, 1.1), (0.3, 0.5))
         out[f"rattle-pouch-{v}"] = mix([(rattle, 0.0), (rumble, 0.0)], LOOP_SECONDS)
     for k in list(out):
         if k.startswith("rattle-"):

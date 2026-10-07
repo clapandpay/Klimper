@@ -67,7 +67,8 @@ the tier's two loop variants at a slightly random rate (0.96 to 1.04); each jolt
 jolt; and the loop's volume (0.55 to 1) and rate (0.92 to 1.25) follow a smoothed measure of
 how hard the hand is shaking, so the coins swell and settle with the hand.
 
-Haptics on a shake: one tap per jolt, no closer than 70 ms, `rigid` for the light tiers,
+Haptics on a shake: one tap per turn of the hand (no closer than 160 ms; faster is a buzz, not
+coins), with the knock sound riding on the tap, `rigid` for the light tiers,
 `medium` for a handful, `heavy` for a pouch, intensity from the tier's weight and the jolt's
 force (never below what a hand notices). Android: one `VibrationEffect` pulse per jolt, 18 to
 48 ms, amplitude from the same strength.
@@ -91,8 +92,10 @@ coins) and gains. A hand full of coins is that anyway.
 - **Arrive** (`ding`): a small rattle dying away. One tick for a coin; a clink and a tick for a
   few; four grains over a quarter second for a handful; the pouch's low body plus eight grains
   over 0.4 s. 0.16 to 0.83 s.
-- **Rattle** (two loops per tier, 0.78 s, seamless): 3 grains a loop for a coin (one coin
-  knocking about), 8 for a few, 16 for a handful, 28 plus five low-passed thuds for the pouch.
+- **Rattle** (two loops per tier, 0.78 s, seamless): the grains fall in two bursts a loop with
+  a pause after each (a hand turns about 2.4 times a second, and the coins knock when it turns):
+  2 grains a loop for a coin (one coin knocking about), 5 for a few, 9 for a handful, 16 plus
+  two low-passed thuds for the pouch.
   The loop's last 60 ms are overlapped onto its first and dropped, so it runs into itself.
 - **Knock** (one per jolt): a dull light impact for a coin, two ticks for a few, a light impact
   with a clink for a handful, the medium impact with the body for a pouch. 0.12 to 0.21 s.
