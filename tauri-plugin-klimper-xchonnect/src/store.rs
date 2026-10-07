@@ -474,8 +474,11 @@ impl SessionStore {
         Ok(out)
     }
 
-    /// Forget a session: both keyring entries and the index row.
+    /// Forget a session: both keyring entries and the index row. Under the same lock as
+    /// [`SessionStore::save`], or a save from the session loop could interleave with the
+    /// clean-up and put the blob or the index row back.
     pub fn remove(&self, fingerprint: u32, id: &str) -> Result<()> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
         self.secrets.delete(&Self::session_key(fingerprint, id))?;
         self.secrets.delete(&Self::limits_key(fingerprint, id))?;
         let mut index = self.index.lock().map_err(Error::internal)?;

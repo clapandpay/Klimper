@@ -71,6 +71,15 @@ version="$(scripts/set-version.sh --check)"
 if [ -n "$(git status --porcelain -- . ':!builtin-apps/build')" ]; then
   echo "Warning: uncommitted changes in klimper/ go into this build." >&2
 fi
+# The build rewrites two committed files: the build number goes into Info.plist, and the
+# entitlements come back without their comments. Neither is a change to keep, so each of
+# them that is clean now is put back after the build, and a build leaves no diff behind.
+rewritten=(src-tauri/gen/apple/sage-tauri_iOS/Info.plist
+  src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements)
+restore=()
+for file in "${rewritten[@]}"; do
+  git diff --quiet -- "$file" && restore+=("$file")
+done
 
 command -v bindgen >/dev/null || { echo "bindgen is missing: cargo install bindgen-cli --locked" >&2; exit 1; }
 # swift-rs needs llvm-objcopy under Xcode 27 to export the plugins' @_cdecl functions; without it
@@ -86,6 +95,8 @@ export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false
 # (0.1.0.N), four parts where Apple allows three, and the export then drops it back to 0.1.0.
 pnpm tauri ios build --export-method app-store-connect --ci \
   --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$build_number\"}}}"
+
+[ "${#restore[@]}" -eq 0 ] || git checkout --quiet -- "${restore[@]}"
 
 ipa="$(ls -t src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
 echo "Built $ipa (Klimper $version, build $build_number, $(git rev-parse --short HEAD))"

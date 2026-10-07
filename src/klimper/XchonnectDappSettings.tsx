@@ -101,6 +101,11 @@ export type LimitInput =
 export function parseLimit(text: string, precision: number): LimitInput {
   const trimmed = text.trim();
   if (trimmed === '') return { kind: 'none' };
+  // A plain amount, as the hint says: BigNumber alone would also read "1e3", "0x10"
+  // or ".5", and a user who typed one of those did not mean what it parses to.
+  if (!/^\d+(\.\d*)?$/.test(trimmed)) {
+    return { kind: 'invalid', reason: 'notANumber' };
+  }
   const value = BigNumber(trimmed);
   if (value.isNaN() || value.isNegative()) {
     return { kind: 'invalid', reason: 'notANumber' };
@@ -209,6 +214,14 @@ export default function XchonnectDappSettings() {
   const [asking, setAsking] = useState<Dangerous | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // The screen stays mounted when the route moves from one dApp to another (back and
+  // forward), so a draft is only ever the current dApp's.
+  useEffect(() => {
+    setDraft(null);
+    setProblem(null);
+    setSaved(false);
+  }, [sessionId]);
 
   useEffect(() => {
     if (session !== null && draft === null) setDraft(draftOf(session));
