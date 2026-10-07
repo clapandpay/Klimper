@@ -40,8 +40,25 @@ pub const EVENT_PAIRING: &str = "klimper-xchonnect://pairing";
 /// Event: the set of connected dApps changed.
 pub const EVENT_SESSIONS: &str = "klimper-xchonnect://sessions";
 
-/// Name and link the wallet sends to the dApp.
+/// Name the wallet sends to the dApp.
 pub const WALLET_NAME: &str = "Klimper";
+
+/// Universal-link base the wallet announces for same-device requests (spec 8.2). Kept
+/// unannounced on purpose: a dApp SDK that has seen it opens `<link>/pair#…` and
+/// `<link>/req#…` for every later pairing and request, and until clapandpay.com serves
+/// its apple-app-site-association (TASK-040, TASK-109) iOS hands those to Safari and a
+/// dead site. Without it the SDK keeps opening the `xchonnect:` pairing URI, which the
+/// app's URL scheme answers (TASK-072.01). Set to `Some("https://clapandpay.com")` once
+/// the file is live (TASK-085).
+pub const WALLET_LINK: Option<&str> = None;
+
+fn wallet_meta() -> WalletMeta {
+    WalletMeta {
+        name: Some(WALLET_NAME.to_owned()),
+        link: WALLET_LINK.map(str::to_owned),
+        ..WalletMeta::default()
+    }
+}
 
 /// How long one poll for `session.confirm` waits on the relay.
 const CONFIRM_POLL_WAIT: u64 = 5;
@@ -239,10 +256,7 @@ pub async fn reply(attempt: &mut Attempt, now: u64) -> Result<PairingSas> {
         .create_mailbox(&read, &write, attempt.verified.uri().ticket.as_ref())
         .await?;
 
-    let meta = WalletMeta {
-        name: Some(WALLET_NAME.to_owned()),
-        ..WalletMeta::default()
-    };
+    let meta = wallet_meta();
     let (pairing, outgoing) = WalletPairing::reply(
         &mut OsEntropy,
         now,
@@ -322,10 +336,7 @@ pub async fn confirm(
 ) -> Result<StoredSession> {
     let mut session = attempt.session.take().ok_or(Error::UnknownPairing)?;
     let uri = attempt.verified.uri();
-    let meta = WalletMeta {
-        name: Some(WALLET_NAME.to_owned()),
-        ..WalletMeta::default()
-    };
+    let meta = wallet_meta();
     let ready = session
         .confirm_sas(&mut OsEntropy, now, Some(meta))
         .map_err(Error::protocol)?;

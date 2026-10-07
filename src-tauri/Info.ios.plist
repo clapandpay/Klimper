@@ -9,6 +9,24 @@
              export documentation is approved and its code is in ITSEncryptionExportComplianceCode;
              `false` claims an exemption nobody has confirmed. Until TASK-090 decides, each build
              answers the export question in App Store Connect. -->
+        <!-- The Xchonnect pairing URI (`xchonnect:v1?r=…&s=…`, spec 6.2) opens Klimper from any
+             website, with no hosting on our side; a dApp's SDK uses it before a wallet has
+             announced a link base. Universal links (applinks:clapandpay.com) are in the
+             entitlements. Hand-maintained on purpose: tauri-plugin-deep-link's own config would
+             rewrite the entitlements and drop webcredentials (docs/xchonnect-links.md). -->
+        <key>CFBundleURLTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleURLName</key>
+                <string>com.clapandpay.klimper.xchonnect</string>
+                <key>CFBundleURLSchemes</key>
+                <array>
+                    <string>xchonnect</string>
+                </array>
+                <key>CFBundleTypeRole</key>
+                <string>Viewer</string>
+            </dict>
+        </array>
         <key>UIApplicationSceneManifest</key>
         <dict>
             <key>UIApplicationSupportsMultipleScenes</key>

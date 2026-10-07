@@ -82,37 +82,67 @@ Anything that starts `xchonnect:` but cannot be used is reported without its tex
 same reason the pairing screen never echoes a code. **Websites** sits beside it in the
 navigation when `xchonnectEnabled`, so the connected websites are not only in Settings.
 
+## How a link reaches the app (TASK-072.01)
+
+```
+Safari / a dApp's "open in wallet"
+  → KlimperSceneDelegate (gen/apple/Sources/sage-tauri/KlimperScene.m)
+    scene:openURLContexts:, scene:continueUserActivity:, and the URLContexts /
+    userActivities of a cold start's connection options
+  → tao's application delegate: application:openURL:options:,
+    application:continueUserActivity:restorationHandler:
+  → Tauri RunEvent::Opened { urls }
+  → tauri-plugin-deep-link: stores the URLs (getCurrent) and emits deep-link://new-url
+  → src/klimper/xchonnectDeepLink.ts: listenForXchonnectLinks (mounted once by KlimperRoot)
+  → offerXchonnectLink → the connect or request screen
+```
+
+Two forms arrive, and any website can use either; Klimper allowlists nobody and verifies
+the dApp's origin document during pairing instead:
+
+| Form                                     | Registered by                                     | Needs hosting |
+| ---------------------------------------- | ------------------------------------------------- | ------------- |
+| `xchonnect:v1?r=…&s=…` (the pairing URI) | `CFBundleURLTypes` in `src-tauri/Info.ios.plist`  | no            |
+| `https://clapandpay.com/pair`, `/req`    | `applinks:clapandpay.com` in the iOS entitlements | yes, the AASA |
+
+The scheme is what makes "connect to mobile" work today: the dApp SDK opens the pairing URI
+itself on a device where no wallet has announced a link base (Pengui's
+`openPairingInWallet`), iOS asks "Open in Klimper?", and the connect screen runs
+`inspectPairingUri` on the handed-over code at once, so the user's next tap is Approve and
+then the SAS comparison. A universal link skips the question but needs the association file
+(below).
+
+Three rules of the wiring:
+
+- **The plugin's own config is not used.** `plugins.deep-link` in a Tauri conf file makes
+  the plugin's build script rewrite `gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`
+  and `Info.plist` on every iOS build; it would replace `com.apple.developer.associated-domains`
+  with `applinks` entries only and so drop `webcredentials:clapandpay.com`, which the passkey
+  uses. The scheme and the domains are therefore hand-maintained in `Info.ios.plist` and the
+  entitlements, and `docs/UPSTREAM.md` lists both.
+- **`WalletMeta.link` is still not announced** (`WALLET_LINK` in `pairing.rs`). Once a
+  dApp SDK has seen it, it opens `<link>/pair#…` and `<link>/req#…` for every later pairing
+  and request; until the AASA is served those go to Safari and a dead site, so announcing it
+  early would break the second pairing on a phone. It becomes `Some("https://clapandpay.com")`
+  with TASK-085 when the file is live.
+- **The listener never reads a URL.** `listenForXchonnectLinks` subscribes before it reads the
+  launch URL, delivers a link that came through both paths at start-up once, and hands
+  everything to `offerXchonnectLink`, which parses, redacts and routes. Outside a Tauri window
+  the plugin has no IPC and the listener is a no-op.
+
+The webview needs `deep-link:default` (`get_current`) in `src-tauri/capabilities/klimper.json`,
+main webview only; the event comes with `core:event`.
+
+On a device: with the TestFlight build installed, a tap on `xchonnect:v1?…` in Safari (or on
+Pengui's "connect to mobile") has to open Klimper on the connect screen with the website's
+domain shown. That is the owner's check; it cannot be made on this Mac (no simulator builds,
+and Associated Domains only resolve on a device against the live file).
+
+Android has the parser and the handoff but no delivery: `tauri-plugin-deep-link` would take
+`plugins.deep-link.mobile` in `tauri.android.conf.json` for the manifest's intent filters,
+which only an Android build can verify.
+
 ## What is still missing for a real universal link
-
-Two pieces, and neither is in the webview.
-
-### 1. The operating system has to hand us the URL
-
-`tauri-plugin-deep-link` is not installed, so nothing delivers a `/pair` or `/req` URL to
-the app. The wiring, when it is added:
-
-```toml
-# src-tauri/Cargo.toml
-tauri-plugin-deep-link = "2"
-```
-
-```rust
-// src-tauri/src/lib.rs, next to the other plugins
-.plugin(tauri_plugin_deep_link::init())
-```
-
-```ts
-// once, where the app starts
-import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
-import { offerXchonnectLink } from '@/klimper/xchonnectLinkHandoff';
-
-await onOpenUrl((urls) => urls.forEach(offerXchonnectLink));
-```
-
-`offerXchonnectLink` already handles a cold start (it stores the link and the screen reads
-it on mount), a suspended app and a foreground app identically, which is what the
-integration guide asks for. The plugin also needs the `deep-link:default` permission in
-`src-tauri/capabilities/klimper.json`, main webview only.
 
 ### 2. The association has to be served
 

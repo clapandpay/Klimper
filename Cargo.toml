@@ -76,6 +76,9 @@ tauri-plugin-window-state = "2.4.1"
 tauri-plugin-barcode-scanner = "2.4.5"
 tauri-plugin-biometric = "2.3.2"
 tauri-plugin-safe-area-insets = "0.1.0"
+# Klimper: 2.4 is the last line for Tauri 2.10 (2.5+ needs 2.12). No plugins.deep-link config
+# anywhere: its build script would rewrite the hand-maintained iOS entitlements (TASK-072.01).
+tauri-plugin-deep-link = "~2.4"
 tauri-plugin-sage = { path = "./tauri-plugin-sage" }
 tauri-plugin-klimper-passkey = { path = "./tauri-plugin-klimper-passkey" }
 tauri-plugin-klimper-xchonnect = { path = "./tauri-plugin-klimper-xchonnect" }

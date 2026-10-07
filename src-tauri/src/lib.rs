@@ -221,7 +221,11 @@ pub fn run() {
         .plugin(tauri_plugin_klimper_passkey::init())
         // Klimper: dApp connections over Xchonnect (clapandpay decision-008). Every
         // entry point in the webview is behind VITE_ENABLE_XCHONNECT.
-        .plugin(tauri_plugin_klimper_xchonnect::init());
+        .plugin(tauri_plugin_klimper_xchonnect::init())
+        // Klimper: `xchonnect:` and clapandpay.com links reach the webview as
+        // `deep-link://new-url` (docs/xchonnect-links.md). The OS registration is
+        // hand-maintained in Info.ios.plist and the entitlements, not plugin config.
+        .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(not(mobile))]
     {

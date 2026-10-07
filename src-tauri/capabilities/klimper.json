@@ -6,6 +6,7 @@
   "permissions": [
     "klimper-passkey:default",
     "klimper-xchonnect:default",
+    "deep-link:default",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
     "core:window:allow-show",
