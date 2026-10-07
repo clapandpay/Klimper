@@ -169,9 +169,13 @@ impl RelayClient {
         Ok(Reply { status, body })
     }
 
-    /// Like [`Self::call`] but turns a non-2xx into an error. A `404` becomes
-    /// [`Error::PairingCodeUsed`] for the caller to interpret: the relay answers
-    /// byte-identically for "no such mailbox" and "wrong token", so that is all we know.
+    /// Like [`Self::call`] but turns a non-2xx into an error. The relay's own `404`, body
+    /// `{"error":"not_found"}` (relay-api.md §Errors), becomes [`Error::PairingCodeUsed`]
+    /// for the caller to interpret: the relay answers byte-identically for "no such
+    /// mailbox" and "wrong token", so that is all we know. A `404` with any other body is
+    /// not the relay speaking (a proxy or a host between deploys) and is an ordinary
+    /// [`Error::Relay`], which callers retry: the session loop deletes a session on
+    /// `PairingCodeUsed`, and a proxy's 404 must not erase every connection on the device.
     async fn ok(
         &self,
         method: &'static str,
@@ -184,8 +188,21 @@ impl RelayClient {
         if (200..300).contains(&reply.status) {
             return Ok(reply.body);
         }
-        let code = reply.body["error"].as_str().unwrap_or("unknown").to_owned();
-        if reply.status == 404 {
+        // A code is a short snake_case word (relay-api.md §Errors). Anything else is not
+        // the relay's, and it would reach the user's screen and the log as written.
+        let code = match reply.body["error"].as_str() {
+            Some(code)
+                if !code.is_empty()
+                    && code.len() <= 32
+                    && code
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') =>
+            {
+                code.to_owned()
+            }
+            _ => "unknown".to_owned(),
+        };
+        if reply.status == 404 && code == "not_found" {
             return Err(Error::PairingCodeUsed);
         }
         Err(Error::Relay(format!("{} ({code})", reply.status)))

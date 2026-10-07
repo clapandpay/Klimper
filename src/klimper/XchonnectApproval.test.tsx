@@ -521,6 +521,31 @@ describe('the queue', () => {
     );
   });
 
+  it('does not let a tap meant for a withdrawn request land on the next one', async () => {
+    // Benign A, then B; the website withdraws A as the thumb comes down on Approve.
+    pendingApprovals.mockResolvedValue([
+      request(spendPrompt(), 'a1'),
+      request(spendPrompt(), 'a2'),
+    ]);
+    renderScreen(<XchonnectApproval />);
+    await waitFor(() => expect(screen.getByTestId('asset-net')).toBeDefined());
+
+    handlers.get('approval-resolved')?.({ id: 'a1', approved: false });
+    await waitFor(() => expect(screen.queryByTestId('queue-count')).toBeNull());
+    const approve = screen.getByRole('button', { name: /approve/i });
+    expect(approve).toHaveProperty('disabled', true);
+    fireEvent.click(approve);
+    expect(resolveApproval).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(approve).toHaveProperty('disabled', false), {
+      timeout: 2000,
+    });
+    fireEvent.click(approve);
+    await waitFor(() =>
+      expect(resolveApproval).toHaveBeenCalledWith('a2', true),
+    );
+  });
+
   it('answers a /req link with nothing pending by syncing, not by guessing', async () => {
     const {
       offerXchonnectLink,

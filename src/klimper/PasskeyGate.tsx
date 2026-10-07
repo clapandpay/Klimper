@@ -20,8 +20,11 @@ export function PasskeyGate() {
     try {
       setStatus(await passkey.status());
     } catch (err) {
+      // Fail closed. An unreadable envelope or a plugin error must not open the wallet
+      // as if no passkey protected it: a key imported then would be stored under the
+      // empty password, outside the passkey for good. The button below retries.
       setError(String(err));
-      setStatus({ supported: false, enrolled: false, locked: false });
+      setStatus({ supported: true, enrolled: true, locked: true });
     }
   }, []);
 

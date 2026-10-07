@@ -334,6 +334,16 @@ describe('parseLimit', () => {
     expect(parseLimit('lots', 12).kind).toBe('invalid');
   });
 
+  it('refuses number syntax that is not a plain amount', () => {
+    for (const text of ['1e3', '0x10', '.5', '1,5', '+1', 'Infinity']) {
+      expect(parseLimit(text, 12), text).toEqual({
+        kind: 'invalid',
+        reason: 'notANumber',
+      });
+    }
+    expect(parseLimit('1.', 12)).toEqual({ kind: 'amount', mojos: 1e12 });
+  });
+
   it('refuses an amount that a JSON number cannot carry exactly', () => {
     // StoredLimit is a u128 in Rust but crosses as a JSON number, so above 2^53 the
     // value the plugin stores would not be the value the user typed.

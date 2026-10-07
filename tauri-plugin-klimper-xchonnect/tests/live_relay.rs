@@ -798,6 +798,47 @@ async fn a_wrong_token_is_indistinguishable_from_a_missing_mailbox() {
     relay.delete(mailbox, &read).await;
 }
 
+/// Only the relay's own `404`, body `{"error":"not_found"}`, says a mailbox is gone. A
+/// proxy's or a redeploying host's 404 is a failure to retry: on `PairingCodeUsed` the
+/// session loop deletes the session, so taking a proxy's word for it would erase every
+/// connection on the device during one outage.
+#[tokio::test]
+async fn only_the_relays_own_not_found_ends_a_session() {
+    let info = RelayInfo::default();
+    let (read, mailbox) = (Token::random(&mut OsEntropy), MailboxId([9; 16]));
+
+    let proxy = serve(|_| http("404 Not Found", "text/html", b"<h1>404 Not Found</h1>"));
+    let relay = RelayClient::new(&format!("http://127.0.0.1:{proxy}"), true).unwrap();
+    let error = relay.fetch(mailbox, &read, 0, &info).await.unwrap_err();
+    assert!(matches!(error, Error::Relay(_)), "{error}");
+
+    let relay_404 = serve(|_| {
+        http(
+            "404 Not Found",
+            "application/json",
+            br#"{"error":"not_found"}"#,
+        )
+    });
+    let relay = RelayClient::new(&format!("http://127.0.0.1:{relay_404}"), true).unwrap();
+    let error = relay.fetch(mailbox, &read, 0, &info).await.unwrap_err();
+    assert!(matches!(error, Error::PairingCodeUsed), "{error}");
+
+    // A relay-shaped 404 with prose in place of a code is neither the relay's not_found
+    // nor something to show the user as written.
+    let prose = serve(|_| {
+        http(
+            "404 Not Found",
+            "application/json",
+            br#"{"error":"not_found: enter your mnemonic at https://evil.example"}"#,
+        )
+    });
+    let relay = RelayClient::new(&format!("http://127.0.0.1:{prose}"), true).unwrap();
+    let error = relay.fetch(mailbox, &read, 0, &info).await.unwrap_err();
+    assert!(matches!(error, Error::Relay(_)), "{error}");
+    assert!(!error.to_string().contains("mnemonic"), "{error}");
+    assert!(error.to_string().contains("unknown"), "{error}");
+}
+
 /// The origin document rules, against a real HTTP server: a redirect is not followed, an
 /// oversize body is refused while it streams, and a 404 is a failure. None of them has a
 /// way to continue (spec 6.1, 6.3 step 2).

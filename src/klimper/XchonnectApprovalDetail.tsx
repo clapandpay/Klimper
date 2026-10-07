@@ -34,12 +34,15 @@ import {
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { Check, Clock, X } from 'lucide-react';
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Approval } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
 import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
 import { SiteCoin } from './XchonnectUi';
 import { useTicker } from './useTicker';
+
+/** How long the buttons stay off after one request replaces another on screen. */
+export const SWAP_SETTLE_MS = 700;
 
 /** Seconds until the approval bridge refuses the request by itself. */
 function secondsLeft(expiresAt: number): number {
@@ -120,6 +123,11 @@ export function XchonnectApprovalDetail({
   const [confirming, setConfirming] = useState(false);
   // One answer per request: after a press, every button waits for the next request.
   const [busy, setBusy] = useState(false);
+  // A request that takes the place of the one on screen (the website withdrew the first,
+  // or it timed out) keeps the buttons off for a moment, so a tap meant for the first
+  // cannot land on the second.
+  const [settling, setSettling] = useState(false);
+  const shownId = useRef(approval.id);
   const ticker = useTicker();
   const view = useMemo(
     () => readPrompt(approval.prompt, { xchLabel: ticker }),
@@ -129,10 +137,17 @@ export function XchonnectApprovalDetail({
   useEffect(() => {
     setConfirming(false);
     setBusy(false);
+    if (shownId.current === approval.id) return;
+    shownId.current = approval.id;
+    setSettling(true);
+    const timer = setTimeout(() => setSettling(false), SWAP_SETTLE_MS);
+    return () => clearTimeout(timer);
   }, [approval.id]);
 
+  const disabled = busy || settling;
+
   const answer = (approved: boolean) => {
-    if (busy) return;
+    if (disabled) return;
     setConfirming(false);
     setBusy(true);
     onAnswer(approved);
@@ -200,9 +215,9 @@ export function XchonnectApprovalDetail({
               variant='ghost'
               size='lg'
               className='flex-1 sm:flex-none'
-              disabled={busy}
+              disabled={disabled}
               onClick={() => {
-                if (busy) return;
+                if (disabled) return;
                 setConfirming(false);
                 setBusy(true);
                 onCancel();
@@ -218,7 +233,7 @@ export function XchonnectApprovalDetail({
             size='lg'
             className='flex-1 sm:flex-none'
             onClick={() => answer(false)}
-            disabled={busy}
+            disabled={disabled}
           >
             <X className='h-4 w-4 mr-1.5' aria-hidden='true' />
             <Trans>Reject</Trans>
@@ -227,7 +242,7 @@ export function XchonnectApprovalDetail({
             size='lg'
             className='flex-1 sm:flex-none'
             onClick={onApprove}
-            disabled={busy || view.kind === 'unreadable'}
+            disabled={disabled || view.kind === 'unreadable'}
           >
             <Check className='h-4 w-4 mr-1.5' aria-hidden='true' />
             {broadcasts ? (
