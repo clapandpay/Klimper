@@ -2,209 +2,41 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright 2026 the Klimper authors
 #
-# The Klimper sound (clapandpay TASK-111.01, decision-009), synthesised, deterministic from fixed
-# seeds, pure Python, no dependencies. `python3 scripts/klimper-sound.py` always writes
-# byte-identical files into src/klimper/sound/:
+# The Klimper sound (clapandpay TASK-111.01, decision-009): real coins, cut from CC0 recordings
+# (src/klimper/sound/sources/, see SOURCES.md there) into the files the app plays. Pure Python,
+# no dependencies, deterministic: `python3 scripts/klimper-sound.py` always writes byte-identical
+# files into src/klimper/sound/:
 #
-#   klimper-ding-<tier>.wav        coins arrive: one bright coin "ding", richer per tier (one shot)
-#   klimper-rattle-<tier>-{a,b}.wav the phone is shaken: coins rattling, heavier per tier (loops;
-#                                  two variants, the phone picks one at random each shake)
-#   klimper-knock-<tier>.wav       one jolt: a couple of coins knocking, played on top of the
-#                                  loop at a random pitch, louder the harder the jolt
+#   klimper-ding-<tier>.wav          coins arrive: a small rattle, longer and fuller per tier
+#   klimper-rattle-<tier>-{a,b}.wav  the phone is shaken: coins rattling, a seamless loop; two
+#                                    variants, the phone picks one at random each shake
+#   klimper-knock-<tier>.wav         one jolt: a knock on top of the loop, at a random pitch
 #
-# Two sounds, two moments. The ding is the old "money arrived" coin sound of the first mobile
-# wallets, made ours: a struck coin with a long bright ring and a second, higher coin a moment
-# later (the "klim-per" rise, the same two pitch ratios as the rattle's signature), plus a
-# small cascade for the bigger tiers. The rattle is what the name means: coins in a hand being
-# shaken. Not bells: a coin in a pile is damped by its neighbours, so each knock is a short
-# inharmonic tick (disc partials 1, 1.59, 2.14, 2.30, 2.65, 2.92, the high ones gone first)
-# with a noisy edge where metal meets metal, and between the knocks coins slide on coins, a
-# short high hiss. The rattle plays as long as the shaking lasts, so it is a seamless loop:
-# knocks are spread evenly and the last 60 ms are crossfaded into the first.
-#
-# Tiers (USD bounds, in src/klimper/sound/tiers.ts): coin, few, handful, pouch. Listening
-# notes in docs/sound.md.
+# Tiers (USD bounds in src/klimper/sound/tiers.ts): coin, few, handful, pouch. A tier's weight is
+# made of layers (more coins), speed (heavy coins move slower and sound lower) and, for the
+# pouch, a low-passed body underneath. Listening notes in docs/sound.md.
 
 import math
 import os
-import random
 import struct
 import sys
 import wave
 
 RATE = 44_100
 PEAK = 10 ** (-1 / 20)  # -1 dBFS
-LOOP_SECONDS = 0.9
+LOOP_SECONDS = 0.84
 CROSSFADE = 0.06
 
-# Partial ratios of a struck disc, with weight and relative decay.
-DISC = [(1.0, 1.0), (1.59, 0.7), (2.14, 0.5), (2.30, 0.42), (2.65, 0.3), (2.92, 0.24)]
-# A coin that rings (the ding): fewer, cleaner partials, the fundamental strong.
-RING = [(1.0, 1.0), (2.0, 0.35), (2.76, 0.22), (3.4, 0.12), (5.2, 0.06)]
-
-# The two pitch ratios of "klim-per": the ding's second coin, the rattle's signature.
-RISE = 1.26
-MID = 1.12
-
-DINGS = {
-    # base pitch Hz, how many coins follow the first (cascade), ring decay s, a thud under it
-    "coin": dict(seed=101, base=1760.0, cascade=0, decay=0.2, thud=0.0),
-    "few": dict(seed=103, base=1660.0, cascade=1, decay=0.22, thud=0.0),
-    "handful": dict(seed=107, base=1560.0, cascade=2, decay=0.24, thud=0.15),
-    "pouch": dict(seed=109, base=1480.0, cascade=4, decay=0.26, thud=0.6),
-}
-
-RATTLES = {
-    # base pitch Hz, pitch spread, knocks per loop, hiss grains per loop, knock decay s, rumble;
-    # seeds: one per variant
-    "coin": dict(seeds=(201, 211), base=5600.0, spread=0.10, knocks=5, grains=3, decay=0.06, rumble=0.0),
-    "few": dict(seeds=(203, 213), base=4900.0, spread=0.25, knocks=14, grains=12, decay=0.05, rumble=0.0),
-    "handful": dict(seeds=(207, 217), base=4200.0, spread=0.32, knocks=30, grains=30, decay=0.045, rumble=0.12),
-    "pouch": dict(seeds=(209, 219), base=3400.0, spread=0.38, knocks=60, grains=70, decay=0.04, rumble=0.3),
-}
-
-KNOCKS = {
-    # base pitch Hz, how many coins touch in the jolt
-    "coin": dict(seed=301, base=5600.0, coins=1),
-    "few": dict(seed=303, base=4900.0, coins=2),
-    "handful": dict(seed=307, base=4200.0, coins=3),
-    "pouch": dict(seed=309, base=3400.0, coins=5),
-}
+HERE = os.path.dirname(os.path.abspath(__file__))
+SOUND = os.path.join(HERE, "..", "src", "klimper", "sound")
+SOURCES = os.path.join(SOUND, "sources")
 
 
-def strike(buf, at, freq, amp, decay, partials, rng, edge=0.002, edge_amp=1.2, bend=0.06):
-    """A struck coin: partials with exponential decays, a noisy edge, a pitch bend at contact."""
-    start = int(at * RATE)
-    length = int(decay * 5 * RATE)
-    phases = [rng.random() * math.tau for _ in partials]
-    edge_n = int(edge * RATE)
-    for i in range(length):
-        j = (start + i) % len(buf)  # wraps: a loop's tail lands on its head
-        t = i / RATE
-        b = 1 + bend * math.exp(-t / 0.004)
-        s = 0.0
-        for (ratio, weight), ph in zip(partials, phases):
-            tau = decay * (0.3 + 0.7 * weight)
-            s += weight * math.exp(-t / tau) * math.sin(math.tau * freq * ratio * b * t + ph)
-        if i < edge_n:
-            s += (rng.random() * 2 - 1) * edge_amp * (1 - i / edge_n)
-        buf[j] += amp * s * min(1.0, i / (0.0004 * RATE))
-
-
-def grain(buf, at, amp, rng):
-    """Coins sliding on coins: a few milliseconds of high hiss."""
-    start = int(at * RATE)
-    length = int((0.003 + rng.random() * 0.009) * RATE)
-    centre = 6000.0 + rng.random() * 4000.0
-    noise = 0.0
-    for i in range(length):
-        j = (start + i) % len(buf)
-        t = i / RATE
-        noise = noise * 0.55 + (rng.random() * 2 - 1) * 0.45
-        env = math.sin(math.pi * i / length)
-        buf[j] += amp * env * noise * math.sin(math.tau * centre * t)
-
-
-def thud(buf, at, amp, rng, f0=110.0, f1=52.0, decay=0.045):
-    """Mass landing: a pitch drop with a little filtered noise."""
-    start = int(at * RATE)
-    length = int(decay * 3.2 * RATE)
-    noise = 0.0
-    for i in range(length):
-        if start + i >= len(buf):
-            break
-        t = i / RATE
-        f = (f0 - f1) * math.exp(-t * 11) + f1
-        noise = noise * 0.94 + (rng.random() * 2 - 1) * 0.06
-        buf[start + i] += amp * math.exp(-t / decay) * (math.sin(math.tau * f * t) * 0.9 + noise * 2.0)
-
-
-def normalise(buf):
-    peak = max(abs(x) for x in buf) or 1.0
-    scale = PEAK / peak
-    return [max(-1.0, min(1.0, x * scale)) for x in buf]
-
-
-def render_ding(spec):
-    rng = random.Random(spec["seed"])
-    base, decay = spec["base"], spec["decay"]
-    total = 0.12 * (spec["cascade"] + 1) + decay * 5 + 0.1
-    buf = [0.0] * int(total * RATE)
-    if spec["thud"]:
-        thud(buf, 0.0, spec["thud"], rng, f0=140.0, f1=70.0, decay=0.06)
-    # The first coin, and its "per": a second, higher coin 90 ms later, a little softer.
-    strike(buf, 0.0, base, 1.0, decay, RING, rng, edge=0.0015, edge_amp=0.8, bend=0.03)
-    strike(buf, 0.09, base * RISE, 0.75, decay * 0.9, RING, rng, edge=0.0012, edge_amp=0.6, bend=0.03)
-    # Bigger tiers: more coins follow, each a little higher and softer, slightly uneven.
-    for k in range(spec["cascade"]):
-        at = 0.19 + 0.085 * k + (rng.random() - 0.5) * 0.02
-        ratio = MID * (1.06 ** k)
-        strike(buf, at, base * ratio, 0.55 * (0.88 ** k), decay * 0.8, RING, rng,
-               edge=0.0012, edge_amp=0.6, bend=0.03)
-        # and a few small damped knocks underneath: the coins touching
-        for _ in range(2):
-            strike(buf, at + rng.random() * 0.05, base * 3 * math.exp((rng.random() - 0.5) * 0.4),
-                   0.18, 0.04, DISC, rng)
-    out = normalise(buf)
-    # Cut the ring once it is below -44 dBFS, plus 30 ms of air.
-    last = max(i for i, x in enumerate(out) if abs(x) > 0.006)
-    return out[: min(len(out), last + int(0.03 * RATE))]
-
-
-def render_knock(spec):
-    """One jolt: a couple of coins knocking, 0.12 s, played over the loop at a random pitch."""
-    rng = random.Random(spec["seed"])
-    buf = [0.0] * int(0.14 * RATE)
-    for k in range(spec["coins"]):
-        at = k * 0.006 + rng.random() * 0.012
-        f = spec["base"] * math.exp((rng.random() * 2 - 1) * 0.3)
-        strike(buf, at, f, 0.9 * (0.8 ** k), 0.045 * (0.7 + 0.6 * rng.random()), DISC, rng)
-    if spec["coins"] >= 3:
-        grain(buf, 0.01, 0.25, rng)
-    out = normalise(buf)
-    last = max(i for i, x in enumerate(out) if abs(x) > 0.006)
-    return out[: min(len(out), last + int(0.02 * RATE))]
-
-
-def render_rattle(spec, seed):
-    rng = random.Random(seed)
-    n = int(LOOP_SECONDS * RATE)
-    buf = [0.0] * n
-    base, spread = spec["base"], spec["spread"]
-
-    def pitch():
-        return base * math.exp((rng.random() * 2 - 1) * spread)
-
-    for _ in range(spec["knocks"]):
-        at = rng.random() * LOOP_SECONDS
-        amp = 0.3 + 0.6 * rng.random()
-        decay = spec["decay"] * (0.6 + 0.8 * rng.random())
-        strike(buf, at, pitch(), amp, decay, DISC, rng)
-        if rng.random() < 0.6:  # the other coin of the touch
-            strike(buf, at + 0.0015 + rng.random() * 0.004, pitch() * 1.08, amp * 0.55,
-                   decay * 0.8, DISC, rng)
-    for _ in range(spec["grains"]):
-        grain(buf, rng.random() * LOOP_SECONDS, 0.08 + 0.14 * rng.random(), rng)
-    # The signature, once per loop, cleaner and a little lower: low, high, middle.
-    sig_at = 0.5
-    for offset, ratio in ((0.0, 1.0), (0.068, RISE), (0.142, MID)):
-        strike(buf, sig_at + offset, base * 0.92 * ratio, 0.5, spec["decay"] * 1.3, DISC, rng,
-               edge=0.0012, edge_amp=0.6)
-    if spec["rumble"]:
-        # The mass moving: slow filtered noise under everything, breathing with the shake.
-        noise = 0.0
-        for i in range(n):
-            noise = noise * 0.985 + (rng.random() * 2 - 1) * 0.015
-            swell = 0.7 + 0.3 * math.sin(math.tau * i / n)  # one cycle per loop: seamless
-            buf[i] += spec["rumble"] * 6.0 * noise * swell
-    # Seamless: the strikes already wrapped; now overlap the last 60 ms onto the first 60 ms
-    # (tail fading out, head fading in) and drop the tail, so the loop's last sample runs
-    # straight into its first.
-    fade = int(CROSSFADE * RATE)
-    for i in range(fade):
-        w = i / fade
-        buf[i] = buf[i] * w + buf[n - fade + i] * (1 - w)
-    return normalise(buf[: n - fade])
+def load(name):
+    with wave.open(os.path.join(SOURCES, f"{name}.wav")) as w:
+        assert w.getnchannels() == 1 and w.getframerate() == RATE and w.getsampwidth() == 2, name
+        n = w.getnframes()
+        return [s / 32768 for s in struct.unpack(f"<{n}h", w.readframes(n))]
 
 
 def write(path, samples):
@@ -215,32 +47,194 @@ def write(path, samples):
         w.writeframes(b"".join(struct.pack("<h", int(round(s * 32767))) for s in samples))
 
 
+# ---- editing primitives --------------------------------------------------------------------
+
+
+def cut(x, start, duration=None):
+    a = int(start * RATE)
+    b = len(x) if duration is None else min(len(x), a + int(duration * RATE))
+    return x[a:b]
+
+
+def speed(x, rate):
+    """Play `x` at `rate` (0.9 is slower and lower). Linear interpolation is enough for coins."""
+    n = int(len(x) / rate)
+    out = []
+    for i in range(n):
+        p = i * rate
+        j = int(p)
+        f = p - j
+        a = x[min(j, len(x) - 1)]
+        b = x[min(j + 1, len(x) - 1)]
+        out.append(a * (1 - f) + b * f)
+    return out
+
+
+def gain(x, g):
+    return [v * g for v in x]
+
+
+def fade(x, fade_in=0.0, fade_out=0.0):
+    out = list(x)
+    n_in = int(fade_in * RATE)
+    for i in range(min(n_in, len(out))):
+        out[i] *= i / n_in
+    n_out = int(fade_out * RATE)
+    for i in range(min(n_out, len(out))):
+        out[len(out) - 1 - i] *= i / n_out
+    return out
+
+
+def lowpass(x, cutoff):
+    """One-pole low-pass: the body of a pouch, what you hear through a hand."""
+    k = 1 - math.exp(-math.tau * cutoff / RATE)
+    y = 0.0
+    out = []
+    for v in x:
+        y += k * (v - y)
+        out.append(y)
+    return out
+
+
+def mix(layers, length=None):
+    """Sum of (samples, offset seconds); the result is as long as needed, or `length` seconds."""
+    n = length and int(length * RATE)
+    if n is None:
+        n = max(int(off * RATE) + len(s) for s, off in layers)
+    out = [0.0] * n
+    for s, off in layers:
+        start = int(off * RATE)
+        for i, v in enumerate(s):
+            j = start + i
+            if j >= n:
+                break
+            out[j] += v
+    return out
+
+
+def wrap_mix(layers, length):
+    """Like `mix`, but what runs past the end wraps to the start: for loops."""
+    n = int(length * RATE)
+    out = [0.0] * n
+    for s, off in layers:
+        start = int(off * RATE)
+        for i, v in enumerate(s):
+            out[(start + i) % n] += v
+    return out
+
+
+def loop(x):
+    """Seamless: overlap the last 60 ms onto the first 60 ms and drop the tail."""
+    n = len(x)
+    f = int(CROSSFADE * RATE)
+    out = list(x)
+    for i in range(f):
+        w = i / f
+        out[i] = x[i] * w + x[n - f + i] * (1 - w)
+    return out[: n - f]
+
+
+def normalise(x):
+    peak = max(abs(v) for v in x) or 1.0
+    return [max(-1.0, min(1.0, v * PEAK / peak)) for v in x]
+
+
+def trim(x, floor=0.006, air=0.03):
+    last = max(i for i, v in enumerate(x) if abs(v) > floor)
+    return x[: min(len(x), last + int(air * RATE))]
+
+
+# ---- the sounds ----------------------------------------------------------------------------
+#
+# The recordings are single gestures: a clink of 0.1 to 0.25 s and silence. So they are used as
+# grains: many copies spread through a loop at seeded offsets, speeds and gains, which is what
+# a hand full of coins is anyway. Seeds are fixed, so the files are reproducible.
+
+import random
+
+
+def scatter(grains, count, length, seed, speeds=(0.9, 1.12), gains=(0.5, 1.0)):
+    """`count` grains across `length` seconds, wrapping, each at its own speed and gain."""
+    rng = random.Random(seed)
+    layers = []
+    for _ in range(count):
+        g = rng.choice(grains)
+        layers.append(
+            (gain(speed(g, rng.uniform(*speeds)), rng.uniform(*gains)), rng.uniform(0, length))
+        )
+    return wrap_mix(layers, length)
+
+
+def build():
+    coins = load("kenney-handle-coins")  # coins moved in a hand: the clink is at 0.10 to 0.45 s
+    toss = load("kenney-handle-coins-2")  # a smaller handful: the clink is at 0.15 to 0.34 s
+    light0 = load("kenney-metal-light-0")
+    light2 = load("kenney-metal-light-2")
+    medium = load("kenney-metal-medium-1")
+    heavy = load("kenney-metal-heavy-0")
+    body = gain(lowpass(heavy, 180), 1.6)  # the weight of the pouch, felt more than heard
+
+    clink = fade(cut(coins, 0.10, 0.40), 0.004, 0.05)
+    tick = fade(cut(toss, 0.15, 0.19), 0.003, 0.05)
+    grains = [clink, tick]
+
+    out = {}
+
+    # Coins arrive: a small rattle, denser and lower per tier, dying away.
+    out["ding-coin"] = fade(speed(tick, 1.1), 0, 0.06)
+    out["ding-few"] = fade(mix([(speed(clink, 1.05), 0.0), (gain(speed(tick, 0.95), 0.7), 0.09)]), 0, 0.08)
+    out["ding-handful"] = fade(
+        mix([(clink, 0.0), (gain(speed(clink, 1.08), 0.8), 0.07), (gain(tick, 0.7), 0.16), (gain(speed(clink, 0.94), 0.6), 0.24)]),
+        0, 0.12,
+    )
+    out["ding-pouch"] = fade(
+        mix(
+            [(body, 0.0), (speed(clink, 0.92), 0.0), (gain(speed(clink, 1.0), 0.9), 0.06), (gain(tick, 0.8), 0.12),
+             (gain(speed(clink, 0.88), 0.8), 0.17), (gain(speed(clink, 1.05), 0.6), 0.26), (gain(tick, 0.5), 0.33),
+             (gain(speed(clink, 0.9), 0.4), 0.4)]
+        ),
+        0, 0.18,
+    )
+
+    # Shaken: loops. The count of grains is the weight; speed sets the size of the coins.
+    out["rattle-coin-a"] = scatter([tick, speed(clink, 1.15)], 3, LOOP_SECONDS, 11, (1.0, 1.2), (0.6, 1.0))
+    out["rattle-coin-b"] = scatter([tick, speed(clink, 1.15)], 3, LOOP_SECONDS, 12, (1.0, 1.2), (0.6, 1.0))
+    out["rattle-few-a"] = scatter(grains, 8, LOOP_SECONDS, 21, (0.95, 1.12))
+    out["rattle-few-b"] = scatter(grains, 8, LOOP_SECONDS, 22, (0.95, 1.12))
+    out["rattle-handful-a"] = scatter(grains, 16, LOOP_SECONDS, 31, (0.9, 1.08))
+    out["rattle-handful-b"] = scatter(grains, 16, LOOP_SECONDS, 32, (0.9, 1.08))
+    for v, seed in (("a", 41), ("b", 42)):
+        rattle = scatter(grains, 28, LOOP_SECONDS, seed, (0.82, 1.02))
+        rumble = scatter([body], 5, LOOP_SECONDS, seed + 100, (0.8, 1.1), (0.3, 0.5))
+        out[f"rattle-pouch-{v}"] = mix([(rattle, 0.0), (rumble, 0.0)], LOOP_SECONDS)
+    for k in list(out):
+        if k.startswith("rattle-"):
+            out[k] = loop(out[k])
+
+    # One jolt: a knock. Dull and single for a coin, hard and heavy for a pouch.
+    out["knock-coin"] = fade(cut(light2, 0.0, 0.12), 0, 0.03)
+    out["knock-few"] = fade(mix([(tick, 0.0), (gain(speed(tick, 0.9), 0.6), 0.015)]), 0, 0.03)
+    out["knock-handful"] = fade(mix([(cut(light0, 0.0, 0.14), 0.0), (gain(cut(clink, 0.0, 0.14), 0.7), 0.01)]), 0, 0.04)
+    out["knock-pouch"] = fade(mix([(medium, 0.0), (gain(body, 0.6), 0.0), (gain(cut(speed(clink, 0.9), 0.0, 0.16), 0.7), 0.02)]), 0, 0.04)
+
+    return out
+
+
 def main():
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "klimper", "sound")
-    os.makedirs(out, exist_ok=True)
-    jobs = []
-    for name, spec in DINGS.items():
-        jobs.append((f"klimper-ding-{name}.wav", lambda s=spec: render_ding(s), (0.3, 1.6)))
-    for name, spec in RATTLES.items():
-        for variant, seed in zip("ab", spec["seeds"]):
-            jobs.append((f"klimper-rattle-{name}-{variant}.wav",
-                         lambda s=spec, sd=seed: render_rattle(s, sd), (0.3, 1.6)))
-    for name, spec in KNOCKS.items():
-        jobs.append((f"klimper-knock-{name}.wav", lambda s=spec: render_knock(s), (0.03, 0.2)))
-    for filename, render, (lo, hi) in jobs:
-        samples = render()
-        path = os.path.join(out, filename)
+    bounds = {"ding": (0.15, 1.6), "rattle": (0.3, 1.6), "knock": (0.03, 0.3)}
+    for name, samples in build().items():
+        kind = name.split("-")[0]
+        samples = normalise(samples)
+        if kind != "rattle":
+            samples = trim(samples)
+        path = os.path.join(SOUND, f"klimper-{name}.wav")
         write(path, samples)
         seconds = len(samples) / RATE
         print(f"{os.path.relpath(path):50} {seconds:5.2f} s  {os.path.getsize(path) // 1024:4} kB")
+        lo, hi = bounds[kind]
         if not lo <= seconds <= hi:
             print("  duration out of bounds", file=sys.stderr)
             sys.exit(1)
-    for stale in ("coin", "few", "handful", "pouch"):
-        for old in (f"klimper-{stale}.wav", f"klimper-rattle-{stale}.wav"):
-            path = os.path.join(out, old)
-            if os.path.exists(path):
-                os.remove(path)
 
 
 if __name__ == "__main__":

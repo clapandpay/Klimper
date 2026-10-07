@@ -35,10 +35,16 @@ vi.mock('@/state', async () => {
   return { useWalletState };
 });
 
-const price = vi.hoisted(() => vi.fn());
 const key = vi.hoisted(() => vi.fn());
 vi.mock('@/bindings', () => ({
-  commands: { getXchUsdPrice: price, getKey: key },
+  commands: { getKey: key },
+}));
+const price = vi.hoisted(() => ({ usd: null as number | null }));
+vi.mock('@/klimper/price', () => ({
+  lastPrices: () =>
+    price.usd === null
+      ? null
+      : { xchUsd: price.usd, cats: {}, source: 'nodexch', at: 0 },
 }));
 
 const ding = vi.hoisted(() => vi.fn(async () => undefined));
@@ -58,7 +64,7 @@ vi.mock('usehooks-ts', () => ({
   ],
 }));
 
-import { COALESCE_MS, forgetPrice, KlimperSound } from './KlimperSound';
+import { COALESCE_MS, KlimperSound } from './KlimperSound';
 import { resetPageValue, usePageValue } from '@/klimper/pageValue';
 
 /** A page that shows a dollar value, as Token.tsx and TokenList.tsx do. */
@@ -83,9 +89,8 @@ describe('the Klimper sound, running', () => {
     vi.useFakeTimers();
     ding.mockClear();
     shake.mockClear();
-    price.mockReset().mockResolvedValue({ usd: 10 });
+    price.usd = 10;
     key.mockReset().mockResolvedValue({ key: { fingerprint: 1 } });
-    forgetPrice();
     resetPageValue();
     setting.value = null;
     phone.value = false;
@@ -145,7 +150,7 @@ describe('the Klimper sound, running', () => {
   });
 
   it('is silent without a price, and for less than a cent', async () => {
-    price.mockRejectedValue(new Error('offline'));
+    price.usd = null;
     render(<KlimperSound />);
     await act(async () => {
       wallet().setState({ sync: sync('1000000000000') });
@@ -157,8 +162,7 @@ describe('the Klimper sound, running', () => {
     await settle();
     expect(ding).not.toHaveBeenCalled();
     // A price, but dust: still nothing.
-    price.mockResolvedValue({ usd: 10 });
-    forgetPrice();
+    price.usd = 10;
     await act(async () => {
       wallet().setState({ sync: sync('900000000100000') }); // +100000 mojos
     });
