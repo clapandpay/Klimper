@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Haptics on a shake. The accelerometer needs no permission. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
+</manifest>

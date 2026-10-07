@@ -56,6 +56,7 @@ export function KlimperSound() {
   // Receives: watch the balance Sage keeps.
   useEffect(() => {
     if (!on) return;
+    let alive = true;
     const detector = new ReceiveDetector();
     let fingerprint: number | null = null;
     let fingerprintAsked = false;
@@ -69,7 +70,8 @@ export function KlimperSound() {
         return;
       }
       fingerprint ??= now;
-      void playJingle(tierOf(usdOf(mojos, await xchPrice())), false);
+      const tier = tierOf(usdOf(mojos, await xchPrice()));
+      if (alive) void playJingle(tier, false);
     });
     const look = (sync: ReturnType<typeof useWalletState.getState>['sync']) => {
       const outcome = detector.observe(sampleOf(sync));
@@ -89,6 +91,7 @@ export function KlimperSound() {
     look(useWalletState.getState().sync);
     const unsubscribe = useWalletState.subscribe((state) => look(state.sync));
     return () => {
+      alive = false;
       unsubscribe();
       coalescer.cancel();
     };
@@ -96,18 +99,17 @@ export function KlimperSound() {
 
   // Shakes: the whole wallet, felt and heard. Phone only.
   useEffect(() => {
-    if (!onPhone()) return;
-    if (!on) {
-      void setShakeEnabled(false);
-      return;
-    }
+    // Off: nothing to do. The watch was never started, or the previous run of this
+    // effect stopped it on its way out.
+    if (!onPhone() || !on) return;
     let stopped = false;
     let unlisten: (() => void) | null = null;
     void listen(SHAKE_EVENT, async () => {
       const { sync } = useWalletState.getState();
       if (sync.receive_address === 'Unknown') return;
       const balance = sampleOf(sync).balance;
-      void playJingle(tierOf(usdOf(balance, await xchPrice())), true);
+      const tier = tierOf(usdOf(balance, await xchPrice()));
+      if (!stopped) void playJingle(tier, true);
     }).then((stop) => {
       if (stopped) stop();
       else unlisten = stop;

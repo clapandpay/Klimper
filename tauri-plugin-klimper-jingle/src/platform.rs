@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The Swift side (`AVAudioPlayer`, `UIImpactFeedbackGenerator`, `CMMotionManager`); elsewhere
-//! unsupported. The jingle bytes cross the bridge base64-encoded, once per tier per run (Swift
+//! The Swift side (`AVAudioPlayer`, `UIImpactFeedbackGenerator`, `CMMotionManager`) and the
+//! Kotlin side (`SoundPool`, `Vibrator`, `SensorManager`); elsewhere unsupported. The jingle bytes cross the bridge base64-encoded, once per tier per run (Swift
 //! keeps the decoded player).
 
 use std::sync::{Arc, Mutex};
@@ -17,6 +17,10 @@ use crate::{Error, Impact, Result, Shake, Tier};
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_klimper_jingle);
+
+/// The Kotlin plugin (`android/`): its package is the Gradle namespace.
+#[cfg(target_os = "android")]
+const ANDROID_PLUGIN: &str = "com.clapandpay.klimper.jingle";
 
 pub struct Native<R: Runtime> {
     handle: Option<PluginHandle<R>>,
@@ -49,14 +53,16 @@ struct ShakeArgs {
     channel: Option<Channel<InvokeResponseBody>>,
 }
 
-#[cfg_attr(not(target_os = "ios"), allow(clippy::unnecessary_wraps))]
+#[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
 pub fn init<R: Runtime, C: DeserializeOwned>(
     _app: &AppHandle<R>,
     _api: PluginApi<R, C>,
 ) -> std::result::Result<Native<R>, Box<dyn std::error::Error>> {
     #[cfg(target_os = "ios")]
     let handle = Some(_api.register_ios_plugin(init_plugin_klimper_jingle)?);
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(target_os = "android")]
+    let handle = Some(_api.register_android_plugin(ANDROID_PLUGIN, "KlimperJinglePlugin")?);
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     let handle = None;
     Ok(Native {
         handle,

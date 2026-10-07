@@ -143,28 +143,35 @@ class KlimperJinglePlugin: Plugin {
 
   // MARK: Shake
 
+  // `peaks`, `peakIntensity` and `lastShake` belong to the motion queue: the main queue only
+  // ever touches them through an operation on it, and the channel is captured at start.
   private func startMotionIfWanted() {
-    guard shakeEnabled, shakeChannel != nil, motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive
+    guard shakeEnabled, let channel = shakeChannel, motion.isDeviceMotionAvailable,
+      !motion.isDeviceMotionActive
     else { return }
-    peaks.removeAll()
-    peakIntensity = 0
+    motionQueue.addOperation { [weak self] in
+      self?.peaks.removeAll()
+      self?.peakIntensity = 0
+    }
     motion.deviceMotionUpdateInterval = 1.0 / 30.0
     motion.startDeviceMotionUpdates(to: motionQueue) { [weak self] data, _ in
       guard let self, let data else { return }
       let a = data.userAcceleration
       let magnitude = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
-      self.observe(magnitude: magnitude, at: data.timestamp)
+      self.observe(magnitude: magnitude, at: data.timestamp, channel: channel)
     }
   }
 
   private func stopMotion() {
     if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
-    peaks.removeAll()
-    peakIntensity = 0
+    motionQueue.addOperation { [weak self] in
+      self?.peaks.removeAll()
+      self?.peakIntensity = 0
+    }
   }
 
   // Runs on the motion queue.
-  private func observe(magnitude: Double, at time: TimeInterval) {
+  private func observe(magnitude: Double, at time: TimeInterval, channel: Channel) {
     guard magnitude >= jolt else { return }
     peaks.removeAll { time - $0 > window }
     peaks.append(time)
@@ -175,10 +182,9 @@ class KlimperJinglePlugin: Plugin {
     // 1.6 g is the least that counts, 4 g is as hard as a hand shakes a phone.
     let intensity = min(1, max(0, (peakIntensity - jolt) / (4.0 - jolt)))
     peakIntensity = 0
-    let channel = shakeChannel
     DispatchQueue.main.async {
       guard UIApplication.shared.applicationState == .active else { return }
-      try? channel?.send(["intensity": intensity])
+      try? channel.send(["intensity": intensity])
     }
   }
 }

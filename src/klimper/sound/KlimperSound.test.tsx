@@ -184,8 +184,7 @@ describe('the Klimper sound, running', () => {
     });
     await settle();
     expect(played).not.toHaveBeenCalled();
-    expect(shake).toHaveBeenCalledWith(false);
-    expect(shake).not.toHaveBeenCalledWith(true);
+    expect(shake).not.toHaveBeenCalled();
     expect(listeners.size).toBe(0);
   });
 });

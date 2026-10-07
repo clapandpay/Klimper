@@ -15,7 +15,7 @@ a switch in Settings, everything in one folder, and a native side that is idle u
 | Build flag                    | `VITE_ENABLE_KLIMPER_SOUND=true` (`.env`, `.env.production`)                                                                                                |
 | User switch                   | Settings → Klimper sound; `localStorage` key `klimper.sound`, on by default                                                                                 |
 | Everything in the webview     | `src/klimper/sound/` (loaded lazily, only with the flag)                                                                                                    |
-| Native side (iOS)             | `tauri-plugin-klimper-jingle/` (Rust + Swift)                                                                                                               |
+| Native side (iOS, Android)    | `tauri-plugin-klimper-jingle/` (Rust + Swift + Kotlin)                                                                                                      |
 | The files and their generator | `src/klimper/sound/klimper-*.wav`, `scripts/klimper-sound.py`                                                                                               |
 | Hook points in Sage's code    | `KlimperRoot.tsx` (one lazy element), `pages/Settings.tsx` (one element), `src-tauri/src/lib.rs` (one plugin), `capabilities/klimper.json` (one permission) |
 
@@ -94,7 +94,11 @@ library (`include_bytes!`) and handed to Swift once per tier per run, which keep
 resource plumbing out of it. Haptics: `UIImpactFeedbackGenerator`, light under 0.4, medium
 under 0.7, heavy above, with `intensity`. Nothing plays or vibrates unless the app is active.
 Desktop: the web audio API, decoded once per tier (Vite resolves `./klimper-${tier}.wav`).
-Android: the plugin has no Kotlin yet; the commands fail quietly and nothing plays.
+Android: `SoundPool` with the WAV written once to the cache directory, skipped when the
+ringer is on silent or vibrate (the hand still feels it); `VibrationEffect.createWaveform`
+with one pulse per impact, amplitude from strength; `TYPE_LINEAR_ACCELERATION` (or the raw
+accelerometer with 1 g removed) at game rate while resumed. Written to the same shape as the
+Swift, not yet compiled: there is no Android SDK on the development machine.
 
 Every failure is quiet: one `console.warn` per run at most, never a toast. A sound that did
 not play is not an error the user needs.
