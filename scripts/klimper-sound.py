@@ -8,9 +8,8 @@
 # files into src/klimper/sound/:
 #
 #   klimper-ding-<tier>.wav          coins arrive: a small rattle, longer and fuller per tier
-#   klimper-rattle-<tier>-{a,b}.wav  the phone is shaken: coins rattling, a seamless loop; two
-#                                    variants, the phone picks one at random each shake
-#   klimper-knock-<tier>.wav         one jolt: a knock on top of the loop, at a random pitch
+#   klimper-knock-<tier>-{a,b,c}.wav one turn of a shaking hand: a few coins knocking, slowed;
+#                                    the phone plays one per turn, with a haptic tap
 #
 # Tiers (USD bounds in src/klimper/sound/tiers.ts): coin, few, handful, pouch. A tier's weight is
 # made of layers (more coins), speed (heavy coins move slower and sound lower) and, for the
@@ -24,8 +23,6 @@ import wave
 
 RATE = 44_100
 PEAK = 10 ** (-1 / 20)  # -1 dBFS
-LOOP_SECONDS = 0.84
-CROSSFADE = 0.06
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUND = os.path.join(HERE, "..", "src", "klimper", "sound")
@@ -112,28 +109,6 @@ def mix(layers, length=None):
     return out
 
 
-def wrap_mix(layers, length):
-    """Like `mix`, but what runs past the end wraps to the start: for loops."""
-    n = int(length * RATE)
-    out = [0.0] * n
-    for s, off in layers:
-        start = int(off * RATE)
-        for i, v in enumerate(s):
-            out[(start + i) % n] += v
-    return out
-
-
-def loop(x):
-    """Seamless: overlap the last 60 ms onto the first 60 ms and drop the tail."""
-    n = len(x)
-    f = int(CROSSFADE * RATE)
-    out = list(x)
-    for i in range(f):
-        w = i / f
-        out[i] = x[i] * w + x[n - f + i] * (1 - w)
-    return out[: n - f]
-
-
 def normalise(x):
     peak = max(abs(v) for v in x) or 1.0
     return [max(-1.0, min(1.0, v * PEAK / peak)) for v in x]
@@ -152,40 +127,20 @@ def trim(x, floor=0.006, air=0.03):
 
 import random
 
-
-# A hand shakes about 2.4 times a second, and the coins knock when it turns, not in between: two
-# bursts a loop, each a quarter second, with a pause after each. Pauses are what make it coins.
-BURSTS = ((0.0, 0.24), (0.42, 0.66))
-
-
-def scatter(grains, count, length, seed, speeds=(0.9, 1.12), gains=(0.5, 1.0)):
-    """`count` grains across the loop's bursts, wrapping, each at its own speed and gain."""
-    rng = random.Random(seed)
-    layers = []
-    for i in range(count):
-        g = rng.choice(grains)
-        start, end = BURSTS[i % len(BURSTS)]
-        layers.append(
-            (gain(speed(g, rng.uniform(*speeds)), rng.uniform(*gains)), rng.uniform(start, end))
-        )
-    return wrap_mix(layers, length)
+# How many coins knock in one turn of the hand, how slowed (lower, calmer), and how much of the
+# pouch's low body is under them. One coin barely moves: a near-empty wallet sounds empty.
+LOUDNESS = {"coin": 0.4, "few": 0.6, "handful": 0.8, "pouch": 1.0}
+KNOCKS = {"coin": (1, 0.9, 0.0), "few": (3, 0.86, 0.0), "handful": (5, 0.82, 0.25), "pouch": (8, 0.78, 0.6)}
 
 
 def build():
     coins = load("kenney-handle-coins")  # coins moved in a hand: the clink is at 0.10 to 0.45 s
     toss = load("kenney-handle-coins-2")  # a smaller handful: the clink is at 0.15 to 0.34 s
-    light0 = load("kenney-metal-light-0")
-    light2 = load("kenney-metal-light-2")
-    medium = load("kenney-metal-medium-1")
-    heavy = load("kenney-metal-heavy-0")
-    body = gain(lowpass(heavy, 180), 1.6)  # the weight of the pouch, felt more than heard
-
+    body = gain(lowpass(load("kenney-metal-heavy-0"), 180), 1.6)  # weight, felt more than heard
     clink = fade(cut(coins, 0.10, 0.40), 0.004, 0.05)
     tick = fade(cut(toss, 0.15, 0.19), 0.003, 0.05)
-    grains = [clink, tick]
 
     out = {}
-
     # Coins arrive: a small rattle, denser and lower per tier, dying away.
     out["ding-coin"] = fade(speed(tick, 1.1), 0, 0.06)
     out["ding-few"] = fade(mix([(speed(clink, 1.05), 0.0), (gain(speed(tick, 0.95), 0.7), 0.09)]), 0, 0.08)
@@ -195,44 +150,34 @@ def build():
     )
     out["ding-pouch"] = fade(
         mix(
-            [(body, 0.0), (speed(clink, 0.92), 0.0), (gain(speed(clink, 1.0), 0.9), 0.06), (gain(tick, 0.8), 0.12),
+            [(body, 0.0), (speed(clink, 0.92), 0.0), (gain(clink, 0.9), 0.06), (gain(tick, 0.8), 0.12),
              (gain(speed(clink, 0.88), 0.8), 0.17), (gain(speed(clink, 1.05), 0.6), 0.26), (gain(tick, 0.5), 0.33),
              (gain(speed(clink, 0.9), 0.4), 0.4)]
         ),
         0, 0.18,
     )
-
-    # Shaken: loops. The count of grains is the weight; speed sets the size of the coins.
-    out["rattle-coin-a"] = scatter([tick, speed(clink, 1.15)], 2, LOOP_SECONDS, 11, (1.0, 1.2), (0.6, 1.0))
-    out["rattle-coin-b"] = scatter([tick, speed(clink, 1.15)], 2, LOOP_SECONDS, 12, (1.0, 1.2), (0.6, 1.0))
-    out["rattle-few-a"] = scatter(grains, 5, LOOP_SECONDS, 21, (0.95, 1.12))
-    out["rattle-few-b"] = scatter(grains, 5, LOOP_SECONDS, 22, (0.95, 1.12))
-    out["rattle-handful-a"] = scatter(grains, 9, LOOP_SECONDS, 31, (0.9, 1.08))
-    out["rattle-handful-b"] = scatter(grains, 9, LOOP_SECONDS, 32, (0.9, 1.08))
-    for v, seed in (("a", 41), ("b", 42)):
-        rattle = scatter(grains, 16, LOOP_SECONDS, seed, (0.82, 1.02))
-        rumble = scatter([body], 2, LOOP_SECONDS, seed + 100, (0.8, 1.1), (0.3, 0.5))
-        out[f"rattle-pouch-{v}"] = mix([(rattle, 0.0), (rumble, 0.0)], LOOP_SECONDS)
-    for k in list(out):
-        if k.startswith("rattle-"):
-            out[k] = loop(out[k])
-
-    # One jolt: a knock. Dull and single for a coin, hard and heavy for a pouch.
-    out["knock-coin"] = fade(cut(light2, 0.0, 0.12), 0, 0.03)
-    out["knock-few"] = fade(mix([(tick, 0.0), (gain(speed(tick, 0.9), 0.6), 0.015)]), 0, 0.03)
-    out["knock-handful"] = fade(mix([(cut(light0, 0.0, 0.14), 0.0), (gain(cut(clink, 0.0, 0.14), 0.7), 0.01)]), 0, 0.04)
-    out["knock-pouch"] = fade(mix([(medium, 0.0), (gain(body, 0.6), 0.0), (gain(cut(speed(clink, 0.9), 0.0, 0.16), 0.7), 0.02)]), 0, 0.04)
-
+    # One turn of the hand: `count` coins within a few tens of milliseconds, three variants a tier.
+    for t, (tier, (count, rate, weight)) in enumerate(KNOCKS.items()):
+        for v, variant in enumerate("abc"):
+            rng = random.Random(100 * t + v)
+            layers = [
+                (gain(speed(rng.choice([clink, tick]), rate * rng.uniform(0.95, 1.05)), rng.uniform(0.5, 1.0)),
+                 rng.uniform(0, 0.025 * count))
+                for _ in range(count)
+            ]
+            if weight:
+                layers.append((gain(body, weight), 0.0))
+            out[f"knock-{tier}-{variant}"] = fade(mix(layers), 0, 0.08)
     return out
 
 
 def main():
-    bounds = {"ding": (0.15, 1.6), "rattle": (0.3, 1.6), "knock": (0.03, 0.3)}
+    bounds = {"ding": (0.15, 1.6), "knock": (0.03, 0.8)}
     for name, samples in build().items():
         kind = name.split("-")[0]
-        samples = normalise(samples)
-        if kind != "rattle":
-            samples = trim(samples)
+        samples = trim(normalise(samples))
+        if kind == "knock":  # a lighter wallet is a quieter one
+            samples = gain(samples, LOUDNESS[name.split("-")[1]])
         path = os.path.join(SOUND, f"klimper-{name}.wav")
         write(path, samples)
         seconds = len(samples) / RATE
