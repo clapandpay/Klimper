@@ -58,14 +58,9 @@ export function usdOf(
 }
 
 /** The bundled files of a tier, as the plugin and the web both name them. */
-export function soundFilesOf(tier: Tier): {
-  ding: string;
-  rattles: [string, string];
-  knock: string;
-} {
+export function soundFilesOf(tier: Tier): { ding: string; knocks: string[] } {
   return {
     ding: `klimper-ding-${tier}.wav`,
-    rattles: [`klimper-rattle-${tier}-a.wav`, `klimper-rattle-${tier}-b.wav`],
-    knock: `klimper-knock-${tier}.wav`,
+    knocks: ['a', 'b', 'c'].map((v) => `klimper-knock-${tier}-${v}.wav`),
   };
 }

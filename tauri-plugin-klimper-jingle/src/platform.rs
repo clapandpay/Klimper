@@ -27,17 +27,14 @@ const ANDROID_PLUGIN: &str = "com.clapandpay.klimper.jingle";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Sound {
     Ding(Tier),
-    Rattle(Tier),
+    Knocks(Tier),
 }
 
 impl Sound {
     fn encoded(self) -> Vec<String> {
         match self {
             Sound::Ding(tier) => vec![B64.encode(tier.ding())],
-            Sound::Rattle(tier) => {
-                let [a, b] = tier.rattles();
-                vec![B64.encode(a), B64.encode(b), B64.encode(tier.knock())]
-            }
+            Sound::Knocks(tier) => tier.knocks().iter().map(|w| B64.encode(w)).collect(),
         }
     }
 }
@@ -70,10 +67,8 @@ struct PlayArgs {
 struct ShakeArgs {
     enabled: bool,
     tier: Tier,
-    /// The two rattle loops of `tier`, base64; `None` once the native side has them.
-    loops: Option<Vec<String>>,
-    /// The knock of `tier`, base64; `None` once the native side has it.
-    knock: Option<String>,
+    /// The three knocks of `tier`, base64; `None` once the native side has them.
+    knocks: Option<Vec<String>>,
 }
 
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
@@ -103,26 +98,18 @@ impl<R: Runtime> Native<R> {
     }
 
     pub fn set_shake(&self, enabled: bool, tier: Tier) -> Result<()> {
-        let sound = Sound::Rattle(tier);
-        let fresh = if enabled {
+        let sound = Sound::Knocks(tier);
+        let knocks = if enabled {
             self.unless_sent(sound)?
         } else {
             None
-        };
-        let (loops, knock) = match fresh {
-            Some(mut v) => {
-                let knock = v.pop();
-                (Some(v), knock)
-            }
-            None => (None, None),
         };
         let result = self.run(
             "setShake",
             ShakeArgs {
                 enabled,
                 tier,
-                loops,
-                knock,
+                knocks,
             },
         );
         self.forget_if_failed(sound, &result);

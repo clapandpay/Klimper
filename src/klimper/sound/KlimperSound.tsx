@@ -6,8 +6,8 @@
 // Two moments. Coins arrive: the balance Sage keeps goes up on a synced wallet, and the ding
 // of the received value rings once (several coins landing together ring once, for their sum).
 // Nothing worth a cent, or no price at all (testnet, offline): silence, on both moments.
-// The phone is shaken: the native side does all of it, in real time; the webview only tells
-// it the tier of what is on the page (a token page: that token; the wallet page: the total;
+// The phone is shaken: the native side does all of it, in real time (every turn of the hand is
+// one knock and one haptic tap together); the webview only tells it the tier of what is on the page (a token page: that token; the wallet page: the total;
 // anything else: the whole wallet), and again whenever that changes.
 //
 // Cost when on: one subscription to the wallet store (a few comparisons per update), one to

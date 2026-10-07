@@ -6,7 +6,7 @@ Klimper is what coins do. The app is the one place that jingle is heard (clapand
 
 - **Coins arrive**: one bright coin rings, the "money arrived" sound of the first mobile
   wallets, made ours. Richer the more arrived. Heard, not felt.
-- **The phone is shaken**: the coins on the open page rattle in the hand for as long as the
+- **The phone is shaken**: every turn of the hand is a knock of the coins on the open page and a tap, for as long as the
   shaking lasts, with a vibration on every jolt, heavier the more they are worth. Stops when
   the hand does.
 
@@ -36,7 +36,7 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
 | Everything in the webview     | `src/klimper/sound/` (loaded lazily, only with the flag)                                                                                                                                                                                |
 | What the open page is worth   | `src/klimper/pageValue.ts` (a few lines, outside the lazy chunk so pages can import it)                                                                                                                                                 |
 | Native side (iOS, Android)    | `tauri-plugin-klimper-jingle/` (Rust + Swift + Kotlin)                                                                                                                                                                                  |
-| The files and their generator | `src/klimper/sound/klimper-{ding,rattle-a,rattle-b,knock}-<tier>.wav`, `scripts/klimper-sound.py`                                                                                                                                       |
+| The files and their generator | `src/klimper/sound/klimper-{ding-<tier>,knock-<tier>-{a,b,c}}.wav`, `scripts/klimper-sound.py`                                                                                                                                          |
 | Hook points in Sage's code    | `KlimperRoot.tsx` (one lazy element), `pages/Settings.tsx` (one element), `pages/Token.tsx` and `pages/TokenList.tsx` (one `usePageValue` line each), `src-tauri/src/lib.rs` (one plugin), `capabilities/klimper.json` (one permission) |
 
 Flag off: the chunk is never loaded, Settings has no card, the plugin sits unused, and
@@ -48,12 +48,12 @@ dropped and the native side is disarmed.
 Four weights, by the US-dollar value of the coins involved. The table is
 `src/klimper/sound/tiers.ts` (tests at the bounds).
 
-| Tier      | Value          | Ding (coins arrive)                    | Rattle (shake)                            |
-| --------- | -------------- | -------------------------------------- | ----------------------------------------- |
-| `coin`    | $0.01 to $1    | one tick                               | one coin knocking about (3 grains a loop) |
-| `few`     | $1 to $20      | a clink and a tick                     | 8 grains a loop                           |
-| `handful` | $20 to $200    | four grains over a quarter second      | 16 grains a loop                          |
-| `pouch`   | $200 and above | a low body and eight grains over 0.4 s | 28 grains and five low thuds a loop       |
+| Tier      | Value          | Ding (coins arrive)                    | Each turn of a shaking hand              |
+| --------- | -------------- | -------------------------------------- | ---------------------------------------- |
+| `coin`    | $0.01 to $1    | one tick                               | one coin, quiet; one light `rigid` tick  |
+| `few`     | $1 to $20      | a clink and a tick                     | three coins; one `heavy` tap at 0.8      |
+| `handful` | $20 to $200    | four grains over a quarter second      | five coins, some weight; thud and clack  |
+| `pouch`   | $200 and above | a low body and eight grains over 0.4 s | eight coins and the body; thud and clack |
 
 What is weighed: for the ding, what arrived (several coins landing within 1.5 s are one ding,
 for their sum). For the shake, **what the open page shows**: a token page rattles with that
@@ -61,17 +61,14 @@ token's value, the wallet page with the total, any other page with the whole wal
 **No price (testnet, offline, not fetched yet), or less than a cent, means silence**: no ding,
 no rattle, no taps. A wallet with nothing in it makes no sound (owner's rule, 2026-10-07).
 
-**Harder shaking sounds harder, and no two shakes are alike.** Each rattle starts from one of
-the tier's two loop variants at a slightly random rate (0.96 to 1.04); each jolt adds a knock
-(a couple of coins, 0.14 s) on top at a random pitch (rate 0.85 to 1.25), louder the harder the
-jolt; and the loop's volume (0.55 to 1) and rate (0.92 to 1.25) follow a smoothed measure of
-how hard the hand is shaking, so the coins swell and settle with the hand.
-
-Haptics on a shake: one tap per turn of the hand (no closer than 160 ms; faster is a buzz, not
-coins), with the knock sound riding on the tap, `rigid` for the light tiers,
-`medium` for a handful, `heavy` for a pouch, intensity from the tier's weight and the jolt's
-force (never below what a hand notices). Android: one `VibrationEffect` pulse per jolt, 18 to
-48 ms, amplitude from the same strength.
+**The shake is one rule**: every turn of the hand (a jolt of 1.3 g or more, at most one every
+0.28 s) is one knock and one haptic tap, at the same moment. Nothing loops, so the sound and the
+feel follow the hand and stop when it does. One of three knock variants is picked at random at a
+slightly random rate (0.9 to 1.05), louder the harder the jolt. The heavy tiers tap twice, a full
+`heavy` thud and a `rigid` clack 60 ms later, like a pouch landing in the hand. The knocks are
+slowed (rate 0.78 to 0.9 when cut) and quieter for lighter tiers (0.4, 0.6, 0.8, 1.0), so a
+near-empty wallet sounds and feels near empty. Android: one `VibrationEffect` per turn, a
+two-pulse waveform for the heavy tiers.
 
 ## The sounds
 
@@ -92,13 +89,9 @@ coins) and gains. A hand full of coins is that anyway.
 - **Arrive** (`ding`): a small rattle dying away. One tick for a coin; a clink and a tick for a
   few; four grains over a quarter second for a handful; the pouch's low body plus eight grains
   over 0.4 s. 0.16 to 0.83 s.
-- **Rattle** (two loops per tier, 0.78 s, seamless): the grains fall in two bursts a loop with
-  a pause after each (a hand turns about 2.4 times a second, and the coins knock when it turns):
-  2 grains a loop for a coin (one coin knocking about), 5 for a few, 9 for a handful, 16 plus
-  two low-passed thuds for the pouch.
-  The loop's last 60 ms are overlapped onto its first and dropped, so it runs into itself.
-- **Knock** (one per jolt): a dull light impact for a coin, two ticks for a few, a light impact
-  with a clink for a handful, the medium impact with the body for a pouch. 0.12 to 0.21 s.
+- **Knock** (three per tier, one per turn of the hand): 1, 3, 5 or 8 grains within a few tens of
+  milliseconds, slowed to 0.9, 0.86, 0.82 or 0.78, with the pouch's low body under the two heavy
+  tiers. 0.2 to 0.7 s.
 
 The first two versions were synthesised (inharmonic disc partials); the owner heard the
 second on a phone and asked for real coins. Listening notes for this one: to be judged on the
@@ -124,20 +117,13 @@ Sage's wallet store (`useWalletState`, refreshed on every `coin_state` event):
   baseline, so a switch to a richer wallet is never a ding.
 
 **The phone is shaken.** The webview arms the native side with the tier of what the page shows
-(`setShake(true, tier)`, at once with `coin` so the first shake answers before any price, then
-with the real tier, and again whenever it changes); off disarms it. Everything else is native,
-in real time:
+(`setShake(true, tier)`, whenever the tier changes); off disarms it. Everything else is native, in real time:
 
 - iOS: `CMMotionManager` user acceleration at 40 Hz (gravity removed, no permission) while
-  the app is active. A jolt is 1.3 g or more; two jolts within 0.45 s start one of the tier's
-  rattle loops (`AVAudioPlayer`, `numberOfLoops = -1`, `enableRate`); every jolt while it runs
-  is a haptic tap, a knock (three players per tier so knocks overlap), a nudge to the loop's
-  volume and rate, and pushes the stop back; 0.35 s without a jolt fades the loop out in 120 ms. Resigning active
-  stops both. Motion state lives on the motion queue, players and haptics on main.
-- Android: `TYPE_LINEAR_ACCELERATION` (or the raw accelerometer with 1 g removed) at game
-  rate while resumed, the same thresholds; `SoundPool` loop (`-1`), `stop` on stillness; a
-  `VibrationEffect` pulse per jolt. Skipped when the ringer is silent or vibrate (the hand still
-  feels it). Written to the same shape as the Swift, **not compiled**: no Android SDK here.
+  the app is active, on the main queue; resigning active stops it. About a hundred lines.
+- Android: `TYPE_LINEAR_ACCELERATION` at game rate while resumed, the same rule; `SoundPool`,
+  skipped when the ringer is silent or vibrate (the hand still feels it). Written to the same
+  shape as the Swift, **not compiled**: no Android SDK here.
 
 **Playback.** The sixteen WAVs are baked into the Rust library (`include_bytes!`) and handed to
 the native side base64 once per sound per run, which keeps Xcode and Gradle resource plumbing
@@ -153,5 +139,5 @@ component with the store, the price, the fingerprint, the page value and the swi
 the ding of a summed receive, quiet on spend/catch-up/switch/fingerprint change, a coin
 without a price, the shake armed with the page's tier or the wallet's, nothing when off).
 Plugin: `cargo test -p tauri-plugin-klimper-jingle` (the WAVs are baked in and valid, tiers
-parse). Swift compiles in the TestFlight build; the ding, the rattle and the haptics on a
+parse). Swift compiles in the TestFlight build; the ding, the knocks and the haptics on a
 device are the owner's check.
