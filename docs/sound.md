@@ -48,12 +48,12 @@ dropped and the native side is disarmed.
 Four weights, by the US-dollar value of the coins involved. The table is
 `src/klimper/sound/tiers.ts` (tests at the bounds).
 
-| Tier      | Value                 | Ding (coins arrive)                               | Rattle (shake)                           |
-| --------- | --------------------- | ------------------------------------------------- | ---------------------------------------- |
-| `coin`    | under $1, or no price | one coin and its answer a fifth of a second later | one coin knocking about, 5 knocks a loop |
-| `few`     | $1 to $20             | the same plus one more coin                       | 14 knocks a loop, a little hiss          |
-| `handful` | $20 to $200           | a cascade of three, a touch of weight under it    | 30 knocks, hiss, a low rumble            |
-| `pouch`   | $200 and above        | a thud, then a cascade of five                    | 60 knocks, much hiss, the mass moving    |
+| Tier      | Value          | Ding (coins arrive)                    | Rattle (shake)                            |
+| --------- | -------------- | -------------------------------------- | ----------------------------------------- |
+| `coin`    | $0.01 to $1    | one tick                               | one coin knocking about (3 grains a loop) |
+| `few`     | $1 to $20      | a clink and a tick                     | 8 grains a loop                           |
+| `handful` | $20 to $200    | four grains over a quarter second      | 16 grains a loop                          |
+| `pouch`   | $200 and above | a low body and eight grains over 0.4 s | 28 grains and five low thuds a loop       |
 
 What is weighed: for the ding, what arrived (several coins landing within 1.5 s are one ding,
 for their sum). For the shake, **what the open page shows**: a token page rattles with that
@@ -74,29 +74,32 @@ force (never below what a hand notices). Android: one `VibrationEffect` pulse pe
 
 ## The sounds
 
-`scripts/klimper-sound.py` (pure Python, no dependencies, fixed seeds) writes all sixteen
-files (a ding, two rattle loops and a knock per tier),
-44.1 kHz 16-bit mono, peak at -1 dBFS. Running it twice gives byte-identical files, so a change
-to the sound is a change to the script, reviewed like code. 12 to 114 kB each, 1.1 MB in all, baked into the binary.
+Real coins. The files are cut by `scripts/klimper-sound.py` (pure Python, no dependencies,
+fixed seeds) from six **CC0** recordings by Kenney (kenney.nl: RPG Audio `handleCoins`,
+`handleCoins2`; Impact Sounds `impactMetal_light_000/002`, `_medium_001`, `_heavy_000`), kept
+in `src/klimper/sound/sources/` as mono 44.1 kHz WAV with their provenance in `SOURCES.md`.
+CC0 is public domain: free to use, change and ship, no attribution required; the file is the
+attribution anyway. Running the script twice gives byte-identical files, so a change to the
+sound is a change to the script, reviewed like code. Sixteen files, 10 to 67 kB, 0.8 MB in all,
+baked into the binary.
 
-**The ding.** A coin that rings: a strong fundamental with a few clean partials (1, 2.0, 2.76,
-3.4, 5.2), a 0.2 to 0.26 s decay, a soft noisy edge and a small pitch bend at contact. A second,
-higher coin follows 90 ms later at the ratio 1.26: the "klim-per" rise, the same two ratios as
-the rattle's signature. Bigger tiers add a cascade of coins, each a little higher and softer,
-with a few damped knocks underneath (the coins touching) and, for the heavy tiers, a thud
-first. The ring is cut at -44 dBFS; 1.0 to 1.3 s.
+The recordings are single gestures (a clink of 0.1 to 0.25 s, then silence), so they are used
+as **grains**: the clink of `handleCoins` (0.10 to 0.45 s) and the tick of `handleCoins2`
+(0.15 to 0.34 s), copied many times at seeded offsets, speeds (0.82 to 1.2, lower is bigger
+coins) and gains. A hand full of coins is that anyway.
 
-**The rattle.** What the name means: coins in a hand being shaken. Not bells: a coin in a pile
-is damped by its neighbours, so each knock is a short inharmonic tick (disc partials 1, 1.59,
-2.14, 2.30, 2.65, 2.92, the high ones gone first, 40 to 60 ms) with a noisy edge where metal
-meets metal; six in ten knocks have a second coin a few milliseconds behind. Between the knocks,
-coins slide on coins: 3 to 12 ms grains of high hiss. The heavy tiers have a low rumble, the
-mass moving, breathing once per loop. Once per loop the signature: three cleaner knocks, low,
-high, middle. The loop is seamless: knocks wrap around the end, and the last 60 ms are
-overlapped onto the first and dropped, so the last sample runs into the first. 0.84 s a loop.
+- **Arrive** (`ding`): a small rattle dying away. One tick for a coin; a clink and a tick for a
+  few; four grains over a quarter second for a handful; the pouch's low body plus eight grains
+  over 0.4 s. 0.16 to 0.83 s.
+- **Rattle** (two loops per tier, 0.78 s, seamless): 3 grains a loop for a coin (one coin
+  knocking about), 8 for a few, 16 for a handful, 28 plus five low-passed thuds for the pouch.
+  The loop's last 60 ms are overlapped onto its first and dropped, so it runs into itself.
+- **Knock** (one per jolt): a dull light impact for a coin, two ticks for a few, a light impact
+  with a clink for a handful, the medium impact with the body for a pouch. 0.12 to 0.21 s.
 
-Listening notes (2026-10-07, second version, after the owner heard the first on a phone: "more
-like coins colliding, rascheln"): to be judged on the device.
+The first two versions were synthesised (inharmonic disc partials); the owner heard the
+second on a phone and asked for real coins. Listening notes for this one: to be judged on the
+device.
 
 ## How it works
 
