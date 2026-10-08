@@ -32,7 +32,8 @@ vi.mock('./xchonnect', () => ({
     inspectPairingUri: (uri: string) => inspectPairingUri(uri),
     approvePairing: (id: string) => approvePairing(id),
     cancelPairing: (id: string) => cancelPairing(id),
-    confirmSas: (id: string, matches: boolean) => confirmSas(id, matches),
+    confirmSas: (id: string, matches: boolean, all?: boolean) =>
+      confirmSas(id, matches, all),
   },
   XCHONNECT_EVENTS: { pairing: 'pairing' },
   onXchonnectEvent: (_event: string, handler: (payload: unknown) => void) => {
@@ -286,6 +287,7 @@ describe('after the six digits match', () => {
     fireEvent.click(screen.getByRole('button', { name: 'They match' }));
 
     await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeDefined());
-    expect(confirmSas).toHaveBeenCalledWith('p1', true);
+    // The receive addresses are shared unless the switch was turned off.
+    expect(confirmSas).toHaveBeenCalledWith('p1', true, true);
   });
 });

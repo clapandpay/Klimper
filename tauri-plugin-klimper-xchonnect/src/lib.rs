@@ -272,10 +272,24 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         limits: stored.record.permissions.limits.clone(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
-        all_receive_keys: stored.record.own_key.is_none()
-            || stored.record.permissions.exposed_keys.len() > 1,
+        all_receive_keys: stored.record.permissions.exposed_keys.len() > 1,
         connected,
     }
+}
+
+/// What a website sees: its own key, and every receive key when the user allowed that. The own
+/// key stays in the list either way, so coins paid to the website's address never vanish
+/// from it.
+fn exposed_keys(
+    own: Option<chia_bls::PublicKey>,
+    all: bool,
+    receive_keys: &[chia_bls::PublicKey],
+) -> Vec<chia_bls::PublicKey> {
+    let mut keys: Vec<chia_bls::PublicKey> = own.into_iter().collect();
+    if all {
+        keys.extend(receive_keys.iter().filter(|key| Some(**key) != own));
+    }
+    keys
 }
 
 fn key_hex(key: &chia_bls::PublicKey) -> String {
@@ -547,6 +561,7 @@ async fn confirm_sas<R: Runtime>(
     state: State<'_, Xchonnect<R>>,
     pairing_id: String,
     matches: bool,
+    all_receive_keys: Option<bool>,
 ) -> Result<Option<SessionSummary>> {
     let shared = state.attempt(&pairing_id).await?;
     let mut attempt = shared.lock().await;
@@ -568,11 +583,13 @@ async fn confirm_sas<R: Runtime>(
         return Err(Error::NoWallet);
     }
     let dapp = attempt.verified.uri().domain.clone();
-    attempt.permissions.exposed_keys = state
+    let own = state
         .store
-        .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?
-        .into_iter()
-        .collect();
+        .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
+    // Its own key first (that is what the record keeps as `own_key`), then, if the user chose
+    // it on the pairing screen, every receive key.
+    attempt.permissions.exposed_keys =
+        exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
         Ok(stored) => stored,
         Err(error) => {
@@ -753,10 +770,11 @@ async fn set_dapp_policy<R: Runtime>(
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
     // Which keys the website sees: all receive keys, or its own (picked now for a website
     // paired before it had one).
+    // Which keys the website sees: its own key (claimed now for a website paired before it
+    // had one), and every receive key when the user allows that.
     let keys = match policy.all_receive_keys {
         None => None,
-        Some(true) => Some((None, snapshot.receive_keys.iter().map(key_hex).collect())),
-        Some(false) => {
+        Some(all) => {
             let current = state.store.load(snapshot.fingerprint, &session_id)?;
             let own = match current
                 .record
@@ -771,8 +789,11 @@ async fn set_dapp_policy<R: Runtime>(
                     &snapshot.website_keys,
                 )?,
             };
-            let own = own.map(|key| key_hex(&key));
-            Some((own.clone(), own.into_iter().collect::<Vec<_>>()))
+            let exposed = exposed_keys(own, all, &snapshot.receive_keys)
+                .iter()
+                .map(key_hex)
+                .collect::<Vec<_>>();
+            Some((own.map(|key| key_hex(&key)), exposed))
         }
     };
     let keys_changed = keys.is_some();
@@ -957,6 +978,18 @@ mod lib_tests {
         // The constant is the only switch; there is no setting and no environment
         // variable that turns developer mode on in a release build.
         assert_eq!(developer_mode_allowed(), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn all_addresses_keep_the_websites_own_one() {
+        let key = |i: u8| chia_bls::SecretKey::from_seed(&[i; 64]).public_key();
+        let receive = [key(1), key(2)];
+        assert_eq!(exposed_keys(Some(key(9)), false, &receive), vec![key(9)]);
+        assert_eq!(
+            exposed_keys(Some(key(9)), true, &receive),
+            vec![key(9), key(1), key(2)]
+        );
+        assert_eq!(exposed_keys(None, true, &receive), receive.to_vec());
     }
 
     #[test]

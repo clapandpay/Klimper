@@ -202,26 +202,30 @@ lock screen. Klimper keeps the preview key with the registration for a future ex
 
 Allowed methods (as checkboxes over the methods the session was granted), the exposed key,
 a per-request and a per-day limit per asset (XCH and every token the wallet holds), and the
-dangerous switches. Defaults are spec 9.3: the CHIP-0002 required methods, **one key of the
-website's own**, no auto-approval, every switch off, no limits.
+two dangerous switches (unsafe signatures, unreadable contracts). Defaults: the CHIP-0002
+required methods, the receive addresses plus one key of the website's own, no
+auto-approval, both dangerous switches off, no limits.
 
-**One address per website** (TASK-120). When the six digits match, the website is given one
-of the wallet's **hardened** keys: the first one no website has ever had (a per-wallet list,
-`websites:<fingerprint>` in the keyring, outlives every connection, and the claim is made
-under the store's write lock). Sage never hands out a hardened key as a receive or change
+**What a website sees** (TASK-120). Pairing has one switch, **Can see my receive addresses**,
+**on by default** (owner, 2026-10-08): a website such as Pengui then sees the user's receive
+addresses with their coins and can show balances and build transfers and offers from them.
+Every request still needs the user's approval. The same switch is in the website's settings,
+without a confirmation dialog; changing it re-sends `session.permissions`.
+
+Either way, when the six digits match the website is also given one of the wallet's
+**hardened** keys as its own address: the first one no website has ever had (a per-wallet
+list, `websites:<fingerprint>` in the keyring, outlives every connection, and the claim is
+made under the store's write lock). Sage never hands out a hardened key as a receive or change
 address, and coins paid to one do not move Sage's next receive address, so a website's key
-never overlaps the user's own addresses or another website's, and "see all my receive
-addresses" (unhardened keys) never includes another website's key. A wallet without a free
-hardened key gives the website none. Websites therefore cannot link the user's addresses
-through Klimper, and a message signed for one website is signed by a key no other website
-knows. A payment the wallet makes on chain still shows its input coins and change address to
-anyone who looks; that is how Chia coins work, not something Klimper can hide. Requests the website builds itself
+never overlaps the user's addresses or another website's, and the receive addresses never
+include another website's key. With the switch **off**, that own address is all the website
+sees: it cannot link the user's addresses through Klimper, and a message it asks to have
+signed is signed by a key no other website knows. Requests a website builds itself
 (`signCoinSpends`, `submitCoinSpends`, `signMessage`) are signed with the keys it was given
 only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send`,
-which Klimper builds from its own coins, uses the whole wallet. "Let it see all my receive
-addresses" is a third dangerous switch, for websites that build trades from the user's coins
-(Pengui); it re-sends `session.permissions` with every receive key. Websites paired before
-this keep seeing every address until the switch is turned off.
+which Klimper builds from its own coins, uses the whole wallet. A payment the wallet makes on
+chain still shows its input coins and change address to anyone who looks, and a page that
+sees the addresses asks some chain service about them; Klimper cannot hide either.
 
 **Kept per website** (TASK-121). Its own key, its limits and its daily totals are stored per
 wallet and verified domain, not per connection: removing a connection and pairing again

@@ -150,9 +150,16 @@ export const xchonnect = {
   cancelPairing: (pairingId: string) =>
     call<null>('cancel_pairing', { pairingId }),
 
-  /** The user compared the six digits. `false` ends the session and deletes everything. */
-  confirmSas: (pairingId: string, matches: boolean) =>
-    call<SessionSummary | null>('confirm_sas', { pairingId, matches }),
+  /**
+   * The user compared the six digits. `false` ends the session and deletes everything.
+   * `allReceiveKeys`: the website sees every receive address, not only its own one.
+   */
+  confirmSas: (pairingId: string, matches: boolean, allReceiveKeys = false) =>
+    call<SessionSummary | null>('confirm_sas', {
+      pairingId,
+      matches,
+      allReceiveKeys,
+    }),
 
   /** Connected dApps. Also resumes the message loop of every stored session. */
   listSessions: () => call<SessionSummary[]>('list_sessions'),

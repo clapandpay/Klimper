@@ -117,12 +117,12 @@ describe('the defaults of a new connection', () => {
       false,
     );
 
-    // One fresh key.
-    const shared = screen.getByTestId('shared-keys');
-    expect(shared.querySelectorAll('[title]')).toHaveLength(1);
-    expect(shared.querySelector('[title]')?.getAttribute('title')).toBe(
-      `0x${'a'.repeat(96)}`,
-    );
+    // One key of its own: it does not see the receive addresses.
+    expect(
+      screen
+        .getByLabelText('Can see my receive addresses')
+        .getAttribute('data-state'),
+    ).toBe('unchecked');
 
     // No limits: both XCH fields are empty.
     expect(screen.getByLabelText('Per request')).toHaveProperty('value', '');
@@ -152,18 +152,25 @@ describe('the defaults of a new connection', () => {
   });
 });
 
-describe('the key the website sees', () => {
-  it('is one short line, with the explanation kept for a tooltip', async () => {
+describe('the addresses the website sees', () => {
+  it('is one switch, the explanation behind an info dot, no full key on screen', async () => {
     openSettings();
-
-    const row = await waitFor(() => screen.getByTestId('shared-keys'));
-    expect(row.textContent).toContain('Shared key');
-    expect(row.textContent).toContain(`0x${'a'.repeat(4)}…${'a'.repeat(4)}`);
-    // The full 96-digit key is not spelled out on the screen.
+    await waitFor(() => screen.getByTestId('address-switch'));
     expect(document.body.textContent).not.toContain('a'.repeat(96));
-    expect(
-      screen.getByRole('button', { name: 'What does the website see?' }),
-    ).toBeDefined();
+    const row = screen.getByTestId('address-switch');
+    expect(row.querySelector('button.xc-hint')).not.toBeNull();
+  });
+
+  it('turns on at once: every request still needs approval', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Can see my receive addresses'));
+    fireEvent.click(screen.getByLabelText('Can see my receive addresses'));
+    expect(screen.queryByTestId('dangerous-confirm')).toBeNull();
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        allReceiveKeys: true,
+      }),
+    );
   });
 });
 
@@ -222,29 +229,6 @@ describe('a dangerous permission needs its own confirmation', () => {
     await waitFor(() =>
       expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
         allowUnknownContracts: true,
-      }),
-    );
-  });
-
-  it('asks before letting a website see all receive addresses', async () => {
-    openSettings();
-    await waitFor(() =>
-      screen.getByLabelText(/Let it see all my receive addresses/),
-    );
-
-    fireEvent.click(
-      screen.getByLabelText(/Let it see all my receive addresses/),
-    );
-    expect(setDappPolicy).not.toHaveBeenCalled();
-    const dialog = await waitFor(() => screen.getByTestId('dangerous-confirm'));
-    expect(dialog.textContent).toMatch(/connect them to you/);
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'I understand, turn it on' }),
-    );
-    await waitFor(() =>
-      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
-        allReceiveKeys: true,
       }),
     );
   });

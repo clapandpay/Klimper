@@ -49,7 +49,14 @@ import {
   QrCameraOff,
 } from './QrCamera';
 import { XchonnectDomain } from './XchonnectDomain';
-import { ConnectSteps, Fact, Hint, SasDigits, SiteCoin } from './XchonnectUi';
+import {
+  AddressSwitch,
+  ConnectSteps,
+  Fact,
+  Hint,
+  SasDigits,
+  SiteCoin,
+} from './XchonnectUi';
 import {
   onXchonnectEvent,
   PairingEvent,
@@ -103,6 +110,9 @@ export default function XchonnectConnect() {
   const [failure, setFailure] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [camera, setCamera] = useState<CameraState>('off');
+  // Whether the website sees the receive addresses (on by default); applied when the digits
+  // match.
+  const [allAddresses, setAllAddresses] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
   // Read by listeners that outlive a render: which pairing is on screen, and whether one is
   // under way (a link arriving then must not replace it under the user's thumb).
@@ -257,7 +267,11 @@ export default function XchonnectConnect() {
     if (preview === null) return;
     setBusy(true);
     try {
-      const session = await xchonnect.confirmSas(preview.pairingId, matches);
+      const session = await xchonnect.confirmSas(
+        preview.pairingId,
+        matches,
+        allAddresses,
+      );
       // The list opens on the new connection, so the user sees what they just made.
       navigate(XCHONNECT_ROUTES.dapps, {
         state: matches && session ? { connected: session.sessionId } : null,
@@ -430,10 +444,23 @@ export default function XchonnectConnect() {
 
         {stage === 'verified' && preview !== null && (
           <Card>
-            <CardHeader className='space-y-4'>
+            <CardHeader className='space-y-3'>
               <div className='flex items-center gap-1.5 text-sm font-medium xc-verified'>
                 <ShieldCheck className='h-4 w-4' aria-hidden='true' />
                 <Trans>Domain verified</Trans>
+                <Hint>
+                  <dl className='space-y-2'>
+                    <Fact label={<Trans>Network</Trans>}>
+                      {preview.chainId}
+                    </Fact>
+                    <Fact label={<Trans>It may ask for</Trans>}>
+                      {preview.grantedMethods.join(', ')}
+                    </Fact>
+                    <Fact label={<Trans>Relay</Trans>} mono>
+                      {preview.relay}
+                    </Fact>
+                  </dl>
+                </Hint>
               </div>
               <div className='flex items-start gap-4'>
                 <SiteCoin domain={preview.domainUnicode} size='lg' />
@@ -455,32 +482,10 @@ export default function XchonnectConnect() {
                 </Trans>
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-5 text-sm'>
-              <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-2'>
-                <Fact label={<Trans>Network</Trans>}>{preview.chainId}</Fact>
-                <Fact label={<Trans>It may ask for</Trans>}>
-                  {preview.grantedMethods.join(', ')}
-                </Fact>
-                <Fact label={<Trans>Addresses it will see</Trans>}>
-                  {keyCount > 0 ? (
-                    <span className='inline-flex items-center gap-1'>
-                      <Trans>One address of its own</Trans>
-                      <Hint>
-                        <Trans>
-                          Not your other addresses, so it cannot link them or
-                          see their coins. You can allow that later in its
-                          permissions.
-                        </Trans>
-                      </Hint>
-                    </span>
-                  ) : (
-                    t`none`
-                  )}
-                </Fact>
-                <Fact label={<Trans>Relay</Trans>} mono>
-                  {preview.relay}
-                </Fact>
-              </dl>
+            <CardContent className='space-y-4 text-sm'>
+              {keyCount > 0 && (
+                <AddressSwitch all={allAddresses} onChange={setAllAddresses} />
+              )}
               {preview.developerMode && (
                 <p
                   className='flex items-start gap-2 text-destructive'
@@ -496,8 +501,12 @@ export default function XchonnectConnect() {
                   </Trans>
                 </p>
               )}
-              <div className='flex flex-wrap items-center gap-2'>
-                <Button onClick={() => void pair()} disabled={busy}>
+              <div className='flex items-center gap-2'>
+                <Button
+                  className='flex-1'
+                  onClick={() => void pair()}
+                  disabled={busy}
+                >
                   <Trans>Connect</Trans>
                 </Button>
                 <Button

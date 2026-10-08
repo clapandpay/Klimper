@@ -7,6 +7,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { Check, Info } from 'lucide-react';
@@ -184,5 +186,47 @@ export function LivePill({ live }: { readonly live: boolean }) {
         <Trans>not listening</Trans>
       )}
     </span>
+  );
+}
+
+/**
+ * Whether a website sees the user's receive addresses (on by default): it can then show every
+ * coin and build transfers and offers from them, as Pengui does. Off, it sees one address of
+ * its own and cannot link the user's addresses. Every request needs approval either way. The
+ * same switch on the pairing screen and in a website's settings.
+ */
+export function AddressSwitch({
+  all,
+  onChange,
+  disabled = false,
+}: {
+  readonly all: boolean;
+  readonly onChange: (all: boolean) => void;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <div
+      className='flex items-center justify-between gap-3'
+      data-testid='address-switch'
+    >
+      <div className='flex min-w-0 items-center gap-1'>
+        <Label htmlFor='see-addresses' className='font-normal'>
+          <Trans>Can see my receive addresses</Trans>
+        </Label>
+        <Hint>
+          <Trans>
+            On: it can show your coins and build transfers and offers from them.
+            Off: it sees one address of its own. Every request still needs your
+            approval.
+          </Trans>
+        </Hint>
+      </div>
+      <Switch
+        id='see-addresses'
+        checked={all}
+        disabled={disabled}
+        onCheckedChange={onChange}
+      />
+    </div>
   );
 }

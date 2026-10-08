@@ -40,17 +40,11 @@ import { Switch } from '@/components/ui/switch';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { AlertTriangle, Info, KeyRound } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
-import { Hint } from './XchonnectUi';
+import { AddressSwitch, Hint } from './XchonnectUi';
 import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
@@ -153,71 +147,7 @@ function draftOf(session: SessionSummary): Draft {
   return { methods: [...session.methods], limits };
 }
 
-/** `0x1234…cdef`: enough to recognise a key, short enough to read. */
-export function shortKey(key: string): string {
-  const hex = key.startsWith('0x') ? key.slice(2) : key;
-  return hex.length <= 12
-    ? `0x${hex}`
-    : `0x${hex.slice(0, 4)}…${hex.slice(-4)}`;
-}
-
-/** The keys this website was given, one line, the explanation in a tooltip. */
-function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
-  const count = keys.length;
-  return (
-    <div
-      className='flex flex-wrap items-center gap-2 text-sm'
-      data-testid='shared-keys'
-    >
-      <KeyRound className='h-4 w-4 text-muted-foreground' aria-hidden='true' />
-      <span className='text-muted-foreground'>
-        {keys.length === 1 ? (
-          <Trans>Shared key</Trans>
-        ) : (
-          <Trans>Shared keys</Trans>
-        )}
-      </span>
-      {keys.length > 3 ? (
-        <span className='xc-chip'>
-          <Trans>all {count} receive addresses</Trans>
-        </span>
-      ) : null}
-      {keys.length <= 3 &&
-        keys.map((key) => (
-          <span key={key} className='xc-chip font-mono' title={key}>
-            {shortKey(key)}
-          </span>
-        ))}
-      <TooltipProvider delayDuration={150}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type='button'
-              className='text-muted-foreground hover:text-foreground'
-              aria-label={t`What does the website see?`}
-            >
-              <Info className='h-4 w-4' aria-hidden='true' />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent className='max-w-xs'>
-            {count === 1 ? (
-              <Trans>
-                The website sees only this key and the address made from it —
-                nothing else in your wallet.
-              </Trans>
-            ) : (
-              <Trans>
-                The website sees these keys and the addresses made from them.
-              </Trans>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  );
-}
-
-type Dangerous = 'unsafe' | 'unknown' | 'addresses';
+type Dangerous = 'unsafe' | 'unknown';
 
 function policyFor(which: Dangerous, on: boolean): DappPolicy {
   switch (which) {
@@ -225,8 +155,6 @@ function policyFor(which: Dangerous, on: boolean): DappPolicy {
       return { allowAggSigUnsafe: on };
     case 'unknown':
       return { allowUnknownContracts: on };
-    case 'addresses':
-      return { allReceiveKeys: on };
   }
 }
 
@@ -457,7 +385,10 @@ export default function XchonnectDappSettings() {
                 );
               })}
             </div>
-            <SharedKeys keys={session.exposedKeys} />
+            <AddressSwitch
+              all={session.allReceiveKeys}
+              onChange={(all) => void apply({ allReceiveKeys: all })}
+            />
           </CardContent>
         </Card>
 
@@ -587,24 +518,6 @@ export default function XchonnectDappSettings() {
           <CardContent className='space-y-3 p-4 pt-0'>
             <div className='flex items-center justify-between gap-3'>
               <div className='flex min-w-0 items-center gap-1'>
-                <Label htmlFor='all-addresses' className='font-normal'>
-                  <Trans>Let it see all my receive addresses</Trans>
-                </Label>
-                <Hint>
-                  <Trans>
-                    Otherwise it sees one address of its own. Websites that
-                    build trades from your coins, like Pengui, need this.
-                  </Trans>
-                </Hint>
-              </div>
-              <Switch
-                id='all-addresses'
-                checked={session.allReceiveKeys}
-                onCheckedChange={(value) => dangerous('addresses', value)}
-              />
-            </div>
-            <div className='flex items-center justify-between gap-3'>
-              <div className='flex min-w-0 items-center gap-1'>
                 <Label htmlFor='allow-unsafe' className='font-normal'>
                   <Trans>Allow unsafe signatures</Trans>
                 </Label>
@@ -651,8 +564,6 @@ export default function XchonnectDappSettings() {
               <DialogTitle className='text-destructive'>
                 {asking === 'unsafe' ? (
                   <Trans>Allow unsafe signatures?</Trans>
-                ) : asking === 'addresses' ? (
-                  <Trans>Show it all your receive addresses?</Trans>
                 ) : (
                   <Trans>Allow unreadable contracts?</Trans>
                 )}
@@ -663,11 +574,6 @@ export default function XchonnectDappSettings() {
                     A signature this website asks for could then be reused in a
                     completely different spend, including one that takes
                     everything. Almost nothing needs this.
-                  </Trans>
-                ) : asking === 'addresses' ? (
-                  <Trans>
-                    It can then see every coin at those addresses, and connect
-                    them to you. Every request still needs your approval.
                   </Trans>
                 ) : (
                   <Trans>
