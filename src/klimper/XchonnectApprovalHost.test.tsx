@@ -169,7 +169,7 @@ describe('the overlay', () => {
 
     await waitFor(() => screen.getByTestId('approval-overlay'));
     expect(screen.getByTestId('queue-count').textContent).toContain(
-      '1 more waiting',
+      '+1 waiting',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 

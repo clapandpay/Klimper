@@ -49,7 +49,7 @@ import {
   QrCameraOff,
 } from './QrCamera';
 import { XchonnectDomain } from './XchonnectDomain';
-import { ConnectSteps, Fact, SasDigits, SiteCoin } from './XchonnectUi';
+import { ConnectSteps, Fact, Hint, SasDigits, SiteCoin } from './XchonnectUi';
 import {
   onXchonnectEvent,
   PairingEvent,
@@ -312,15 +312,15 @@ export default function XchonnectConnect() {
         {stage === 'enter' && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-xl'>
+              <CardTitle className='text-xl flex items-center gap-1'>
                 <Trans>Scan the website&apos;s code</Trans>
+                <Hint>
+                  <Trans>
+                    Press connect on the website. It shows a QR code: point the
+                    camera at it, or paste the code under it.
+                  </Trans>
+                </Hint>
               </CardTitle>
-              <CardDescription>
-                <Trans>
-                  Press connect on the website. It shows a QR code: point the
-                  camera at it, or paste the code under it.
-                </Trans>
-              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5'>
               {camera === 'on' ? (
@@ -343,24 +343,24 @@ export default function XchonnectConnect() {
               <div className='flex flex-wrap justify-center gap-2'>
                 {camera === 'on' ? (
                   <Button variant='outline' onClick={() => setCamera('off')}>
-                    <Trans>Stop the camera</Trans>
+                    <Trans>Stop</Trans>
                   </Button>
                 ) : (
                   <Button onClick={scan}>
                     <Camera className='h-4 w-4 mr-2' aria-hidden='true' />
-                    <Trans>Scan with the camera</Trans>
+                    <Trans>Scan</Trans>
                   </Button>
                 )}
                 <Button variant='secondary' onClick={() => void paste()}>
                   <ClipboardPaste className='h-4 w-4 mr-2' aria-hidden='true' />
-                  <Trans>Paste the code</Trans>
+                  <Trans>Paste</Trans>
                 </Button>
                 <Button
                   variant='outline'
                   onClick={() => fileInput.current?.click()}
                 >
                   <ImageIcon className='h-4 w-4 mr-2' aria-hidden='true' />
-                  <Trans>Choose a picture</Trans>
+                  <Trans>Picture</Trans>
                 </Button>
                 <input
                   ref={fileInput}
@@ -376,26 +376,28 @@ export default function XchonnectConnect() {
                 />
               </div>
 
-              <div className='space-y-2 border-t border-border pt-4'>
-                <div className='xc-label'>
-                  <Trans>Or type the code</Trans>
+              <details className='border-t border-border pt-3'>
+                <summary className='cursor-pointer text-sm text-muted-foreground'>
+                  <Trans>Type the code</Trans>
+                </summary>
+                <div className='space-y-2 pt-3'>
+                  <Textarea
+                    aria-label={t`Pairing code`}
+                    rows={3}
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    className='font-mono text-xs'
+                    placeholder='xchonnect:v1?…'
+                  />
+                  <Button
+                    variant={code.trim() === '' ? 'outline' : 'default'}
+                    onClick={() => void check(code)}
+                    disabled={busy || code.trim() === ''}
+                  >
+                    <Trans>Check</Trans>
+                  </Button>
                 </div>
-                <Textarea
-                  aria-label={t`Pairing code`}
-                  rows={3}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  className='font-mono text-xs'
-                  placeholder='xchonnect:v1?…'
-                />
-                <Button
-                  variant={code.trim() === '' ? 'outline' : 'default'}
-                  onClick={() => void check(code)}
-                  disabled={busy || code.trim() === ''}
-                >
-                  <Trans>Check this website</Trans>
-                </Button>
-              </div>
+              </details>
             </CardContent>
           </Card>
         )}
@@ -403,14 +405,14 @@ export default function XchonnectConnect() {
         {stage === 'checking' && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-xl'>
+              <CardTitle className='text-xl flex items-center gap-1'>
                 <Trans>Checking the website…</Trans>
+                <Hint>
+                  <Trans>
+                    Klimper is asking the domain to prove it signed this code.
+                  </Trans>
+                </Hint>
               </CardTitle>
-              <CardDescription>
-                <Trans>
-                  Klimper is asking the domain to prove it signed this code.
-                </Trans>
-              </CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -418,9 +420,16 @@ export default function XchonnectConnect() {
         {stage === 'verified' && preview !== null && (
           <Card>
             <CardHeader className='space-y-4'>
-              <div className='flex items-center gap-2 text-sm font-medium text-muted-foreground'>
+              <div className='flex items-center gap-1.5 text-sm font-medium xc-verified'>
                 <ShieldCheck className='h-4 w-4' aria-hidden='true' />
-                <Trans>This domain proved who it is</Trans>
+                <Trans>Domain verified</Trans>
+                <Hint>
+                  <Trans>
+                    This domain proved it owns the key that signed the code.
+                    Only the domain is verified — the name below is what it
+                    claims.
+                  </Trans>
+                </Hint>
               </div>
               <div className='flex items-start gap-4'>
                 <SiteCoin domain={preview.domainUnicode} size='lg' />
@@ -436,12 +445,6 @@ export default function XchonnectConnect() {
                   />
                 </div>
               </div>
-              <CardDescription>
-                <Trans>
-                  It owns the key that signed the code. Only the domain is
-                  verified — the name is what it claims.
-                </Trans>
-              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5 text-sm'>
               <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-2'>
@@ -451,10 +454,12 @@ export default function XchonnectConnect() {
                 </Fact>
                 <Fact label={<Trans>Addresses it will see</Trans>}>
                   {keyCount > 0 ? (
-                    <Trans>
-                      Your {keyCount} receive addresses, so it can show your
-                      balances
-                    </Trans>
+                    <span className='inline-flex items-center gap-1'>
+                      <Trans>{keyCount} receive addresses</Trans>
+                      <Hint>
+                        <Trans>So it can show your balances.</Trans>
+                      </Hint>
+                    </span>
                   ) : (
                     t`none`
                   )}
@@ -478,13 +483,7 @@ export default function XchonnectConnect() {
                   </Trans>
                 </p>
               )}
-              <p className='text-muted-foreground'>
-                <Trans>
-                  Nothing is signed automatically. Every request still asks you,
-                  and you can change what this website may do at any time.
-                </Trans>
-              </p>
-              <div className='flex flex-wrap gap-2'>
+              <div className='flex flex-wrap items-center gap-2'>
                 <Button onClick={() => void pair()} disabled={busy}>
                   <Trans>Connect</Trans>
                 </Button>
@@ -495,6 +494,13 @@ export default function XchonnectConnect() {
                 >
                   <Trans>Cancel</Trans>
                 </Button>
+                <Hint>
+                  <Trans>
+                    Nothing is signed automatically. Every request still asks
+                    you, and you can change what this website may do at any
+                    time.
+                  </Trans>
+                </Hint>
               </div>
             </CardContent>
           </Card>
@@ -503,15 +509,15 @@ export default function XchonnectConnect() {
         {stage === 'sas' && sas !== null && (
           <Card>
             <CardHeader>
-              <CardTitle className='text-xl'>
-                <Trans>Do these six digits match?</Trans>
+              <CardTitle className='text-xl flex items-center gap-1'>
+                <Trans>Same digits on the website?</Trans>
+                <Hint>
+                  <Trans>
+                    The website shows the same six digits. If they are
+                    different, somebody is in the middle.
+                  </Trans>
+                </Hint>
               </CardTitle>
-              <CardDescription>
-                <Trans>
-                  The website shows the same six digits. If they are different,
-                  somebody is in the middle.
-                </Trans>
-              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5'>
               <SasDigits sas={sas.sas} />
@@ -530,9 +536,7 @@ export default function XchonnectConnect() {
                 </div>
               ) : (
                 <p className='text-sm text-muted-foreground text-center'>
-                  <Trans>
-                    Waiting for the website… {remaining} seconds left
-                  </Trans>
+                  <Trans>Waiting for the website… {remaining}s</Trans>
                 </p>
               )}
             </CardContent>

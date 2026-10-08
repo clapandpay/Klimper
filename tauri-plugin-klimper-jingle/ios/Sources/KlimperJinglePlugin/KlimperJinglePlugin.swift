@@ -24,6 +24,10 @@ struct PlayArgs: Decodable {
   let wav: String?
 }
 
+struct FeelArgs: Decodable {
+  let kind: String
+}
+
 struct ShakeArgs: Decodable {
   let enabled: Bool
   let tier: String
@@ -99,6 +103,29 @@ class KlimperJinglePlugin: Plugin {
       self.tier = args.tier
       self.armed = args.enabled
       if args.enabled { self.watch() } else { self.rest() }
+      invoke.resolve()
+    }
+  }
+
+  /// A control's system haptic (the slide to approve): grab, a tick per mark, done. The
+  /// generators follow the phone's own haptics setting.
+  private let selection = UISelectionFeedbackGenerator()
+  private let impact = UIImpactFeedbackGenerator(style: .light)
+  private let notice = UINotificationFeedbackGenerator()
+
+  @objc public func feel(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(FeelArgs.self)
+    DispatchQueue.main.async {
+      switch args.kind {
+      case "grab":
+        self.impact.impactOccurred(intensity: 0.7)
+        self.selection.prepare()
+      case "tick":
+        self.selection.selectionChanged()
+        self.selection.prepare()
+      case "done": self.notice.notificationOccurred(.success)
+      default: break
+      }
       invoke.resolve()
     }
   }

@@ -33,12 +33,13 @@ import {
 } from '@/components/ui/dialog';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { Check, Clock, X } from 'lucide-react';
+import { Clock, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Approval } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
 import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
-import { SiteCoin } from './XchonnectUi';
+import { SlideToApprove } from './SlideToApprove';
+import { Hint, SiteCoin } from './XchonnectUi';
 import { useTicker } from './useTicker';
 
 /** How long the buttons stay off after one request replaces another on screen. */
@@ -69,7 +70,7 @@ function useSecondsLeft(expiresAt: number): number {
   return left;
 }
 
-/** "Refused by itself in 4:31", urgent in the last minute. */
+/** "4:31" until the request is refused by itself, urgent in the last minute. */
 export function Countdown({ expiresAt }: { readonly expiresAt: number }) {
   const left = useSecondsLeft(expiresAt);
   const time = clock(left);
@@ -78,9 +79,13 @@ export function Countdown({ expiresAt }: { readonly expiresAt: number }) {
       className='xc-countdown'
       data-urgent={left <= 60}
       data-testid='approval-countdown'
+      title={t`Refused by itself in ${time}`}
     >
       <Clock className='h-3.5 w-3.5 shrink-0' aria-hidden='true' />
-      <Trans>refused by itself in {time}</Trans>
+      <span className='sr-only'>
+        <Trans>refused by itself in</Trans>{' '}
+      </span>
+      {time}
     </span>
   );
 }
@@ -88,11 +93,6 @@ export function Countdown({ expiresAt }: { readonly expiresAt: number }) {
 /** What a waiting approval is, in a few words and with no amount in it. */
 export function approvalHeadline(approval: Approval): ReactNode {
   return promptHeadline(readPrompt(approval.prompt));
-}
-
-/** The verified domain, and only that: this line sits next to amounts. */
-function AsksYouToSign({ dapp }: { readonly dapp: string }) {
-  return <Trans>{dapp} asks you to sign</Trans>;
 }
 
 export interface ApprovalDetailProps {
@@ -121,6 +121,8 @@ export function XchonnectApprovalDetail({
   titleId,
 }: ApprovalDetailProps) {
   const [confirming, setConfirming] = useState(false);
+  // Puts the slider back after the second confirmation was left without approving.
+  const [slides, setSlides] = useState(0);
   // One answer per request: after a press, every button waits for the next request.
   const [busy, setBusy] = useState(false);
   // A request that takes the place of the one on screen (the website withdrew the first,
@@ -162,6 +164,7 @@ export function XchonnectApprovalDetail({
   };
 
   const broadcasts = view.kind === 'spend' && view.broadcasts;
+  const approveLabel = broadcasts ? t`Approve and send` : t`Approve`;
 
   return (
     <article className='xc-approval' data-testid='approval-detail'>
@@ -178,17 +181,35 @@ export function XchonnectApprovalDetail({
               header is next to amounts, and a claimed name next to an amount is a claim
               about the amount.
             */}
-            <AsksYouToSign dapp={approval.dapp} />
+            {approval.dapp}
+            <span className='sr-only'>
+              {' '}
+              <Trans>asks you to sign</Trans>
+            </span>
           </h2>
           <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground'>
-            <span className='xc-chip'>{approvalHeadline(approval)}</span>
-            <span className='font-mono text-xs'>{approval.method}</span>
+            <span className='xc-chip' title={approval.method}>
+              {approvalHeadline(approval)}
+            </span>
             <Countdown expiresAt={approval.expiresAt} />
             {waiting > 0 && (
               <span className='text-xs' data-testid='queue-count'>
-                <Trans>{waiting} more waiting</Trans>
+                <Trans>+{waiting} waiting</Trans>
               </span>
             )}
+            <Hint>
+              {broadcasts ? (
+                <Trans>
+                  If you do nothing, this request is refused when the time runs
+                  out. Approving signs it and Klimper sends it to the network.
+                </Trans>
+              ) : (
+                <Trans>
+                  If you do nothing, this request is refused when the time runs
+                  out.
+                </Trans>
+              )}
+            </Hint>
           </div>
         </div>
         {aside}
@@ -199,22 +220,34 @@ export function XchonnectApprovalDetail({
       </div>
 
       <footer className='xc-approval-actions'>
-        <p className='text-xs text-muted-foreground sm:max-w-[16rem]'>
-          {broadcasts ? (
-            <Trans>
-              If you do nothing, this request is refused. Approving signs it and
-              Klimper sends it to the network.
-            </Trans>
-          ) : (
-            <Trans>If you do nothing, this request is refused.</Trans>
-          )}
-        </p>
-        <div className='flex flex-wrap gap-2 sm:ml-auto'>
+        <SlideToApprove
+          label={approveLabel}
+          hint={
+            broadcasts ? (
+              <Trans>Slide to approve and send</Trans>
+            ) : (
+              <Trans>Slide to approve</Trans>
+            )
+          }
+          onConfirm={onApprove}
+          disabled={disabled || view.kind === 'unreadable'}
+          resetKey={`${approval.id}:${slides}`}
+          testId='approval-slide'
+        />
+        <div className='flex gap-2'>
+          <Button
+            variant='outline'
+            className='flex-1 rounded-full'
+            onClick={() => answer(false)}
+            disabled={disabled}
+          >
+            <X className='h-4 w-4 mr-1.5' aria-hidden='true' />
+            <Trans>Reject</Trans>
+          </Button>
           {onCancel && (
             <Button
               variant='ghost'
-              size='lg'
-              className='flex-1 sm:flex-none'
+              className='rounded-full'
               disabled={disabled}
               onClick={() => {
                 if (disabled) return;
@@ -225,32 +258,9 @@ export function XchonnectApprovalDetail({
               title={t`Withdraw it without answering. The website is told it was cancelled.`}
               data-testid='approval-cancel'
             >
-              <Trans>Cancel request</Trans>
+              <Trans>Withdraw</Trans>
             </Button>
           )}
-          <Button
-            variant='outline'
-            size='lg'
-            className='flex-1 sm:flex-none'
-            onClick={() => answer(false)}
-            disabled={disabled}
-          >
-            <X className='h-4 w-4 mr-1.5' aria-hidden='true' />
-            <Trans>Reject</Trans>
-          </Button>
-          <Button
-            size='lg'
-            className='flex-1 sm:flex-none'
-            onClick={onApprove}
-            disabled={disabled || view.kind === 'unreadable'}
-          >
-            <Check className='h-4 w-4 mr-1.5' aria-hidden='true' />
-            {broadcasts ? (
-              <Trans>Approve and send</Trans>
-            ) : (
-              <Trans>Approve</Trans>
-            )}
-          </Button>
         </div>
       </footer>
       {footer}
@@ -259,7 +269,13 @@ export function XchonnectApprovalDetail({
         The second confirmation. Separate decision, separate words, and the puzzle hash in
         full: there is nothing else anybody can tell the user about this contract.
       */}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
+      <Dialog
+        open={confirming}
+        onOpenChange={(open) => {
+          setConfirming(open);
+          if (!open) setSlides((n) => n + 1);
+        }}
+      >
         <DialogContent data-testid='unknown-contract-confirm'>
           <DialogHeader>
             <DialogTitle className='text-destructive'>
@@ -283,7 +299,13 @@ export function XchonnectApprovalDetail({
               </div>
             ))}
           <DialogFooter>
-            <Button variant='outline' onClick={() => setConfirming(false)}>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setConfirming(false);
+                setSlides((n) => n + 1);
+              }}
+            >
               <Trans>Go back</Trans>
             </Button>
             <Button variant='destructive' onClick={() => answer(true)}>

@@ -1,3 +1,3 @@
 [default]
-description = "Play the Klimper coin ding, and turn the shake rattle (with haptics) on or off."
-permissions = ["allow-play", "allow-set-shake"]
+description = "Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, and tap the system haptics of a control."
+permissions = ["allow-play", "allow-set-shake", "allow-feel"]

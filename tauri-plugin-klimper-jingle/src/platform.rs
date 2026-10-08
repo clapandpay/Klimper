@@ -15,7 +15,7 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-use crate::{Error, Result, Tier};
+use crate::{Error, Feel, Result, Tier};
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_klimper_jingle);
@@ -71,6 +71,11 @@ struct ShakeArgs {
     grains: Option<Vec<String>>,
 }
 
+#[derive(Serialize)]
+struct FeelArgs {
+    kind: Feel,
+}
+
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
 pub fn init<R: Runtime, C: DeserializeOwned>(
     _app: &AppHandle<R>,
@@ -114,6 +119,10 @@ impl<R: Runtime> Native<R> {
         );
         self.forget_if_failed(sound, &result);
         result
+    }
+
+    pub fn feel(&self, kind: Feel) -> Result<()> {
+        self.run("feel", FeelArgs { kind })
     }
 
     fn unless_sent(&self, sound: Sound) -> Result<Option<Vec<String>>> {

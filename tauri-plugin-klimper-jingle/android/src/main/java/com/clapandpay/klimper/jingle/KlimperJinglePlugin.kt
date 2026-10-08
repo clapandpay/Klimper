@@ -26,6 +26,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
 import android.util.Base64
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -44,6 +45,11 @@ import kotlin.random.Random
 class PlayArgs {
     lateinit var tier: String
     var wav: String? = null
+}
+
+@InvokeArg
+class FeelArgs {
+    lateinit var kind: String
 }
 
 @InvokeArg
@@ -138,6 +144,21 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         tier = args.tier
         armed = args.enabled
         if (armed) watch() else rest()
+        invoke.resolve()
+    }
+
+    /** A control's system haptic (the slide to approve); the phone's haptics setting decides. */
+    @Command
+    fun feel(invoke: Invoke) {
+        val kind = invoke.parseArgs(FeelArgs::class.java).kind
+        val constant = when (kind) {
+            "grab" -> HapticFeedbackConstants.VIRTUAL_KEY
+            "tick" -> HapticFeedbackConstants.CLOCK_TICK
+            "done" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM
+                else HapticFeedbackConstants.LONG_PRESS
+            else -> null
+        }
+        if (constant != null) activity.runOnUiThread { activity.window.decorView.performHapticFeedback(constant) }
         invoke.resolve()
     }
 

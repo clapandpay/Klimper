@@ -89,6 +89,30 @@ async fn set_shake<R: Runtime>(
         .map_err(|error| Error::Platform(error.to_string()))?
 }
 
+/// The system haptics a control asks for: a finger takes hold, passes a mark, finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Feel {
+    Grab,
+    Tick,
+    Done,
+}
+
+/// One system haptic for a control (the slide to approve). The phone's own haptics setting
+/// decides whether it is felt; the Klimper sound switch does not, since this is feedback for a
+/// gesture rather than the coin sound.
+#[command]
+async fn feel<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    kind: Feel,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || native.feel(kind))
+        .await
+        .map_err(|error| Error::Platform(error.to_string()))?
+}
+
 /// Single coin hits, one contact each, shared by every tier: the phone builds every turn of a
 /// shaking hand out of these at random.
 pub fn grains() -> [&'static [u8]; 8] {
@@ -115,7 +139,7 @@ pub fn grains() -> [&'static [u8]; 8] {
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-jingle")
-        .invoke_handler(tauri::generate_handler![play, set_shake])
+        .invoke_handler(tauri::generate_handler![play, set_shake, feel])
         .setup(|app, api| {
             let native = platform::init(app, api)?;
             app.manage(native);
@@ -136,6 +160,15 @@ mod tests {
             assert_eq!(&wav[8..12], b"WAVE");
             assert!(wav.len() < 200 * 1024, "{} bytes", wav.len());
         }
+    }
+
+    #[test]
+    fn feels_are_the_lowercase_names_the_webview_uses() {
+        assert_eq!(
+            serde_json::from_str::<Feel>("\"tick\"").unwrap(),
+            Feel::Tick
+        );
+        assert_eq!(serde_json::to_string(&Feel::Done).unwrap(), "\"done\"");
     }
 
     #[test]

@@ -2,10 +2,52 @@
 // Small pieces the Xchonnect screens share, in the Klimper Coin look (docs/design-guide.md).
 // The styles are `xchonnect.css`; nothing here decides anything.
 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { Check } from 'lucide-react';
-import { ReactNode } from 'react';
+import { Check, Info } from 'lucide-react';
+import { ReactNode, useState } from 'react';
 import './xchonnect.css';
+
+/**
+ * The longer sentence behind a short label: an info dot that opens on tap (a phone has no
+ * hover) and on hover with a mouse. The screens keep one line each and put the why here.
+ */
+export function Hint({
+  children,
+  label,
+}: {
+  readonly children: ReactNode;
+  /** What the dot is about, for a screen reader. */
+  readonly label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const mouse = (event: React.PointerEvent) => event.pointerType === 'mouse';
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type='button'
+        className='xc-hint'
+        aria-label={label ?? t`More about this`}
+        onPointerEnter={(event) => mouse(event) && setOpen(true)}
+        onPointerLeave={(event) => mouse(event) && setOpen(false)}
+      >
+        <Info className='h-3.5 w-3.5' aria-hidden='true' />
+      </PopoverTrigger>
+      <PopoverContent
+        className='xc-hint-body'
+        side='top'
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /** The sun coin for a website: the first letter of its verified domain. */
 export function SiteCoin({

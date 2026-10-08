@@ -80,7 +80,7 @@ function enterCode(code = CODE) {
   fireEvent.change(screen.getByLabelText('Pairing code'), {
     target: { value: code },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Check this website' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Check' }));
 }
 
 beforeEach(() => {
@@ -160,9 +160,10 @@ describe('a pairing failure is a dead end', () => {
     // Back at the entry stage with an empty field: the refused code is gone, and the
     // user has to read a new one from the website.
     expect(screen.getByLabelText('Pairing code')).toHaveProperty('value', '');
-    expect(
-      screen.getByRole('button', { name: 'Check this website' }),
-    ).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Check' })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 });
 
@@ -256,9 +257,7 @@ describe('entry points', () => {
   it('says so instead of showing a camera when the device has none', async () => {
     renderScreen(<XchonnectConnect />);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Scan with the camera' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }));
 
     // jsdom has no navigator.mediaDevices, like a webview without camera access.
     await waitFor(() =>

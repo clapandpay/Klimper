@@ -9,6 +9,7 @@
 // costs, then what could go wrong, and only then the detail.
 
 import { toAddress } from '@/lib/utils';
+import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
 import {
@@ -17,9 +18,19 @@ import {
   BadgeCheck,
   Clock,
   Home,
+  KeyRound,
+  PenLine,
   Send,
   ShieldCheck,
 } from 'lucide-react';
+import {
+  AssetFacts,
+  factsOf,
+  formatUsd,
+  usdOf,
+  useApprovalAssets,
+} from './useApprovalAssets';
+import { Hint } from './XchonnectUi';
 import {
   AssetView,
   BindingView,
@@ -45,7 +56,7 @@ function Danger({
 }) {
   return (
     <div
-      className='rounded-lg border border-destructive p-3 space-y-1'
+      className='rounded-2xl border border-destructive p-3 space-y-1'
       data-testid={testId}
       role='alert'
     >
@@ -58,67 +69,139 @@ function Danger({
   );
 }
 
+/** A short fact with its reason behind an info dot. */
+function Badge({
+  icon,
+  tone,
+  hint,
+  testId,
+  children,
+}: {
+  readonly icon: React.ReactNode;
+  readonly tone?: 'verified';
+  readonly hint: React.ReactNode;
+  readonly testId?: string;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <span className='xc-badge' data-tone={tone} data-testid={testId}>
+      {icon}
+      {children}
+      <Hint>{hint}</Hint>
+    </span>
+  );
+}
+
+/** Dollars next to an amount, when Klimper has a price for it. */
+function Usd({
+  asset,
+  mojos,
+  precision,
+}: {
+  readonly asset: string | null;
+  readonly mojos: BigNumber;
+  readonly precision: number;
+}) {
+  const usd = usdOf(asset, mojos, precision);
+  return usd === null ? null : <span>≈ {formatUsd(usd)}</span>;
+}
+
 /**
  * One asset.
  *
  * `net` is the verdict, and it is the only figure in large type. `conditional_received`
  * gets its own line and its own sentence, and is never added to anything: it arrives from
- * spends the user neither owns nor signs, so it is income only if somebody else acts.
+ * spends the user neither owns nor signs, so it is income only if somebody else acts. Under
+ * the net: its dollars and what the wallet holds afterwards, both from the wallet's own data.
  */
 function Asset({
   asset,
+  facts,
   payLabel,
 }: {
   readonly asset: AssetView;
+  readonly facts: AssetFacts | undefined;
   readonly payLabel?: React.ReactNode;
 }) {
   const magnitude = formatMagnitude(asset.net, asset.precision);
   const conditional = formatAmount(asset.conditionalReceived, asset.precision);
-  const label = asset.label;
+  const label = asset.isXch ? asset.label : (facts?.ticker ?? asset.label);
+  const after =
+    facts?.balance != null && !asset.net.isZero()
+      ? facts.balance.plus(asset.net)
+      : null;
+  const left =
+    after === null ? '' : `${formatAmount(after, asset.precision)} ${label}`;
+  const sign = asset.net.isNegative() ? '−' : asset.net.isZero() ? '' : '+';
   return (
-    <div className='space-y-1' data-testid='prompt-asset'>
-      {asset.net.isNegative() ? (
+    <div className='flex items-start gap-3' data-testid='prompt-asset'>
+      {facts?.icon ? (
+        <img src={facts.icon} alt='' className='xc-asset-icon' loading='lazy' />
+      ) : (
+        <span className='xc-asset-icon' aria-hidden='true'>
+          {Array.from(label)[0]?.toUpperCase()}
+        </span>
+      )}
+      <div className='min-w-0 flex-1 space-y-0.5'>
         <div className='flex items-baseline justify-between gap-3'>
-          <span className='text-muted-foreground'>
-            {payLabel ?? <Trans>You pay</Trans>}
+          <span className='text-sm text-muted-foreground'>
+            {asset.net.isNegative() ? (
+              (payLabel ?? <Trans>You pay</Trans>)
+            ) : asset.net.isZero() ? (
+              <Trans>No change</Trans>
+            ) : (
+              <Trans>You receive</Trans>
+            )}
           </span>
           <span
-            className='text-2xl font-semibold text-destructive'
+            className={`text-2xl font-semibold text-right break-all ${
+              asset.net.isNegative()
+                ? 'text-destructive'
+                : asset.net.isZero()
+                  ? 'text-muted-foreground'
+                  : ''
+            }`}
             data-testid='asset-net'
           >
-            −{magnitude} {label}
+            {sign}
+            {magnitude} {label}
           </span>
         </div>
-      ) : asset.net.isZero() ? (
-        <div className='flex items-baseline justify-between gap-3 text-muted-foreground'>
+        <div className='xc-sub flex flex-wrap justify-between gap-x-3'>
           <span>
-            <Trans>No change</Trans>
+            {!asset.isXch && (
+              <span className='font-mono' title={asset.assetId ?? undefined}>
+                {facts?.ticker ? asset.label : null}
+              </span>
+            )}
           </span>
-          <span data-testid='asset-net'>0 {label}</span>
-        </div>
-      ) : (
-        <div className='flex items-baseline justify-between gap-3'>
-          <span className='text-muted-foreground'>
-            <Trans>You receive</Trans>
-          </span>
-          <span className='text-2xl font-semibold' data-testid='asset-net'>
-            +{magnitude} {label}
-          </span>
-        </div>
-      )}
-      {asset.conditionalReceived.isGreaterThan(0) && (
-        <div
-          className='flex items-baseline justify-between gap-3 text-sm text-muted-foreground'
-          data-testid='asset-conditional'
-        >
-          <span>
-            <Trans>Only if the counterparty completes</Trans>
-          </span>
-          <span>
-            +{conditional} {label}
+          <span className='flex gap-2'>
+            <Usd
+              asset={asset.assetId}
+              mojos={asset.net.abs()}
+              precision={asset.precision}
+            />
+            {after !== null && after.isGreaterThanOrEqualTo(0) && (
+              <span data-testid='asset-after'>
+                <Trans>then {left}</Trans>
+              </span>
+            )}
           </span>
         </div>
-      )}
+        {asset.conditionalReceived.isGreaterThan(0) && (
+          <div
+            className='flex items-baseline justify-between gap-3 text-sm text-muted-foreground'
+            data-testid='asset-conditional'
+          >
+            <span>
+              <Trans>Only if the counterparty completes</Trans>
+            </span>
+            <span>
+              +{conditional} {label}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -143,11 +226,7 @@ function TimeLocks({ locks }: { readonly locks: TimeLockView }) {
     lines.push(<Trans key='xh'>Expires at block {height}</Trans>);
   }
   if (locks.hasRelative) {
-    lines.push(
-      <Trans key='rel'>
-        Some spends are time-limited relative to their coins.
-      </Trans>,
-    );
+    lines.push(<Trans key='rel'>Time-limited</Trans>);
   }
   if (lines.length === 0) return null;
   return (
@@ -189,18 +268,18 @@ function Binding({
   }
   return (
     <div
-      className='rounded-lg border border-border p-3 space-y-2 text-sm'
+      className='rounded-2xl border border-border p-3 space-y-1.5 text-sm'
       data-testid='prompt-partial'
     >
-      <div className='font-medium'>
-        <Trans>This is one half of a trade</Trans>
+      <div className='flex items-center gap-1 font-medium'>
+        <Trans>One half of a trade</Trans>
+        <Hint>
+          <Trans>
+            You are signing your side. Klimper checked that your signature only
+            pays out if the other side pays you.
+          </Trans>
+        </Hint>
       </div>
-      <p className='text-muted-foreground'>
-        <Trans>
-          You are signing your side. Klimper checked that your signature only
-          pays out if the other side pays you.
-        </Trans>
-      </p>
       {binding?.payments.map((payment, index) => (
         <div
           // eslint-disable-next-line react/no-array-index-key
@@ -216,18 +295,17 @@ function Binding({
   );
 }
 
-/**
- * An address the wallet encoded itself from the recipient's puzzle hash, shortened for the
- * line it sits on; the whole address is on hover.
- */
-function Recipient({
-  output,
+/** A puzzle hash as the network's address, shortened, the whole on hover. */
+function Address({
+  puzzleHash,
   prefix,
+  testId,
 }: {
-  readonly output: OutputView;
+  readonly puzzleHash: string | null;
   readonly prefix: string;
+  readonly testId?: string;
 }) {
-  if (output.recipient === null) {
+  if (puzzleHash === null) {
     return (
       <span className='text-muted-foreground'>
         <Trans>an address Klimper cannot show</Trans>
@@ -236,20 +314,16 @@ function Recipient({
   }
   let address: string;
   try {
-    address = toAddress(output.recipient, prefix);
+    address = toAddress(puzzleHash, prefix);
   } catch {
-    address = `0x${output.recipient}`;
+    address = `0x${puzzleHash}`;
   }
   const short =
     address.length > 22
-      ? `${address.slice(0, 12)}…${address.slice(-6)}`
+      ? `${address.slice(0, 10)}…${address.slice(-6)}`
       : address;
   return (
-    <span
-      className='font-mono text-xs'
-      title={address}
-      data-testid='output-address'
-    >
+    <span className='font-mono text-xs' title={address} data-testid={testId}>
       {short}
     </span>
   );
@@ -286,15 +360,19 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
         <div className='flex items-center gap-2 font-semibold'>
           <Home className='h-4 w-4 shrink-0' aria-hidden='true' />
           <Trans>Only to your own addresses</Trans>
+          <Hint>
+            <Trans>Nothing leaves your wallet except the network fee.</Trans>
+          </Hint>
         </div>
-        <p className='text-sm text-muted-foreground'>
-          <Trans>Nothing leaves your wallet except the network fee.</Trans>
-        </p>
         <ul className='space-y-1 text-sm'>
           {toUser.map((output, index) => (
             // eslint-disable-next-line react/no-array-index-key
             <li key={index} className='flex items-center justify-between gap-3'>
-              <Recipient output={output} prefix={prefix} />
+              <Address
+                puzzleHash={output.recipient}
+                prefix={prefix}
+                testId='output-address'
+              />
               <span className='tabular-nums'>
                 {formatAmount(output.amount, output.precision)} {output.label}
               </span>
@@ -306,11 +384,8 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
   }
 
   return (
-    <div className='space-y-2' data-testid='prompt-outputs'>
-      <div className='xc-label'>
-        <Trans>Sending</Trans>
-      </div>
-      <ul className='space-y-2'>
+    <div className='space-y-1.5' data-testid='prompt-outputs'>
+      <ul className='space-y-1.5'>
         {toOthers.map((output, index) => (
           <li
             // eslint-disable-next-line react/no-array-index-key
@@ -318,6 +393,10 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
             className='flex flex-wrap items-center gap-x-2 gap-y-1'
             data-testid='prompt-output'
           >
+            <Send
+              className='h-4 w-4 shrink-0 text-muted-foreground'
+              aria-hidden='true'
+            />
             <span className='xc-send-amount'>
               {formatAmount(output.amount, output.precision)} {output.label}
             </span>
@@ -325,15 +404,16 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
               className='h-4 w-4 text-muted-foreground'
               aria-hidden='true'
             />
-            <Recipient output={output} prefix={prefix} />
+            <Address
+              puzzleHash={output.recipient}
+              prefix={prefix}
+              testId='output-address'
+            />
           </li>
         ))}
       </ul>
       {toUser.length > 0 && (
-        <div
-          className='text-sm text-muted-foreground'
-          data-testid='prompt-change'
-        >
+        <div className='xc-sub' data-testid='prompt-change'>
           <Trans>Change back to you:</Trans>{' '}
           {totals(toUser)
             .map(
@@ -347,73 +427,64 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
   );
 }
 
-/** A recipient puzzle hash as the network's address, shortened, the whole on hover. */
-function Address({
-  puzzleHash,
-  prefix,
-}: {
-  readonly puzzleHash: string;
-  readonly prefix: string;
-}) {
-  let address: string;
-  try {
-    address = toAddress(puzzleHash, prefix);
-  } catch {
-    address = `0x${puzzleHash}`;
-  }
-  const short =
-    address.length > 22
-      ? `${address.slice(0, 12)}…${address.slice(-6)}`
-      : address;
-  return (
-    <span className='font-mono text-xs' title={address}>
-      {short}
-    </span>
-  );
-}
-
 /**
- * What happens to the request and who built it, then the two-engine check. Shown before
- * any amount, because it says whose figures follow.
+ * Who built the request, that Klimper sends it, and the two-engine check, as badges with
+ * their sentences behind the info dot. Shown before any amount: it says whose figures follow.
  */
 function Handling({ view }: { readonly view: SpendPromptView }) {
-  if (!view.broadcasts && !view.crossChecked) return null;
   return (
-    <div className='space-y-1.5 text-sm' data-testid='prompt-handling'>
-      {view.broadcasts && (
-        <div className='flex items-start gap-2'>
-          <Send
-            className='h-4 w-4 mt-0.5 shrink-0 text-muted-foreground'
-            aria-hidden='true'
-          />
-          <span>
-            {view.walletBuilt ? (
+    <div className='xc-badges' data-testid='prompt-handling'>
+      <Badge
+        icon={<ShieldCheck className='h-3.5 w-3.5' aria-hidden='true' />}
+        hint={
+          <Trans>
+            This is what Klimper worked out by running the spend itself, not
+            what the website says it does.
+          </Trans>
+        }
+      >
+        <Trans>Simulated by Klimper</Trans>
+      </Badge>
+      {view.broadcasts &&
+        (view.walletBuilt ? (
+          <Badge
+            icon={<Send className='h-3.5 w-3.5' aria-hidden='true' />}
+            hint={
               <Trans>
                 Klimper built this from your own coins and sends it to the
                 network itself.
               </Trans>
-            ) : (
+            }
+          >
+            <Trans>Built by Klimper</Trans>
+          </Badge>
+        ) : (
+          <Badge
+            icon={<Send className='h-3.5 w-3.5' aria-hidden='true' />}
+            hint={
               <Trans>
                 The website built this transaction. Klimper checks it, signs it
                 and sends it to the network itself.
               </Trans>
-            )}
-          </span>
-        </div>
-      )}
+            }
+          >
+            <Trans>Built by the website</Trans>
+          </Badge>
+        ))}
       {view.crossChecked && (
-        <div
-          className='flex items-start gap-2 xc-verified'
-          data-testid='prompt-cross-checked'
-        >
-          <ShieldCheck className='h-4 w-4 mt-0.5 shrink-0' aria-hidden='true' />
-          <span>
+        <Badge
+          tone='verified'
+          testId='prompt-cross-checked'
+          icon={<BadgeCheck className='h-3.5 w-3.5' aria-hidden='true' />}
+          hint={
             <Trans>
-              Checked twice: your wallet’s records and an independent simulation
-              agree on what leaves your wallet.
+              Your wallet’s records and an independent simulation agree on what
+              leaves your wallet.
             </Trans>
-          </span>
-        </div>
+          }
+        >
+          <Trans>Checked twice</Trans>
+        </Badge>
       )}
     </div>
   );
@@ -436,16 +507,36 @@ function Intent({
   const kind = intent.kind;
   return (
     <div className='xc-intent space-y-2' data-testid='prompt-intent'>
-      {kind !== null && (
-        <div className='text-sm'>
-          <span className='text-muted-foreground'>
-            <Trans>Described by the website as</Trans>
-          </span>{' '}
+      <div className='flex items-center gap-1 text-sm'>
+        <span className='text-muted-foreground'>
+          <Trans>The website says</Trans>
+        </span>
+        {kind !== null && (
           <span className='font-mono' data-testid='intent-kind'>
             {kind}
           </span>
-        </div>
-      )}
+        )}
+        {intent.recipientsComplete && (
+          <span className='sr-only'>
+            <Trans>
+              Verified by Klimper: these are the only payments to anyone else.
+            </Trans>
+          </span>
+        )}
+        <Hint>
+          {intent.recipientsComplete ? (
+            <Trans>
+              The label is the website’s own. Each line with a tick is checked
+              by Klimper, and there are no other payments to anyone else.
+            </Trans>
+          ) : (
+            <Trans>
+              The label is the website’s own. Each line with a tick is checked
+              by Klimper.
+            </Trans>
+          )}
+        </Hint>
+      </div>
       {intent.verified.length > 0 && (
         <ul className='space-y-1 text-sm'>
           {intent.verified.map((fact, index) => (
@@ -487,18 +578,12 @@ function Intent({
           ))}
         </ul>
       )}
-      {intent.recipientsComplete && (
-        <p className='text-xs text-muted-foreground'>
-          <Trans>
-            Verified by Klimper: these are the only payments to anyone else.
-          </Trans>
-        </p>
-      )}
     </div>
   );
 }
 
 function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
+  const facts = useApprovalAssets(view.assets);
   const sendsToOthers = view.outputs.some((output) => !output.toUser);
   // The fee is one figure. Both readings are shown only when they disagree.
   const showReserve =
@@ -506,26 +591,9 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
     (view.impliedFee === null || !view.reserveFee.isEqualTo(view.impliedFee));
   return (
     <div className='space-y-4'>
-      <p className='text-sm text-muted-foreground'>
-        <Trans>
-          This is what Klimper worked out by running the spend itself, not what
-          the website says it does.
-        </Trans>
-      </p>
-
       <Handling view={view} />
 
-      {view.intent !== null && (
-        <Intent
-          intent={view.intent}
-          prefix={view.xchLabel.toLowerCase()}
-          xchLabel={view.xchLabel}
-        />
-      )}
-
-      <Destinations view={view} />
-
-      <div className='xc-verdict space-y-3'>
+      <div className='xc-verdict space-y-4'>
         {view.assets.length === 0 ? (
           <p className='text-sm'>
             <Trans>No change to your assets.</Trans>
@@ -535,6 +603,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
             <Asset
               key={asset.label}
               asset={asset}
+              facts={factsOf(facts, asset)}
               payLabel={
                 sendsToOthers && asset.isXch ? (
                   <Trans>In total, with the fee</Trans>
@@ -545,13 +614,18 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         )}
       </div>
 
+      <Destinations view={view} />
+
       <div className='space-y-1 text-sm'>
         {view.impliedFee === null ? (
-          <div className='text-muted-foreground'>
-            <Trans>
-              This request spends coins it does not include, so Klimper cannot
-              work out the network fee.
-            </Trans>
+          <div className='flex items-center gap-1 text-muted-foreground'>
+            <Trans>Network fee unknown</Trans>
+            <Hint>
+              <Trans>
+                This request spends coins it does not include, so Klimper cannot
+                work out the network fee.
+              </Trans>
+            </Hint>
           </div>
         ) : (
           view.impliedFee.isGreaterThan(0) && (
@@ -562,8 +636,15 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
               <span className='text-muted-foreground'>
                 <Trans>Network fee</Trans>
               </span>
-              <span>
+              <span className='text-right'>
                 {formatAmount(view.impliedFee, XCH_PRECISION)} {view.xchLabel}
+                <span className='xc-sub ml-2'>
+                  <Usd
+                    asset={null}
+                    mojos={view.impliedFee}
+                    precision={XCH_PRECISION}
+                  />
+                </span>
               </span>
             </div>
           )
@@ -582,6 +663,14 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
           </div>
         )}
       </div>
+
+      {view.intent !== null && (
+        <Intent
+          intent={view.intent}
+          prefix={view.xchLabel.toLowerCase()}
+          xchLabel={view.xchLabel}
+        />
+      )}
 
       <TimeLocks locks={view.timeLocks} />
 
@@ -618,12 +707,12 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         </Danger>
       )}
 
-      <SignatureCounts
-        ours={view.signatures.length}
-        foreign={view.foreignSignatures}
-      />
-
-      <ComputedDetail view={view} />
+      <ComputedDetail view={view}>
+        <SignatureCounts
+          ours={view.signatures.length}
+          foreign={view.foreignSignatures}
+        />
+      </ComputedDetail>
     </div>
   );
 }
@@ -632,27 +721,31 @@ function MessagePrompt({ view }: { readonly view: MessagePromptView }) {
   const length = view.length;
   return (
     <div className='space-y-3 text-sm'>
-      <p>
-        <Trans>
-          This website asks you to sign a message. Signing proves you hold the
-          key; it moves no money.
-        </Trans>
-      </p>
-      <div>
-        <div className='text-muted-foreground mb-1'>
+      <div className='xc-badges'>
+        <Badge
+          icon={<PenLine className='h-3.5 w-3.5' aria-hidden='true' />}
+          hint={
+            <Trans>Signing proves you hold the key. It moves no money.</Trans>
+          }
+        >
           {view.messageText === null ? (
             <Trans>The website asks you to sign this data</Trans>
           ) : (
             <Trans>The website asks you to sign this text</Trans>
           )}
-        </div>
+        </Badge>
+        <span className='xc-badge' data-tone='verified'>
+          <Trans>moves no money</Trans>
+        </span>
+      </div>
+      <div>
         <pre
-          className='font-mono text-xs break-all whitespace-pre-wrap bg-muted p-2 rounded max-h-48 overflow-y-auto'
+          className='font-mono text-xs break-all whitespace-pre-wrap bg-muted p-3 rounded-2xl max-h-48 overflow-y-auto'
           data-testid='message-body'
         >
           {view.messageText ?? view.messageHex}
         </pre>
-        <div className='text-xs text-muted-foreground mt-1'>
+        <div className='xc-sub mt-1'>
           <Trans>{length} characters</Trans>
           {view.truncated && (
             <>
@@ -662,10 +755,11 @@ function MessagePrompt({ view }: { readonly view: MessagePromptView }) {
           )}
         </div>
       </div>
-      <div>
-        <div className='text-muted-foreground'>
-          <Trans>With this key</Trans>
-        </div>
+      <div className='flex items-start gap-2'>
+        <KeyRound
+          className='h-4 w-4 mt-0.5 shrink-0 text-muted-foreground'
+          aria-label={t`With this key`}
+        />
         <div className='font-mono text-xs break-all' data-testid='message-key'>
           {view.publicKey}
         </div>
@@ -682,7 +776,7 @@ function SignatureCounts({
   readonly foreign: number;
 }) {
   return (
-    <div className='text-sm text-muted-foreground'>
+    <div className='text-xs text-muted-foreground'>
       <Trans>Signatures you would produce: {ours}</Trans>
       {foreign > 0 && (
         <>
@@ -702,13 +796,20 @@ function SignatureCounts({
  * not do: a field a dApp could influence would be rendered after all, just inside a
  * disclosure. Everything here has been through `readPrompt`.
  */
-function ComputedDetail({ view }: { readonly view: PromptView }) {
+function ComputedDetail({
+  view,
+  children,
+}: {
+  readonly view: PromptView;
+  readonly children?: React.ReactNode;
+}) {
   return (
-    <details>
+    <details className='space-y-2'>
       <summary className='cursor-pointer text-xs text-muted-foreground'>
-        <Trans>Everything Klimper computed</Trans>
+        <Trans>Details</Trans>
       </summary>
-      <pre className='text-[10px] overflow-x-auto bg-muted p-2 rounded mt-1'>
+      {children}
+      <pre className='text-[10px] overflow-x-auto bg-muted p-2 rounded-xl'>
         {JSON.stringify(view, null, 2)}
       </pre>
     </details>

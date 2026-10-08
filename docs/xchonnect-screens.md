@@ -47,6 +47,13 @@ The second question has a short answer, and the long one goes behind a disclosur
 | SAS                  | `text-5xl font-mono tracking-[0.3em]`  | the six digits                                                         |
 | Claimed text         | `text-muted-foreground` + "it claims"  | `dappName`, the `signMessage` body                                     |
 
+**Short on screen, the why behind a dot.** Every screen keeps one short line per fact. The
+sentence that explains it (why a domain counts as verified, what "simulated" means, what
+happens when the countdown ends) sits behind an info dot (`Hint` in `XchonnectUi.tsx`), which
+opens on a tap as well as on hover, since a phone has no hover. What is never moved behind a
+dot: a danger panel and its sentence, a homograph warning, the dead-end sentence, and the
+"only if the counterparty completes" line. Those stay on screen in full.
+
 Both themes come from the existing theme tokens rather than literal colours, so light and
 dark follow the app (`theme-o-rama`); `text-destructive` and `border-destructive` are the
 only semantic colour used, and every danger panel also carries an icon and a word, so the
@@ -119,26 +126,40 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 
 ```
 ┌──────────────────────────────────────────┐
-│ pengui.xyz asks you to sign              │  verified domain, ASCII form too when it differs
-│ [Sign a spend] signCoinSpends · ⏱ 4:31   │  refused by itself in 4:31; red in the last minute
+│ (p) pengui.xyz                     Later │  verified domain only
+│     [Sign a spend] ⏱ 4:31  +1 waiting ⓘ │  chip names the method on hover; red in the last minute
 ├──────────────────────────────────────────┤
-│ You pay          − 1.5 XCH               │  the verdict line, per asset
-│ You receive        + 0 XCH               │
-│ Only if the counterparty completes:      │  never added to a total
-│                  + 250 CAT 1a2b3c4d…     │
-│ Network fee        0.0000005 XCH         │
+│ [Simulated by Klimper ⓘ] [Checked twice ⓘ]│  badges, the sentence behind each dot
+│ ● You pay            − 1.5 XCH           │  the verdict line, per asset, wallet icon and ticker
+│                  ≈ $18.20 · then 3.2 XCH │  dollars and the balance afterwards, wallet data only
+│   Only if the counterparty completes     │  never added to a total
+│                      + 250 USDC.b        │
+│ ➤ 1.5 XCH → xch1qz4…k9f2                 │  where it goes
+│ Network fee   0.0000005 XCH   <$0.01     │
 ├──────────────────────────────────────────┤
 │ ⚠ Unknown contract                       │  danger panel, puzzle hash in full
 │ ⚠ Unsafe signature                       │  danger panel, red, the loudest thing present
+│ ▸ Details                                │  signature counts and the parsed view
 ├──────────────────────────────────────────┤
-│ ▸ Everything Klimper computed            │  disclosure: the whole prompt, verbatim JSON
-├──────────────────────────────────────────┤
-│ [ Approve ]  [ Reject ]                  │
+│ ( ⟫  Slide to approve               )    │  glass track, sun knob
+│ [ ✕ Reject ]              [ Withdraw ]   │
 └──────────────────────────────────────────┘
 ```
 
+- **Slide to approve.** Approving is a slide, not a tap (`SlideToApprove.tsx`): the knob has
+  to travel nearly the whole track, a short slide springs back, and a tap on the knob does
+  nothing. The phone ticks at each quarter and confirms with a success haptic
+  (`feel` in the jingle plugin; the phone's haptics setting decides, not the Klimper sound
+  switch). The knob is a button named "Approve" (or "Approve and send"): Enter, Space or a
+  screen reader's activate approves at once, since that is a deliberate press. The drag never
+  re-renders React; it sets one CSS custom property and the compositor draws the rest.
+- **What the wallet knows about each asset.** The ticker and icon are the wallet's own record of
+  the asset id (`getToken`), the same the token list shows; a CAT without one keeps
+  `CAT <8 hex>…`, and one with a ticker shows that id small beneath it. The dollar figure is the
+  last price fetch (no request of its own; none on testnet), and "then …" is the wallet's
+  balance plus the net. None of it comes from the website.
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
-  which shows the puzzle hash and has its own Approve.
+  which shows the puzzle hash and has its own Approve. Going back puts the slider back.
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
   "Later" and navigating away only postpone within that time, and the countdown says
   when it runs out.

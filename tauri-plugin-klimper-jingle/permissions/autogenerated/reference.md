@@ -1,11 +1,12 @@
 ## Default Permission
 
-Play the Klimper coin ding, and turn the shake rattle (with haptics) on or off.
+Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, and tap the system haptics of a control.
 
 #### This default permission set includes the following:
 
 - `allow-play`
 - `allow-set-shake`
+- `allow-feel`
 
 ## Permission Table
 
@@ -15,6 +16,32 @@ Play the Klimper coin ding, and turn the shake rattle (with haptics) on or off.
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`klimper-jingle:allow-feel`
+
+</td>
+<td>
+
+Enables the feel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-jingle:deny-feel`
+
+</td>
+<td>
+
+Denies the feel command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

@@ -141,7 +141,7 @@ describe('only the wallet’s own simulation is rendered', () => {
     expect(screen.getByTestId('prompt-implied-fee').textContent).toContain(
       '0.0000005 XCH',
     );
-    expect(screen.getByText(/not what the website says it does/)).toBeDefined();
+    expect(screen.getByText('Simulated by Klimper')).toBeDefined();
   });
 
   it('renders no string the dApp put in the prompt', async () => {
@@ -200,7 +200,9 @@ describe('only the wallet’s own simulation is rendered', () => {
     await waitFor(() => expect(screen.getByTestId('asset-net')).toBeDefined());
     // Only the verified domain identifies the requester here.
     expect(screen.queryByTestId('claimed-name')).toBeNull();
-    expect(screen.getByText(/pengui\.xyz asks you to sign/)).toBeDefined();
+    expect(screen.getByTestId('approval-title').textContent).toMatch(
+      /pengui\.xyz asks you to sign/,
+    );
   });
 
   it('refuses to describe a prompt it cannot read, and will not let it be approved', async () => {
@@ -414,7 +416,7 @@ describe('one decision per request, and the wallet sends', () => {
 
     await waitFor(() => screen.getByTestId('prompt-handling'));
     expect(screen.getByTestId('prompt-handling').textContent).toMatch(
-      /website built this transaction/,
+      /Built by the website/,
     );
     expect(screen.getByTestId('prompt-cross-checked').textContent).toMatch(
       /Checked twice/,
@@ -435,7 +437,7 @@ describe('one decision per request, and the wallet sends', () => {
 
     await waitFor(() => screen.getByTestId('prompt-handling'));
     expect(screen.getByTestId('prompt-handling').textContent).toMatch(
-      /built this from your own coins/,
+      /Built by Klimper/,
     );
     expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
   });
