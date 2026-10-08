@@ -243,6 +243,7 @@ behaviour.
 | ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
 | `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
+| `src/components/TransferDialog.tsx`                                                   | +46 lines, `handlesEnabled`          | `@anna` for NFT, DID and option transfers; same checks as Send. Sage plans it (#871) |
 | `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
 | `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
