@@ -2,13 +2,15 @@
 // The Klimper sound on iOS (clapandpay TASK-111). Two moments:
 //
 // - Coins arrive: `play` rings the tier's ding once (AVAudioPlayer).
-// - The phone is shaken: every turn of the hand is a few coins landing in it, heard and felt at
-//   the same instant. One Core Haptics pattern per turn holds both: each coin is a single coin
-//   hit (one of eight recordings, at its own pitch and loudness) and, where the hand can tell
-//   them apart, a tap. The first tap is the dull weight of the wallet, the rest are the sharp
-//   clicks of coin on coin. How many coins, which, in what order, how far apart, how high and
-//   how loud are drawn fresh every turn, so no two turns are alike; the tier sets the ranges. A
-//   near-empty wallet is one coin.
+// - The phone is shaken: every turn of the hand is a few coins landing in it, felt only (taps
+//   in one Core Haptics pattern). The first tap is the dull weight of the wallet, the rest are
+//   the sharp clicks of coin on coin.
+// - The phone is tilted: the coins roll, heard and felt, as in a real wallet: a low rumble and
+//   a few coins, each a single coin hit (one of eight recordings, at its own pitch and
+//   loudness) with its tap.
+//
+// How many coins, which, in what order, how far apart, how high and how loud are drawn fresh
+// every time, so no two are alike; the tier sets the ranges. A near-empty wallet is one coin.
 //
 // Sound follows the ambient audio session (the silent switch mutes it; the taps stay). Nothing
 // runs unless the shake is armed and the app is active.
@@ -264,13 +266,13 @@ class KlimperJinglePlugin: Plugin {
     try? current?.start(atTime: CHHapticTimeImmediate)
   }
 
+  /// A shake: the coins land in the hand, felt only. Sound comes with a tilt (`slide`).
   private func turnOfTheHand(force: Double) {
     guard let engine, !grains.isEmpty, let t = Self.tiers[tier] else { return }
     var order = Array(grains.indices).shuffled()
     if order.count > 1, order[0] == lastFirst { order.swapAt(0, 1) }  // never the same opener
     lastFirst = order[0]
     var coins = min(Int.random(in: t.coins), order.count)
-    let base = max(0.6, t.loud * (0.6 + 0.4 * force))
     var events: [CHHapticEvent] = []
     var at = 0.0
     var lastTap = -1.0
@@ -283,11 +285,7 @@ class KlimperJinglePlugin: Plugin {
         let gap = -log(Double.random(in: 0.05...1)) * 0.022 * (0.8 + 0.6 * force)
         at += min(0.06, max(0.008, gap))
       }
-      let volume = k == 0 ? base : base * .random(in: 0.2...0.7) * pow(0.85, Double(k))
-      events.append(CHHapticEvent(audioResourceID: grains[order[k]], parameters: [
-        CHHapticEventParameter(parameterID: .audioVolume, value: Float(min(1, volume))),
-        CHHapticEventParameter(parameterID: .audioPitch, value: Float(.random(in: t.pitch))),
-      ], relativeTime: at))
+      // Felt, not heard: only a tilt makes the coins sound, as in a real wallet.
       // The hand feels separate coins only some 45 ms apart; at most four.
       guard at - lastTap >= 0.045, taps < 4 else { continue }
       let intensity = k == 0

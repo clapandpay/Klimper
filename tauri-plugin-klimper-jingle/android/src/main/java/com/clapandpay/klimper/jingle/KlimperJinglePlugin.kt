@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Klimper sound on Android (clapandpay TASK-111), the same as the Swift: `play` rings the
-// tier's ding once; while the shake is armed, every turn of the hand is a few coins landing, each
-// a single coin hit (one of eight, at its own pitch and loudness) and, where the hand can tell
-// them apart, a vibration pulse. Count, choice, order, spacing, pitch and loudness are drawn fresh
-// every turn; the tier sets the ranges. Sound is skipped when the ringer is silent or vibrate (the
-// hand still feels it). Nothing runs unless the app is resumed.
+// tier's ding once; while the shake is armed, every turn of the hand is a few coins landing, felt
+// as vibration pulses only, and a tilt lets the coins roll, heard (single coin hits, one of eight,
+// at their own pitch and loudness) and felt. Count, choice, order, spacing, pitch and loudness are
+// drawn fresh every time; the tier sets the ranges. Sound is skipped when the ringer is silent or
+// vibrate (the hand still feels it). Nothing runs unless the app is resumed.
 //
 // Not yet compiled: there is no Android SDK on the development machine (docs/sound.md).
 
@@ -252,7 +252,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             val id = grains[order[k]]
             val volume = (t.loud * (0.35 + 0.25 * amount) * 0.8.pow(k)).toFloat()
             // Each coin lands ROLL_MS after its place in `at`, once the roll has started.
-            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, 1f) }, at + ROLL_MS)
+            val rate = Random.nextDouble(t.rate.start, t.rate.endInclusive).toFloat()
+            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, rate) }, at + ROLL_MS)
             // The roll before the first coin, a low hum between the others.
             timings.add(if (k == 0) ROLL_MS else at + ROLL_MS - timings.sum())
             amplitudes.add(if (k == 0) (60 + 40 * amount).toInt() else 45)
@@ -264,7 +265,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         }
     }
 
-    // A few coins landing in the hand: each a coin hit, and a pulse where the hand can tell them apart.
+    // A few coins landing in the hand, felt only: a pulse where the hand can tell them apart.
     private fun turnOfTheHand(force: Double) {
         val t = TIERS[tier] ?: return
         val order = grains.indices.shuffled().toMutableList()
@@ -272,8 +273,6 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         lastFirst = order.firstOrNull() ?: return
         var coins = min(t.coins.random(), order.size)
         if (coins == 1 && order.size > 1 && Random.nextDouble() < 0.3) coins = 2
-        val base = max(0.6, t.loud * (0.6 + 0.4 * force))
-        val sound = soundOn()
         val timings = ArrayList<Long>()
         val amplitudes = ArrayList<Int>()
         var at = 0.0
@@ -281,10 +280,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         var pulses = 0
         for (k in 0 until coins) {
             if (k > 0) at += min(0.06, max(0.008, -ln(Random.nextDouble(0.05, 1.0)) * 0.022 * (0.8 + 0.6 * force)))
-            val id = grains[order[k]]
-            val volume = (if (k == 0) base else base * Random.nextDouble(0.2, 0.7) * 0.85.pow(k)).toFloat()
-            val rate = Random.nextDouble(t.rate.start, t.rate.endInclusive).toFloat()
-            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, rate) }, (at * 1000).toLong())
+            // Felt, not heard: only a tilt makes the coins sound, as in a real wallet.
             if (k > 0 && (at - lastPulse < 0.045 || pulses >= 4)) continue
             val strength = if (k == 0) max(0.85, t.weight * (0.9 + 0.2 * force))
             else max(0.5, t.weight * 0.85.pow(pulses) * Random.nextDouble(0.92, 1.12))

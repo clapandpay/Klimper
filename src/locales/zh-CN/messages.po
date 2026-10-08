@@ -282,17 +282,21 @@ msgstr ""
 #~ msgid "A coin rings when coins arrive: the more they are worth, the richer it sounds. Shaking is for the phone."
 #~ msgstr ""
 
-#: src/klimper/KlimperSettings.tsx:74
+#: src/klimper/KlimperSettings.tsx:75
 msgid "A coin rings when coins arrive."
 msgstr ""
 
 #: src/klimper/KlimperSettings.tsx:68
-msgid "A coin rings when coins arrive. Shake or tilt the phone and you hear and feel the coins on the open page: the more they are worth, the heavier. Silent mode mutes the sound."
-msgstr ""
+#~ msgid "A coin rings when coins arrive. Shake or tilt the phone and you hear and feel the coins on the open page: the more they are worth, the heavier. Silent mode mutes the sound."
+#~ msgstr ""
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:29
 #~ msgid "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
 #~ msgstr ""
+
+#: src/klimper/KlimperSettings.tsx:68
+msgid "A coin rings when coins arrive. Tilt the phone and you hear and feel the coins on the open page roll; shake it and you feel them: the more they are worth, the heavier. Silent mode mutes the sound."
+msgstr ""
 
 #: src/klimper/XchonnectDapps.tsx:359
 msgid "A connected website can ask you to sign — and you decide every time. Open the website, press its connect button, and scan or paste the code it shows."
@@ -2571,7 +2575,7 @@ msgstr ""
 #~ msgid "Hide zero balances"
 #~ msgstr ""
 
-#: src/klimper/KlimperSettings.tsx:87
+#: src/klimper/KlimperSettings.tsx:88
 msgid "Hides amounts and keeps the coins quiet and still. Confirmations still show amounts."
 msgstr ""
 
@@ -4179,7 +4183,7 @@ msgstr ""
 msgid "Primary"
 msgstr ""
 
-#: src/klimper/KlimperSettings.tsx:85
+#: src/klimper/KlimperSettings.tsx:86
 msgid "Privacy mode"
 msgstr ""
 

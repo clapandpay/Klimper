@@ -6,9 +6,11 @@ Klimper is what coins do. The app is the one place that jingle is heard (clapand
 
 - **Coins arrive**: one bright coin rings, the "money arrived" sound of the first mobile
   wallets, made ours. Richer the more arrived. Heard, not felt.
-- **The phone is shaken**: every turn of the hand is a few coins landing, heard and felt, as heavy as the open page, for as long as the
-  shaking lasts, with a vibration on every jolt, heavier the more they are worth. Stops when
-  the hand does.
+- **The phone is shaken**: every turn of the hand is a few coins landing, felt (not heard), as
+  heavy as the open page, for as long as the shaking lasts, heavier the more they are worth.
+  Stops when the hand does.
+- **The phone is tilted**: the coins roll, heard and felt, as in a real wallet. This is the only
+  movement that makes a sound.
 
 It is a small touch, built to cost nothing when not in use and to touch nothing that matters.
 
@@ -21,7 +23,7 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
 - It touches no keys, no transactions, no database, nothing in the send or receive path, and
   cannot block or delay them: everything is asynchronous and fails quietly (one `console.warn`
   per run at most, never a toast).
-- The tiers are coarse on purpose: a bystander hearing a shake learns at most "more than $200".
+- The tiers are coarse on purpose: a bystander hearing a tilt learns at most "more than $200".
   Nothing about amounts is logged.
 - The switch in Settings is the privacy setting: off means no sound and no haptics, and the
   accelerometer is stopped. The build flag removes the feature altogether.
@@ -74,17 +76,17 @@ token's value, the wallet page with the total, any other page with the whole wal
 **No price (testnet, offline, not fetched yet), or less than a cent, means silence**: no ding,
 no rattle, no taps. A wallet with nothing in it makes no sound (owner's rule, 2026-10-07).
 
-**The shake is one rule**: every turn of the hand is a few coins landing in it, heard and felt
-at the same instant, and built fresh every time. A turn is a jolt of 1.8 g after the hand has come
-back below 0.6 g (once per reversal), at most every 0.35 s, so everyday handling does not count. Each coin is one of eight single coin
-hits, drawn without repeats and never the same opener twice, spaced like coins settling (gaps of
-8 to 60 ms, mostly short, wider the harder the hand), at its own pitch and loudness (the first
-loudest, the rest 20 to 70 % of it and fading). The hand feels them as taps where they are at
+**The shake is one rule**: every turn of the hand is a few coins landing in it, felt only (since
+2026-10-08: only a tilt sounds, so walking with the phone stays silent), built fresh every time. A turn is a jolt of 1.8 g after the hand has come
+back below 0.6 g (once per reversal), at most every 0.35 s, so everyday handling does not count. The coins are
+spaced like coins settling (gaps of 8 to 60 ms, mostly short, wider the harder the hand). The
+hand feels them as taps where they are at
 least 45 ms apart, four at most: the first is the wallet's weight, dull for a pouch and brighter
 for one coin, the rest sharp, lighter clicks of coin on coin; a quarter of the turns end with one
-coin sliding off. A new turn cuts the last one's settle. On iOS one Core Haptics pattern carries
-the sounds and the taps together, so they cannot drift apart; Android schedules them the same
-way with `SoundPool` and one `VibrationEffect` waveform.
+coin sliding off. A new turn cuts the last one's settle. A tilt's coins are each one of eight
+single coin hits, drawn without repeats, at their own pitch and loudness; on iOS one Core Haptics
+pattern carries the sounds and the taps together, so they cannot drift apart; Android schedules
+them the same way with `SoundPool` and one `VibrationEffect` waveform.
 
 ## The sounds
 
