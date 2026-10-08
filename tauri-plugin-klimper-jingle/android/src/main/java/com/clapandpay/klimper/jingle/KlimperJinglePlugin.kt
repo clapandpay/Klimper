@@ -92,6 +92,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         private const val TILT_WITHIN_MS = 700L // a turn slower than this is not a tilt
         private const val TILT_CALM_G = 0.3 // a tilt only counts with a steady hand
         private const val SLIDE_EVERY_MS = 600L
+        private const val CLINK_MS = 25L
         private const val ROLL_MS = 40L // the coins roll this long before the first lands
     }
 
@@ -114,6 +115,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     /** The coin pouch is open (TASK-124): tilt and jolts go to the webview, whose coins knock and call [clink]. */
     private var pouchChannel: Channel? = null
     private var pouchGravity: DoubleArray? = null
+    private var lastClink = 0L
     private var resumed = true
     private var turned = true
     private var lastTurn = 0L
@@ -190,7 +192,10 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         val args = invoke.parseArgs(ClinkArgs::class.java)
         invoke.resolve()
         val t = TIERS[tier] ?: return
-        if (pouchChannel == null || grains.isEmpty()) return
+        val now = SystemClock.elapsedRealtime()
+        // Knocks closer than CLINK_MS are one: the ear and the hand cannot tell them apart anyway.
+        if (pouchChannel == null || grains.isEmpty() || now - lastClink < CLINK_MS) return
+        lastClink = now
         // A big coin sounds lower than a small one.
         val rate = (t.rate.endInclusive - args.size * (t.rate.endInclusive - t.rate.start)).toFloat()
         if (soundOn()) coin(grains.random(), (t.loud * (0.3 + 0.7 * args.force)).toFloat(), rate, 0L)
@@ -232,7 +237,9 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         sensors().registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
         // Tilting slowly lets the coins slide (where the phone has a gravity sensor).
         sensors().getDefaultSensor(Sensor.TYPE_GRAVITY)?.let {
-            sensors().registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            // The pouch's coins follow the tilt as it happens; the slide only needs a glance.
+            val rate = if (pouchChannel != null) SensorManager.SENSOR_DELAY_GAME else SensorManager.SENSOR_DELAY_UI
+            sensors().registerListener(this, it, rate)
         }
     }
 
@@ -258,8 +265,9 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         turned = false
         lastTurn = now
         if (pouch != null) {
-            // The pouch's coins take the push and knock; nothing sounds here on its own.
-            pouch.send(JSObject().put("jx", x / SensorManager.GRAVITY_EARTH).put("jy", y / SensorManager.GRAVITY_EARTH))
+            // The pouch's coins take the push and knock; nothing sounds here on its own. Signs
+            // the iOS way (Core Motion reads the other way round from Android's sensors).
+            pouch.send(JSObject().put("jx", -x / SensorManager.GRAVITY_EARTH).put("jy", -y / SensorManager.GRAVITY_EARTH))
             return
         }
         turnOfTheHand(min(1.0, (g - JOLT_G) / 2.5))

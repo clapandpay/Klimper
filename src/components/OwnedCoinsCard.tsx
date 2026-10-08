@@ -111,6 +111,33 @@ export function OwnedCoinsCard({
     });
   }, [selectedCoinIds, coins]);
 
+  // Klimper: coins selected outside this page (the coin pouch, TASK-124) are loaded by id, so
+  // Split and Combine act on every selected coin. Sets state only when it adds a coin.
+  useEffect(() => {
+    const missing = selectedCoinIds.filter(
+      (id) => !selectedCoinRecords.some((r) => r.coin_id === id),
+    );
+    if (missing.length === 0) return;
+    let isMounted = true;
+    commands
+      .getCoinsByIds({ coin_ids: missing })
+      .then((res) => {
+        if (!isMounted) return;
+        setSelectedCoinRecords((prev) => {
+          const added = res.coins.filter(
+            (c) =>
+              selectedCoinIds.includes(c.coin_id) &&
+              !prev.some((r) => r.coin_id === c.coin_id),
+          );
+          return added.length > 0 ? [...prev, ...added] : prev;
+        });
+      })
+      .catch(addError);
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCoinIds, selectedCoinRecords, addError]);
+
   const [canCombine, setCanCombine] = useState(false);
   const [canSplit, setCanSplit] = useState(false);
   const [canAutoCombine, setCanAutoCombine] = useState(false);

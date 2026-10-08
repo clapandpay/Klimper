@@ -82,6 +82,9 @@ class KlimperJinglePlugin: Plugin {
   /// and call `clink`, instead of the shake and tilt sounding here on their own.
   private var pouchChannel: Channel?
   private var pouchGravity: CMAcceleration?
+  private var lastClink: TimeInterval = 0
+  /// Knocks closer than this are one: the ear and the hand cannot tell them apart anyway.
+  private let clinkEvery = 0.025
 
   override init() {
     super.init()
@@ -141,7 +144,11 @@ class KlimperJinglePlugin: Plugin {
     let args = try invoke.parseArgs(ClinkArgs.self)
     invoke.resolve()
     DispatchQueue.main.async {
-      guard self.pouchChannel != nil, !self.grains.isEmpty, let t = Self.tiers[self.tier] else { return }
+      let now = CACurrentMediaTime()
+      guard self.pouchChannel != nil, !self.grains.isEmpty, let t = Self.tiers[self.tier],
+        now - self.lastClink >= self.clinkEvery
+      else { return }
+      self.lastClink = now
       // A big coin sounds lower and feels duller than a small one.
       let pitch = t.pitch.upperBound - args.size * (t.pitch.upperBound - t.pitch.lowerBound)
       let events = self.coin(

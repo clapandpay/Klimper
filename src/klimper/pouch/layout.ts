@@ -11,6 +11,8 @@ import type { CoinRecord } from '@/bindings';
 import BigNumber from 'bignumber.js';
 
 export const MAX_DISCS = 120;
+/** At most this many tiny coins are selected at once: one combine stays a sensible spend. */
+export const DUST_SELECT = 200;
 const FILL = 0.42;
 const R_MIN = 7;
 const R_MAX = 42;
@@ -26,7 +28,7 @@ export interface Disc {
 
 export interface Layout {
   discs: Disc[];
-  /** Coins too small to draw: their ids, smallest first. */
+  /** Free coins too small to draw, smallest first, at most DUST_SELECT: to select for a combine. */
   dust: string[];
 }
 
@@ -40,9 +42,13 @@ export function layoutCoins(
     .slice()
     .sort((a, b) => BigNumber(b.amount).comparedTo(BigNumber(a.amount)) ?? 0);
   const shown = byAmount.slice(0, MAX_DISCS);
+  // Dust to select for a combine: the smallest free coins (not in a transaction or an offer,
+  // which would make the combine impossible), at most DUST_SELECT of them in one go.
   const dust = byAmount
     .slice(MAX_DISCS)
     .reverse()
+    .filter((c) => c.transaction_id === null && c.offer_id === null)
+    .slice(0, DUST_SELECT)
     .map((c) => c.coin_id);
   if (shown.length === 0) return { discs: [], dust };
 

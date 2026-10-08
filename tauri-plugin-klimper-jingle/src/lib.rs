@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use tauri::{
     AppHandle, Manager, Runtime, State, command,
     ipc::Channel,
+    webview::PageLoadEvent,
     plugin::{Builder, TauriPlugin},
 };
 
@@ -179,6 +180,19 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let native = platform::init(app, api)?;
             app.manage(native);
             Ok(())
+        })
+        // A page that (re)loads never closed the pouch it had open: close it, or the motion
+        // stream would run on for a channel nobody listens to, and the shake stay silent.
+        .on_page_load(|webview, payload| {
+            if payload.event() != PageLoadEvent::Started {
+                return;
+            }
+            if let Some(native) = webview.try_state::<Native<R>>() {
+                let native = native.inner().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let _ = native.pouch(None);
+                });
+            }
         })
         .build()
 }

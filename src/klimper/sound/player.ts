@@ -58,13 +58,23 @@ export type PouchMotion =
  */
 export function openPouch(onMotion: (motion: PouchMotion) => void): () => void {
   if (!onPhone()) return () => undefined;
-  const channel = new Channel<PouchMotion>();
-  channel.onmessage = onMotion;
-  void inOrder(() =>
-    invoke('plugin:klimper-jingle|pouch', { open: true, channel }),
-  );
+  // The phone has one motion stream: the first pouch opens it, the last one closes it, and
+  // every open pouch hears it.
+  listeners.add(onMotion);
+  if (listeners.size === 1) {
+    const channel = new Channel<PouchMotion>();
+    channel.onmessage = (motion) =>
+      listeners.forEach((listen) => listen(motion));
+    void inOrder(() =>
+      invoke('plugin:klimper-jingle|pouch', { open: true, channel }),
+    );
+  }
+  let open = true;
   return () => {
-    channel.onmessage = () => undefined;
+    if (!open) return;
+    open = false;
+    listeners.delete(onMotion);
+    if (listeners.size > 0) return;
     void inOrder(() =>
       invoke('plugin:klimper-jingle|pouch', {
         open: false,
@@ -73,6 +83,8 @@ export function openPouch(onMotion: (motion: PouchMotion) => void): () => void {
     );
   };
 }
+
+const listeners = new Set<(motion: PouchMotion) => void>();
 
 /** A knock between coins in an open pouch, heard and felt. `size` and `force` 0..1. */
 export function clink(size: number, force: number): void {

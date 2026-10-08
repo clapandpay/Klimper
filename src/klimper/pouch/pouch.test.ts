@@ -4,7 +4,7 @@
 
 import type { CoinRecord } from '@/bindings';
 import { describe, expect, it } from 'vitest';
-import { layoutCoins, MAX_DISCS } from './layout';
+import { DUST_SELECT, layoutCoins, MAX_DISCS } from './layout';
 import { Body, G, World } from './physics';
 
 function heap(n: number, r = 12): Body[] {
@@ -156,6 +156,16 @@ describe('the pouch layout', () => {
     const { discs, dust } = layoutCoins(coins, 320, 200, false);
     expect(discs).toHaveLength(MAX_DISCS);
     expect(dust).toEqual(['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6']);
+  });
+
+  it('leaves locked coins out of the dust to select, and selects at most DUST_SELECT', () => {
+    const coins = Array.from({ length: MAX_DISCS + DUST_SELECT + 50 }, (_, i) =>
+      coin(`c${i}`, i + 1, i === 0 ? { transaction_id: 'tx' } : {}),
+    );
+    const { dust } = layoutCoins(coins, 320, 200, false);
+    expect(dust).not.toContain('c0');
+    expect(dust).toHaveLength(DUST_SELECT);
+    expect(dust[0]).toBe('c1');
   });
 
   it('shows coins in a transaction or an offer, but locked', () => {

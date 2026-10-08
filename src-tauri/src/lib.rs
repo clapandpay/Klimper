@@ -223,7 +223,7 @@ pub fn run() {
         // entry point in the webview is behind VITE_ENABLE_XCHONNECT.
         .plugin(tauri_plugin_klimper_xchonnect::init())
         // Klimper: the coin jingle (decision-009). Idle until the webview, behind
-        // VITE_ENABLE_KLIMPER_SOUND and the Settings switch, asks for a sound or a shake watch.
+        // VITE_ENABLE_KLIMPER_COINS and the Settings switch, asks for a sound or a shake watch.
         .plugin(tauri_plugin_klimper_jingle::init())
         // Klimper: `xchonnect:` and clapandpay.com links reach the webview as
         // `deep-link://new-url` (docs/xchonnect-links.md). The OS registration is

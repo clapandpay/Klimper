@@ -61,6 +61,7 @@ export function CoinPouch({
   const audible = soundOn && !privacy;
 
   const [coins, setCoins] = useState<CoinRecord[]>([]);
+  const [total, setTotal] = useState(0);
   const [width, setWidth] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -83,6 +84,9 @@ export function CoinPouch({
     ghosts.current = [];
     births.current = [];
     meet.current = null;
+    waited.current = false;
+    setCoins([]);
+    setTotal(0);
   }, [asset.asset_id]);
 
   // The coins: all owned ones, largest first; again whenever the wallet's coins change.
@@ -99,7 +103,31 @@ export function CoinPouch({
           ascending: false,
           filter_mode: 'owned',
         })
-        .then((res) => alive && setCoins(res.coins))
+        .then((res) => {
+          if (!alive) return;
+          setTotal(res.total);
+          // The same coins as before: nothing to move, nothing to wake.
+          setCoins((before) =>
+            sameCoins(before, res.coins) ? before : res.coins,
+          );
+          // Spent or now locked coins leave the selection, so Split and Combine never get
+          // them (only when every coin was loaded, else an unloaded one is not "spent").
+          if (res.total <= FETCH_LIMIT) {
+            const usable = new Set(
+              res.coins
+                .filter((c) => !c.transaction_id && !c.offer_id)
+                .map((c) => c.coin_id),
+            );
+            setSelectedCoins((current) => {
+              const kept = Object.keys(current).filter(
+                (id) => !current[id] || usable.has(id),
+              );
+              return kept.length === Object.keys(current).length
+                ? current
+                : Object.fromEntries(kept.map((id) => [id, current[id]]));
+            });
+          }
+        })
         .catch(addError);
     void load();
     const unlisten = events.syncEvent.listen((event) => {
@@ -113,7 +141,7 @@ export function CoinPouch({
       clearTimeout(timer);
       void unlisten.then((u) => u());
     };
-  }, [asset.asset_id, addError]);
+  }, [asset.asset_id, addError, setSelectedCoins]);
 
   // The box's width follows the card.
   useEffect(() => {
@@ -389,6 +417,14 @@ export function CoinPouch({
     wake.current();
   };
 
+  // A gesture the system took over: let go of the coin, select nothing.
+  const onCancel = () => {
+    const p = pointer.current;
+    pointer.current = null;
+    if (p) p.body.held = false;
+    wake.current();
+  };
+
   const picked = coins.filter((c) => selectedCoins[c.coin_id]);
   const pickedSum = picked.reduce(
     (sum, c) => sum.plus(c.amount),
@@ -397,7 +433,7 @@ export function CoinPouch({
   const dust = layout?.dust ?? [];
   const ticker = asset.ticker ?? '';
   const pickedCount = picked.length;
-  const coinCount = coins.length;
+  const coinCount = Math.max(total, coins.length);
   const dustCount = dust.length;
 
   return (
@@ -415,7 +451,7 @@ export function CoinPouch({
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
-          onPointerCancel={onUp}
+          onPointerCancel={onCancel}
         />
         {coins.length === 0 && (
           <p className='absolute inset-0 flex items-center justify-center text-sm text-muted-foreground'>
@@ -526,3 +562,15 @@ function coinSprite(
 }
 
 export default CoinPouch;
+
+/** Whether two loads hold the same coins in the same state. */
+function sameCoins(a: CoinRecord[], b: CoinRecord[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (c, i) =>
+      c.coin_id === b[i].coin_id &&
+      c.amount === b[i].amount &&
+      c.transaction_id === b[i].transaction_id &&
+      c.offer_id === b[i].offer_id,
+  );
+}
