@@ -36,7 +36,10 @@ export function Hint({
         className='xc-hint'
         aria-label={label ?? t`More about this`}
         onPointerDown={(event) => setByMouse(mouse(event))}
-        onClick={(event) => byMouse && event.preventDefault()}
+        onClick={(event) => {
+          if (byMouse) event.preventDefault();
+          setByMouse(false); // the next press may be the keyboard's
+        }}
         onPointerEnter={(event) => mouse(event) && setOpen(true)}
         onPointerLeave={(event) => mouse(event) && setOpen(false)}
       >

@@ -3,13 +3,14 @@ import { useHandle } from '@/hooks/useHandle';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
 import { handlesEnabled } from '@/lib/features';
+import { isHandleInput } from '@/lib/handles';
 import { amount } from '@/lib/formTypes';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { PasteInput } from './PasteInput';
@@ -75,12 +76,22 @@ export function TransferDialog({
   const { network } = useNetwork();
   const handlePrefix = handlesEnabled && network === 'mainnet' ? 'xch' : null;
   const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
+  const shown = useRef<string | null>(null);
+  shown.current =
+    handleLookup.status === 'resolved' ? handleLookup.resolved.address : null;
+  useEffect(() => {
+    if (handleLookup.status === 'resolved') form.clearErrors('address');
+  }, [handleLookup.status, form]);
 
   const handler = async (values: z.infer<typeof schema>) => {
+    if (!handlePrefix && isHandleInput(values.address)) {
+      form.setError('address', { message: t`Handles work on mainnet only` });
+      return;
+    }
     const checked = await recheckHandle(
       values.address,
       handlePrefix,
-      handleLookup.status === 'resolved' ? handleLookup.resolved.address : null,
+      () => shown.current,
     );
     if ('error' in checked) {
       form.setError('address', { message: checked.error });

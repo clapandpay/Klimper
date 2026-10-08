@@ -349,8 +349,14 @@ pub fn send(
         }
     })
     .map_err(|e| {
+        // Sage's own words stay here: they name balances and coins, and a dApp could probe
+        // the wallet with them without the user ever seeing a prompt.
         tracing::info!("xchonnect: chia_send could not be built: {e}");
-        error(codes::SPENDABLE_BALANCE_EXCEEDED, &e, Some("build_failed"))
+        error(
+            codes::SPENDABLE_BALANCE_EXCEEDED,
+            "the wallet could not build this send",
+            Some("build_failed"),
+        )
     })?;
     let puzzle_hash = on_sage(state, async move |sage| sage.parse_address(address))
         .map_err(|_| invalid("address"))?;

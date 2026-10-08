@@ -78,6 +78,8 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     let request = provider.createCredentialRegistrationRequest(
       challenge: challenge, name: args.userName, userID: userId)
     request.prf = .inputValues(.init(saltInput1: salt))
+    // Face ID or the passcode at enrolment too, not only at unlock.
+    request.userVerificationPreference = .required
     perform(request, invoke)
   }
 

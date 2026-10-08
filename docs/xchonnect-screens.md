@@ -150,17 +150,25 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 ```
 
 - **Slide to approve.** Approving is a slide, not a tap (`SlideToApprove.tsx`): the knob has
-  to travel nearly the whole track, a short slide springs back, and a tap on the knob does
-  nothing. The phone ticks at each quarter and confirms with a success haptic
-  (`feel` in the jingle plugin; the phone's haptics setting decides, not the Klimper sound
-  switch). The knob is a button named "Approve" (or "Approve and send"): Enter, Space or a
-  screen reader's activate approves at once, since that is a deliberate press. The drag never
-  re-renders React; it sets one CSS custom property and the compositor draws the rest.
+  to travel nearly the whole track, a short or abandoned slide springs back, and no tap, long
+  press or slow click on the knob approves. One finger at a time, and a slide counts only for
+  the request it began on. The phone ticks at the half and at the point where letting go
+  approves, and confirms with a success haptic (`feel` in the jingle plugin; the phone's
+  haptics setting decides, not the Klimper sound switch). The knob answers pointers only.
+  Keyboards and assistive technology get a separate button named "Approve" (or "Approve and
+  send"), out of sight until it has focus, which approves at once since pressing it is
+  deliberate. The drag never re-renders React: it sets one CSS custom property, the knob
+  moves by transform and the trail by clip.
+- **The deadline holds.** When the countdown reaches zero the slider turns off, and the
+  approval bridge refuses an answer after the request's own deadline: a website that gave
+  up on a request (and may have sent it again) never has the old one signed late.
 - **What the wallet knows about each asset.** "then …" is the wallet's balance plus the net
   (`getToken`). XCH also shows its dollar value from the last price fetch (no request of its
   own; none on testnet). A CAT stays named `CAT <8 hex>…` in the verdict line: its ticker was
   registered by whoever made it, and a CAT can be called "XCH", so the wallet's ticker appears
-  only beside it, small ("your wallet: USDC.b"), and a CAT gets no icon and no price here. A
+  only beside it, small ("your wallet: USDC.b"), and a CAT gets no picture and no price here,
+  only a lettered coin; one the wallet holds none of says "not in your wallet". The id shows
+  both ends (`CAT 1a2b3c4d…9f8e7d`), since matching the first 32 bits is cheap. A
   CAT whose id did not parse gets none of this. None of it comes from the website.
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve. Going back puts the slider back.

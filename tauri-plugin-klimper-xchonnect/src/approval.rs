@@ -73,6 +73,18 @@ pub struct Approval {
     pub kind: ApprovalKind,
 }
 
+/// How long an approval may still wait: until its deadline, and never past
+/// [`DECISION_TIMEOUT`]. `expires_at` 0 means no deadline of its own.
+fn time_left(expires_at: u64) -> Duration {
+    if expires_at == 0 {
+        return DECISION_TIMEOUT;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    Duration::from_secs(expires_at.saturating_sub(now)).min(DECISION_TIMEOUT)
+}
+
 struct Waiting {
     approval: Approval,
     answer: mpsc::Sender<bool>,
@@ -138,6 +150,7 @@ impl ApprovalBridge {
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
         let (tx, rx) = mpsc::channel();
+        let expires_at = approval.expires_at;
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
         {
             let Ok(mut registry) = self.registry.lock() else {
@@ -165,8 +178,9 @@ impl ApprovalBridge {
         on_shown();
 
         // A timeout and a closed channel are both rejections: the only path to `true` is
-        // the user pressing approve.
-        let decision = matches!(rx.recv_timeout(DECISION_TIMEOUT), Ok(true));
+        // the user pressing approve, before the request's own deadline. A request the dApp
+        // has already given up on (and may have sent again) is never signed late.
+        let decision = matches!(rx.recv_timeout(time_left(expires_at)), Ok(true));
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
         }
@@ -185,7 +199,10 @@ impl ApprovalBridge {
                 // Already withdrawn (and answered "no"): an approval now would be reported
                 // as given although nothing will be signed.
                 let key = (w.approval.session_id.clone(), w.approval.request_id.clone());
-                (!registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
+                // Past its deadline: the waiting thread is about to give up, and an approval
+                // that slipped in now would sign a request the dApp no longer expects.
+                let live = time_left(w.approval.expires_at) > Duration::ZERO;
+                (live && !registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
             })
         };
         let sender = sender.ok_or(Error::UnknownApproval)?;
@@ -323,6 +340,15 @@ mod tests {
         assert!(worker.join().unwrap(), "approved");
         let events = seen.lock().unwrap().clone();
         assert_eq!(events, vec![EVENT_APPROVAL, EVENT_APPROVAL_DONE]);
+    }
+
+    #[test]
+    fn a_request_past_its_deadline_is_never_signed() {
+        let (bridge, _) = bridge();
+        let mut late = approval("late");
+        late.expires_at = 1; // long gone
+        assert!(!bridge.ask(late), "refused without waiting");
+        assert!(bridge.resolve("late", true).is_err());
     }
 
     #[test]

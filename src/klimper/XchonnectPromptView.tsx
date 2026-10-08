@@ -34,6 +34,7 @@ import { Hint } from './XchonnectUi';
 import {
   AssetView,
   BindingView,
+  claimedText,
   IntentView,
   formatAmount,
   formatMagnitude,
@@ -125,7 +126,9 @@ function Asset({
       : null;
   const left =
     after === null ? '' : `${formatAmount(after, asset.precision)} ${label}`;
-  const ticker = facts?.ticker ?? '';
+  const ticker = claimedText(facts?.ticker);
+  // Looked up, and the wallet holds none of it: a CAT the user has never had.
+  const unheld = !asset.isXch && facts !== undefined && facts.balance === null;
   const sign = asset.net.isNegative() ? '−' : asset.net.isZero() ? '' : '+';
   return (
     <div className='flex items-start gap-3' data-testid='prompt-asset'>
@@ -159,7 +162,12 @@ function Asset({
         </div>
         <div className='xc-sub flex flex-wrap justify-between gap-x-3'>
           <span title={asset.assetId ?? undefined} data-testid='asset-ticker'>
-            {facts?.ticker && <Trans>your wallet: {ticker}</Trans>}
+            {ticker !== '' && <Trans>your wallet: {ticker}</Trans>}
+            {unheld && (
+              <span data-testid='asset-unheld'>
+                <Trans>not in your wallet</Trans>
+              </span>
+            )}
           </span>
           <span className='flex gap-2'>
             {asset.isXch && <Usd mojos={asset.net.abs()} />}
@@ -580,7 +588,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         ) : (
           view.assets.map((asset) => (
             <Asset
-              key={asset.label}
+              key={asset.assetId ?? asset.label}
               asset={asset}
               facts={factsOf(facts, asset)}
               payLabel={

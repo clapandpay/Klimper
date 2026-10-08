@@ -32,12 +32,13 @@ export function handleErrorMessage(code: HandleErrorCode): string {
 /**
  * Resolve "@anna" again at submit. The address on screen is the one the user agreed to: if
  * none is shown yet, or the handle now points somewhere else, nothing is sent and the user
- * looks again. Input that is not a handle passes through unchanged.
+ * looks again. `shown` is read after the registry answered, so a live lookup that finished
+ * meanwhile counts. Input that is not a handle passes through unchanged.
  */
 export async function recheckHandle(
   input: string,
   prefix: string | null,
-  shown: string | null,
+  shownNow: () => string | null,
 ): Promise<{ address: string } | { error: string }> {
   if (!prefix || !isHandleInput(input)) return { address: input };
   let address: string;
@@ -50,6 +51,7 @@ export async function recheckHandle(
       ),
     };
   }
+  const shown = shownNow();
   if (shown === null) {
     return { error: t`Wait until the address is shown, then try again` };
   }

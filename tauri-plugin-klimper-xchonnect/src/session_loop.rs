@@ -57,6 +57,7 @@ use xchonnect_wallet_kit::RpcError;
 use xchonnect_core::uri::ParseOptions;
 
 use crate::approval::{ApprovalBridge, Emitter, Withdrawn};
+use crate::developer_mode_allowed;
 use crate::error::{Error, Result};
 use crate::origin;
 use crate::relay::{RelayClient, RelayInfo};
@@ -334,7 +335,7 @@ impl SessionLoop {
             return false;
         };
         let options = ParseOptions {
-            developer_mode: stored.record.developer_mode,
+            developer_mode: stored.record.developer_mode && developer_mode_allowed(),
         };
         let document = tokio::select! {
             document = origin::fetch(&stored.record.dapp, options) => document,
@@ -897,7 +898,8 @@ async fn post_end(relay: &RelayClient, outgoing: &xchonnect_core::session::Outgo
 /// request instead of waiting on a mailbox nobody reads. Only a session whose stored state
 /// cannot be read at all can end locally alone.
 pub async fn end_without_loop(store: &SessionStore, stored: &mut StoredSession) {
-    let Ok(relay) = RelayClient::new(&stored.record.relay, stored.record.developer_mode) else {
+    let developer_mode = stored.record.developer_mode && developer_mode_allowed();
+    let Ok(relay) = RelayClient::new(&stored.record.relay, developer_mode) else {
         return;
     };
     let Some(mut session) = stored

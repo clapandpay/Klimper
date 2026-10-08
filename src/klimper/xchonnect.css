@@ -493,6 +493,7 @@
 .xc-hint:hover,
 .xc-hint[data-state='open'] {
   color: var(--foreground);
+  background: rgb(128 128 128 / 0.14);
   background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
 }
 
@@ -523,11 +524,13 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted-foreground);
+  background: rgb(128 128 128 / 0.1);
   background: color-mix(in srgb, var(--muted-foreground) 9%, transparent);
 }
 
 .xc-badge[data-tone='verified'] {
   color: var(--teal, var(--primary));
+  background: rgb(15 124 135 / 0.12);
   background: color-mix(in srgb, var(--teal, var(--primary)) 12%, transparent);
 }
 
@@ -545,7 +548,9 @@
   font-size: 0.9375rem;
   font-weight: 800;
   color: var(--foreground);
+  background: rgb(128 128 128 / 0.16);
   background: color-mix(in srgb, var(--muted-foreground) 14%, var(--card));
+  box-shadow: inset 0 0 0 1px rgb(128 128 128 / 0.22);
   box-shadow: inset 0 0 0 1px
     color-mix(in srgb, var(--muted-foreground) 20%, transparent);
 }
@@ -723,10 +728,24 @@
     0 10px 22px -6px rgb(255 59 31 / 0.65);
 }
 
-/* Inside the knob: the track clips anything outside it. */
-.xc-slide-knob:focus-visible {
-  outline: 3px solid rgb(255 255 255 / 0.95);
-  outline-offset: -5px;
+/*
+ * The press for keyboards and assistive technology: out of sight until it has focus, then
+ * a ring around the whole track (inside it: the track clips anything outside).
+ */
+.xc-slide-press {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 9999px;
+  color: transparent;
+  background: transparent;
+  clip-path: inset(50%);
+}
+
+.xc-slide-press:focus-visible {
+  clip-path: none;
+  outline: 3px solid var(--sun-orange, var(--primary));
+  outline-offset: -3px;
 }
 
 .xc-slide[data-done='true'] .xc-slide-knob {

@@ -32,20 +32,24 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('recheckHandle', () => {
   it('passes an address through untouched', async () => {
-    expect(await recheckHandle('xch1abc', 'xch', null)).toEqual({
+    expect(await recheckHandle('xch1abc', 'xch', () => null)).toEqual({
       address: 'xch1abc',
     });
   });
 
   it('refuses when the handle now points elsewhere than shown', async () => {
     registry(PH);
-    const checked = await recheckHandle('@anna', 'xch', 'xch1somewhereelse');
+    const checked = await recheckHandle(
+      '@anna',
+      'xch',
+      () => 'xch1somewhereelse',
+    );
     expect(checked).toHaveProperty('error');
   });
 
   it('refuses before any address was shown', async () => {
     registry(PH);
-    const checked = await recheckHandle('@anna', 'xch', null);
+    const checked = await recheckHandle('@anna', 'xch', () => null);
     expect(checked).toHaveProperty('error');
   });
 
@@ -53,6 +57,23 @@ describe('recheckHandle', () => {
     registry(PH);
     const { toAddress } = await import('@/lib/utils');
     const address = toAddress(PH, 'xch');
-    expect(await recheckHandle('@anna', 'xch', address)).toEqual({ address });
+    expect(await recheckHandle('@anna', 'xch', () => address)).toEqual({
+      address,
+    });
+  });
+
+  it('counts an address that appeared while the registry was asked', async () => {
+    const { toAddress } = await import('@/lib/utils');
+    const address = toAddress(PH, 'xch');
+    let shown: string | null = null;
+    registry(PH);
+    const answer = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation(async (...args) => {
+      shown = address; // the live lookup lands first
+      return answer ? answer(...args) : new Response('{}');
+    });
+    expect(await recheckHandle('@anna', 'xch', () => shown)).toEqual({
+      address,
+    });
   });
 });

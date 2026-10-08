@@ -109,7 +109,7 @@ describe('readPrompt', () => {
     const view = readPrompt(swap);
     if (view.kind !== 'spend') throw new Error('expected a spend');
     const cat = view.assets[1];
-    expect(cat.label).toBe(`CAT ${TAIL.slice(0, 8)}…`);
+    expect(cat.label).toBe(`CAT ${TAIL.slice(0, 8)}…${TAIL.slice(-6)}`);
     expect(cat.net.toString()).toBe('0');
     expect(cat.conditionalReceived.toString()).toBe('250000');
     // And it is not quietly added anywhere else either.
@@ -237,6 +237,25 @@ describe('readPrompt', () => {
       expect(view.assets[0].label).toBe('XCH');
     });
 
+    it('refuses an asset type it does not know rather than calling it XCH', () => {
+      const view = readPrompt({
+        ...simpleSend,
+        summary: {
+          ...simpleSend.summary,
+          assets: [
+            {
+              asset: { type: 'nft', launcher_id: TAIL },
+              sent: 1,
+              received: 0,
+              conditional_received: 0,
+              net: -1,
+            },
+          ],
+        },
+      });
+      expect(view.kind).toBe('unreadable');
+    });
+
     it('derives an asset name instead of reading one', () => {
       const view = readPrompt({
         ...simpleSend,
@@ -254,7 +273,9 @@ describe('readPrompt', () => {
         },
       });
       if (view.kind !== 'spend') throw new Error('expected a spend');
-      expect(view.assets[0].label).toBe(`CAT ${TAIL.slice(0, 8)}…`);
+      expect(view.assets[0].label).toBe(
+        `CAT ${TAIL.slice(0, 8)}…${TAIL.slice(-6)}`,
+      );
     });
 
     it('drops a puzzle hash that is prose rather than hex', () => {

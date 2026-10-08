@@ -149,7 +149,9 @@ export function XchonnectApprovalDetail({
   // Off from the very render that shows a new request, before any effect has run: a slide
   // or tap meant for the request before cannot land on this one.
   const swapped = shownId.current !== approval.id;
-  const disabled = busy || settling || swapped;
+  // Out of time: the wallet refuses it now (the bridge checks the deadline too).
+  const expired = useSecondsLeft(approval.expiresAt) <= 0;
+  const disabled = busy || settling || swapped || expired;
 
   /** One answer per request. */
   const once = (act: () => void) => {

@@ -7,9 +7,10 @@
 // haptic at the end. One finger at a time; a release counts only for the request the slide
 // began on.
 //
-// The knob is a real button named after the action. A press that did not start with a finger
-// or the mouse on it (Enter, Space, VoiceOver, TalkBack, a switch control) approves at once,
-// since that is deliberate; a tap on it does nothing, only a slide does.
+// The knob answers pointers only, and only to a slide: no tap, long press or slow click on it
+// approves. Keyboards and assistive technology (VoiceOver, TalkBack, switch control) get their
+// own button named after the action, hidden until it has focus, which approves at once since
+// pressing it is deliberate. The two never share an event, so no timing rule is involved.
 //
 // Light by construction: the drag never re-renders React. It writes one custom property
 // (`--p`, 0 to 1) on the track, and CSS moves the knob with a transform and reveals the trail
@@ -22,8 +23,6 @@ import { feel } from './haptics';
 /** How far the knob must travel to count, as a share of the track. */
 const DONE_AT = 0.92;
 const MARKS = [0.5, DONE_AT];
-/** A click this soon after a finger or the mouse touched the knob is that touch, not a press. */
-const TOUCHED_MS = 700;
 
 export function SlideToApprove({
   label,
@@ -52,7 +51,6 @@ export function SlideToApprove({
     id: number;
     key: string | undefined;
   } | null>(null);
-  const touched = useRef(0);
   // The latest key, read by a release that may land after the request was replaced.
   const currentKey = useRef(resetKey);
   currentKey.current = resetKey;
@@ -99,7 +97,6 @@ export function SlideToApprove({
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    touched.current = event.timeStamp;
     if (drag.current || !event.isPrimary || event.button !== 0) return;
     if (disabled || done || !track.current || !knob.current) return;
     const width = measure();
@@ -150,19 +147,25 @@ export function SlideToApprove({
         {hint}
       </span>
       <button
+        type='button'
+        className='xc-slide-press'
+        disabled={disabled || done}
+        onClick={finish}
+      >
+        {label}
+      </button>
+      <button
         ref={knob}
         type='button'
         className='xc-slide-knob'
-        aria-label={label}
+        aria-hidden='true'
+        tabIndex={-1}
         disabled={disabled}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
-        onClick={(event) => {
-          // Keyboard and assistive presses come without a touch on the knob just before.
-          if (event.timeStamp - touched.current > TOUCHED_MS) finish();
-        }}
+        data-testid={testId ? `${testId}-knob` : undefined}
       >
         {done ? (
           <Check className='h-6 w-6' aria-hidden='true' />

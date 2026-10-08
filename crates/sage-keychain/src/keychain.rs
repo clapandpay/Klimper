@@ -51,13 +51,20 @@ impl Default for Keychain {
 }
 
 impl Keychain {
+    /// Loads a keychain. It opens with Sage's empty password only if that password actually
+    /// decrypts it; secrets sealed under another password (a passkey) stay locked from the
+    /// first moment, so nothing that runs before the lock screen can read or add a key.
     pub fn from_bytes(data: &[u8]) -> Result<Self, KeychainError> {
         let keys = bincode::deserialize(data)?;
-        Ok(Self {
+        let mut keychain = Self {
             rng: ChaCha20Rng::from_entropy(),
             keys,
-            password: Password::default(),
-        })
+            password: Password(None),
+        };
+        match keychain.unlock(b"") {
+            Ok(()) | Err(KeychainError::Decrypt) => Ok(keychain),
+            Err(error) => Err(error),
+        }
     }
 
     /// The password to pass to the methods that read or add secrets.
@@ -299,6 +306,21 @@ mod tests {
         assert!(matches!(reloaded.unlock(b""), Err(KeychainError::Decrypt)));
         reloaded.unlock(b"wallet key").unwrap();
         assert_eq!(&*reloaded.password().unwrap(), b"wallet key");
+    }
+
+    #[test]
+    fn a_reloaded_keychain_is_open_only_under_the_empty_password() {
+        let mut open = Keychain::default();
+        open.add_mnemonic(&mnemonic(), b"").unwrap();
+        assert!(
+            !Keychain::from_bytes(&open.to_bytes().unwrap())
+                .unwrap()
+                .is_locked()
+        );
+
+        open.change_password(b"wallet key").unwrap();
+        let sealed = Keychain::from_bytes(&open.to_bytes().unwrap()).unwrap();
+        assert!(sealed.is_locked(), "a passkey keychain starts locked");
     }
 
     #[test]

@@ -104,6 +104,12 @@ export default function XchonnectConnect() {
   const [remaining, setRemaining] = useState(0);
   const [camera, setCamera] = useState<CameraState>('off');
   const fileInput = useRef<HTMLInputElement>(null);
+  // Read by listeners that outlive a render: which pairing is on screen, and whether one is
+  // under way (a link arriving then must not replace it under the user's thumb).
+  const pairingId = useRef<string | null>(null);
+  pairingId.current = preview?.pairingId ?? null;
+  const busyPairing = useRef(false);
+  busyPairing.current = stage !== 'enter' && stage !== 'failed';
 
   /** Give up on this attempt. There is no path from here back into the flow. */
   const fail = useCallback((message: string) => {
@@ -150,6 +156,7 @@ export default function XchonnectConnect() {
     if (link?.kind === 'pair') void check(link.uri);
     if (link?.kind === 'notALink') setFailure(problemMessage(link.problem));
     return subscribeXchonnectLink((incoming) => {
+      if (busyPairing.current) return;
       if (incoming.kind === 'pair') void check(incoming.uri);
       if (incoming.kind === 'notALink') {
         setFailure(problemMessage(incoming.problem));
@@ -162,6 +169,8 @@ export default function XchonnectConnect() {
     const unlisten = onXchonnectEvent<PairingEvent>(
       XCHONNECT_EVENTS.pairing,
       (event) => {
+        // Only the pairing on screen: another attempt's events neither end nor confirm it.
+        if (event.pairingId !== pairingId.current) return;
         if (event.state === 'failed') {
           fail(event.error ?? t`The website never answered.`);
           return;

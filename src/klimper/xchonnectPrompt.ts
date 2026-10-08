@@ -203,6 +203,7 @@ function amountOf(value: unknown): BigNumber {
 }
 
 /** A present amount that is not an exact integer; `readPrompt` turns it into `unreadable`. */
+/** Something in the prompt cannot be shown exactly (an amount, an asset): the whole prompt is unreadable. */
 class UnreadableAmount extends Error {}
 
 /** Lower-case hex of any length, with or without `0x`. Anything else is dropped. */
@@ -232,10 +233,17 @@ function assetOf(
   if (!isRecord(value)) return { label: xchLabel, isXch: true, assetId: null };
   if (value.type === 'cat') {
     const assetId = hexOf(value.asset_id, 32);
+    // Both ends of the id: a CAT whose first 32 bits match a real one is cheap to make.
     return assetId === null
       ? { label: 'Unknown CAT', isXch: false, assetId: null }
-      : { label: `CAT ${assetId.slice(0, 8)}…`, isXch: false, assetId };
+      : {
+          label: `CAT ${assetId.slice(0, 8)}…${assetId.slice(-6)}`,
+          isXch: false,
+          assetId,
+        };
   }
+  // A kind of asset this build does not know is not shown as XCH: nobody can consent to it.
+  if (value.type !== 'xch') throw new UnreadableAmount();
   return { label: xchLabel, isXch: true, assetId: null };
 }
 
@@ -364,13 +372,15 @@ export function sanitiseMessageText(text: string): {
       const code = character.codePointAt(0) ?? 0;
       if (character === '\n' || character === '\t') return character;
       if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return '�';
-      // Bidi overrides and isolates, zero-width and word joiners, BOM.
+      // Every format character (bidi controls, zero-width and word joiners, BOM, soft
+      // hyphen, tag characters…), line and paragraph separators, and the Hangul fillers
+      // that render as nothing.
       if (
-        (code >= 0x200b && code <= 0x200f) ||
-        (code >= 0x202a && code <= 0x202e) ||
-        (code >= 0x2066 && code <= 0x2069) ||
-        code === 0x2060 ||
-        code === 0xfeff
+        /[\p{Cf}\p{Zl}\p{Zp}]/u.test(character) ||
+        code === 0x115f ||
+        code === 0x1160 ||
+        code === 0x3164 ||
+        code === 0xffa0
       ) {
         return '�';
       }

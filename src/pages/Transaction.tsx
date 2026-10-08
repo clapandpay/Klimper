@@ -64,8 +64,11 @@ export default function Transaction() {
 
   const heightLabel = height ?? '';
   // Look the spends up on mempoolxch.space (Klimper).
-  const { isTestnet } = useNetwork();
-  const explorerUrl = mempoolBlockUrl(height, isTestnet);
+  const { network, isTestnet } = useNetwork();
+  const explorerUrl =
+    network === 'mainnet' || network === 'testnet'
+      ? mempoolBlockUrl(height, isTestnet)
+      : null;
 
   return (
     <>

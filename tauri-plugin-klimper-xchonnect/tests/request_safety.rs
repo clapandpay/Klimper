@@ -193,7 +193,9 @@ impl Harness {
             dapp: DAPP.to_owned(),
             method: method.to_owned(),
             request_id: "r1".to_owned(),
-            expires_at: NOW + 60,
+            // No deadline of its own: `NOW` is a fixed date, and the bridge checks a
+            // deadline against the real clock (its own test covers that).
+            expires_at: 0,
             progress: self.progress.clone(),
         }
     }

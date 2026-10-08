@@ -81,7 +81,10 @@ export default function Send() {
   const { network } = useNetwork();
   const handlePrefix =
     handlesEnabled && !bulk && network === 'mainnet' ? 'xch' : null;
-  const resolvedAddress = useRef<string | null>(null);
+  /** The address a handle was checked to, with the input it was checked for. */
+  const resolvedAddress = useRef<{ input: string; address: string } | null>(
+    null,
+  );
   const shownAddress = useRef<string | null>(null);
 
   const ticker = asset?.ticker || 'CAT';
@@ -136,7 +139,7 @@ export default function Send() {
           const checked = await recheckHandle(
             value,
             handlePrefix,
-            shownAddress.current,
+            () => shownAddress.current,
           );
           if ('error' in checked) {
             ctx.addIssue({
@@ -144,7 +147,10 @@ export default function Send() {
               message: checked.error,
             });
           } else {
-            resolvedAddress.current = checked.address;
+            resolvedAddress.current = {
+              input: value,
+              address: checked.address,
+            };
           }
         })
         .refine(
@@ -203,6 +209,11 @@ export default function Send() {
   const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
   shownAddress.current =
     handleLookup.status === 'resolved' ? handleLookup.resolved.address : null;
+  // The address is on screen now: an earlier "wait until it is shown" no longer applies.
+  const handleShown = shownAddress.current;
+  useEffect(() => {
+    if (handleShown) form.clearErrors('address');
+  }, [handleShown, form]);
 
   const { handleScanOrPaste, handleScanImage } = useScannerOrClipboard(
     (scanResValue) => {
@@ -212,7 +223,10 @@ export default function Send() {
 
   const onSubmit = () => {
     const values = form.getValues();
-    const address = resolvedAddress.current ?? values.address;
+    // Only a check made for exactly this input: an older one may finish last.
+    const checked = resolvedAddress.current;
+    const address =
+      checked?.input === values.address ? checked.address : values.address;
 
     let memos: string[] = [];
 

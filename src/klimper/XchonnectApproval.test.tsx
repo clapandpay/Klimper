@@ -189,7 +189,7 @@ describe('only the wallet’s own simulation is rendered', () => {
     }
     // The asset is named from its TAIL hash, by the wallet.
     expect(screen.getByTestId('asset-net').textContent).toContain(
-      `CAT ${TAIL.slice(0, 8)}…`,
+      `CAT ${TAIL.slice(0, 8)}…${TAIL.slice(-6)}`,
     );
   });
 
@@ -265,7 +265,10 @@ describe('a conditional receipt never looks received', () => {
     const nets = screen
       .getAllByTestId('asset-net')
       .map((node) => node.textContent);
-    expect(nets).toEqual(['−1 XCH', `0 CAT ${TAIL.slice(0, 8)}…`]);
+    expect(nets).toEqual([
+      '−1 XCH',
+      `0 CAT ${TAIL.slice(0, 8)}…${TAIL.slice(-6)}`,
+    ]);
     expect(screen.getByText('No change')).toBeDefined();
   });
 
