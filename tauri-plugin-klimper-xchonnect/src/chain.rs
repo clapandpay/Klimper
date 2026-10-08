@@ -21,14 +21,10 @@ use chia_wallet_sdk::{
     chia::puzzle_types::{Proof, standard::StandardArgs},
     prelude::*,
 };
-use sage::Sage;
-use sage_api::{
-    Amount,
-    wallet_connect::{self, SendTransactionImmediately},
-};
 use sage_database::{
     AssetFilter, CoinFilterMode, CoinRow, CoinSortMode, Database, DeserializePrimitive,
 };
+use sage_wallet::{Status, SyncCommand, Transaction, insert_transaction, submit_to_peers};
 use xchonnect_wallet_kit::{
     AssetBalance, AssetKind, ChainData, ChainError, CoinQuery, LineageProof, SpendableCoin,
     TxStatus,
@@ -217,27 +213,6 @@ async fn spendable(
     })
 }
 
-/// A bundle in the shape Sage's own `sendTransaction` takes, so Klimper broadcasts exactly
-/// as Sage does over `WalletConnect`.
-fn sage_bundle(bundle: &SpendBundle) -> wallet_connect::SpendBundle {
-    wallet_connect::SpendBundle {
-        coin_spends: bundle
-            .coin_spends
-            .iter()
-            .map(|cs| wallet_connect::CoinSpend {
-                coin: wallet_connect::Coin {
-                    parent_coin_info: hex::encode(cs.coin.parent_coin_info),
-                    puzzle_hash: hex::encode(cs.coin.puzzle_hash),
-                    amount: Amount::u64(cs.coin.amount),
-                },
-                puzzle_reveal: hex::encode(&cs.puzzle_reveal),
-                solution: hex::encode(&cs.solution),
-            })
-            .collect(),
-        aggregated_signature: hex::encode(bundle.aggregated_signature.to_bytes()),
-    }
-}
-
 /// `getAssetCoins` over one wallet database.
 async fn read_coins(
     db: &Database,
@@ -338,19 +313,59 @@ impl ChainData for KlimperChain {
         Self::run(async { read_unlocked(&self.db().await?, coin_ids, keys).await })
     }
 
+    /// What Sage's `send_transaction_immediately` does, but with the wallet lock held only
+    /// to read what the send needs: trying the peers one after another can take a while,
+    /// and the rest of the wallet must not wait on a website's broadcast (TASK-119).
     fn send_transaction(&self, bundle: &SpendBundle) -> Result<TxStatus, ChainError> {
-        let request = SendTransactionImmediately {
-            spend_bundle: sage_bundle(bundle),
-        };
         Self::run(async {
-            let sage = self.state.lock().await;
-            let response = Sage::send_transaction_immediately(&sage, request)
+            let (wallet, peer_state, commands) = {
+                let sage = self.state.lock().await;
+                (
+                    sage.wallet().map_err(unavailable)?,
+                    sage.peer_state.clone(),
+                    sage.command_sender.clone(),
+                )
+            };
+            let peers = peer_state.lock().await.peers();
+            match submit_to_peers(&peers, bundle.clone())
                 .await
-                .map_err(unavailable)?;
-            Ok(TxStatus {
-                status: response.status,
-                error: response.error,
-            })
+                .map_err(unavailable)?
+            {
+                Status::Pending => {
+                    let peer = peer_state
+                        .lock()
+                        .await
+                        .acquire_peer()
+                        .ok_or_else(|| unavailable("no peers"))?;
+                    let subscriptions = insert_transaction(
+                        &wallet.db,
+                        &peer,
+                        wallet.genesis_challenge,
+                        bundle.name(),
+                        Transaction::from_coin_spends(bundle.coin_spends.clone())
+                            .map_err(unavailable)?,
+                        bundle.aggregated_signature.clone(),
+                    )
+                    .await
+                    .map_err(unavailable)?;
+                    commands
+                        .send(SyncCommand::SubscribeCoins {
+                            coin_ids: subscriptions,
+                        })
+                        .await
+                        .map_err(unavailable)?;
+                    Ok(TxStatus {
+                        status: 1,
+                        error: None,
+                    })
+                }
+                Status::Failed(status, error) => Ok(TxStatus { status, error }),
+                // As Sage answers it: a status no peer gave a verdict on.
+                Status::Unknown => Ok(TxStatus {
+                    status: 3,
+                    error: None,
+                }),
+            }
         })
     }
 }

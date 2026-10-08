@@ -25,6 +25,7 @@ sage-api = { workspace = true }
 sage-config = { workspace = true }
 sage-database = { workspace = true }
 sage-keychain = { workspace = true }
+sage-wallet = { workspace = true }
 
 tauri = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

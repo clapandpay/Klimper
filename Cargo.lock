@@ -8436,6 +8436,7 @@ dependencies = [
  "sage-config",
  "sage-database",
  "sage-keychain",
+ "sage-wallet",
  "security-framework-sys",
  "serde",
  "serde_json",

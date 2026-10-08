@@ -120,6 +120,30 @@ struct Registry {
     /// Requests withdrawn before their answer was sent, by `(session, request)`. The
     /// session loop takes the entry when it answers the request, so nothing accumulates.
     withdrawn: BTreeMap<(String, String), Withdrawn>,
+    /// When the user last said no, per session, within [`REJECTION_WINDOW`].
+    rejections: BTreeMap<String, std::collections::VecDeque<std::time::Instant>>,
+}
+
+/// After this many rejections within [`REJECTION_WINDOW`], a session's requests are refused
+/// without a prompt until the oldest of them is out of the window (TASK-119): a website that
+/// keeps asking cannot wear the user down into a tap.
+pub const REJECTIONS_BEFORE_PAUSE: usize = 3;
+pub const REJECTION_WINDOW: Duration = Duration::from_mins(2);
+
+impl Registry {
+    /// Whether `session` is paused now, forgetting rejections out of the window.
+    fn paused(&mut self, session: &str, now: std::time::Instant) -> bool {
+        let Some(recent) = self.rejections.get_mut(session) else {
+            return false;
+        };
+        while recent
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= REJECTION_WINDOW)
+        {
+            recent.pop_front();
+        }
+        recent.len() >= REJECTIONS_BEFORE_PAUSE
+    }
 }
 
 impl std::fmt::Debug for ApprovalBridge {
@@ -152,6 +176,7 @@ impl ApprovalBridge {
     /// on screen (not when the request was refused before it could be shown).
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
+        let key = (approval.session_id.clone(), approval.request_id.clone());
         let (tx, rx) = mpsc::channel();
         let wait = time_left(approval.expires_at);
         // Already past its deadline: never shown, never signed.
@@ -170,8 +195,11 @@ impl ApprovalBridge {
                 return false;
             }
             // Withdrawn while it was being simulated: never shown.
-            let key = (approval.session_id.clone(), approval.request_id.clone());
             if registry.withdrawn.contains_key(&key) {
+                return false;
+            }
+            // The user just said no to this website several times: not asked again yet.
+            if registry.paused(&approval.session_id, std::time::Instant::now()) {
                 return false;
             }
             registry.waiting.insert(
@@ -195,6 +223,14 @@ impl ApprovalBridge {
         );
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
+            // A no from the user (or silence), not a request the website withdrew itself.
+            if !decision && !registry.withdrawn.contains_key(&key) {
+                registry
+                    .rejections
+                    .entry(key.0.clone())
+                    .or_default()
+                    .push_back(std::time::Instant::now());
+            }
         }
         (self.emit)(
             EVENT_APPROVAL_DONE,
@@ -352,6 +388,28 @@ mod tests {
         assert!(worker.join().unwrap(), "approved");
         let events = seen.lock().unwrap().clone();
         assert_eq!(events, vec![EVENT_APPROVAL, EVENT_APPROVAL_DONE]);
+    }
+
+    #[test]
+    fn a_website_rejected_again_and_again_is_not_asked_for_a_while() {
+        let (bridge, seen) = bridge();
+        for round in 0..REJECTIONS_BEFORE_PAUSE {
+            let worker = {
+                let bridge = bridge.clone();
+                std::thread::spawn(move || bridge.ask(approval(&format!("r{round}"))))
+            };
+            for _ in 0..200 {
+                if bridge.resolve(&format!("r{round}"), false).is_ok() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(!worker.join().unwrap());
+        }
+        let shown = seen.lock().unwrap().len();
+        // The next one is refused at once and never reaches the screen.
+        assert!(!bridge.ask(approval("again")));
+        assert_eq!(seen.lock().unwrap().len(), shown);
     }
 
     #[test]
