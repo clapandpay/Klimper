@@ -50,6 +50,7 @@ import { AlertTriangle, Info, KeyRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
+import { Hint } from './XchonnectUi';
 import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
@@ -394,9 +395,9 @@ export default function XchonnectDappSettings() {
         title={t`What this website may do`}
         back={() => navigate(XCHONNECT_ROUTES.dapps)}
       />
-      <Container className='max-w-xl space-y-4'>
+      <Container className='max-w-xl space-y-3'>
         <Card>
-          <CardHeader>
+          <CardHeader className='p-4 pb-2'>
             <CardTitle className='text-base'>
               <XchonnectDomain
                 identity={identityOfSession(session)}
@@ -409,7 +410,7 @@ export default function XchonnectDappSettings() {
 
         {problem !== null && (
           <Card className='border-destructive'>
-            <CardHeader>
+            <CardHeader className='p-4 pb-2'>
               <CardDescription className='text-destructive break-words'>
                 {problem}
               </CardDescription>
@@ -418,122 +419,139 @@ export default function XchonnectDappSettings() {
         )}
 
         <Card>
-          <CardHeader>
-            <CardTitle className='text-base'>
+          <CardHeader className='p-4 pb-2'>
+            <CardTitle className='text-base flex items-center gap-1'>
               <Trans>What it may ask for</Trans>
+              <Hint>
+                <Trans>
+                  Taking a method away means the website is refused when it
+                  tries. Nothing here is approved automatically.
+                </Trans>
+              </Hint>
             </CardTitle>
-            <CardDescription>
-              <Trans>
-                Taking a method away means the website is refused when it tries.
-                Nothing here is approved automatically.
-              </Trans>
-            </CardDescription>
           </CardHeader>
-          <CardContent className='space-y-3'>
-            {DEFAULT_METHODS.map((method) => {
-              const essential = (
-                ESSENTIAL_METHODS as readonly string[]
-              ).includes(method);
-              return (
-                <div key={method} className='flex items-center gap-3'>
-                  <Checkbox
-                    id={`method-${method}`}
-                    checked={draft.methods.includes(method)}
-                    disabled={essential}
-                    onCheckedChange={(value) =>
-                      toggleMethod(method, value === true)
-                    }
-                  />
-                  <Label htmlFor={`method-${method}`} className='font-mono'>
-                    {method}
-                  </Label>
-                  {essential && (
-                    <span className='text-xs text-muted-foreground'>
-                      <Trans>always allowed</Trans>
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+          <CardContent className='space-y-3 p-4 pt-0'>
+            <div className='grid grid-cols-2 gap-x-3 gap-y-2'>
+              {DEFAULT_METHODS.map((method) => {
+                const essential = (
+                  ESSENTIAL_METHODS as readonly string[]
+                ).includes(method);
+                return (
+                  <div key={method} className='flex items-center gap-2 min-w-0'>
+                    <Checkbox
+                      id={`method-${method}`}
+                      checked={draft.methods.includes(method)}
+                      disabled={essential}
+                      onCheckedChange={(value) =>
+                        toggleMethod(method, value === true)
+                      }
+                    />
+                    <Label
+                      htmlFor={`method-${method}`}
+                      className='font-mono text-xs truncate'
+                      title={essential ? t`always allowed` : undefined}
+                    >
+                      {method}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
             <SharedKeys keys={session.exposedKeys} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className='text-base'>
+          <CardHeader className='p-4 pb-2'>
+            <CardTitle className='text-base flex items-center gap-1'>
               <Trans>How much it may cost</Trans>
+              <Hint>
+                <Trans>
+                  Leave a field empty for no limit. A token with no limit here
+                  is not limited, and NFTs never are. A day is a UTC day.
+                </Trans>
+              </Hint>
             </CardTitle>
             <CardDescription>
               <Trans>
                 A request over a limit is refused before it reaches you — you
-                will not see a signing prompt for it. Leave a field empty for no
-                limit.
-              </Trans>{' '}
-              <Trans>
-                A token with no limit here is not limited, and NFTs never are. A
-                day is a UTC day.
+                will not see a signing prompt for it.
               </Trans>
             </CardDescription>
           </CardHeader>
-          <CardContent className='space-y-4'>
+          <CardContent className='space-y-2 p-4 pt-0'>
+            <div
+              className='grid grid-cols-[1fr_5.5rem_5.5rem] gap-2 xc-label'
+              aria-hidden='true'
+            >
+              <span />
+              <span>
+                <Trans>Per request</Trans>
+              </span>
+              <span>
+                <Trans>Per day</Trans>
+              </span>
+            </div>
             {assetKeys.map((key) => (
-              <div key={key} className='space-y-2'>
-                <div className='font-medium'>
+              <div
+                key={key}
+                className='grid grid-cols-[1fr_5.5rem_5.5rem] items-center gap-2'
+              >
+                <div className='min-w-0 text-sm font-medium truncate'>
                   {assetLabel(key, ticker)}
                   {tokens.get(key) ? (
-                    <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                    <span className='ml-1.5 font-normal text-muted-foreground'>
                       {claimedText(tokens.get(key))}
                     </span>
                   ) : null}
                 </div>
-                <div className='grid grid-cols-2 gap-3'>
-                  <div className='space-y-1'>
-                    <Label htmlFor={`per-request-${key}`}>
-                      <Trans>Per request</Trans>
-                    </Label>
-                    <Input
-                      id={`per-request-${key}`}
-                      inputMode='decimal'
-                      value={draft.limits[key].perRequest}
-                      onChange={(event) => {
-                        setSaved(false);
-                        setDraft({
-                          ...draft,
-                          limits: {
-                            ...draft.limits,
-                            [key]: {
-                              ...draft.limits[key],
-                              perRequest: event.target.value,
-                            },
+                <div>
+                  <Label htmlFor={`per-request-${key}`} className='sr-only'>
+                    <Trans>Per request</Trans>
+                  </Label>
+                  <Input
+                    className='h-9'
+                    id={`per-request-${key}`}
+                    inputMode='decimal'
+                    value={draft.limits[key].perRequest}
+                    onChange={(event) => {
+                      setSaved(false);
+                      setDraft({
+                        ...draft,
+                        limits: {
+                          ...draft.limits,
+                          [key]: {
+                            ...draft.limits[key],
+                            perRequest: event.target.value,
                           },
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label htmlFor={`per-day-${key}`}>
-                      <Trans>Per day</Trans>
-                    </Label>
-                    <Input
-                      id={`per-day-${key}`}
-                      inputMode='decimal'
-                      value={draft.limits[key].perDay}
-                      onChange={(event) => {
-                        setSaved(false);
-                        setDraft({
-                          ...draft,
-                          limits: {
-                            ...draft.limits,
-                            [key]: {
-                              ...draft.limits[key],
-                              perDay: event.target.value,
-                            },
+                        },
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`per-day-${key}`} className='sr-only'>
+                    <Trans>Per day</Trans>
+                  </Label>
+                  <Input
+                    className='h-9'
+                    id={`per-day-${key}`}
+                    inputMode='decimal'
+                    value={draft.limits[key].perDay}
+                    onChange={(event) => {
+                      setSaved(false);
+                      setDraft({
+                        ...draft,
+                        limits: {
+                          ...draft.limits,
+                          [key]: {
+                            ...draft.limits[key],
+                            perDay: event.target.value,
                           },
-                        });
-                      }}
-                    />
-                  </div>
+                        },
+                      });
+                    }}
+                  />
                 </div>
               </div>
             ))}
@@ -554,61 +572,67 @@ export default function XchonnectDappSettings() {
         </Card>
 
         <Card className='border-destructive'>
-          <CardHeader>
+          <CardHeader className='p-4 pb-2'>
             <CardTitle className='text-base flex items-center gap-2'>
               <AlertTriangle className='h-4 w-4' aria-hidden='true' />
               <Trans>Dangerous permissions</Trans>
+              <Hint>
+                <Trans>
+                  All are off for every new website. Turn one on only if you
+                  know exactly why this one needs it.
+                </Trans>
+              </Hint>
             </CardTitle>
-            <CardDescription>
-              <Trans>
-                All are off for every new website. Turn one on only if you know
-                exactly why this one needs it.
-              </Trans>
-            </CardDescription>
           </CardHeader>
-          <CardContent className='space-y-4'>
-            <div className='flex items-start justify-between gap-3'>
-              <Label htmlFor='all-addresses' className='font-normal'>
-                <Trans>Let it see all my receive addresses</Trans>
-                <p className='text-sm text-muted-foreground mt-1'>
+          <CardContent className='space-y-3 p-4 pt-0'>
+            <div className='flex items-center justify-between gap-3'>
+              <div className='flex min-w-0 items-center gap-1'>
+                <Label htmlFor='all-addresses' className='font-normal'>
+                  <Trans>Let it see all my receive addresses</Trans>
+                </Label>
+                <Hint>
                   <Trans>
                     Otherwise it sees one address of its own. Websites that
                     build trades from your coins, like Pengui, need this.
                   </Trans>
-                </p>
-              </Label>
+                </Hint>
+              </div>
               <Switch
                 id='all-addresses'
                 checked={session.allReceiveKeys}
                 onCheckedChange={(value) => dangerous('addresses', value)}
               />
             </div>
-            <div className='flex items-start justify-between gap-3'>
-              <Label htmlFor='allow-unsafe' className='font-normal'>
-                <Trans>Allow unsafe signatures</Trans>
-                <p className='text-sm text-muted-foreground mt-1'>
+            <div className='flex items-center justify-between gap-3'>
+              <div className='flex min-w-0 items-center gap-1'>
+                <Label htmlFor='allow-unsafe' className='font-normal'>
+                  <Trans>Allow unsafe signatures</Trans>
+                </Label>
+                <Hint>
                   <Trans>
                     An unsafe signature is valid in any spend, not just the one
                     you were shown.
                   </Trans>
-                </p>
-              </Label>
+                </Hint>
+              </div>
               <Switch
                 id='allow-unsafe'
                 checked={session.allowAggSigUnsafe}
                 onCheckedChange={(value) => dangerous('unsafe', value)}
               />
             </div>
-            <div className='flex items-start justify-between gap-3'>
-              <Label htmlFor='allow-unknown' className='font-normal'>
-                <Trans>Allow contracts Klimper cannot read</Trans>
-                <p className='text-sm text-muted-foreground mt-1'>
+            <div className='flex items-center justify-between gap-3'>
+              <div className='flex min-w-0 items-center gap-1'>
+                <Label htmlFor='allow-unknown' className='font-normal'>
+                  <Trans>Allow contracts Klimper cannot read</Trans>
+                </Label>
+                <Hint>
                   <Trans>
                     Klimper can still show you the net effect, but not what the
                     contract does afterwards.
                   </Trans>
-                </p>
-              </Label>
+                </Hint>
+              </div>
               <Switch
                 id='allow-unknown'
                 checked={session.allowUnknownContracts}
