@@ -9,7 +9,7 @@ what is shown, in what words, and what the user is **not** offered.
 
 Normative behaviour is xchonnect's `docs/spec/xchonnect-spec.md`; what a wallet owes the
 user is its `docs/wallet-integration.md` (§1, §5, §6 and the MUST checklist). The typed
-command surface is `src/klimper/xchonnect.ts`.
+command surface is `src/klimper/xchonnect/xchonnect.ts`.
 
 ## The four rules nothing may drop
 
@@ -49,7 +49,7 @@ The second question has a short answer, and the long one goes behind a disclosur
 
 **Short on screen, the why behind a dot.** Every screen keeps one short line per fact. The
 sentence that explains it (why a domain counts as verified, what "simulated" means, what
-happens when the countdown ends) sits behind an info dot (`Hint` in `XchonnectUi.tsx`), which
+happens when the countdown ends) sits behind an info dot (`Hint`, `src/klimper/Hint.tsx`), which
 opens on a tap as well as on hover, since a phone has no hover. What is never moved behind a
 dot: a danger panel and its sentence, a homograph warning, the dead-end sentence, "only the
 domain is verified" next to "Domain verified", "if they are different, somebody is in the
@@ -243,7 +243,7 @@ nothing appeared can find the reason.
 
 ## Rendering table
 
-Every field the view may read, and nothing else. `src/klimper/xchonnectPrompt.ts` reads
+Every field the view may read, and nothing else. `src/klimper/xchonnect/xchonnectPrompt.ts` reads
 exactly this list by explicit key and validated type; any other key in the prompt JSON —
 including anything a dApp managed to influence — is dropped before the view sees it.
 

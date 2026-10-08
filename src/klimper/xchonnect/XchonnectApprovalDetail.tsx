@@ -39,8 +39,9 @@ import { Approval } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
 import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
 import { SlideToApprove } from './SlideToApprove';
-import { Hint, SiteCoin } from './XchonnectUi';
-import { useTicker } from './useTicker';
+import { Hint } from '../Hint';
+import { SiteCoin } from './XchonnectUi';
+import { useTicker } from '../useTicker';
 
 /** How long the buttons stay off after one request replaces another on screen. */
 const SWAP_SETTLE_MS = 700;

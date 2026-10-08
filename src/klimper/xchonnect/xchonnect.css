@@ -478,35 +478,6 @@
 }
 
 /* The info dot behind a short label, and the sentence it opens. */
-.xc-hint {
-  display: inline-flex;
-  width: 1.25rem;
-  height: 1.25rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  color: var(--muted-foreground);
-  vertical-align: middle;
-}
-
-.xc-hint:hover,
-.xc-hint[data-state='open'] {
-  color: var(--foreground);
-  background: rgb(128 128 128 / 0.14);
-  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
-}
-
-.xc-hint-body {
-  /* Above the approval overlay (z-index 61), which a hint can sit inside. */
-  z-index: 70;
-  max-width: min(18rem, calc(100vw - 2rem));
-  padding: 0.625rem 0.75rem;
-  font-size: 0.8125rem;
-  line-height: 1.35;
-  border-radius: 14px;
-}
-
 /* Small facts in a row: what Klimper checked, who built the spend. */
 .xc-badges {
   display: flex;

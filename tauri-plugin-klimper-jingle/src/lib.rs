@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize, Serializer};
 use tauri::{
     AppHandle, Manager, Runtime, State, command,
+    ipc::Channel,
     plugin::{Builder, TauriPlugin},
 };
 
@@ -113,6 +114,40 @@ async fn feel<R: Runtime>(
         .map_err(|error| Error::Platform(error.to_string()))?
 }
 
+/// The coin pouch is open (TASK-124): the phone's tilt and the jolts of the hand go to
+/// `channel` (`{ gx, gy }` in g, `{ jx, jy }` for a jolt), and the shake and tilt no longer sound
+/// on their own: the pouch's coins knock and call [`clink`]. `open: false` closes it (the
+/// channel is then ignored).
+#[command]
+async fn pouch<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    open: bool,
+    channel: Channel<serde_json::Value>,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || native.pouch(open.then_some(channel)))
+        .await
+        .map_err(|error| Error::Platform(error.to_string()))?
+}
+
+/// One knock between coins in the pouch: a coin hit and a tap, the same ones a shake is made
+/// of. `size` and `force` are 0..1.
+#[command]
+async fn clink<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    size: f64,
+    force: f64,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        native.clink(size.clamp(0.0, 1.0), force.clamp(0.0, 1.0))
+    })
+    .await
+    .map_err(|error| Error::Platform(error.to_string()))?
+}
+
 /// Single coin hits, one contact each, shared by every tier: the phone builds every turn of a
 /// shaking hand out of these at random.
 pub fn grains() -> [&'static [u8]; 8] {
@@ -139,7 +174,7 @@ pub fn grains() -> [&'static [u8]; 8] {
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-jingle")
-        .invoke_handler(tauri::generate_handler![play, set_shake, feel])
+        .invoke_handler(tauri::generate_handler![play, set_shake, feel, pouch, clink])
         .setup(|app, api| {
             let native = platform::init(app, api)?;
             app.manage(native);

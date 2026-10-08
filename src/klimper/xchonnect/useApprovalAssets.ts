@@ -11,7 +11,7 @@
 import { commands } from '@/bindings';
 import BigNumber from 'bignumber.js';
 import { useEffect, useState } from 'react';
-import { lastPrices } from './price';
+import { lastPrices } from '../price';
 import { AssetView } from './xchonnectPrompt';
 
 export interface AssetFacts {

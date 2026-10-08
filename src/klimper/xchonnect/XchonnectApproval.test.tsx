@@ -23,7 +23,7 @@ vi.mock('@/components/Header', () => ({
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 const ticker = vi.hoisted(() => ({ value: 'XCH' }));
-vi.mock('./useTicker', () => ({ useTicker: () => ticker.value }));
+vi.mock('../useTicker', () => ({ useTicker: () => ticker.value }));
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
@@ -57,7 +57,7 @@ vi.mock('./xchonnect', () => ({
   },
 }));
 
-const { renderScreen } = await import('./testHarness');
+const { renderScreen } = await import('../testHarness');
 const XchonnectApproval = (await import('./XchonnectApproval')).default;
 
 const KEY_A = `0x${'a'.repeat(96)}`;

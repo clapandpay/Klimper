@@ -5,14 +5,14 @@
 
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { klimperSoundEnabled } from '@/lib/features';
+import { klimperCoinsEnabled } from '@/lib/features';
 import { Trans } from '@lingui/react/macro';
 import { Coins, EyeOff } from 'lucide-react';
 import { ReactNode } from 'react';
 import { onPhone } from './haptics';
 import { usePrivacy } from './privacy';
 import { useKlimperSoundSetting } from './sound/setting';
-import { Hint } from './XchonnectUi';
+import { Hint } from './Hint';
 
 function Row({
   id,
@@ -58,7 +58,7 @@ export function KlimperSettings() {
   const [privacy, setPrivacy] = usePrivacy();
   return (
     <div className='mb-6 divide-y overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm'>
-      {klimperSoundEnabled && (
+      {klimperCoinsEnabled && (
         <Row
           id='klimper-sound-switch'
           icon={<Coins className='h-5 w-5' />}

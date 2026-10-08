@@ -17,7 +17,7 @@ vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
-vi.mock('./useTicker', () => ({ useTicker: () => 'XCH' }));
+vi.mock('../useTicker', () => ({ useTicker: () => 'XCH' }));
 vi.mock('theme-o-rama', () => ({
   useTheme: () => ({ currentTheme: { mostLike: 'light' } }),
 }));
@@ -42,7 +42,7 @@ vi.mock('./xchonnect', () => ({
   onXchonnectEvent: () => Promise.resolve(() => undefined),
 }));
 
-const { renderScreen } = await import('./testHarness');
+const { renderScreen } = await import('../testHarness');
 const XchonnectDappSettings = (await import('./XchonnectDappSettings')).default;
 const { DEFAULT_METHODS, parseLimit } = await import('./XchonnectDappSettings');
 
@@ -158,7 +158,7 @@ describe('the addresses the website sees', () => {
     await waitFor(() => screen.getByTestId('address-switch'));
     expect(document.body.textContent).not.toContain('a'.repeat(96));
     const row = screen.getByTestId('address-switch');
-    expect(row.querySelector('button.xc-hint')).not.toBeNull();
+    expect(row.querySelector('button.klimper-hint')).not.toBeNull();
   });
 
   it('turns on at once: every request still needs approval', async () => {

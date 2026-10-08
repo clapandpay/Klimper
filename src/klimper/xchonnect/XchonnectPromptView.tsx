@@ -30,7 +30,7 @@ import {
   xchUsd,
   useApprovalAssets,
 } from './useApprovalAssets';
-import { Hint } from './XchonnectUi';
+import { Hint } from '../Hint';
 import {
   AssetView,
   BindingView,

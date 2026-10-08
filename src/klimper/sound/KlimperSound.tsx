@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Klimper sound, running (clapandpay TASK-111.03, decision-009). Mounted once by
-// `KlimperRoot`, only when `VITE_ENABLE_KLIMPER_SOUND` is on, and loaded lazily so a build
+// `KlimperRoot`, only when `VITE_ENABLE_KLIMPER_COINS` is on, and loaded lazily so a build
 // without the flag ships none of this. Renders nothing.
 //
 // Two moments. Coins arrive: the balance Sage keeps goes up on a synced wallet, and the ding

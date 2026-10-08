@@ -23,6 +23,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { amount } from '@/lib/formTypes';
 import { fromMojos, toMojos } from '@/lib/utils';
 import { useWallet } from '@/contexts/WalletContext';
+import { KlimperCoinPouch } from '@/klimper/pouch';
 import { MASK, useMaskAmounts } from '@/klimper/privacy';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -438,6 +439,12 @@ export function OwnedCoinsCard({
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Klimper: the same coins as discs, sharing this selection (TASK-124). */}
+        <KlimperCoinPouch
+          asset={asset}
+          selectedCoins={selectedCoins}
+          setSelectedCoins={setSelectedCoins}
+        />
         <CoinList
           clawback={false}
           precision={asset.precision}

@@ -27,7 +27,7 @@ vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
-vi.mock('./useTicker', () => ({ useTicker: () => 'XCH' }));
+vi.mock('../useTicker', () => ({ useTicker: () => 'XCH' }));
 const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'macos' }));
@@ -76,7 +76,7 @@ vi.mock('./xchonnect', () => ({
   },
 }));
 
-const { renderScreen } = await import('./testHarness');
+const { renderScreen } = await import('../testHarness');
 const { XchonnectApprovalHost } = await import('./XchonnectApprovalHost');
 const XchonnectApproval = (await import('./XchonnectApproval')).default;
 const { setXchonnectNavigator } = await import('./xchonnectLinkHandoff');

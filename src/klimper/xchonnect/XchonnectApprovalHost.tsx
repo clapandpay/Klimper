@@ -27,8 +27,8 @@ import { useEffect, useRef, useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { ExternalLink } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { mempoolTxUrl } from './explorer';
-import { useTicker } from './useTicker';
+import { mempoolTxUrl } from '../explorer';
+import { useTicker } from '../useTicker';
 import {
   onXchonnectEvent,
   SentEvent,

@@ -53,6 +53,10 @@ msgstr ""
 #~ msgid "{0} clawed back coin{1}"
 #~ msgstr ""
 
+#: src/klimper/pouch/CoinPouch.tsx:359
+#~ msgid "{0} coins"
+#~ msgstr ""
+
 #: src/components/confirmations/TokenConfirmation.tsx:243
 #~ msgid "{0} finalized clawback{1}"
 #~ msgstr ""
@@ -67,6 +71,10 @@ msgstr ""
 
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:287
 #~ msgid "{0} offers have been created and imported successfully{1}. You will now be redirected to the offers page where you can view the details of each offer."
+#~ msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:350
+#~ msgid "{0} selected"
 #~ msgstr ""
 
 #: src/components/NftCard.tsx:362
@@ -99,6 +107,10 @@ msgstr ""
 
 #: src/components/confirmations/TokenConfirmation.tsx:227
 msgid "{coinCount, plural, one {Split # coin} other {Split # coins}}"
+msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:362
+msgid "{coinCount} coins"
 msgstr ""
 
 #: src/klimper/XchonnectApprovalHost.tsx:114
@@ -214,6 +226,10 @@ msgstr "{peersToDeleteCount, plural, one {Dadurch wird der Peer aus Ihrer Verbin
 msgid "{peersToDeleteCount, plural, one {Will temporarily prevent the peer from being connected to.} other {Will temporarily prevent the peers from being connected to.}}"
 msgstr "{peersToDeleteCount, plural, one {Verhindert vorübergehend die Verbindung zum Peer.} other {Verhindert vorübergehend die Verbindung zu den ausgewählten Peers.}}"
 
+#: src/klimper/pouch/CoinPouch.tsx:353
+msgid "{pickedCount} selected"
+msgstr ""
+
 #: src/components/ClawbackCoinsCard.tsx:358
 msgid "{selectedCoinCount} {selectedCoinLabel} selected"
 msgstr ""
@@ -222,7 +238,7 @@ msgstr ""
 #~ msgid "{selectedCoinCount} {selectedCoinLabel} selected ({selectedCoinsTotal} {0})"
 #~ msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:499
+#: src/components/OwnedCoinsCard.tsx:506
 msgid "{selectedCoinCount} {selectedCoinLabel} selected ({selectedCoinsTotal} {ticker})"
 msgstr ""
 
@@ -344,6 +360,10 @@ msgstr ""
 
 #: src/klimper/XchonnectApprovalHost.tsx:267
 msgid "A website asks you to sign"
+msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:365
+msgid "About your coins"
 msgstr ""
 
 #: src/pages/Themes.tsx:170
@@ -727,7 +747,7 @@ msgstr "Attribute"
 #~ msgid "Auto Combine {0}"
 #~ msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:629
+#: src/components/OwnedCoinsCard.tsx:636
 msgid "Auto Combine {ticker}"
 msgstr ""
 
@@ -923,9 +943,9 @@ msgstr ""
 #: src/components/FeeOnlyDialog.tsx:93
 #: src/components/NftCard.tsx:697
 #: src/components/OfferRowCard.tsx:107
-#: src/components/OwnedCoinsCard.tsx:546
-#: src/components/OwnedCoinsCard.tsx:614
-#: src/components/OwnedCoinsCard.tsx:697
+#: src/components/OwnedCoinsCard.tsx:553
+#: src/components/OwnedCoinsCard.tsx:621
+#: src/components/OwnedCoinsCard.tsx:704
 #: src/components/ThemeCard.tsx:216
 #: src/components/TokenCard.tsx:288
 #: src/components/TransferDialog.tsx:166
@@ -1146,7 +1166,7 @@ msgstr ""
 
 #: src/components/ClawbackCoinsCard.tsx:354
 #: src/components/MultiSelectActionBar.tsx:91
-#: src/components/OwnedCoinsCard.tsx:495
+#: src/components/OwnedCoinsCard.tsx:502
 msgid "Clear Selection"
 msgstr ""
 
@@ -1161,7 +1181,7 @@ msgstr ""
 
 #: src/components/ClawbackCoinsCard.tsx:290
 #: src/components/CoinList.tsx:540
-#: src/components/OwnedCoinsCard.tsx:417
+#: src/components/OwnedCoinsCard.tsx:418
 msgid "coin"
 msgstr ""
 
@@ -1192,7 +1212,7 @@ msgstr ""
 
 #: src/components/ClawbackCoinsCard.tsx:290
 #: src/components/CoinList.tsx:541
-#: src/components/OwnedCoinsCard.tsx:417
+#: src/components/OwnedCoinsCard.tsx:418
 msgid "coins"
 msgstr ""
 
@@ -1278,9 +1298,9 @@ msgstr ""
 msgid "Colors"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:485
-#: src/components/OwnedCoinsCard.tsx:549
-#: src/components/OwnedCoinsCard.tsx:700
+#: src/components/OwnedCoinsCard.tsx:492
+#: src/components/OwnedCoinsCard.tsx:556
+#: src/components/OwnedCoinsCard.tsx:707
 msgid "Combine"
 msgstr "Zusammenfügen"
 
@@ -1288,7 +1308,7 @@ msgstr "Zusammenfügen"
 #~ msgid "Combine {0}"
 #~ msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:512
+#: src/components/OwnedCoinsCard.tsx:519
 msgid "Combine {ticker}"
 msgstr "{ticker} zusammenfügen"
 
@@ -1297,8 +1317,8 @@ msgstr "{ticker} zusammenfügen"
 msgid "Combine Coins"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:285
-#: src/components/OwnedCoinsCard.tsx:399
+#: src/components/OwnedCoinsCard.tsx:286
+#: src/components/OwnedCoinsCard.tsx:400
 msgid "Combine Details"
 msgstr ""
 
@@ -1924,6 +1944,10 @@ msgstr ""
 
 #: src/pages/Send.tsx:477
 msgid "e.g. ff00ab"
+msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:366
+msgid "Each coin is one disc: the bigger, the more it holds. A payment spends whole coins and gives change back as a new coin. Tilt the phone to move them, tap coins to select them, then split or combine them below."
 msgstr ""
 
 #: src/components/TokenCard.tsx:169
@@ -3081,11 +3105,11 @@ msgstr ""
 msgid "Marketplaces"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:679
+#: src/components/OwnedCoinsCard.tsx:686
 msgid "Maximum Coin Amount"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:664
+#: src/components/OwnedCoinsCard.tsx:671
 msgid "Maximum Number of Coins"
 msgstr ""
 
@@ -3269,9 +3293,9 @@ msgstr ""
 #: src/components/dialogs/CancelOfferDialog.tsx:68
 #: src/components/FeeOnlyDialog.tsx:78
 #: src/components/NftCard.tsx:681
-#: src/components/OwnedCoinsCard.tsx:531
-#: src/components/OwnedCoinsCard.tsx:599
-#: src/components/OwnedCoinsCard.tsx:649
+#: src/components/OwnedCoinsCard.tsx:538
+#: src/components/OwnedCoinsCard.tsx:606
+#: src/components/OwnedCoinsCard.tsx:656
 #: src/components/TransferDialog.tsx:151
 #: src/pages/CreateProfile.tsx:87
 #: src/pages/IssueToken.tsx:146
@@ -3424,6 +3448,10 @@ msgstr ""
 msgid "No coins being spent."
 msgstr ""
 
+#: src/klimper/pouch/CoinPouch.tsx:346
+msgid "No coins yet"
+msgstr ""
+
 #: src/components/NftCard.tsx:398
 #: src/components/NftCard.tsx:402
 msgid "No collection"
@@ -3572,9 +3600,9 @@ msgstr ""
 #: src/components/dialogs/CancelOffersFlow.tsx:43
 #: src/components/FeeOnlyDialog.tsx:51
 #: src/components/NftCard.tsx:241
-#: src/components/OwnedCoinsCard.tsx:260
-#: src/components/OwnedCoinsCard.tsx:306
-#: src/components/OwnedCoinsCard.tsx:356
+#: src/components/OwnedCoinsCard.tsx:261
+#: src/components/OwnedCoinsCard.tsx:307
+#: src/components/OwnedCoinsCard.tsx:357
 #: src/components/TransferDialog.tsx:58
 msgid "Not enough funds to cover the fee"
 msgstr "Nicht genügend Guthaben, um die Gebühr zu decken"
@@ -3893,7 +3921,7 @@ msgid "Outline"
 msgstr ""
 
 #: src/components/confirmations/TokenConfirmation.tsx:287
-#: src/components/OwnedCoinsCard.tsx:578
+#: src/components/OwnedCoinsCard.tsx:585
 msgid "Output Count"
 msgstr "Output Anzahl"
 
@@ -3913,7 +3941,7 @@ msgstr ""
 #~ msgid "Override the default of whether to sync old blocks"
 #~ msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:437
+#: src/components/OwnedCoinsCard.tsx:438
 msgid "Owned Coins"
 msgstr ""
 
@@ -4701,6 +4729,14 @@ msgstr ""
 msgid "Select"
 msgstr ""
 
+#: src/klimper/pouch/CoinPouch.tsx:382
+#~ msgid "Select {0} tiny coins"
+#~ msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:385
+msgid "Select {dustCount} tiny coins"
+msgstr ""
+
 #: src/components/MultiSelectActionBar.tsx:72
 #: src/pages/PeerList.tsx:66
 msgid "Select all"
@@ -5176,8 +5212,8 @@ msgstr "Ausgegeben"
 msgid "Spent Coins"
 msgstr "Ausgegebene Coins"
 
-#: src/components/OwnedCoinsCard.tsx:466
-#: src/components/OwnedCoinsCard.tsx:617
+#: src/components/OwnedCoinsCard.tsx:473
+#: src/components/OwnedCoinsCard.tsx:624
 msgid "Split"
 msgstr "Splitten"
 
@@ -5185,7 +5221,7 @@ msgstr "Splitten"
 #~ msgid "Split {0}"
 #~ msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:561
+#: src/components/OwnedCoinsCard.tsx:568
 msgid "Split {ticker}"
 msgstr "{ticker} splitten"
 
@@ -5194,7 +5230,7 @@ msgstr "{ticker} splitten"
 msgid "Split Coins"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:335
+#: src/components/OwnedCoinsCard.tsx:336
 msgid "Split Details"
 msgstr ""
 
@@ -5277,7 +5313,7 @@ msgstr ""
 msgid "Swap"
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:483
+#: src/components/OwnedCoinsCard.tsx:490
 msgid "Sweep"
 msgstr ""
 
@@ -5923,11 +5959,11 @@ msgstr ""
 msgid "This will claw back all of the selected coins."
 msgstr ""
 
-#: src/components/OwnedCoinsCard.tsx:515
+#: src/components/OwnedCoinsCard.tsx:522
 msgid "This will combine all of the selected coins into one."
 msgstr "Dadurch werden alle ausgewählten Coins zu einem einzigen kombiniert."
 
-#: src/components/OwnedCoinsCard.tsx:632
+#: src/components/OwnedCoinsCard.tsx:639
 msgid "This will combine small enough coins automatically, so you don't have to manually select them."
 msgstr ""
 
@@ -5991,7 +6027,7 @@ msgstr ""
 msgid "This will send the profile to the provided address."
 msgstr "Dadurch wird das Profil an die angegebene Adresse gesendet."
 
-#: src/components/OwnedCoinsCard.tsx:564
+#: src/components/OwnedCoinsCard.tsx:571
 msgid "This will split all of the selected coins."
 msgstr "Dadurch werden alle ausgewählten Coins aufgeteilt."
 
@@ -6979,6 +7015,10 @@ msgstr ""
 
 #: src/klimper/XchonnectPromptView.tsx:550
 msgid "Your balance changes by"
+msgstr ""
+
+#: src/klimper/pouch/CoinPouch.tsx:337
+msgid "Your coins"
 msgstr ""
 
 #: src/klimper/PasskeySettings.tsx:51

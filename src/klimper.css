@@ -321,6 +321,50 @@
   font-variant-numeric: tabular-nums;
 }
 
-.klimper-total .xc-hint {
+.klimper-total .klimper-hint {
   color: inherit;
+}
+
+/* The coin pouch on a token page (TASK-124): a soft, deep pocket the coins lie in. */
+.klimper-pouch {
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      rgb(255 255 255 / 0.08),
+      transparent 70%
+    ),
+    var(--muted);
+  box-shadow:
+    inset 0 2px 10px rgb(0 0 0 / 0.18),
+    inset 0 -1px 0 rgb(255 255 255 / 0.06);
+}
+
+/* The info dot behind a short label (`Hint.tsx`), on every Klimper screen. */
+.klimper-hint {
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--muted-foreground);
+  vertical-align: middle;
+}
+
+.klimper-hint:hover,
+.klimper-hint[data-state='open'] {
+  color: var(--foreground);
+  background: rgb(128 128 128 / 0.14);
+  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+}
+
+.klimper-hint-body {
+  /* Above the approval overlay (z-index 61), which a hint can sit inside. */
+  z-index: 70;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  border-radius: 14px;
 }

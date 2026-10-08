@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the clink command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-clink",
+          "markdownDescription": "Enables the clink command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clink command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-clink",
+          "markdownDescription": "Denies the clink command without any pre-configured scope."
+        },
+        {
           "description": "Enables the feel command without any pre-configured scope.",
           "type": "string",
           "const": "allow-feel",
@@ -319,6 +331,18 @@
           "markdownDescription": "Denies the play command without any pre-configured scope."
         },
         {
+          "description": "Enables the pouch command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pouch",
+          "markdownDescription": "Enables the pouch command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pouch command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pouch",
+          "markdownDescription": "Denies the pouch command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_shake command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-shake",
@@ -331,10 +355,10 @@
           "markdownDescription": "Denies the set_shake command without any pre-configured scope."
         },
         {
-          "description": "Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, and tap the system haptics of a control.\n#### This default permission set includes:\n\n- `allow-play`\n- `allow-set-shake`\n- `allow-feel`",
+          "description": "Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, tap the system haptics of a control, and let the coin pouch follow the tilt and knock.\n#### This default permission set includes:\n\n- `allow-play`\n- `allow-set-shake`\n- `allow-feel`\n- `allow-pouch`\n- `allow-clink`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, and tap the system haptics of a control.\n#### This default permission set includes:\n\n- `allow-play`\n- `allow-set-shake`\n- `allow-feel`"
+          "markdownDescription": "Play the Klimper coin ding, turn the shake rattle (with haptics) on or off, tap the system haptics of a control, and let the coin pouch follow the tilt and knock.\n#### This default permission set includes:\n\n- `allow-play`\n- `allow-set-shake`\n- `allow-feel`\n- `allow-pouch`\n- `allow-clink`"
         }
       ]
     }

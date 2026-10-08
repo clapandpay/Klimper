@@ -19,7 +19,7 @@ request". Only the relay's answer is acted on.
 | Sealing the token, registering it, renewing it    | `tauri-plugin-klimper-xchonnect/src/push.rs`, `session_loop.rs` (`ensure_push`)                       |
 | iOS: permission, APNs token, wake-ups             | `tauri-plugin-klimper-xchonnect/ios/Sources/KlimperXchonnectPlugin.swift`                             |
 | Android: permission, Firebase token, notification | `tauri-plugin-klimper-xchonnect/android/` (`KlimperXchonnectPlugin.kt`, `KlimperMessagingService.kt`) |
-| What the user sees when notifications are refused | `src/klimper/useXchonnectPush.ts`, `XchonnectDapps.tsx`                                               |
+| What the user sees when notifications are refused | `src/klimper/xchonnect/useXchonnectPush.ts`, `XchonnectDapps.tsx`                                     |
 
 The permission is asked at the **first confirmed pairing**, not at launch. Registration is
 per session, with a fresh sealed token, so the relay cannot link two sessions of one phone.

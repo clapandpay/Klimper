@@ -11,7 +11,7 @@ import { scanEnabled, xchonnectEnabled } from '@/lib/features';
 import { Trans } from '@lingui/react/macro';
 import { Globe, ScanLine } from 'lucide-react';
 import { SCANNER_ROUTE } from './Scanner';
-import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
+import { XCHONNECT_ROUTES } from './xchonnect/xchonnectLinkHandoff';
 
 interface KlimperNavLinksProps {
   isCollapsed?: boolean;

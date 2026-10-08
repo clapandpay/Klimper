@@ -55,7 +55,7 @@ vi.mock('@/hooks/useScannerOrClipboard', () => ({
   },
 }));
 
-const { renderScreen } = await import('./testHarness');
+const { renderScreen } = await import('../testHarness');
 const XchonnectConnect = (await import('./XchonnectConnect')).default;
 
 const preview: PairingPreview = {

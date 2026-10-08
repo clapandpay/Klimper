@@ -25,7 +25,7 @@ vi.mock('./xchonnect', () => ({
   onXchonnectEvent: () => Promise.resolve(() => undefined),
 }));
 
-const { renderScreen } = await import('./testHarness');
+const { renderScreen } = await import('../testHarness');
 const { XchonnectSettings } = await import('./XchonnectSettings');
 
 afterEach(cleanup);

@@ -18,7 +18,7 @@
 
 import { Check, ChevronsRight } from 'lucide-react';
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { feel } from './haptics';
+import { feel } from '../haptics';
 
 /** How far the knob must travel to count, as a share of the track. */
 const DONE_AT = 0.92;

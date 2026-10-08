@@ -29,7 +29,7 @@ vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({
   scannerRoutes: <Route path='/scanner' element={<div />} />,
 }));
-vi.mock('./XchonnectRoutes', () => ({
+vi.mock('./xchonnect/XchonnectRoutes', () => ({
   xchonnectRoutes: <Route path='/xchonnect' element={<div />} />,
 }));
 

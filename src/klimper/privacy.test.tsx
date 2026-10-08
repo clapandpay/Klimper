@@ -27,7 +27,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
 });
 
-vi.mock('@/lib/features', () => ({ klimperSoundEnabled: true }));
+vi.mock('@/lib/features', () => ({ klimperCoinsEnabled: true }));
 vi.mock('./haptics', () => ({ onPhone: () => true }));
 
 const { MASK, PRIVACY_KEY, RevealAmounts } = await import('./privacy');

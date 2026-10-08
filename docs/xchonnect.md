@@ -154,6 +154,6 @@ no environment variable that turns that on in a release build.
 - **Same-device requests**: the pairing reply does not announce the wallet's link base
   (`WalletMeta.link`), and the verified `return_url` is not persisted with the session or
   surfaced on `SessionSummary`. Both are small plugin changes; the UI guard is written and
-  tested (`src/klimper/xchonnectReturn.ts`).
+  tested (`src/klimper/xchonnect/xchonnectReturn.ts`).
 - **Coin and balance reads, `sendTransaction`**: TASK-082. Only the methods wallet-kit
   handles are answered; anything else returns the CHIP-0002 method-not-found code.

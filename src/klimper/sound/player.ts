@@ -7,7 +7,7 @@
 //
 // Everything here fails quietly: a sound that did not play is not an error the user needs.
 
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { onPhone } from '../haptics';
 import type { Tier } from './tiers';
 
@@ -44,6 +44,41 @@ export async function setShake(enabled: boolean, tier: Tier): Promise<void> {
   return inOrder(() =>
     invoke('plugin:klimper-jingle|set_shake', { enabled, tier }),
   );
+}
+
+/** What the phone tells an open coin pouch: gravity, or a jolt of the hand (in g, phone axes). */
+export type PouchMotion =
+  | { gx: number; gy: number }
+  | { jx: number; jy: number };
+
+/**
+ * Open the coin pouch (TASK-124): the phone's tilt and jolts come to `onMotion`, and the shake
+ * and tilt stop sounding on their own, since the pouch's coins knock instead ([`clink`]).
+ * Returns the close. Phone only; elsewhere the pouch has no motion and this does nothing.
+ */
+export function openPouch(onMotion: (motion: PouchMotion) => void): () => void {
+  if (!onPhone()) return () => undefined;
+  const channel = new Channel<PouchMotion>();
+  channel.onmessage = onMotion;
+  void inOrder(() =>
+    invoke('plugin:klimper-jingle|pouch', { open: true, channel }),
+  );
+  return () => {
+    channel.onmessage = () => undefined;
+    void inOrder(() =>
+      invoke('plugin:klimper-jingle|pouch', {
+        open: false,
+        channel: new Channel(),
+      }),
+    );
+  };
+}
+
+/** A knock between coins in an open pouch, heard and felt. `size` and `force` 0..1. */
+export function clink(size: number, force: number): void {
+  if (!onPhone()) return;
+  // Not queued: a knock is now or never, and order between knocks does not matter.
+  void invoke('plugin:klimper-jingle|clink', { size, force }).catch(quiet);
 }
 
 // Desktop: one AudioContext, buffers decoded on first use and kept.

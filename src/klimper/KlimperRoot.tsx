@@ -8,18 +8,21 @@
 import '@/lib/klimperTheme';
 import { t } from '@lingui/core/macro';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { klimperSoundEnabled } from '@/lib/features';
+import { klimperCoinsEnabled } from '@/lib/features';
 import { KlimperErrorBoundary } from './KlimperErrorBoundary';
 import { PasskeyGate } from './PasskeyGate';
-import { XchonnectApprovalHost } from './XchonnectApprovalHost';
-import { listenForXchonnectLinks } from './xchonnectDeepLink';
-import { goToXchonnectRoute, XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
+import { XchonnectApprovalHost } from './xchonnect/XchonnectApprovalHost';
+import { listenForXchonnectLinks } from './xchonnect/xchonnectDeepLink';
+import {
+  goToXchonnectRoute,
+  XCHONNECT_ROUTES,
+} from './xchonnect/xchonnectLinkHandoff';
 
 export { klimperRouter } from './routes';
 
 // The Klimper sound (decision-009): its chunk is loaded only when the flag is on, so a build
 // without it carries nothing of it, and a build with it pays for the chunk once.
-const KlimperSound = klimperSoundEnabled
+const KlimperSound = klimperCoinsEnabled
   ? lazy(() => import('./sound/KlimperSound'))
   : null;
 

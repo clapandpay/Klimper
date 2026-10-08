@@ -21,7 +21,7 @@ vi.mock('@/components/CopyBox', () => ({
 }));
 
 const offerXchonnectLink = vi.fn();
-vi.mock('./xchonnectLinkHandoff', () => ({
+vi.mock('./xchonnect/xchonnectLinkHandoff', () => ({
   offerXchonnectLink: (raw: string) => offerXchonnectLink(raw),
 }));
 

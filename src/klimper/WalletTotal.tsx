@@ -7,7 +7,7 @@ import { NumberFormat } from '@/components/NumberFormat';
 import { Trans } from '@lingui/react/macro';
 import { lastPrices } from './price';
 import { useMaskAmounts } from './privacy';
-import { Hint } from './XchonnectUi';
+import { Hint } from './Hint';
 
 export function WalletTotal({ usd }: { readonly usd: number }) {
   const masked = useMaskAmounts();

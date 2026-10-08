@@ -44,7 +44,8 @@ import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
-import { AddressSwitch, Hint } from './XchonnectUi';
+import { Hint } from '../Hint';
+import { AddressSwitch } from './XchonnectUi';
 import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
@@ -54,7 +55,7 @@ import {
   XCH_PRECISION,
 } from './xchonnectPrompt';
 import { useXchonnectSessions } from './useXchonnectSessions';
-import { useTicker } from './useTicker';
+import { useTicker } from '../useTicker';
 import './xchonnect.css';
 
 /**

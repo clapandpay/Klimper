@@ -47,13 +47,13 @@ import {
   QrCamera,
   QrCameraIdle,
   QrCameraOff,
-} from './QrCamera';
+} from '../QrCamera';
 import { XchonnectDomain } from './XchonnectDomain';
+import { Hint } from '../Hint';
 import {
   AddressSwitch,
   ConnectSteps,
   Fact,
-  Hint,
   SasDigits,
   SiteCoin,
 } from './XchonnectUi';

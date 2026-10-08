@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
   clapAndPayConnectEnabled: false,
-  klimperSoundEnabled: false,
+  klimperCoinsEnabled: false,
   nftsEnabled: true,
   offersEnabled: true,
   optionsEnabled: true,
@@ -42,10 +42,10 @@ vi.mock('react-router-dom', async (original) => ({
 }));
 vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({ scannerRoutes: null }));
-vi.mock('./XchonnectRoutes', () => ({ xchonnectRoutes: null }));
+vi.mock('./xchonnect/XchonnectRoutes', () => ({ xchonnectRoutes: null }));
 vi.mock('./PasskeyGate', () => ({ PasskeyGate: () => null }));
 const overlayThrows = vi.hoisted(() => ({ value: false }));
-vi.mock('./XchonnectApprovalHost', () => ({
+vi.mock('./xchonnect/XchonnectApprovalHost', () => ({
   XchonnectApprovalHost: () => {
     if (overlayThrows.value) throw new Error('overlay broke');
     return <div data-testid='overlay' />;

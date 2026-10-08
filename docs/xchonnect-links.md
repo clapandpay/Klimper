@@ -20,7 +20,7 @@ Parameters are in the **fragment** so they never reach a web server and never ap
 server log. For `/pair` the fragment contains the pairing secret `s`, which is the
 out-of-band secret that authenticates the whole handshake.
 
-`src/klimper/xchonnectLink.ts` is the only parser, and `parseXchonnectLink` is total: a
+`src/klimper/xchonnect/xchonnectLink.ts` is the only parser, and `parseXchonnectLink` is total: a
 failure is a result, not an exception, and the result is a code rather than the text that
 failed. Three things follow from that, and each has a test:
 
@@ -38,7 +38,7 @@ universal link's fragment would both break routing and write the pairing secret 
 history stack.
 
 So a link is handed over in memory. `offerXchonnectLink(url)` in
-`src/klimper/xchonnectLinkHandoff.ts` parses it, keeps it for exactly one read, and
+`src/klimper/xchonnect/xchonnectLinkHandoff.ts` parses it, keeps it for exactly one read, and
 navigates to `/xchonnect/connect` or `/xchonnect/request` — a bare route, with no
 parameters. The screen calls `takeXchonnectLink()` once; a reload cannot replay a pairing
 code.
@@ -93,7 +93,7 @@ Safari / a dApp's "open in wallet"
     application:continueUserActivity:restorationHandler:
   → Tauri RunEvent::Opened { urls }
   → tauri-plugin-deep-link: stores the URLs (getCurrent) and emits deep-link://new-url
-  → src/klimper/xchonnectDeepLink.ts: listenForXchonnectLinks (mounted once by KlimperRoot)
+  → src/klimper/xchonnect/xchonnectDeepLink.ts: listenForXchonnectLinks (mounted once by KlimperRoot)
   → offerXchonnectLink → the connect or request screen
 ```
 
@@ -186,7 +186,7 @@ What is missing, both in the plugin rather than the screens:
   already refuses an origin document whose `return_url` leaves the claimed domain — so
   pairing fails rather than handing the wallet a URL to police. But it is neither persisted
   with the session nor put on `SessionSummary`, so the webview has nothing to return to.
-  `src/klimper/xchonnectReturn.ts` holds the guard and its tests: https only, byte-exact
+  `src/klimper/xchonnect/xchonnectReturn.ts` holds the guard and its tests: https only, byte-exact
   authority, no userinfo, no port, no trailing dot, checked against the session's verified
   ASCII domain. Until the field exists the approval screen does what the integration guide
   asks for in that case — it leaves the user with a clear "you can go back now" state
