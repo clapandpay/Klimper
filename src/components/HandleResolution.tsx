@@ -14,7 +14,7 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react';
 
-export function handleErrorMessage(code: HandleErrorCode): string {
+function handleErrorMessage(code: HandleErrorCode): string {
   switch (code) {
     case 'invalid':
       return t`A handle is 3 to 63 letters and digits`;

@@ -203,6 +203,14 @@ function amountOf(value: unknown): BigNumber {
 }
 
 /** A present amount that is not an exact integer; `readPrompt` turns it into `unreadable`. */
+/**
+ * How a CAT is named wherever Klimper cannot vouch for a name: by both ends of its asset id,
+ * since a CAT whose first 32 bits match a real one is cheap to make.
+ */
+export function catLabel(assetId: string): string {
+  return `CAT ${assetId.slice(0, 8)}…${assetId.slice(-6)}`;
+}
+
 /** Something in the prompt cannot be shown exactly (an amount, an asset): the whole prompt is unreadable. */
 class UnreadableAmount extends Error {}
 
@@ -233,14 +241,9 @@ function assetOf(
   if (!isRecord(value)) return { label: xchLabel, isXch: true, assetId: null };
   if (value.type === 'cat') {
     const assetId = hexOf(value.asset_id, 32);
-    // Both ends of the id: a CAT whose first 32 bits match a real one is cheap to make.
     return assetId === null
       ? { label: 'Unknown CAT', isXch: false, assetId: null }
-      : {
-          label: `CAT ${assetId.slice(0, 8)}…${assetId.slice(-6)}`,
-          isXch: false,
-          assetId,
-        };
+      : { label: catLabel(assetId), isXch: false, assetId };
   }
   // A kind of asset this build does not know is not shown as XCH: nobody can consent to it.
   if (value.type !== 'xch') throw new UnreadableAmount();

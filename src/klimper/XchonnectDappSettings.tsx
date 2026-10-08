@@ -51,7 +51,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { AssetLimit, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
-import { CAT_PRECISION, XCH_PRECISION } from './xchonnectPrompt';
+import { CAT_PRECISION, catLabel, XCH_PRECISION } from './xchonnectPrompt';
 import { useXchonnectSessions } from './useXchonnectSessions';
 import { useTicker } from './useTicker';
 import './xchonnect.css';
@@ -76,8 +76,7 @@ const ESSENTIAL_METHODS = ['chainId', 'connect'] as const;
 /** `xch` or `cat:<64 hex>` (the plugin's `asset_key`). */
 function assetLabel(key: string, ticker: string): string {
   if (key === 'xch') return ticker;
-  const tail = key.startsWith('cat:') ? key.slice(4) : key;
-  return `CAT ${tail.slice(0, 8)}…`;
+  return catLabel(key.startsWith('cat:') ? key.slice(4) : key);
 }
 
 function precisionOf(key: string): number {

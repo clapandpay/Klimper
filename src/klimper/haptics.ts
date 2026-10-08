@@ -6,7 +6,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { platform } from '@tauri-apps/plugin-os';
 
-export type Feel = 'grab' | 'tick' | 'done';
+type Feel = 'grab' | 'tick' | 'done';
 
 let phone: boolean | null = null;
 
