@@ -31,11 +31,14 @@ import { usePrivacy } from '../privacy';
 import { clink, openPouch } from '../sound/player';
 import { useKlimperSoundSetting } from '../sound/setting';
 import { Hint } from '../Hint';
+import { Birth, change, Ghost, GONE_MS, grown, progress } from './changes';
 import { assetHue, layoutCoins } from './layout';
 import { Body, STEP, World } from './physics';
 
 const HEIGHT = 200;
 const CLINK_MS = 45;
+/** How long spent coins wait for what they became before they are shown leaving. */
+const WAIT_MS = 1500;
 /** A pointer that moved less than this was a tap. */
 const TAP_PX = 6;
 /** More than Sage's list ever pages through at once; beyond MAX_DISCS it is dust anyway. */
@@ -68,6 +71,19 @@ export function CoinPouch({
   const audibleRef = useRef(audible);
   audibleRef.current = audible;
   const wake = useRef<() => void>(() => undefined);
+  // Coins on their way out and on their way in (`changes.ts`), and where spent coins meet.
+  const ghosts = useRef<Ghost[]>([]);
+  const births = useRef<Birth[]>([]);
+  const meet = useRef<{ at: number; size: number } | null>(null);
+  const waited = useRef(false);
+
+  // Another asset: an empty pouch that fills without animations.
+  useEffect(() => {
+    world.current.set([]);
+    ghosts.current = [];
+    births.current = [];
+    meet.current = null;
+  }, [asset.asset_id]);
 
   // The coins: all owned ones, largest first; again whenever the wallet's coins change.
   useEffect(() => {
@@ -115,30 +131,37 @@ export function CoinPouch({
     [coins, width, privacy],
   );
 
-  // Coins into the world: the ones already there keep their place, new ones drop in.
+  // Coins into the world: the ones already there keep their place; spent ones pull together
+  // or leave, new ones come out where they met, or drop in (`changes.ts`).
   useEffect(() => {
     if (!layout) return;
     const w = world.current;
     w.resize(width, HEIGHT);
-    const was = new Map(w.bodies.map((b) => [b.id, b]));
     locked.current = new Set(
       layout.discs.filter((d) => d.locked).map((d) => d.id),
     );
-    w.set(
-      layout.discs.map((d, i): Body => {
-        const old = was.get(d.id);
-        return old
-          ? { ...old, r: d.r, held: false }
-          : {
-              id: d.id,
-              r: d.r,
-              x: d.r + Math.random() * Math.max(1, width - 2 * d.r),
-              y: d.r + (i % 4) * d.r,
-              vx: 0,
-              vy: 0,
-            };
-      }),
-    );
+    // Coins still waiting to appear count as there.
+    const now = performance.now();
+    const before = [...w.bodies, ...births.current.map((b) => b.body)];
+    // A pending transaction's coins went, nothing came yet: what they became may come with
+    // the next update. Wait for it a moment, so a combine is not shown as a send.
+    const ids = new Set(layout.discs.map((d) => d.id));
+    const had = new Set(before.map((b) => b.id));
+    const leaving = before.filter((b) => !ids.has(b.id));
+    const arriving = layout.discs.some((d) => !had.has(d.id));
+    if (leaving.length > 0 && !arriving && leaving.every((b) => b.group)) {
+      if (!waited.current) {
+        waited.current = true;
+        const timer = setTimeout(() => setCoins((c) => [...c]), WAIT_MS);
+        return () => clearTimeout(timer);
+      }
+    }
+    waited.current = false;
+    const next = change(before, layout.discs, width, HEIGHT, now);
+    w.set(next.bodies);
+    ghosts.current = [...ghosts.current, ...next.ghosts];
+    births.current = next.births;
+    if (next.meet) meet.current = next.meet;
     wake.current();
   }, [layout, width]);
 
@@ -156,21 +179,60 @@ export function CoinPouch({
     ctx.scale(dpr, dpr);
     const sprites = new Map<string, HTMLCanvasElement>();
 
-    const draw = () => {
+    const spriteOf = (r: number, sel: boolean, lock: boolean) => {
+      const key = `${Math.round(r * 2)}|${sel}|${lock}`;
+      let sprite = sprites.get(key);
+      if (!sprite) {
+        sprite = coinSprite(Math.round(r * 2) / 2, hue, sel, lock, dpr);
+        sprites.set(key, sprite);
+      }
+      return sprite;
+    };
+    /** A coin's sprite at (x, y), `scale` of its size. */
+    const coin = (
+      sprite: HTMLCanvasElement,
+      x: number,
+      y: number,
+      r: number,
+      scale: number,
+    ) => {
+      const half = (r + PAD) * scale;
+      ctx.drawImage(sprite, x - half, y - half, half * 2, half * 2);
+    };
+
+    const draw = (now: number) => {
       ctx.clearRect(0, 0, width, HEIGHT);
+      // Spent coins: pulled into their meeting point (or out of the pouch), shrinking, fading.
+      ghosts.current = ghosts.current.filter((g) => now < g.start + GONE_MS);
+      for (const g of ghosts.current) {
+        const t = progress(g.start, GONE_MS, now);
+        ctx.globalAlpha = 1 - t * t;
+        coin(
+          spriteOf(g.r, false, true),
+          g.x + (g.tx - g.x) * t,
+          g.y + (g.ty - g.y) * t,
+          g.r,
+          1 - 0.45 * t,
+        );
+      }
+      ctx.globalAlpha = 1;
       for (const b of world.current.bodies) {
-        const sel = !!selected.current[b.id];
-        const lock = locked.current.has(b.id);
-        const key = `${Math.round(b.r * 2)}|${sel}|${lock}`;
-        let sprite = sprites.get(key);
-        if (!sprite) {
-          sprite = coinSprite(Math.round(b.r * 2) / 2, hue, sel, lock, dpr);
-          sprites.set(key, sprite);
-        }
-        const half = b.r + PAD;
-        ctx.drawImage(sprite, b.x - half, b.y - half, half * 2, half * 2);
+        const scale = grown(b.born, now);
+        if (scale <= 0) continue;
+        const sprite = spriteOf(
+          b.r,
+          !!selected.current[b.id],
+          locked.current.has(b.id),
+        );
+        coin(sprite, b.x, b.y, b.r, scale);
       }
     };
+
+    /** Something is still playing that the world's sleep does not see. */
+    const animating = (now: number) =>
+      ghosts.current.length > 0 ||
+      births.current.length > 0 ||
+      world.current.bodies.some((b) => grown(b.born, now) < 1);
 
     let frame = 0;
     let last = 0;
@@ -182,6 +244,18 @@ export function CoinPouch({
       const w = world.current;
       carry = Math.min(carry + (last ? (now - last) / 1000 : STEP), STEP * 4);
       last = now;
+      // New coins whose moment came join the world.
+      const due = births.current.filter((b) => b.at <= now);
+      if (due.length > 0) {
+        births.current = births.current.filter((b) => b.at > now);
+        for (const b of due) w.add(b.body);
+      }
+      // The spent coins meet: one knock, the size of what they became.
+      const met = meet.current;
+      if (met && met.at <= now) {
+        meet.current = null;
+        if (audibleRef.current) clink(met.size, 0.8);
+      }
       while (carry >= STEP) {
         carry -= STEP;
         const impacts = w.step();
@@ -191,9 +265,11 @@ export function CoinPouch({
           clink(strongest.size, strongest.force);
         }
       }
-      draw();
+      draw(now);
       // At rest: no frame until something wakes the coins.
-      if (!w.asleep && onScreen) frame = requestAnimationFrame(tick);
+      if ((!w.asleep || animating(now)) && onScreen) {
+        frame = requestAnimationFrame(tick);
+      }
     };
     wake.current = () => {
       world.current.wake();
@@ -226,7 +302,7 @@ export function CoinPouch({
     });
     observer.observe(element);
     document.addEventListener('visibilitychange', follow);
-    draw();
+    draw(performance.now());
 
     return () => {
       observer.disconnect();

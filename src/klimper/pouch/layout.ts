@@ -20,6 +20,8 @@ export interface Disc {
   r: number;
   /** In a pending transaction or an offer: shown, not selectable. */
   locked: boolean;
+  /** The pending transaction spending it: its coins lean together until it confirms. */
+  pending: string | null;
 }
 
 export interface Layout {
@@ -68,6 +70,7 @@ export function layoutCoins(
       id: c.coin_id,
       r: Math.max(3, radii[i] * scale),
       locked: c.transaction_id !== null || c.offer_id !== null,
+      pending: c.transaction_id,
     })),
     dust,
   };

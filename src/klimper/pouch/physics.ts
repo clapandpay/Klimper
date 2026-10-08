@@ -14,6 +14,10 @@ export interface Body {
   r: number;
   /** Held by a finger: moved by the pointer, not by the world. */
   held?: boolean;
+  /** Spent by the same pending transaction as the others in its group: they lean together. */
+  group?: string;
+  /** When it appeared (ms, the view's clock): drawn growing in. */
+  born?: number;
 }
 
 /** A knock worth hearing: how big the coins are (0..1) and how hard they met (0..1). */
@@ -38,6 +42,8 @@ const HEARD_FROM = 140;
  * a little velocity (pushed down, pushed back), so the test is how far coins actually moved. */
 const REST_MOVE = 0.15;
 const REST_STEPS = 30;
+/** 1/s²: how hard coins of one pending transaction pull towards each other. */
+const LEAN = 9;
 
 export class World {
   bodies: Body[] = [];
@@ -55,6 +61,13 @@ export class World {
   set(bodies: Body[]) {
     this.bodies = bodies;
     this.rMax = Math.max(1, ...bodies.map((b) => b.r));
+    this.wake();
+  }
+
+  /** One more coin, as it appears. */
+  add(body: Body) {
+    this.bodies.push(body);
+    this.rMax = Math.max(this.rMax, body.r);
     this.wake();
   }
 
@@ -94,6 +107,7 @@ export class World {
     const keep = Math.pow(DAMPING_PER_S, dt);
     const before = this.bodies.map((b) => [b.x, b.y]);
 
+    this.lean(dt);
     for (const b of this.bodies) {
       if (b.held) continue;
       b.vx = (b.vx + this.gx * dt) * keep;
@@ -121,6 +135,26 @@ export class World {
       }
     }
     return impacts.sort((a, b) => b.force - a.force);
+  }
+
+  /** Coins of one pending transaction drift towards their middle: about to become one. */
+  private lean(dt: number) {
+    const groups = new Map<string, Body[]>();
+    for (const b of this.bodies) {
+      if (!b.group || b.held) continue;
+      const group = groups.get(b.group);
+      if (group) group.push(b);
+      else groups.set(b.group, [b]);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const cx = group.reduce((sum, b) => sum + b.x, 0) / group.length;
+      const cy = group.reduce((sum, b) => sum + b.y, 0) / group.length;
+      for (const b of group) {
+        b.vx += (cx - b.x) * LEAN * dt;
+        b.vy += (cy - b.y) * LEAN * dt;
+      }
+    }
   }
 
   private walls(b: Body, impacts: Impact[] | null) {
