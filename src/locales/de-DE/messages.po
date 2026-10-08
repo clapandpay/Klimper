@@ -270,11 +270,11 @@ msgstr ""
 msgid "1 request waiting · {time}"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:265
+#: src/klimper/ClapAndPayConnect.tsx:288
 msgid "1. Open {pageHost}"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:275
+#: src/klimper/ClapAndPayConnect.tsx:298
 msgid "2. Paste what the page gave you"
 msgstr ""
 
@@ -798,8 +798,8 @@ msgstr ""
 msgid "Both are off for every new website. Turn one on only if you know exactly why this one needs it."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:272
-#: src/klimper/ClapAndPayConnect.tsx:291
+#: src/klimper/ClapAndPayConnect.tsx:295
+#: src/klimper/ClapAndPayConnect.tsx:347
 msgid "Bringing it in…"
 msgstr ""
 
@@ -1060,8 +1060,8 @@ msgstr ""
 msgid "Choose Your Theme"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:175
-#: src/klimper/ClapAndPayConnect.tsx:229
+#: src/klimper/ClapAndPayConnect.tsx:198
+#: src/klimper/ClapAndPayConnect.tsx:252
 msgid "Clap and Pay"
 msgstr ""
 
@@ -1850,6 +1850,10 @@ msgstr ""
 #: src/pages/CreateWallet.tsx:299
 msgid "Did you save your mnemonic?"
 msgstr "Haben Sie Ihre Mnemonic gespeichert?"
+
+#: src/klimper/ClapAndPayConnect.tsx:328
+msgid "Different"
+msgstr ""
 
 #: src/pages/Settings.tsx:157
 #~ msgid "Disconnect"
@@ -2936,11 +2940,11 @@ msgstr ""
 msgid "Local Offers"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:180
+#: src/klimper/ClapAndPayConnect.tsx:203
 msgid "Lock it with Face ID"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:205
+#: src/klimper/ClapAndPayConnect.tsx:228
 msgid "Lock with Face ID"
 msgstr ""
 
@@ -3510,7 +3514,7 @@ msgstr ""
 msgid "not listening"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:213
+#: src/klimper/ClapAndPayConnect.tsx:236
 msgid "Not now"
 msgstr ""
 
@@ -3688,7 +3692,7 @@ msgstr ""
 msgid "Open menu"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:237
+#: src/klimper/ClapAndPayConnect.tsx:260
 msgid "Opened a Green Envelope? Bring that money into Klimper with your face or fingerprint. Nothing to type."
 msgstr ""
 
@@ -4429,6 +4433,14 @@ msgstr ""
 
 #: src/klimper/XchonnectConnect.tsx:520
 msgid "Same digits on the website?"
+msgstr ""
+
+#: src/klimper/ClapAndPayConnect.tsx:316
+msgid "Same number"
+msgstr ""
+
+#: src/klimper/ClapAndPayConnect.tsx:306
+msgid "Same number on the page, next to the answer?"
 msgstr ""
 
 #: src/klimper/XchonnectDappSettings.tsx:482
@@ -5174,7 +5186,7 @@ msgstr ""
 #~ msgid "Switch between light and dark theme"
 #~ msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:294
+#: src/klimper/ClapAndPayConnect.tsx:350
 msgid "Switch to {theirNetwork} and bring it in"
 msgstr ""
 
@@ -5277,7 +5289,11 @@ msgstr "Ziel-Peers"
 msgid "Technical Information"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:49
+#: src/klimper/ClapAndPayConnect.tsx:324
+msgid "That answer did not come from {pageHost}. Nothing was imported."
+msgstr ""
+
+#: src/klimper/ClapAndPayConnect.tsx:52
 msgid "That answer was made for another request. Open the page again from here."
 msgstr ""
 
@@ -5293,7 +5309,7 @@ msgstr ""
 msgid "That image is too large to scan."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:51
+#: src/klimper/ClapAndPayConnect.tsx:54
 msgid "That is not an answer from {pageHost}. Copy it there and paste again."
 msgstr ""
 
@@ -5317,7 +5333,7 @@ msgstr ""
 msgid "That link does not belong to Klimper."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:283
+#: src/klimper/ClapAndPayConnect.tsx:339
 msgid "That money is on {theirNetwork}. Klimper switches over to bring it in; you can switch back in the settings."
 msgstr ""
 
@@ -5369,7 +5385,7 @@ msgstr ""
 msgid "The initial derivation index to sync to (both hardened and unhardened keys). This is primarily applicable to legacy wallets with either hardened keys or gaps in addresses used."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:307
+#: src/klimper/ClapAndPayConnect.tsx:363
 msgid "The key then lives in Klimper on this device. On a phone it never goes into a backup. If you lose the device, open {pageHost} again: your passkey brings the money back."
 msgstr ""
 
@@ -5385,7 +5401,7 @@ msgstr ""
 msgid "The maximum royalty percent is 655.36%"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:183
+#: src/klimper/ClapAndPayConnect.tsx:206
 msgid "The money is in Klimper now. Right now anyone who can open Klimper on this phone can spend it. With a passkey, Klimper only opens with your face."
 msgstr ""
 
@@ -5405,11 +5421,11 @@ msgstr ""
 msgid "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:246
+#: src/klimper/ClapAndPayConnect.tsx:269
 msgid "The page will show this number too"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:193
+#: src/klimper/ClapAndPayConnect.tsx:216
 msgid "The passkey locks your other wallets in Klimper too. Have their recovery words written down first."
 msgstr ""
 
@@ -6397,7 +6413,7 @@ msgstr ""
 msgid "Use maximum spendable balance"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:234
+#: src/klimper/ClapAndPayConnect.tsx:257
 #: src/pages/Login.tsx:226
 msgid "Use my Clap and Pay money"
 msgstr ""
@@ -6536,7 +6552,7 @@ msgstr ""
 msgid "Wait until the address is shown, then try again"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:202
+#: src/klimper/ClapAndPayConnect.tsx:225
 msgid "Waiting for Face ID…"
 msgstr ""
 

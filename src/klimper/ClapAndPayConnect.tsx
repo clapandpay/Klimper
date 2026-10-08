@@ -7,6 +7,9 @@
 // this app instance can read (src/lib/clapandpayHandoff.ts). From there it is Sage's ordinary
 // key import: nothing in the engine or the app bridge is touched. Sage keeps that key under the
 // empty password, so where a passkey is available the next step offers to lock it (TASK-057).
+// Before anything is imported, the answer code is shown: the page shows the same six digits next
+// to its answer, and an answer that did not come from the page (a swapped clipboard) cannot
+// match them.
 import Container from '@/components/Container';
 import Header from '@/components/Header';
 import SafeAreaView from '@/components/SafeAreaView';
@@ -61,6 +64,11 @@ export default function ClapAndPayConnect() {
   const [opened, setOpened] = useState(false);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // An opened answer waiting for the person to compare its code with the page's.
+  const [confirm, setConfirm] = useState<{
+    payload: HandoffPayload;
+    answerCode: string;
+  } | null>(null);
   // An answer for another network than Klimper's: kept, so one tap can switch and finish.
   const [elsewhere, setElsewhere] = useState<HandoffPayload | null>(null);
   // After the import: offer the passkey, and say so if it would lock other wallets too.
@@ -120,7 +128,22 @@ export default function ClapAndPayConnect() {
     setProblem(null);
     setElsewhere(null);
     try {
-      const payload = await request.open((await readText()) ?? '');
+      setConfirm(await request.open((await readText()) ?? ''));
+    } catch (error) {
+      fail(error);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  // The codes match: the answer is the page's. Now the network, then the import.
+  const accept = async () => {
+    if (!confirm) return;
+    const { payload } = confirm;
+    setConfirm(null);
+    setPending(true);
+    setProblem(null);
+    try {
       // Names, not kinds: the page says "testnet11", and so does Sage's network list.
       const current = (await commands.getNetwork({})).network.name;
       if (payload.network !== current) {
@@ -275,6 +298,39 @@ export default function ClapAndPayConnect() {
                 <Trans>2. Paste what the page gave you</Trans>
               </LoadingButton>
             </div>
+
+            {confirm && (
+              <Alert data-testid='answer-confirm'>
+                <AlertDescription className='space-y-3'>
+                  <p>
+                    <Trans>Same number on the page, next to the answer?</Trans>
+                  </p>
+                  <p
+                    className='font-mono text-4xl font-bold tracking-widest'
+                    data-testid='answer-code'
+                  >
+                    {`${confirm.answerCode.slice(0, 3)} ${confirm.answerCode.slice(3)}`}
+                  </p>
+                  <div className='flex gap-2'>
+                    <Button className='flex-1' onClick={accept}>
+                      <Trans>Same number</Trans>
+                    </Button>
+                    <Button
+                      className='flex-1'
+                      variant='destructive'
+                      onClick={() => {
+                        setConfirm(null);
+                        setProblem(
+                          t`That answer did not come from ${pageHost}. Nothing was imported.`,
+                        );
+                      }}
+                    >
+                      <Trans>Different</Trans>
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {elsewhere && (
               <Alert>

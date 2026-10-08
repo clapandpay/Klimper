@@ -7,10 +7,18 @@
 // the app instance that made the request can read it: copying it, or sending it through a link,
 // reveals nothing.
 //
-//   request   {origin}/connect?v=1&k={P-256 public key, raw, base64url}
+//   request   {origin}/connect#v=1&k={P-256 public key, raw, base64url}
 //   response  cp1.{base64url( sender public key 65 | iv 12 | AES-256-GCM ciphertext )}
 //   key       HKDF-SHA256( ECDH(shared), salt = SHA-256(receiver key | sender key), info = TAG )
 //   payload   JSON { v, network, address, masterSk }, additional data = TAG
+//
+// Two six-digit codes, each shown on both screens. The check code (from the app's key) comes
+// first: the page shows it before it seals anything, so a swapped key is caught before the wallet
+// leaves. The answer code (from both keys) comes last: the page shows it next to the answer and
+// the app after opening it, before anything is imported. Anyone who learns the app's key can seal
+// an answer of their own, but not one whose answer code matches the page's, so a pasted answer
+// that did not come from the page (a swapped clipboard) is caught. The key travels in the URL
+// fragment, which the browser never sends to the server.
 //
 // This file has no imports and uses WebCrypto only. klimper/src/lib/clapandpayHandoff.ts is a
 // byte-for-byte copy of it (a test in this package fails when they differ): edit here, copy there.
@@ -39,6 +47,13 @@ export class HandoffError extends Error {
   }
 }
 
+/** An opened response: the wallet, and the code the page shows next to its answer. */
+export interface HandoffOpened {
+  payload: HandoffPayload;
+  /** Six digits; import only once the person confirms the page shows the same. */
+  answerCode: string;
+}
+
 /** A pending request: keep it in memory until the response arrives, never store it. */
 export interface HandoffRequest {
   /** The page to open. */
@@ -46,7 +61,7 @@ export interface HandoffRequest {
   /** Six digits shown by both sides, so a person can see the page answers this app. */
   checkCode: string;
   /** Opens the response. Rejects with `HandoffError` for anything not meant for this request. */
-  open(response: string): Promise<HandoffPayload>;
+  open(response: string): Promise<HandoffOpened>;
 }
 
 export function toBase64Url(bytes: Uint8Array): string {
@@ -72,6 +87,19 @@ export async function checkCodeOf(receiverKey: Uint8Array<ArrayBuffer>): Promise
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', receiverKey));
   const number = ((digest[0] ?? 0) << 16) | ((digest[1] ?? 0) << 8) | (digest[2] ?? 0);
   return String(number % 1_000_000).padStart(6, '0');
+}
+
+/** Six digits from both public keys: the page's answer, and no other, gives the page's code. */
+export async function answerCodeOf(
+  receiverKey: Uint8Array<ArrayBuffer>,
+  senderKey: Uint8Array<ArrayBuffer>,
+): Promise<string> {
+  const label = new TextEncoder().encode(`${TAG}:answer`);
+  const all = new Uint8Array(label.length + RAW_KEY_BYTES * 2);
+  all.set(label, 0);
+  all.set(receiverKey, label.length);
+  all.set(senderKey, label.length + RAW_KEY_BYTES);
+  return checkCodeOf(all);
 }
 
 /** The AES key both sides arrive at. */
@@ -116,7 +144,7 @@ export async function createHandoffRequest(origin: string): Promise<HandoffReque
   // Not extractable: the private half cannot leave this app instance, even by our own code.
   const pair = await subtle.generateKey(CURVE, false, ['deriveBits']);
   const receiverRaw = new Uint8Array(await subtle.exportKey('raw', pair.publicKey));
-  const url = `${origin.replace(/\/+$/, '')}/connect?v=1&k=${toBase64Url(receiverRaw)}`;
+  const url = `${origin.replace(/\/+$/, '')}/connect#v=1&k=${toBase64Url(receiverRaw)}`;
 
   return {
     url,
@@ -150,7 +178,7 @@ export async function createHandoffRequest(origin: string): Promise<HandoffReque
         throw new HandoffError('bad_response');
       }
       if (!isPayload(payload)) throw new HandoffError('bad_response');
-      return payload;
+      return { payload, answerCode: await answerCodeOf(receiverRaw, senderRaw) };
     },
   };
 }

@@ -32,10 +32,16 @@ opens has to be exactly that origin, in the same browser.
    **Open localhost:5173**. It opens your **default browser**: that has to be the browser the
    wallet was made in (a passkey in iCloud Keychain is found from Safari and Chrome alike; a
    device wallet only in the browser that made it).
-5. On the page: check that the six digits match, **Yes, it is me**, Touch ID, **Copy**.
-6. Back in Klimper: **Paste what the page gave you**. The dev server is on testnet11; if Klimper
-   is on mainnet it offers **Switch to testnet11 and bring it in**, which is the same switch as
-   the network setting.
+5. On the page: check that the six digits match, **Yes, it is me**, Touch ID, **Copy**. Keep
+   the page open: it now shows a second number next to the answer.
+6. Back in Klimper: **Paste what the page gave you**. Klimper shows the answer's number; tap
+   **Same number** only if the page shows the same (an answer that did not come from the page,
+   such as a swapped clipboard, cannot match it). The dev server is on testnet11; if Klimper is
+   on mainnet it offers **Switch to testnet11 and bring it in**, which is the same switch as the
+   network setting.
+
+The app's one-time key travels in the link's fragment (`/connect#v=1&k=…`), which a browser
+never sends to the server; the page still reads an older app's query string (`?v=1&k=…`).
 
 The wallet appears as "Clap and Pay" 🟢, with the address the page shows. Remove the line from
 `.env.local` to talk to clapandpay.com again.
