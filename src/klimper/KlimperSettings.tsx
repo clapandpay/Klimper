@@ -66,10 +66,9 @@ export function KlimperSettings() {
           hint={
             onPhone() ? (
               <Trans>
-                A coin rings when coins arrive. Tilt the phone and you hear and
-                feel the coins on the open page roll; shake it and you feel
-                them: the more they are worth, the heavier. Silent mode mutes
-                the sound.
+                A coin rings when coins arrive. Shake or tilt the phone and you
+                hear and feel the coins on the open page: the more they are
+                worth, the heavier. Silent mode mutes the sound.
               </Trans>
             ) : (
               <Trans>A coin rings when coins arrive.</Trans>
