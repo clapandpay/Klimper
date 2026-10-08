@@ -27,7 +27,7 @@ import {
   AssetFacts,
   factsOf,
   formatUsd,
-  usdOf,
+  xchUsd,
   useApprovalAssets,
 } from './useApprovalAssets';
 import { Hint } from './XchonnectUi';
@@ -92,17 +92,9 @@ function Badge({
   );
 }
 
-/** Dollars next to an amount, when Klimper has a price for it. */
-function Usd({
-  asset,
-  mojos,
-  precision,
-}: {
-  readonly asset: string | null;
-  readonly mojos: BigNumber;
-  readonly precision: number;
-}) {
-  const usd = usdOf(asset, mojos, precision);
+/** Dollars next to an amount of XCH, when Klimper has a price for it. */
+function Usd({ mojos }: { readonly mojos: BigNumber }) {
+  const usd = xchUsd(mojos);
   return usd === null ? null : <span>≈ {formatUsd(usd)}</span>;
 }
 
@@ -112,7 +104,8 @@ function Usd({
  * `net` is the verdict, and it is the only figure in large type. `conditional_received`
  * gets its own line and its own sentence, and is never added to anything: it arrives from
  * spends the user neither owns nor signs, so it is income only if somebody else acts. Under
- * the net: its dollars and what the wallet holds afterwards, both from the wallet's own data.
+ * the net: what the wallet holds afterwards, the dollars for XCH, and the wallet's ticker for a
+ * CAT — beside its asset id, never in its place, since anyone can call a CAT "XCH".
  */
 function Asset({
   asset,
@@ -125,23 +118,20 @@ function Asset({
 }) {
   const magnitude = formatMagnitude(asset.net, asset.precision);
   const conditional = formatAmount(asset.conditionalReceived, asset.precision);
-  const label = asset.isXch ? asset.label : (facts?.ticker ?? asset.label);
+  const label = asset.label;
   const after =
     facts?.balance != null && !asset.net.isZero()
       ? facts.balance.plus(asset.net)
       : null;
   const left =
     after === null ? '' : `${formatAmount(after, asset.precision)} ${label}`;
+  const ticker = facts?.ticker ?? '';
   const sign = asset.net.isNegative() ? '−' : asset.net.isZero() ? '' : '+';
   return (
     <div className='flex items-start gap-3' data-testid='prompt-asset'>
-      {facts?.icon ? (
-        <img src={facts.icon} alt='' className='xc-asset-icon' loading='lazy' />
-      ) : (
-        <span className='xc-asset-icon' aria-hidden='true'>
-          {Array.from(label)[0]?.toUpperCase()}
-        </span>
-      )}
+      <span className='xc-asset-icon' aria-hidden='true'>
+        {Array.from(label)[0]}
+      </span>
       <div className='min-w-0 flex-1 space-y-0.5'>
         <div className='flex items-baseline justify-between gap-3'>
           <span className='text-sm text-muted-foreground'>
@@ -168,19 +158,11 @@ function Asset({
           </span>
         </div>
         <div className='xc-sub flex flex-wrap justify-between gap-x-3'>
-          <span>
-            {!asset.isXch && (
-              <span className='font-mono' title={asset.assetId ?? undefined}>
-                {facts?.ticker ? asset.label : null}
-              </span>
-            )}
+          <span title={asset.assetId ?? undefined} data-testid='asset-ticker'>
+            {facts?.ticker && <Trans>your wallet: {ticker}</Trans>}
           </span>
           <span className='flex gap-2'>
-            <Usd
-              asset={asset.assetId}
-              mojos={asset.net.abs()}
-              precision={asset.precision}
-            />
+            {asset.isXch && <Usd mojos={asset.net.abs()} />}
             {after !== null && after.isGreaterThanOrEqualTo(0) && (
               <span data-testid='asset-after'>
                 <Trans>then {left}</Trans>
@@ -271,15 +253,19 @@ function Binding({
       className='rounded-2xl border border-border p-3 space-y-1.5 text-sm'
       data-testid='prompt-partial'
     >
-      <div className='flex items-center gap-1 font-medium'>
+      <div className='font-medium'>
         <Trans>One half of a trade</Trans>
-        <Hint>
-          <Trans>
-            You are signing your side. Klimper checked that your signature only
-            pays out if the other side pays you.
-          </Trans>
-        </Hint>
       </div>
+      <p className='text-muted-foreground'>
+        {binding?.allBound ? (
+          <Trans>
+            Klimper checked that your signature only pays out if the other side
+            pays you.
+          </Trans>
+        ) : (
+          <Trans>You are signing your side.</Trans>
+        )}
+      </p>
       {binding?.payments.map((payment, index) => (
         <div
           // eslint-disable-next-line react/no-array-index-key
@@ -320,7 +306,7 @@ function Address({
   }
   const short =
     address.length > 22
-      ? `${address.slice(0, 10)}…${address.slice(-6)}`
+      ? `${address.slice(0, 12)}…${address.slice(-6)}`
       : address;
   return (
     <span className='font-mono text-xs' title={address} data-testid={testId}>
@@ -516,25 +502,11 @@ function Intent({
             {kind}
           </span>
         )}
-        {intent.recipientsComplete && (
-          <span className='sr-only'>
-            <Trans>
-              Verified by Klimper: these are the only payments to anyone else.
-            </Trans>
-          </span>
-        )}
         <Hint>
-          {intent.recipientsComplete ? (
-            <Trans>
-              The label is the website’s own. Each line with a tick is checked
-              by Klimper, and there are no other payments to anyone else.
-            </Trans>
-          ) : (
-            <Trans>
-              The label is the website’s own. Each line with a tick is checked
-              by Klimper.
-            </Trans>
-          )}
+          <Trans>
+            The label is the website’s own. Each line with a tick is checked by
+            Klimper.
+          </Trans>
         </Hint>
       </div>
       {intent.verified.length > 0 && (
@@ -577,6 +549,13 @@ function Intent({
             </li>
           ))}
         </ul>
+      )}
+      {intent.recipientsComplete && (
+        <p className='xc-sub'>
+          <Trans>
+            Verified by Klimper: these are the only payments to anyone else.
+          </Trans>
+        </p>
       )}
     </div>
   );
@@ -639,11 +618,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
               <span className='text-right'>
                 {formatAmount(view.impliedFee, XCH_PRECISION)} {view.xchLabel}
                 <span className='xc-sub ml-2'>
-                  <Usd
-                    asset={null}
-                    mojos={view.impliedFee}
-                    precision={XCH_PRECISION}
-                  />
+                  <Usd mojos={view.impliedFee} />
                 </span>
               </span>
             </div>

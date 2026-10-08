@@ -10,7 +10,8 @@ export type Feel = 'grab' | 'tick' | 'done';
 
 let phone: boolean | null = null;
 
-function onPhone(): boolean {
+/** iOS or Android; asked once per run. */
+export function onPhone(): boolean {
   if (phone === null) {
     try {
       const os = platform();

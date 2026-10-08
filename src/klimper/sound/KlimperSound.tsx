@@ -25,7 +25,7 @@ import { lastPrices } from '@/klimper/price';
 import { useWalletState } from '@/state';
 import { useEffect } from 'react';
 import { onPhone, playDing, setShake } from './player';
-import { Coalescer, ReceiveDetector, sampleOf } from './receive';
+import { Coalescer, NO_WALLET, ReceiveDetector, sampleOf } from './receive';
 import { useKlimperSoundSetting } from './setting';
 import { Tier, tierOf, usdOf } from './tiers';
 
@@ -82,7 +82,7 @@ export function KlimperSound() {
         coalescer.cancel();
       } else if (outcome.kind === 'received') {
         coalescer.add(outcome.mojos);
-      } else if (!fingerprintAsked && sync.receive_address !== 'Unknown') {
+      } else if (!fingerprintAsked && sync.receive_address !== NO_WALLET) {
         fingerprintAsked = true;
         void currentFingerprint().then((f) => {
           fingerprint ??= f;
@@ -112,7 +112,7 @@ export function KlimperSound() {
       let usd = page;
       if (page === null) {
         const { sync } = useWalletState.getState();
-        if (sync.receive_address === 'Unknown') return;
+        if (sync.receive_address === NO_WALLET) return;
         const { balance } = sampleOf(sync);
         usd = usdOf(balance, xchPrice());
       }

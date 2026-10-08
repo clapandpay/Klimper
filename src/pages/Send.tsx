@@ -2,10 +2,7 @@ import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { WalletAddressPicker } from '@/components/WalletAddressPicker';
 import { TokenConfirmation } from '@/components/confirmations/TokenConfirmation';
 import Container from '@/components/Container';
-import {
-  HandleResolution,
-  handleErrorMessage,
-} from '@/components/HandleResolution';
+import { HandleResolution, recheckHandle } from '@/components/HandleResolution';
 import Header from '@/components/Header';
 import { NumberFormat } from '@/components/NumberFormat';
 import { PasteInput } from '@/components/PasteInput';
@@ -36,7 +33,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
 import { handlesEnabled } from '@/lib/features';
 import { amount, positiveAmount } from '@/lib/formTypes';
-import { HandleError, isHandleInput, resolveHandle } from '@/lib/handles';
+import { isHandleInput } from '@/lib/handles';
 import {
   fromHexStrict,
   fromMojos,
@@ -136,25 +133,18 @@ export default function Send() {
         .superRefine(async (value, ctx) => {
           resolvedAddress.current = null;
           if (!handlePrefix || !isHandleInput(value)) return;
-          try {
-            const { address } = await resolveHandle(value, handlePrefix);
-            // The address on screen is the one the user agreed to. If the handle now points
-            // somewhere else, stop and let them look again.
-            if (shownAddress.current && shownAddress.current !== address) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: t`This handle just changed. Check the address and try again`,
-              });
-              return;
-            }
-            resolvedAddress.current = address;
-          } catch (error) {
+          const checked = await recheckHandle(
+            value,
+            handlePrefix,
+            shownAddress.current,
+          );
+          if ('error' in checked) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: handleErrorMessage(
-                error instanceof HandleError ? error.code : 'unavailable',
-              ),
+              message: checked.error,
             });
+          } else {
+            resolvedAddress.current = checked.address;
           }
         })
         .refine(

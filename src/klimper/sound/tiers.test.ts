@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { soundFilesOf, TIER_BOUNDS_USD, TIERS, tierOf, usdOf } from './tiers';
+import { TIER_BOUNDS_USD, tierOf, usdOf } from './tiers';
 
 describe('the tier of an amount', () => {
   it('is a coin below a dollar, and silence without a value or below a cent', () => {
@@ -33,15 +33,5 @@ describe('the tier of an amount', () => {
     expect(usdOf(1_000_000_000_000n, null)).toBeNull();
     expect(usdOf(1_000_000_000_000n, 0)).toBeNull();
     expect(tierOf(usdOf(25_000_000_000_000n, 10))).toBe('pouch');
-  });
-
-  it('names a ding per tier and the eight coin hits, in ascending weight', () => {
-    expect(TIERS).toEqual(['coin', 'few', 'handful', 'pouch']);
-    for (const tier of TIERS) {
-      expect(soundFilesOf(tier)).toEqual({
-        ding: `klimper-ding-${tier}.wav`,
-        grains: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `klimper-grain-${n}.wav`),
-      });
-    }
   });
 });

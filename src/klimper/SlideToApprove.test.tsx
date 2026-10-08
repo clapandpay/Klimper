@@ -23,11 +23,14 @@ function slider(onConfirm: () => void, disabled = false) {
 describe('slide to approve', () => {
   it('ignores a tap on the knob', () => {
     const onConfirm = vi.fn();
-    fireEvent.click(slider(onConfirm), { detail: 1 });
+    const knob = slider(onConfirm);
+    fireEvent.pointerDown(knob, { isPrimary: true, button: 0 });
+    fireEvent.pointerUp(knob);
+    fireEvent.click(knob, { detail: 1 });
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('approves on a keyboard or assistive press, once', () => {
+  it('approves on a press that no touch started (keyboard, screen reader), once', () => {
     const onConfirm = vi.fn();
     const knob = slider(onConfirm);
     fireEvent.click(knob, { detail: 0 });

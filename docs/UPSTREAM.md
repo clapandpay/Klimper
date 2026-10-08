@@ -15,7 +15,7 @@ Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LIC
 | ------------------- | -------------------------------------------------- |
 | Merged version      | **v0.13.1**, merged 2026-09-20                     |
 | Hotfix merges since | none                                               |
-| Last checked        | 2026-10-05: `upstream/main` = v0.13.1, nothing new |
+| Last checked        | 2026-10-08: `upstream/main` = v0.13.1, nothing new |
 | Klimper version     | **0.1.0**, its own (`scripts/set-version.sh`)      |
 
 **Klimper numbers its own releases; the version is not Sage's** (TASK-106).
@@ -239,15 +239,15 @@ Added the same way and just as removable, but nothing Sage would want: they are 
 not a wallet primitive. Both default to off in `features.ts`, so a build without `.env` is Sage's
 behaviour.
 
-| File                                                                                  | Ours                                 | Note                                                                                 |
-| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                      |
-| `src/pages/Send.tsx`                                                                  | +54 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict |
-| `src/components/TransferDialog.tsx`                                                   | +46 lines, `handlesEnabled`          | `@anna` for NFT, DID and option transfers; same checks as Send. Sage plans it (#871) |
-| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                       |
-| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                       |
-| `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                   |
-| `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                  |
+| File                                                                                  | Ours                                 | Note                                                                                              |
+| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only)                                   |
+| `src/pages/Send.tsx`                                                                  | +44 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict              |
+| `src/components/TransferDialog.tsx`                                                   | +32 lines, `handlesEnabled`          | `@anna` for NFT, DID and option transfers; shares `recheckHandle` with Send. Sage plans it (#871) |
+| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                                    |
+| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                                    |
+| `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                                |
+| `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                               |
 
 ### Passkey login
 

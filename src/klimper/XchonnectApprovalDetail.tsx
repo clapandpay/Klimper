@@ -43,7 +43,7 @@ import { Hint, SiteCoin } from './XchonnectUi';
 import { useTicker } from './useTicker';
 
 /** How long the buttons stay off after one request replaces another on screen. */
-export const SWAP_SETTLE_MS = 700;
+const SWAP_SETTLE_MS = 700;
 
 /** Seconds until the approval bridge refuses the request by itself. */
 function secondsLeft(expiresAt: number): number {
@@ -95,7 +95,7 @@ export function approvalHeadline(approval: Approval): ReactNode {
   return promptHeadline(readPrompt(approval.prompt));
 }
 
-export interface ApprovalDetailProps {
+interface ApprovalDetailProps {
   readonly approval: Approval;
   /** How many other approvals are waiting; shown, never answerable from here. */
   readonly waiting: number;
@@ -146,14 +146,19 @@ export function XchonnectApprovalDetail({
     return () => clearTimeout(timer);
   }, [approval.id]);
 
-  const disabled = busy || settling;
+  // Off from the very render that shows a new request, before any effect has run: a slide
+  // or tap meant for the request before cannot land on this one.
+  const swapped = shownId.current !== approval.id;
+  const disabled = busy || settling || swapped;
 
-  const answer = (approved: boolean) => {
+  /** One answer per request. */
+  const once = (act: () => void) => {
     if (disabled) return;
     setConfirming(false);
     setBusy(true);
-    onAnswer(approved);
+    act();
   };
+  const answer = (approved: boolean) => once(() => onAnswer(approved));
 
   const onApprove = () => {
     if (needsSecondConfirmation(view)) {
@@ -249,12 +254,7 @@ export function XchonnectApprovalDetail({
               variant='ghost'
               className='rounded-full'
               disabled={disabled}
-              onClick={() => {
-                if (disabled) return;
-                setConfirming(false);
-                setBusy(true);
-                onCancel();
-              }}
+              onClick={() => once(onCancel)}
               title={t`Withdraw it without answering. The website is told it was cancelled.`}
               data-testid='approval-cancel'
             >

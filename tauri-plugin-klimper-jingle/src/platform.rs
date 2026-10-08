@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The Swift side (`AVAudioPlayer`, `UIImpactFeedbackGenerator`, `CMMotionManager`) and the
+//! The Swift side (`AVAudioPlayer`, Core Haptics, `CMMotionManager`, the feedback generators) and the
 //! Kotlin side (`SoundPool`, `Vibrator`, `SensorManager`); elsewhere unsupported. Sound bytes
 //! cross the bridge base64-encoded, once per sound per run (the native side keeps the player).
 

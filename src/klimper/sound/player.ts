@@ -8,17 +8,11 @@
 // Everything here fails quietly: a sound that did not play is not an error the user needs.
 
 import { invoke } from '@tauri-apps/api/core';
-import { platform } from '@tauri-apps/plugin-os';
+import { onPhone } from '../haptics';
 import type { Tier } from './tiers';
 
-export function onPhone(): boolean {
-  try {
-    const os = platform();
-    return os === 'ios' || os === 'android';
-  } catch {
-    return false;
-  }
-}
+// One answer for the whole app (`haptics.ts` asks it too); re-exported for the sound's callers.
+export { onPhone };
 
 let warned = false;
 function quiet(error: unknown) {

@@ -26,6 +26,8 @@ export function Hint({
   readonly label?: string;
 }) {
   const [open, setOpen] = useState(false);
+  // A mouse opens it by hovering; its click must not then toggle it shut again.
+  const [byMouse, setByMouse] = useState(false);
   const mouse = (event: React.PointerEvent) => event.pointerType === 'mouse';
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -33,6 +35,8 @@ export function Hint({
         type='button'
         className='xc-hint'
         aria-label={label ?? t`More about this`}
+        onPointerDown={(event) => setByMouse(mouse(event))}
+        onClick={(event) => byMouse && event.preventDefault()}
         onPointerEnter={(event) => mouse(event) && setOpen(true)}
         onPointerLeave={(event) => mouse(event) && setOpen(false)}
       >
@@ -68,7 +72,7 @@ export function SiteCoin({
   );
 }
 
-export type ConnectStep = 'scan' | 'check' | 'compare';
+type ConnectStep = 'scan' | 'check' | 'compare';
 
 const STEPS: readonly ConnectStep[] = ['scan', 'check', 'compare'];
 

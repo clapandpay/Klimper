@@ -3,15 +3,17 @@
 //
 // A tap is not an answer here, so a stray thumb on a busy screen approves nothing: the knob
 // must travel almost the whole track, and a short slide springs back. The phone ticks as the
-// knob passes each quarter and confirms with a success haptic at the end.
+// knob passes the half and the point where letting go approves, and confirms with a success
+// haptic at the end. One finger at a time; a release counts only for the request the slide
+// began on.
 //
-// The knob is a real button named after the action. Enter or Space on it (a keyboard, a
-// screen reader, a switch control) approves at once, since that is a deliberate press; a
-// pointer click on it does nothing (`detail > 0`), only a slide does.
+// The knob is a real button named after the action. A press that did not start with a finger
+// or the mouse on it (Enter, Space, VoiceOver, TalkBack, a switch control) approves at once,
+// since that is deliberate; a tap on it does nothing, only a slide does.
 //
-// Fast and light by construction: the drag never re-renders React. It writes one custom
-// property (`--p`, 0 to 1) on the track and CSS draws the knob, the fill and the fading label
-// from it, on the compositor.
+// Light by construction: the drag never re-renders React. It writes one custom property
+// (`--p`, 0 to 1) on the track, and CSS moves the knob with a transform and reveals the trail
+// with a clip; the travel in pixels (`--travel`) is measured when the knob is taken.
 
 import { Check, ChevronsRight } from 'lucide-react';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -19,7 +21,9 @@ import { feel } from './haptics';
 
 /** How far the knob must travel to count, as a share of the track. */
 const DONE_AT = 0.92;
-const MARKS = [0.25, 0.5, 0.75];
+const MARKS = [0.5, DONE_AT];
+/** A click this soon after a finger or the mouse touched the knob is that touch, not a press. */
+const TOUCHED_MS = 700;
 
 export function SlideToApprove({
   label,
@@ -46,7 +50,12 @@ export function SlideToApprove({
     width: number;
     p: number;
     id: number;
+    key: string | undefined;
   } | null>(null);
+  const touched = useRef(0);
+  // The latest key, read by a release that may land after the request was replaced.
+  const currentKey = useRef(resetKey);
+  currentKey.current = resetKey;
   const [done, setDone] = useState(false);
 
   const set = (p: number) => track.current?.style.setProperty('--p', String(p));
@@ -64,6 +73,13 @@ export function SlideToApprove({
     setDone(false);
     set(0);
   }, [resetKey]);
+
+  // A rotation moves the end of the track: keep a finished knob there.
+  useEffect(() => {
+    if (!done) return;
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [done]);
 
   // Turned off mid-slide (the request was replaced): let go.
   useEffect(() => {
@@ -83,10 +99,18 @@ export function SlideToApprove({
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    touched.current = event.timeStamp;
+    if (drag.current || !event.isPrimary || event.button !== 0) return;
     if (disabled || done || !track.current || !knob.current) return;
     const width = measure();
     if (width <= 0) return;
-    drag.current = { x: event.clientX, width, p: 0, id: event.pointerId };
+    drag.current = {
+      x: event.clientX,
+      width,
+      p: 0,
+      id: event.pointerId,
+      key: resetKey,
+    };
     knob.current.setPointerCapture?.(event.pointerId);
     track.current.setAttribute('data-dragging', '');
     feel('grab');
@@ -108,7 +132,8 @@ export function SlideToApprove({
     if (!d || d.id !== event.pointerId) return;
     drag.current = null;
     track.current?.removeAttribute('data-dragging');
-    if (d.p >= DONE_AT && event.type === 'pointerup') finish();
+    const same = d.key === currentKey.current;
+    if (same && d.p >= DONE_AT && event.type === 'pointerup') finish();
     else set(0);
   };
 
@@ -135,8 +160,8 @@ export function SlideToApprove({
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         onClick={(event) => {
-          // Keyboard and assistive presses arrive as clicks with no pointer detail.
-          if (event.detail === 0) finish();
+          // Keyboard and assistive presses come without a touch on the knob just before.
+          if (event.timeStamp - touched.current > TOUCHED_MS) finish();
         }}
       >
         {done ? (

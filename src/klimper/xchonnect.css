@@ -497,6 +497,8 @@
 }
 
 .xc-hint-body {
+  /* Above the approval overlay (z-index 61), which a hint can sit inside. */
+  z-index: 70;
   max-width: min(18rem, calc(100vw - 2rem));
   padding: 0.625rem 0.75rem;
   font-size: 0.8125rem;
@@ -555,9 +557,11 @@
 }
 
 /*
- * Slide to approve. Glass: a translucent track that lets the sheet show through, a soft
- * highlight along its top edge, and a sun knob with a specular spot. Everything moves from
- * one custom property, --p (0 to 1), so a drag costs no layout and no React render.
+ * Slide to approve. Glass: a translucent track that lets the sheet show through its blur, a
+ * soft highlight along the top edge, and the sun knob with a specular spot. Everything moves
+ * from one custom property, --p (0 to 1), and the pixel travel measured when the knob is taken
+ * (--travel): the knob is a transform and the trail a clip, so a drag costs paint, not layout.
+ * Plain rgb() only: color-mix() needs Safari 16.2 and the app runs from iOS 15.
  */
 .xc-slide {
   --p: 0;
@@ -574,49 +578,49 @@
   background:
     linear-gradient(
       180deg,
-      rgb(255 255 255 / 0.32),
-      rgb(255 255 255 / 0.06) 55%,
-      rgb(255 255 255 / 0.12)
+      rgb(255 255 255 / 0.45),
+      rgb(255 255 255 / 0.08) 55%,
+      rgb(255 255 255 / 0.18)
     ),
-    color-mix(in srgb, var(--sun-orange, var(--primary)) 16%, var(--card));
-  border: 1px solid rgb(255 255 255 / 0.4);
+    rgb(255 122 31 / 0.14);
+  border: 1px solid rgb(255 255 255 / 0.5);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.55),
-    inset 0 -1px 0 rgb(0 0 0 / 0.06),
-    inset 0 2px 10px rgb(0 0 0 / 0.08),
-    0 10px 30px -14px
-      color-mix(in srgb, var(--sun-orange, #ff7a1a) 70%, transparent);
-  backdrop-filter: blur(18px) saturate(1.6);
-  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    inset 0 -1px 0 rgb(0 0 0 / 0.05),
+    inset 0 2px 10px rgb(0 0 0 / 0.06),
+    0 10px 30px -14px rgb(255 122 31 / 0.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
 }
 
-:is(.dark, [data-theme='dark']) .xc-slide {
+:root.theme-dark .xc-slide {
   border-color: rgb(255 255 255 / 0.14);
   background:
     linear-gradient(
       180deg,
-      rgb(255 255 255 / 0.12),
+      rgb(255 255 255 / 0.14),
       rgb(255 255 255 / 0.02) 55%,
-      rgb(255 255 255 / 0.05)
+      rgb(255 255 255 / 0.06)
     ),
-    color-mix(in srgb, var(--sun-orange, var(--primary)) 14%, var(--card));
+    rgb(255 122 31 / 0.12);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
     inset 0 2px 12px rgb(0 0 0 / 0.35),
-    0 10px 30px -14px
-      color-mix(in srgb, var(--sun-orange, #ff7a1a) 55%, transparent);
+    0 10px 30px -14px rgb(255 122 31 / 0.45);
 }
 
-/* The trail the knob leaves: the sun filling in behind it. */
+/* The trail the knob leaves: the sun filling in behind it, revealed by a clip. */
 .xc-slide-fill {
   position: absolute;
-  inset: 4px auto 4px 4px;
-  width: calc(var(--knob) + (100% - var(--knob) - 8px) * var(--p));
+  inset: 4px;
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--sun-yellow, var(--primary)) 30%, transparent),
-    color-mix(in srgb, var(--sun-orange, var(--primary)) 70%, transparent)
+    rgb(255 194 26 / 0.3),
+    rgb(255 122 31 / 0.75)
+  );
+  clip-path: inset(
+    0 calc((1 - var(--p)) * var(--travel, 100%)) 0 0 round 9999px
   );
   opacity: calc(0.35 + var(--p) * 0.65);
 }
@@ -637,11 +641,12 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .xc-slide[data-done='false'][data-disabled='false'] .xc-slide-label {
+  .xc-slide[data-done='false'][data-disabled='false']:not([data-dragging])
+    .xc-slide-label {
     background: linear-gradient(
         100deg,
         var(--foreground) 40%,
-        color-mix(in srgb, var(--foreground) 35%, white) 50%,
+        rgb(255 255 255 / 0.9) 50%,
         var(--foreground) 60%
       )
       0 0 / 250% 100%;
@@ -692,11 +697,14 @@
     box-shadow 200ms;
 }
 
-.xc-slide-fill,
-.xc-slide-label {
+.xc-slide-fill {
   transition:
-    width 380ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    clip-path 380ms cubic-bezier(0.34, 1.4, 0.64, 1),
     opacity 200ms;
+}
+
+.xc-slide-label {
+  transition: opacity 200ms;
 }
 
 /* While a finger holds it, the knob follows exactly and lifts a little. */
@@ -715,9 +723,10 @@
     0 10px 22px -6px rgb(255 59 31 / 0.65);
 }
 
+/* Inside the knob: the track clips anything outside it. */
 .xc-slide-knob:focus-visible {
-  outline: 3px solid var(--ring, var(--sun-orange));
-  outline-offset: 2px;
+  outline: 3px solid rgb(255 255 255 / 0.95);
+  outline-offset: -5px;
 }
 
 .xc-slide[data-done='true'] .xc-slide-knob {

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { HandleLookup } from '@/hooks/useHandle';
-import { HandleErrorCode } from '@/lib/handles';
+import {
+  HandleError,
+  HandleErrorCode,
+  isHandleInput,
+  resolveHandle,
+} from '@/lib/handles';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import {
@@ -22,6 +27,38 @@ export function handleErrorMessage(code: HandleErrorCode): string {
     case 'unavailable':
       return t`Handles cannot be looked up right now. Use an address instead`;
   }
+}
+
+/**
+ * Resolve "@anna" again at submit. The address on screen is the one the user agreed to: if
+ * none is shown yet, or the handle now points somewhere else, nothing is sent and the user
+ * looks again. Input that is not a handle passes through unchanged.
+ */
+export async function recheckHandle(
+  input: string,
+  prefix: string | null,
+  shown: string | null,
+): Promise<{ address: string } | { error: string }> {
+  if (!prefix || !isHandleInput(input)) return { address: input };
+  let address: string;
+  try {
+    address = (await resolveHandle(input, prefix)).address;
+  } catch (error) {
+    return {
+      error: handleErrorMessage(
+        error instanceof HandleError ? error.code : 'unavailable',
+      ),
+    };
+  }
+  if (shown === null) {
+    return { error: t`Wait until the address is shown, then try again` };
+  }
+  if (shown !== address) {
+    return {
+      error: t`This handle just changed. Check the address and try again`,
+    };
+  }
+  return { address };
 }
 
 // Shows what "@anna" stands for, in full: the address is what the money is sent to.

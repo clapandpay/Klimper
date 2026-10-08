@@ -115,18 +115,19 @@ class KlimperJinglePlugin: Plugin {
 
   @objc public func feel(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(FeelArgs.self)
+    invoke.resolve()  // nothing to wait for: free the bridge before the main thread
     DispatchQueue.main.async {
       switch args.kind {
       case "grab":
         self.impact.impactOccurred(intensity: 0.7)
         self.selection.prepare()
+        self.notice.prepare()  // the success at the end, ready on a warm Taptic Engine
       case "tick":
         self.selection.selectionChanged()
         self.selection.prepare()
       case "done": self.notice.notificationOccurred(.success)
       default: break
       }
-      invoke.resolve()
     }
   }
 

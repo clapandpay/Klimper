@@ -51,8 +51,10 @@ The second question has a short answer, and the long one goes behind a disclosur
 sentence that explains it (why a domain counts as verified, what "simulated" means, what
 happens when the countdown ends) sits behind an info dot (`Hint` in `XchonnectUi.tsx`), which
 opens on a tap as well as on hover, since a phone has no hover. What is never moved behind a
-dot: a danger panel and its sentence, a homograph warning, the dead-end sentence, and the
-"only if the counterparty completes" line. Those stay on screen in full.
+dot: a danger panel and its sentence, a homograph warning, the dead-end sentence, "only the
+domain is verified" next to "Domain verified", "if they are different, somebody is in the
+middle" under the six digits, what Klimper checked about a trade, "these are the only payments
+to anyone else", and the "only if the counterparty completes" line. Those stay on screen.
 
 Both themes come from the existing theme tokens rather than literal colours, so light and
 dark follow the app (`theme-o-rama`); `text-destructive` and `border-destructive` are the
@@ -130,10 +132,11 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 │     [Sign a spend] ⏱ 4:31  +1 waiting ⓘ │  chip names the method on hover; red in the last minute
 ├──────────────────────────────────────────┤
 │ [Simulated by Klimper ⓘ] [Checked twice ⓘ]│  badges, the sentence behind each dot
-│ ● You pay            − 1.5 XCH           │  the verdict line, per asset, wallet icon and ticker
-│                  ≈ $18.20 · then 3.2 XCH │  dollars and the balance afterwards, wallet data only
+│ X You pay            − 1.5 XCH           │  the verdict line, per asset
+│                  ≈ $18.20 · then 3.2 XCH │  dollars (XCH only) and the balance afterwards
+│ C You receive   + 250 CAT 1a2b3c4d…      │  a CAT by its id, always
+│   your wallet: USDC.b                    │  the wallet's ticker beside it, never in its place
 │   Only if the counterparty completes     │  never added to a total
-│                      + 250 USDC.b        │
 │ ➤ 1.5 XCH → xch1qz4…k9f2                 │  where it goes
 │ Network fee   0.0000005 XCH   <$0.01     │
 ├──────────────────────────────────────────┤
@@ -153,11 +156,12 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
   switch). The knob is a button named "Approve" (or "Approve and send"): Enter, Space or a
   screen reader's activate approves at once, since that is a deliberate press. The drag never
   re-renders React; it sets one CSS custom property and the compositor draws the rest.
-- **What the wallet knows about each asset.** The ticker and icon are the wallet's own record of
-  the asset id (`getToken`), the same the token list shows; a CAT without one keeps
-  `CAT <8 hex>…`, and one with a ticker shows that id small beneath it. The dollar figure is the
-  last price fetch (no request of its own; none on testnet), and "then …" is the wallet's
-  balance plus the net. None of it comes from the website.
+- **What the wallet knows about each asset.** "then …" is the wallet's balance plus the net
+  (`getToken`). XCH also shows its dollar value from the last price fetch (no request of its
+  own; none on testnet). A CAT stays named `CAT <8 hex>…` in the verdict line: its ticker was
+  registered by whoever made it, and a CAT can be called "XCH", so the wallet's ticker appears
+  only beside it, small ("your wallet: USDC.b"), and a CAT gets no icon and no price here. A
+  CAT whose id did not parse gets none of this. None of it comes from the website.
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve. Going back puts the slider back.
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
@@ -214,7 +218,7 @@ including anything a dApp managed to influence — is dropped before the view se
 | `summary.unknown_puzzles[]`                                     | danger panel, every puzzle hash in full and selectable; gates a second confirmation                                                                                                                                                                                                                                             | "Unknown contract"                        |
 | `summary.time_locks`                                            | one line per lock, with the absolute time                                                                                                                                                                                                                                                                                       | "Not spendable before" / "Expires"        |
 | `plan.ours[].is_unsafe` or `plan.has_unsafe`                    | the loudest danger panel on the screen, red, icon, never collapsed                                                                                                                                                                                                                                                              | "Unsafe signature"                        |
-| `plan.ours.length`                                              | a soft line                                                                                                                                                                                                                                                                                                                     | "Signatures you would produce"            |
+| `plan.ours.length`                                              | a soft line inside "Details"                                                                                                                                                                                                                                                                                                    | "Signatures you would produce"            |
 | `plan.foreign`                                                  | count only, inside the disclosure                                                                                                                                                                                                                                                                                               | —                                         |
 | `partial`                                                       | a panel explaining that this is one side of a multi-party spend                                                                                                                                                                                                                                                                 | "This is one half of a trade"             |
 | `binding.all_bound` = true                                      | inside that panel                                                                                                                                                                                                                                                                                                               | "Klimper checked the other side is bound" |

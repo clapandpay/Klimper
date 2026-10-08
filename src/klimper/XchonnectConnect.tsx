@@ -423,13 +423,6 @@ export default function XchonnectConnect() {
               <div className='flex items-center gap-1.5 text-sm font-medium xc-verified'>
                 <ShieldCheck className='h-4 w-4' aria-hidden='true' />
                 <Trans>Domain verified</Trans>
-                <Hint>
-                  <Trans>
-                    This domain proved it owns the key that signed the code.
-                    Only the domain is verified — the name below is what it
-                    claims.
-                  </Trans>
-                </Hint>
               </div>
               <div className='flex items-start gap-4'>
                 <SiteCoin domain={preview.domainUnicode} size='lg' />
@@ -445,6 +438,11 @@ export default function XchonnectConnect() {
                   />
                 </div>
               </div>
+              <CardDescription>
+                <Trans>
+                  Only the domain is verified — the name is what it claims.
+                </Trans>
+              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5 text-sm'>
               <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-2'>
@@ -511,13 +509,10 @@ export default function XchonnectConnect() {
             <CardHeader>
               <CardTitle className='text-xl flex items-center gap-1'>
                 <Trans>Same digits on the website?</Trans>
-                <Hint>
-                  <Trans>
-                    The website shows the same six digits. If they are
-                    different, somebody is in the middle.
-                  </Trans>
-                </Hint>
               </CardTitle>
+              <CardDescription>
+                <Trans>If they are different, somebody is in the middle.</Trans>
+              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5'>
               <SasDigits sas={sas.sas} />
