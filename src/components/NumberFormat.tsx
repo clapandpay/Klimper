@@ -1,4 +1,4 @@
-import { MASK, useMaskAmounts } from '@/klimper/privacy';
+import { Masked, useMaskAmounts } from '@/klimper/privacy';
 import BigNumber from 'bignumber.js';
 import { NumberFormatProps, formatNumber } from '../i18n';
 
@@ -9,7 +9,7 @@ export function NumberFormat({
   minimumFractionDigits,
   maximumFractionDigits,
 }: NumberFormatProps) {
-  if (useMaskAmounts()) return <>{MASK}</>; // Klimper privacy mode
+  if (useMaskAmounts()) return <Masked />; // Klimper privacy mode
   try {
     const formatted = formatNumber({
       value,

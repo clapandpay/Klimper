@@ -324,11 +324,15 @@ fn run(
     };
     let outcome = match canonical_method(&meta.method) {
         execute::CHIA_SEND => {
-            if permissions.allows_method(execute::CHIA_SEND) {
+            if !permissions.allows_method(execute::CHIA_SEND) {
+                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
+            } else if approvals.paused(&record.id) {
+                // Refused before anything is built: whether a paused website's send could
+                // be built would tell it the wallet's balance without a prompt.
+                Err(rejected())
+            } else {
                 approver.mark_cross_checked();
                 execute::send(state, &context, &signer, &approver, &broadcaster, params)
-            } else {
-                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
             }
         }
         kit::SUBMIT_COIN_SPENDS => {

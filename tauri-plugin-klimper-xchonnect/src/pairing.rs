@@ -132,6 +132,10 @@ pub struct Attempt {
     /// Set once `session.confirm` arrived. Still unusable until the SAS is confirmed.
     pub session: Option<Session>,
     pub deadline: u64,
+    /// The website's own hardened key, claimed when the digits are confirmed. `None` when the
+    /// wallet has none free; never taken from `permissions.exposed_keys`, which may hold
+    /// receive keys too.
+    pub own_key: Option<chia_bls::PublicKey>,
 }
 
 impl std::fmt::Debug for Attempt {
@@ -219,7 +223,7 @@ pub async fn inspect(
     // Spec 9.3: the required methods and one receive key that is this website's own
     // (`receive_keys` holds just that key; the caller picks it), so websites cannot link the
     // user's addresses or reuse a signed message elsewhere. Seeing every receive address is
-    // a per-website switch the user turns on afterwards. Limits remembered for the domain
+    // a switch on the pairing screen and in the website's settings. Limits remembered for the domain
     // are set by the caller; otherwise every request is prompted.
     let permissions = DappPermissions {
         methods: granted_methods(),
@@ -239,6 +243,7 @@ pub async fn inspect(
         own_read: None,
         session: None,
         deadline: now.saturating_add(CONFIRM_TIMEOUT_S),
+        own_key: None,
         verified,
     })
 }
@@ -361,9 +366,8 @@ pub async fn confirm(
             revoked: false,
             push: None,
             own_key: attempt
-                .permissions
-                .exposed_keys
-                .first()
+                .own_key
+                .as_ref()
                 .map(|key| format!("0x{}", hex::encode(key.to_bytes()))),
         },
         session_hex: hex::encode(session.to_bytes().map_err(Error::protocol)?),
@@ -452,6 +456,7 @@ mod tests {
             own_read: None,
             session: None,
             deadline: testing::NOW + CONFIRM_TIMEOUT_S,
+            own_key: Some(key),
             verified,
         }
     }

@@ -5,7 +5,7 @@
 
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD as B64};
@@ -31,9 +31,21 @@ const USER_NAME: &str = "Klimper wallet";
 
 type AppState = Arc<Mutex<Sage>>;
 
-/// Set once the passkey has unlocked the keychain in this run of the app.
+/// Set once the passkey has unlocked the keychain in this run of the app; and how many locks
+/// there were, so an unlock whose Face ID finished just as the app was locked (sent to the
+/// background) does not open the keys after that lock.
 #[derive(Default)]
-struct Unlocked(AtomicBool);
+struct Unlocked(AtomicBool, AtomicU64);
+
+impl Unlocked {
+    fn locks(&self) -> u64 {
+        self.1.load(Ordering::SeqCst)
+    }
+
+    fn count_lock(&self) {
+        self.1.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -47,6 +59,8 @@ pub enum Error {
     NoPrf,
     #[error("passkey: {0}")]
     Platform(String),
+    #[error("the app was locked while the passkey was asked; unlock again")]
+    LockedMeanwhile,
     #[error(transparent)]
     Envelope(#[from] EnvelopeError),
     #[error(transparent)]
@@ -216,6 +230,7 @@ async fn enroll<R: Runtime>(
     if !passkeys.supported() {
         return Err(Error::Unsupported);
     }
+    let locks = unlocked.locks();
 
     {
         let sage = state.lock().await;
@@ -250,7 +265,7 @@ async fn enroll<R: Runtime>(
             prf_salt: prf_salt.clone(),
         };
         let response = blocking(move || passkeys.assert(request)).await?;
-        decode_prf_output(&response.prf_output.ok_or(Error::NoPrf)?)?
+        decode_prf_output(&Zeroizing::new(response.prf_output.ok_or(Error::NoPrf)?))?
     };
 
     let wallet_key = random_secret();
@@ -262,8 +277,14 @@ async fn enroll<R: Runtime>(
         &wallet_key,
     )?;
 
-    seal_keychain(&mut *state.lock().await, &envelope, &wallet_key)?;
-    unlocked.0.store(true, Ordering::SeqCst);
+    let mut sage = state.lock().await;
+    seal_keychain(&mut sage, &envelope, &wallet_key)?;
+    // Sent to the background while enrolling: the keys are now protected, so lock them.
+    if unlocked.locks() == locks {
+        unlocked.0.store(true, Ordering::SeqCst);
+    } else {
+        lock_if_enrolled(&mut sage, &unlocked);
+    }
     Ok(())
 }
 
@@ -273,12 +294,16 @@ async fn unlock<R: Runtime>(
     state: State<'_, AppState>,
     unlocked: State<'_, Unlocked>,
 ) -> Result<()> {
+    let locks = unlocked.locks();
     let envelope = Envelope::load(&state.lock().await.path)?.ok_or(Error::NotEnrolled)?;
     let prf = prf_from_assertion(&app, &envelope).await?;
     let wallet_key = envelope.open(&prf)?;
 
     let mut sage = state.lock().await;
     still_enrolled(&sage, &envelope)?;
+    if unlocked.locks() != locks {
+        return Err(Error::LockedMeanwhile);
+    }
     open_keychain(&mut sage, &wallet_key)?;
     unlocked.0.store(true, Ordering::SeqCst);
     Ok(())
@@ -304,6 +329,7 @@ async fn lock(state: State<'_, AppState>, unlocked: State<'_, Unlocked>) -> Resu
 /// The file decides, not whether it parses: an envelope that cannot be read must not leave
 /// the keys open in memory.
 fn lock_if_enrolled(sage: &mut Sage, unlocked: &Unlocked) {
+    unlocked.count_lock();
     if sage.path.join(envelope::FILE_NAME).exists() {
         unlocked.0.store(false, Ordering::SeqCst);
         sage.keychain.lock();
@@ -317,6 +343,9 @@ fn lock_on_background<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
     let state = state.inner().clone();
+    // Counted now, not when the wallet is free: an unlock that already holds the wallet
+    // must see it.
+    app.state::<Unlocked>().count_lock();
     if let Ok(mut sage) = state.try_lock() {
         lock_if_enrolled(&mut sage, &app.state::<Unlocked>());
         return;

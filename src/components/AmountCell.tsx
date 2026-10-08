@@ -1,5 +1,6 @@
 import { Amount, AssetKind } from '@/bindings';
 import { fromMojos } from '@/lib/utils';
+import { useMaskAmounts } from '@/klimper/privacy';
 import BigNumber from 'bignumber.js';
 import { NumberFormat } from './NumberFormat';
 
@@ -11,6 +12,7 @@ interface AmountCellProps {
 
 export function AmountCell({ amount, assetKind, precision }: AmountCellProps) {
   const amountNum = BigNumber(amount);
+  const masked = useMaskAmounts();
 
   return (
     <div className='whitespace-nowrap'>
@@ -22,7 +24,9 @@ export function AmountCell({ amount, assetKind, precision }: AmountCellProps) {
               ? 'text-green-600'
               : 'text-red-600'
         }
-        aria-label={`${fromMojos(amount, precision)} ${assetKind}`}
+        aria-label={
+          masked ? undefined : `${fromMojos(amount, precision)} ${assetKind}`
+        }
       >
         {assetKind === 'nft' ||
         assetKind === 'did' ||

@@ -23,6 +23,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { amount } from '@/lib/formTypes';
 import { fromMojos, toMojos } from '@/lib/utils';
 import { useWallet } from '@/contexts/WalletContext';
+import { MASK, useMaskAmounts } from '@/klimper/privacy';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
@@ -417,7 +418,9 @@ export function OwnedCoinsCard({
   const ticker = asset.ticker;
 
   // Calculate total value of selected coins
+  const masked = useMaskAmounts();
   const selectedCoinsTotal = useMemo(() => {
+    if (masked) return MASK;
     if (selectedCoinRecords.length === 0) return '0';
 
     const totalMojos = selectedCoinRecords.reduce((sum, coin) => {
@@ -425,7 +428,7 @@ export function OwnedCoinsCard({
     }, new BigNumber(0));
 
     return fromMojos(totalMojos, asset.precision).toString();
-  }, [selectedCoinRecords, asset.precision]);
+  }, [masked, selectedCoinRecords, asset.precision]);
 
   return (
     <Card className='max-w-full overflow-auto'>

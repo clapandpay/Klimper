@@ -19,7 +19,7 @@ export function PasskeyGate() {
   // Lost passkey: the way out, behind a typed word so it is never a slip of the thumb.
   const [erasing, setErasing] = useState(false);
   const [typed, setTyped] = useState('');
-  const word = t`erase`;
+  const word = t`erase`.toLowerCase();
 
   const refresh = useCallback(async () => {
     try {
@@ -143,16 +143,19 @@ export function PasskeyGate() {
                     disabled={busy || typed.trim().toLowerCase() !== word}
                     onClick={async () => {
                       setBusy(true);
+                      setError(null);
                       try {
                         await passkey.erase();
-                        setErasing(false);
-                        setTyped('');
                       } catch (err) {
                         setError(String(err));
-                      } finally {
                         setBusy(false);
                         await refresh();
+                        return;
                       }
+                      // The wallet the screens still hold is gone: start over on the
+                      // login screen, where it can be restored from its words.
+                      // (Without the #route, so the hash router opens on '/'.)
+                      window.location.replace(window.location.pathname);
                     }}
                   >
                     <Trans>Erase the keys</Trans>

@@ -139,13 +139,18 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
       backgroundObserver = NotificationCenter.default.addObserver(
         forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
       ) { [weak self] _ in
-        // A little time to finish the lock before iOS suspends the process.
+        // Time to finish the lock before iOS suspends the process, even when a command
+        // holds the wallet for a moment. Ended once: by the timer or by iOS, whichever is
+        // first (both run on the main queue).
         var task = UIBackgroundTaskIdentifier.invalid
-        task = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(task) }
-        self?.background?.send([:] as JsonObject)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+        let end = {
+          guard task != .invalid else { return }
           UIApplication.shared.endBackgroundTask(task)
+          task = .invalid
         }
+        task = UIApplication.shared.beginBackgroundTask(expirationHandler: end)
+        self?.background?.send([:] as JsonObject)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: end)
       }
     }
     invoke.resolve()

@@ -48,7 +48,9 @@ class KlimperJinglePlugin: Plugin {
   private let calm = 0.6  // g below which the hand has turned and the next jolt counts
   private let turn = 0.30  // seconds: at most one turn this often
   private let tiltDegrees = 18.0  // a slow tilt this far lets the coins slide
+  private let tiltWithin = 1.0  // seconds: a drift slower than this is not a tilt
   private var tiltFrom: CMAcceleration?  // gravity where the coins last settled
+  private var tiltAt = 0.0  // when `tiltFrom` was taken
 
   private var dings: [String: AVAudioPlayer] = [:]
   private var grainFiles: [URL] = []
@@ -192,16 +194,19 @@ class KlimperJinglePlugin: Plugin {
       // A slow tilt (the hand is calm): the coins slide to the low side, softly.
       if g < self.calm, now - self.lastTurn >= self.turn {
         let gravity = data.gravity
-        if let from = self.tiltFrom {
+        // Only a turn within `tiltWithin` counts: a phone slowly drifting, or set down, stays quiet.
+        if now - self.tiltAt > self.tiltWithin {
+          self.tiltFrom = gravity
+          self.tiltAt = now
+        } else if let from = self.tiltFrom {
           let dot = from.x * gravity.x + from.y * gravity.y + from.z * gravity.z
           let angle = acos(max(-1, min(1, dot))) * 180 / .pi
           if angle >= self.tiltDegrees {
             self.tiltFrom = gravity
+            self.tiltAt = now
             self.lastTurn = now
             self.slide(by: min(1, angle / 60))
           }
-        } else {
-          self.tiltFrom = gravity
         }
       }
       // Once per reversal of the hand: above `jolt` after having come back below `calm`.

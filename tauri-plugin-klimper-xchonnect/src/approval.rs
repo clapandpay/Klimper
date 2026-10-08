@@ -223,8 +223,10 @@ impl ApprovalBridge {
         );
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
-            // A no from the user (or silence), not a request the website withdrew itself.
-            if !decision && !registry.withdrawn.contains_key(&key) {
+            // Any prompt that was shown and not approved counts: a no, silence, the user's
+            // cancel, and the website withdrawing it too, or a website could keep the user
+            // prompted forever by cancelling each request itself.
+            if !decision {
                 registry
                     .rejections
                     .entry(key.0.clone())
@@ -321,6 +323,42 @@ impl ApprovalBridge {
         })
     }
 
+    /// Whether the user said no to this session too often lately ([`REJECTIONS_BEFORE_PAUSE`]).
+    /// Checked before any work for a request, so a paused website learns nothing from it.
+    pub fn paused(&self, session_id: &str) -> bool {
+        self.registry.lock().map_or(true, |mut r| {
+            r.paused(session_id, std::time::Instant::now())
+        })
+    }
+
+    /// The user changed this website's settings: whatever it is waiting on was checked
+    /// against the old ones, so it is withdrawn (the website is told, and may ask again).
+    pub fn withdraw_waiting(&self, session_id: &str) {
+        let senders: Vec<mpsc::Sender<bool>> = self
+            .registry
+            .lock()
+            .map(|mut r| {
+                let keys: Vec<(String, String)> = r
+                    .waiting
+                    .values()
+                    .filter(|x| x.approval.session_id == session_id)
+                    .map(|x| (x.approval.session_id.clone(), x.approval.request_id.clone()))
+                    .collect();
+                for key in keys {
+                    r.withdrawn.entry(key).or_insert(Withdrawn::ByUser);
+                }
+                r.waiting
+                    .values()
+                    .filter(|x| x.approval.session_id == session_id)
+                    .map(|x| x.answer.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        for sender in senders {
+            let _ = sender.send(false);
+        }
+    }
+
     /// The session ended: reject everything it is waiting on, and anything it would still
     /// ask, so a request that was mid-simulation when the user disconnected cannot open a
     /// prompt for a connection that no longer exists.
@@ -410,6 +448,40 @@ mod tests {
         // The next one is refused at once and never reaches the screen.
         assert!(!bridge.ask(approval("again")));
         assert_eq!(seen.lock().unwrap().len(), shown);
+    }
+
+    #[test]
+    fn a_website_cannot_dodge_the_pause_by_withdrawing_its_own_prompts() {
+        let (bridge, _) = bridge();
+        for round in 0..REJECTIONS_BEFORE_PAUSE {
+            let id = format!("w{round}");
+            let worker = {
+                let bridge = bridge.clone();
+                let id = id.clone();
+                std::thread::spawn(move || bridge.ask(approval(&id)))
+            };
+            while bridge.outstanding().is_empty() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            bridge.withdraw_request("s1", &format!("r-{id}"), Withdrawn::ByDapp);
+            assert!(!worker.join().unwrap());
+        }
+        assert!(bridge.paused("s1"));
+    }
+
+    #[test]
+    fn changed_settings_withdraw_the_prompt_on_screen() {
+        let (bridge, _) = bridge();
+        let worker = {
+            let bridge = bridge.clone();
+            std::thread::spawn(move || bridge.ask(approval("p")))
+        };
+        while bridge.outstanding().is_empty() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        bridge.withdraw_waiting("s1");
+        assert!(!worker.join().unwrap());
+        assert_eq!(bridge.take_withdrawn("s1", "r-p"), Some(Withdrawn::ByUser));
     }
 
     #[test]

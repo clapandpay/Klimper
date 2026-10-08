@@ -313,9 +313,9 @@ impl ChainData for KlimperChain {
         Self::run(async { read_unlocked(&self.db().await?, coin_ids, keys).await })
     }
 
-    /// What Sage's `send_transaction_immediately` does, but with the wallet lock held only
-    /// to read what the send needs: trying the peers one after another can take a while,
-    /// and the rest of the wallet must not wait on a website's broadcast (TASK-119).
+    /// What Sage's `send_transaction_immediately` does, but without the wallet lock while
+    /// the peers are tried one after another, which can take a while: the rest of the wallet
+    /// must not wait on a website's broadcast (TASK-119).
     fn send_transaction(&self, bundle: &SpendBundle) -> Result<TxStatus, ChainError> {
         Self::run(async {
             let (wallet, peer_state, commands) = {
@@ -332,6 +332,20 @@ impl ChainData for KlimperChain {
                 .map_err(unavailable)?
             {
                 Status::Pending => {
+                    // Recording it locks again, and only for the wallet it was sent from: if
+                    // the user switched wallet or network meanwhile, the new wallet's database
+                    // and subscriptions must not get the old one's coins.
+                    let sage = self.state.lock().await;
+                    let same = sage.wallet().is_ok_and(|now| {
+                        now.fingerprint == wallet.fingerprint
+                            && now.genesis_challenge == wallet.genesis_challenge
+                    });
+                    if !same {
+                        return Ok(TxStatus {
+                            status: 1,
+                            error: None,
+                        });
+                    }
                     let peer = peer_state
                         .lock()
                         .await
@@ -354,6 +368,7 @@ impl ChainData for KlimperChain {
                         })
                         .await
                         .map_err(unavailable)?;
+                    drop(sage);
                     Ok(TxStatus {
                         status: 1,
                         error: None,

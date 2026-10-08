@@ -6,6 +6,7 @@
 // never hidden from the person deciding. The approval sheet for a website's request formats
 // its own amounts and is never masked either.
 
+import { t } from '@lingui/core/macro';
 import { createContext, ReactNode, useContext } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 
@@ -28,4 +29,13 @@ export function useMaskAmounts(): boolean {
   const [privacy] = usePrivacy();
   const revealed = useContext(Revealed);
   return privacy && !revealed;
+}
+
+/** The mask itself; screen readers say "Hidden" rather than five bullets. */
+export function Masked() {
+  return (
+    <span role='img' aria-label={t`Hidden`}>
+      {MASK}
+    </span>
+  );
 }

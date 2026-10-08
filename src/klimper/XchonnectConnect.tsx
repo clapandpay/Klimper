@@ -270,7 +270,7 @@ export default function XchonnectConnect() {
       const session = await xchonnect.confirmSas(
         preview.pairingId,
         matches,
-        allAddresses,
+        allAddresses && keyCount > 0, // never a choice the user was not shown
       );
       // The list opens on the new connection, so the user sees what they just made.
       navigate(XCHONNECT_ROUTES.dapps, {

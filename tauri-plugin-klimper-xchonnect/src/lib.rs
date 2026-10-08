@@ -240,7 +240,7 @@ pub struct DappPolicy {
     #[serde(default)]
     pub methods: Option<Vec<String>>,
     /// Let the website see every receive address (it can then build spends from all the
-    /// user's coins, and link them), or only its own. Off by default; a confirmation in the UI.
+    /// user's coins, and link them), or only its own. On by default on the pairing screen.
     #[serde(default)]
     pub all_receive_keys: Option<bool>,
 }
@@ -588,6 +588,7 @@ async fn confirm_sas<R: Runtime>(
         .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
     // Its own key first (that is what the record keeps as `own_key`), then, if the user chose
     // it on the pairing screen, every receive key.
+    attempt.own_key = own;
     attempt.permissions.exposed_keys =
         exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
@@ -768,8 +769,6 @@ async fn set_dapp_policy<R: Runtime>(
         return Err(Error::Protocol(format!("unknown asset in a limit: {bad}")));
     }
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
-    // Which keys the website sees: all receive keys, or its own (picked now for a website
-    // paired before it had one).
     // Which keys the website sees: its own key (claimed now for a website paired before it
     // had one), and every receive key when the user allows that.
     let keys = match policy.all_receive_keys {
@@ -781,6 +780,8 @@ async fn set_dapp_policy<R: Runtime>(
                 .own_key
                 .as_deref()
                 .and_then(store::parse_public_key)
+                // A record from before own keys were claimed may name a receive key here.
+                .filter(|key| snapshot.website_keys.contains(key))
             {
                 Some(own) => Some(own),
                 None => state.store.claim_website_key(
@@ -801,9 +802,7 @@ async fn set_dapp_policy<R: Runtime>(
         .store
         .update_policy(snapshot.fingerprint, &session_id, |record| {
             if let Some((own, exposed)) = keys {
-                if own.is_some() {
-                    record.own_key = own;
-                }
+                record.own_key = own;
                 record.permissions.exposed_keys = exposed;
             }
             if let Some(limits) = policy.limits {
@@ -819,6 +818,8 @@ async fn set_dapp_policy<R: Runtime>(
                 record.allow_unknown_contracts = allow;
             }
         })?;
+    // A prompt already on screen was checked against the old settings: withdraw it.
+    state.approvals.withdraw_waiting(&session_id);
     // Remembered for the domain, so connecting again brings the limits back.
     let memory = store::DomainMemory {
         limits: stored.record.permissions.limits.clone(),

@@ -74,6 +74,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         private const val CALM_G = 0.6 // the hand has turned; the next jolt counts
         private const val TURN_MS = 300L
         private const val TILT_DEGREES = 18.0
+        private const val TILT_WITHIN_MS = 1000L // a drift slower than this is not a tilt
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -97,6 +98,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private var lastTurn = 0L
     private var lastG = 0.0 // the hand's latest movement, in g
     private var tiltFrom: DoubleArray? = null // gravity where the coins last settled
+    private var tiltAt = 0L // when [tiltFrom] was taken
     private var lastFirst = -1
 
     init {
@@ -208,22 +210,25 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         turnOfTheHand(min(1.0, (g - JOLT_G) / 2.5))
     }
 
-    /** A slow tilt of at least [TILT_DEGREES], with a calm hand: the coins slide. */
+    /** A tilt of at least [TILT_DEGREES] within [TILT_WITHIN_MS], with a calm hand: the coins slide. */
     private fun tilted(values: FloatArray) {
         val length = sqrt(values.sumOf { (it * it).toDouble() })
         if (length == 0.0 || !resumed) return
         val gravity = DoubleArray(3) { values[it] / length }
+        val now = SystemClock.elapsedRealtime()
         val from = tiltFrom
-        if (from == null) {
+        // Only a turn within TILT_WITHIN_MS counts: a phone slowly drifting, or set down, stays quiet.
+        if (from == null || now - tiltAt > TILT_WITHIN_MS) {
             tiltFrom = gravity
+            tiltAt = now
             return
         }
-        val now = SystemClock.elapsedRealtime()
         if (lastG >= CALM_G || now - lastTurn < TURN_MS) return
         val dot = (0..2).sumOf { from[it] * gravity[it] }.coerceIn(-1.0, 1.0)
         val angle = Math.toDegrees(kotlin.math.acos(dot))
         if (angle < TILT_DEGREES) return
         tiltFrom = gravity
+        tiltAt = now
         lastTurn = now
         slide(min(1.0, angle / 60))
     }
