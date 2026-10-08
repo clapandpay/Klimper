@@ -44,11 +44,15 @@ class KlimperJinglePlugin: Plugin {
       "handful": (3...6, 0.9, 0.35, -0.15...0.1, 0.85),
       "pouch": (5...8, 1.0, 0.25, -0.2...0.05, 1.0),
     ]
-  private let jolt = 1.3  // g that counts as a turn of the hand
+  // Everyday handling (walking, picking the phone up, putting it away) stays quiet: only a
+  // deliberate shake or tilt moves the coins.
+  private let jolt = 1.8  // g that counts as a turn of the hand
   private let calm = 0.6  // g below which the hand has turned and the next jolt counts
-  private let turn = 0.30  // seconds: at most one turn this often
-  private let tiltDegrees = 18.0  // a slow tilt this far lets the coins slide
-  private let tiltWithin = 1.0  // seconds: a drift slower than this is not a tilt
+  private let turn = 0.35  // seconds: at most one turn this often
+  private let tiltDegrees = 30.0  // a tilt this far lets the coins slide
+  private let tiltWithin = 0.7  // seconds: a turn slower than this is not a tilt
+  private let tiltCalm = 0.3  // g: a tilt only counts with a steady hand
+  private let slideEvery = 0.6  // seconds: at most one slide this often
   private var tiltFrom: CMAcceleration?  // gravity where the coins last settled
   private var tiltAt = 0.0  // when `tiltFrom` was taken
 
@@ -192,7 +196,7 @@ class KlimperJinglePlugin: Plugin {
       if g < self.calm { self.turned = true }
       let now = CACurrentMediaTime()
       // A slow tilt (the hand is calm): the coins slide to the low side, softly.
-      if g < self.calm, now - self.lastTurn >= self.turn {
+      if g < self.tiltCalm, now - self.lastTurn >= self.slideEvery {
         let gravity = data.gravity
         // Only a turn within `tiltWithin` counts: a phone slowly drifting, or set down, stays quiet.
         if now - self.tiltAt > self.tiltWithin {
@@ -230,25 +234,30 @@ class KlimperJinglePlugin: Plugin {
 
   // MARK: A turn of the hand
 
-  /// The phone was tilted: a few coins slide and settle. Quieter, softer and slower than a
-  /// shake; fewer coins than the tier's shake, at most three.
+  /// The phone was tilted: the coins roll to the low side and knock into each other. A low
+  /// rumble while they roll, then two to four firm taps; softer than a shake.
   private func slide(by amount: Double) {
     guard let engine, !grains.isEmpty, let t = Self.tiers[tier] else { return }
     let order = Array(grains.indices).shuffled()
-    let coins = min(order.count, max(1, min(3, Int.random(in: t.coins))))
+    let coins = min(order.count, max(2, min(4, Int.random(in: t.coins) + 1)))
     var events: [CHHapticEvent] = []
-    var at = 0.0
+    var at = 0.04  // the coins roll a moment before the first lands
     for k in 0..<coins {
-      if k > 0 { at += .random(in: 0.05...0.09) }
-      let volume = t.loud * (0.25 + 0.2 * amount) * pow(0.8, Double(k))
+      if k > 0 { at += .random(in: 0.04...0.08) }
+      let volume = t.loud * (0.35 + 0.25 * amount) * pow(0.8, Double(k))
       events.append(CHHapticEvent(audioResourceID: grains[order[k]], parameters: [
         CHHapticEventParameter(parameterID: .audioVolume, value: Float(min(1, volume))),
         CHHapticEventParameter(parameterID: .audioPitch, value: Float(.random(in: t.pitch))),
       ], relativeTime: at))
       events.append(Self.tap(
-        at, t.weight * (0.35 + 0.15 * amount) * pow(0.85, Double(k)),
-        .random(in: 0.2...0.4)))
+        at, t.weight * (0.65 + 0.3 * amount) * pow(0.88, Double(k)),
+        .random(in: 0.4...0.6)))
     }
+    // The roll under the taps: dull and low, for as long as the coins move.
+    events.append(CHHapticEvent(eventType: .hapticContinuous, parameters: [
+      CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(0.3 + 0.2 * amount)),
+      CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.1),
+    ], relativeTime: 0, duration: at + 0.06))
     guard let pattern = try? CHHapticPattern(events: events, parameters: []) else { return }
     try? current?.stop(atTime: CHHapticTimeImmediate)
     current = try? engine.makePlayer(with: pattern)
@@ -282,8 +291,8 @@ class KlimperJinglePlugin: Plugin {
       // The hand feels separate coins only some 45 ms apart; at most four.
       guard at - lastTap >= 0.045, taps < 4 else { continue }
       let intensity = k == 0
-        ? t.weight * (0.8 + 0.2 * force)
-        : max(0.35, t.weight * pow(0.82, Double(taps)) * .random(in: 0.88...1.12))
+        ? max(0.85, t.weight * (0.9 + 0.2 * force))
+        : max(0.5, t.weight * pow(0.85, Double(taps)) * .random(in: 0.92...1.12))
       lastTap = at
       taps += 1
       let sharpness = k == 0 ? t.dull + .random(in: -0.05...0.05) : .random(in: 0.6...0.85)

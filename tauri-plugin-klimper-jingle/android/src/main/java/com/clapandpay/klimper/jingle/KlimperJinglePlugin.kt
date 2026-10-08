@@ -70,11 +70,15 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             "handful" to Tier(3..6, 0.9, 0.92..1.06, 0.85),
             "pouch" to Tier(5..8, 1.0, 0.9..1.04, 1.0),
         )
-        private const val JOLT_G = 1.3 // a turn of the hand
+        // Everyday handling stays quiet: only a deliberate shake or tilt moves the coins.
+        private const val JOLT_G = 1.8 // a turn of the hand
         private const val CALM_G = 0.6 // the hand has turned; the next jolt counts
-        private const val TURN_MS = 300L
-        private const val TILT_DEGREES = 18.0
-        private const val TILT_WITHIN_MS = 1000L // a drift slower than this is not a tilt
+        private const val TURN_MS = 350L
+        private const val TILT_DEGREES = 30.0
+        private const val TILT_WITHIN_MS = 700L // a turn slower than this is not a tilt
+        private const val TILT_CALM_G = 0.3 // a tilt only counts with a steady hand
+        private const val SLIDE_EVERY_MS = 600L
+        private const val ROLL_MS = 40L // the coins roll this long before the first lands
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -223,7 +227,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             tiltAt = now
             return
         }
-        if (lastG >= CALM_G || now - lastTurn < TURN_MS) return
+        if (lastG >= TILT_CALM_G || now - lastTurn < SLIDE_EVERY_MS) return
         val dot = (0..2).sumOf { from[it] * gravity[it] }.coerceIn(-1.0, 1.0)
         val angle = Math.toDegrees(kotlin.math.acos(dot))
         if (angle < TILT_DEGREES) return
@@ -233,23 +237,26 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         slide(min(1.0, angle / 60))
     }
 
-    /** A few coins slide and settle: quieter, softer and slower than a shake, at most three. */
+    /** The coins roll to the low side: a low rumble, then two to four firm taps; softer than a shake. */
     private fun slide(amount: Double) {
         val t = TIERS[tier] ?: return
         val order = grains.indices.shuffled()
         if (order.isEmpty()) return
-        val coins = min(order.size, t.coins.random().coerceIn(1, 3))
+        val coins = min(order.size, (t.coins.random() + 1).coerceIn(2, 4))
         val sound = soundOn()
         var at = 0L
         val timings = ArrayList<Long>()
         val amplitudes = ArrayList<Int>()
         for (k in 0 until coins) {
-            if (k > 0) at += Random.nextLong(50, 90)
+            if (k > 0) at += Random.nextLong(40, 80)
             val id = grains[order[k]]
-            val volume = (t.loud * (0.25 + 0.2 * amount) * 0.8.pow(k)).toFloat()
-            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, 1f) }, at)
-            timings.add(if (k == 0) 0L else at - timings.sum()); amplitudes.add(0)
-            timings.add(15L); amplitudes.add((t.weight * (0.35 + 0.15 * amount) * 0.85.pow(k) * 255).toInt().coerceIn(1, 255))
+            val volume = (t.loud * (0.35 + 0.25 * amount) * 0.8.pow(k)).toFloat()
+            // Each coin lands ROLL_MS after its place in `at`, once the roll has started.
+            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, 1f) }, at + ROLL_MS)
+            // The roll before the first coin, a low hum between the others.
+            timings.add(if (k == 0) ROLL_MS else at + ROLL_MS - timings.sum())
+            amplitudes.add(if (k == 0) (60 + 40 * amount).toInt() else 45)
+            timings.add(20L); amplitudes.add((t.weight * (0.65 + 0.3 * amount) * 0.88.pow(k) * 255).toInt().coerceIn(1, 255))
         }
         val vibrator = vibrator() ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasVibrator()) {
@@ -279,8 +286,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             val rate = Random.nextDouble(t.rate.start, t.rate.endInclusive).toFloat()
             if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, rate) }, (at * 1000).toLong())
             if (k > 0 && (at - lastPulse < 0.045 || pulses >= 4)) continue
-            val strength = if (k == 0) t.weight * (0.8 + 0.2 * force)
-            else max(0.35, t.weight * 0.82.pow(pulses) * Random.nextDouble(0.88, 1.12))
+            val strength = if (k == 0) max(0.85, t.weight * (0.9 + 0.2 * force))
+            else max(0.5, t.weight * 0.85.pow(pulses) * Random.nextDouble(0.92, 1.12))
             timings.add(if (k == 0) 0L else ((at - lastPulse) * 1000).toLong() - 20L); amplitudes.add(0)
             timings.add(20L); amplitudes.add((min(1.0, strength) * 255).toInt())
             lastPulse = at

@@ -29,9 +29,11 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
 
 ## Tilt, privacy mode, shake to undo
 
-- **Tilt.** With the coins armed and the hand calm, tilting the phone by about 18° lets a few
-  coins slide: one to three soft hits and gentle taps, quieter and slower than a shake. iOS
-  reads the gravity vector of the same motion updates; Android a `TYPE_GRAVITY` sensor.
+- **Tilt.** With the coins armed and the hand steady (below 0.3 g), turning the phone by 30°
+  within 0.7 s lets the coins roll: a low rumble, then two to four firm taps and coin hits,
+  softer than a shake, at most every 0.6 s. A slower drift, walking or setting the phone down
+  stays quiet. iOS reads the gravity vector of the same motion updates; Android a
+  `TYPE_GRAVITY` sensor.
 - **Privacy mode** (Settings, the Klimper card) keeps the coins quiet and still whatever the
   sound switch says, and hides amounts (`src/klimper/privacy.tsx`).
 - **No "Undo Typing" on a shake.** iOS offers to undo typing when the phone is shaken; the
@@ -73,8 +75,8 @@ token's value, the wallet page with the total, any other page with the whole wal
 no rattle, no taps. A wallet with nothing in it makes no sound (owner's rule, 2026-10-07).
 
 **The shake is one rule**: every turn of the hand is a few coins landing in it, heard and felt
-at the same instant, and built fresh every time. A turn is a jolt of 1.3 g after the hand has come
-back below 0.6 g (once per reversal), at most every 0.3 s. Each coin is one of eight single coin
+at the same instant, and built fresh every time. A turn is a jolt of 1.8 g after the hand has come
+back below 0.6 g (once per reversal), at most every 0.35 s, so everyday handling does not count. Each coin is one of eight single coin
 hits, drawn without repeats and never the same opener twice, spaced like coins settling (gaps of
 8 to 60 ms, mostly short, wider the harder the hand), at its own pitch and loudness (the first
 loudest, the rest 20 to 70 % of it and fading). The hand feels them as taps where they are at
