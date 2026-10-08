@@ -73,6 +73,7 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         private const val JOLT_G = 1.3 // a turn of the hand
         private const val CALM_G = 0.6 // the hand has turned; the next jolt counts
         private const val TURN_MS = 300L
+        private const val TILT_DEGREES = 18.0
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -94,6 +95,8 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private var resumed = true
     private var turned = true
     private var lastTurn = 0L
+    private var lastG = 0.0 // the hand's latest movement, in g
+    private var tiltFrom: DoubleArray? = null // gravity where the coins last settled
     private var lastFirst = -1
 
     init {
@@ -174,7 +177,12 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         if (!armed || !resumed || grains.isEmpty()) return
         val sensor = sensors().getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION) ?: return
         turned = true
+        tiltFrom = null
         sensors().registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+        // Tilting slowly lets the coins slide (where the phone has a gravity sensor).
+        sensors().getDefaultSensor(Sensor.TYPE_GRAVITY)?.let {
+            sensors().registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
     }
 
     private fun rest() {
@@ -185,14 +193,63 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_GRAVITY) {
+            tilted(event.values)
+            return
+        }
         val (x, y, z) = event.values
         val g = sqrt((x * x + y * y + z * z).toDouble()) / SensorManager.GRAVITY_EARTH
+        lastG = g
         if (g < CALM_G) turned = true
         val now = SystemClock.elapsedRealtime()
         if (!turned || g < JOLT_G || now - lastTurn < TURN_MS || !resumed) return
         turned = false
         lastTurn = now
         turnOfTheHand(min(1.0, (g - JOLT_G) / 2.5))
+    }
+
+    /** A slow tilt of at least [TILT_DEGREES], with a calm hand: the coins slide. */
+    private fun tilted(values: FloatArray) {
+        val length = sqrt(values.sumOf { (it * it).toDouble() })
+        if (length == 0.0 || !resumed) return
+        val gravity = DoubleArray(3) { values[it] / length }
+        val from = tiltFrom
+        if (from == null) {
+            tiltFrom = gravity
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (lastG >= CALM_G || now - lastTurn < TURN_MS) return
+        val dot = (0..2).sumOf { from[it] * gravity[it] }.coerceIn(-1.0, 1.0)
+        val angle = Math.toDegrees(kotlin.math.acos(dot))
+        if (angle < TILT_DEGREES) return
+        tiltFrom = gravity
+        lastTurn = now
+        slide(min(1.0, angle / 60))
+    }
+
+    /** A few coins slide and settle: quieter, softer and slower than a shake, at most three. */
+    private fun slide(amount: Double) {
+        val t = TIERS[tier] ?: return
+        val order = grains.indices.shuffled()
+        if (order.isEmpty()) return
+        val coins = min(order.size, t.coins.random().coerceIn(1, 3))
+        val sound = soundOn()
+        var at = 0L
+        val timings = ArrayList<Long>()
+        val amplitudes = ArrayList<Int>()
+        for (k in 0 until coins) {
+            if (k > 0) at += Random.nextLong(50, 90)
+            val id = grains[order[k]]
+            val volume = (t.loud * (0.25 + 0.2 * amount) * 0.8.pow(k)).toFloat()
+            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, 1f) }, at)
+            timings.add(if (k == 0) 0L else at - timings.sum()); amplitudes.add(0)
+            timings.add(15L); amplitudes.add((t.weight * (0.35 + 0.15 * amount) * 0.85.pow(k) * 255).toInt().coerceIn(1, 255))
+        }
+        val vibrator = vibrator() ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasVibrator()) {
+            vibrator.vibrate(VibrationEffect.createWaveform(timings.toLongArray(), amplitudes.toIntArray(), -1))
+        }
     }
 
     // A few coins landing in the hand: each a coin hit, and a pulse where the hand can tell them apart.

@@ -26,6 +26,7 @@ import { useWalletState } from '@/state';
 import { useEffect } from 'react';
 import { onPhone, playDing, setShake } from './player';
 import { Coalescer, NO_WALLET, ReceiveDetector, sampleOf } from './receive';
+import { usePrivacy } from '../privacy';
 import { useKlimperSoundSetting } from './setting';
 import { Tier, tierOf, usdOf } from './tiers';
 
@@ -52,7 +53,10 @@ async function currentFingerprint(): Promise<number | null> {
 type Sync = ReturnType<typeof useWalletState.getState>['sync'];
 
 export function KlimperSound() {
-  const [on] = useKlimperSoundSetting();
+  const [soundOn] = useKlimperSoundSetting();
+  // Privacy mode keeps the coins quiet and still, whatever the sound switch says.
+  const [privacy] = usePrivacy();
+  const on = soundOn && !privacy;
 
   // Coins arrive: watch the balance Sage keeps.
   useEffect(() => {

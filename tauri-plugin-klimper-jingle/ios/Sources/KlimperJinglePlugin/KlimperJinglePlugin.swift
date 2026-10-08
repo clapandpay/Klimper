@@ -47,6 +47,8 @@ class KlimperJinglePlugin: Plugin {
   private let jolt = 1.3  // g that counts as a turn of the hand
   private let calm = 0.6  // g below which the hand has turned and the next jolt counts
   private let turn = 0.30  // seconds: at most one turn this often
+  private let tiltDegrees = 18.0  // a slow tilt this far lets the coins slide
+  private var tiltFrom: CMAcceleration?  // gravity where the coins last settled
 
   private var dings: [String: AVAudioPlayer] = [:]
   private var grainFiles: [URL] = []
@@ -63,6 +65,8 @@ class KlimperJinglePlugin: Plugin {
 
   override init() {
     super.init()
+    // A shake is the coins, never iOS's "Undo Typing" alert.
+    DispatchQueue.main.async { UIApplication.shared.applicationSupportsShakeToEdit = false }
     let center = NotificationCenter.default
     center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) {
       [weak self] _ in self?.rest()
@@ -178,11 +182,28 @@ class KlimperJinglePlugin: Plugin {
     engine?.start { _ in }
     turned = true
     motion.deviceMotionUpdateInterval = 1.0 / 40.0
+    tiltFrom = nil
     motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
-      guard let self, let a = data?.userAcceleration else { return }
+      guard let self, let data else { return }
+      let a = data.userAcceleration
       let g = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
       if g < self.calm { self.turned = true }
       let now = CACurrentMediaTime()
+      // A slow tilt (the hand is calm): the coins slide to the low side, softly.
+      if g < self.calm, now - self.lastTurn >= self.turn {
+        let gravity = data.gravity
+        if let from = self.tiltFrom {
+          let dot = from.x * gravity.x + from.y * gravity.y + from.z * gravity.z
+          let angle = acos(max(-1, min(1, dot))) * 180 / .pi
+          if angle >= self.tiltDegrees {
+            self.tiltFrom = gravity
+            self.lastTurn = now
+            self.slide(by: min(1, angle / 60))
+          }
+        } else {
+          self.tiltFrom = gravity
+        }
+      }
       // Once per reversal of the hand: above `jolt` after having come back below `calm`.
       guard self.turned, g >= self.jolt, now - self.lastTurn >= self.turn else { return }
       self.turned = false
@@ -203,6 +224,31 @@ class KlimperJinglePlugin: Plugin {
   }
 
   // MARK: A turn of the hand
+
+  /// The phone was tilted: a few coins slide and settle. Quieter, softer and slower than a
+  /// shake; fewer coins than the tier's shake, at most three.
+  private func slide(by amount: Double) {
+    guard let engine, !grains.isEmpty, let t = Self.tiers[tier] else { return }
+    let order = Array(grains.indices).shuffled()
+    let coins = min(order.count, max(1, min(3, Int.random(in: t.coins))))
+    var events: [CHHapticEvent] = []
+    var at = 0.0
+    for k in 0..<coins {
+      if k > 0 { at += .random(in: 0.05...0.09) }
+      let volume = t.loud * (0.25 + 0.2 * amount) * pow(0.8, Double(k))
+      events.append(CHHapticEvent(audioResourceID: grains[order[k]], parameters: [
+        CHHapticEventParameter(parameterID: .audioVolume, value: Float(min(1, volume))),
+        CHHapticEventParameter(parameterID: .audioPitch, value: Float(.random(in: t.pitch))),
+      ], relativeTime: at))
+      events.append(Self.tap(
+        at, t.weight * (0.35 + 0.15 * amount) * pow(0.85, Double(k)),
+        .random(in: 0.2...0.4)))
+    }
+    guard let pattern = try? CHHapticPattern(events: events, parameters: []) else { return }
+    try? current?.stop(atTime: CHHapticTimeImmediate)
+    current = try? engine.makePlayer(with: pattern)
+    try? current?.start(atTime: CHHapticTimeImmediate)
+  }
 
   private func turnOfTheHand(force: Double) {
     guard let engine, !grains.isEmpty, let t = Self.tiers[tier] else { return }

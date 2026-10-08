@@ -279,12 +279,20 @@ msgid "2. Paste what the page gave you"
 msgstr "2. Paste what the page gave you"
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:37
-msgid "A coin rings when coins arrive: the more they are worth, the richer it sounds. Shaking is for the phone."
-msgstr "A coin rings when coins arrive: the more they are worth, the richer it sounds. Shaking is for the phone."
+#~ msgid "A coin rings when coins arrive: the more they are worth, the richer it sounds. Shaking is for the phone."
+#~ msgstr "A coin rings when coins arrive: the more they are worth, the richer it sounds. Shaking is for the phone."
+
+#: src/klimper/KlimperSettings.tsx:74
+msgid "A coin rings when coins arrive."
+msgstr "A coin rings when coins arrive."
+
+#: src/klimper/KlimperSettings.tsx:68
+msgid "A coin rings when coins arrive. Shake or tilt the phone and you hear and feel the coins on the open page: the more they are worth, the heavier. Silent mode mutes the sound."
+msgstr "A coin rings when coins arrive. Shake or tilt the phone and you hear and feel the coins on the open page: the more they are worth, the heavier. Silent mode mutes the sound."
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:29
-msgid "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
-msgstr "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
+#~ msgid "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
+#~ msgstr "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
 
 #: src/klimper/XchonnectDapps.tsx:359
 msgid "A connected website can ask you to sign — and you decide every time. Open the website, press its connect button, and scan or paste the code it shows."
@@ -588,6 +596,10 @@ msgstr "Amount includes"
 msgid "an address Klimper cannot show"
 msgstr "an address Klimper cannot show"
 
+#: src/klimper/WalletTotal.tsx:21
+msgid "An estimate from current prices. It does not account for liquidity."
+msgstr "An estimate from current prices. It does not account for liquidity."
+
 #: src/klimper/XchonnectDappSettings.tsx:525
 msgid "An unsafe signature is valid in any spend, not just the one you were shown."
 msgstr "An unsafe signature is valid in any spend, not just the one you were shown."
@@ -684,7 +696,7 @@ msgstr "Asset ID copied to clipboard"
 msgid "assets"
 msgstr "assets"
 
-#: src/pages/TokenList.tsx:177
+#: src/pages/TokenList.tsx:171
 msgid "Assets"
 msgstr "Assets"
 
@@ -776,7 +788,7 @@ msgstr "Banner for {collectionName}"
 msgid "being renewed"
 msgstr "being renewed"
 
-#: src/pages/Settings.tsx:321
+#: src/pages/Settings.tsx:323
 msgid "Biometric Authentication"
 msgstr "Biometric Authentication"
 
@@ -919,6 +931,7 @@ msgstr "Can see my receive addresses"
 #: src/components/TransferDialog.tsx:166
 #: src/components/WalletCard.tsx:394
 #: src/components/WalletCard.tsx:444
+#: src/klimper/PasskeyGate.tsx:167
 #: src/klimper/PasskeySettings.tsx:89
 #: src/klimper/XchonnectConnect.tsx:330
 #: src/klimper/XchonnectConnect.tsx:517
@@ -1068,11 +1081,11 @@ msgstr "Choose an emoji to easily identify your wallet"
 msgid "Choose the network to connect to"
 msgstr "Choose the network to connect to"
 
-#: src/pages/Settings.tsx:334
+#: src/pages/Settings.tsx:336
 msgid "Choose your preferred language"
 msgstr "Choose your preferred language"
 
-#: src/pages/Settings.tsx:300
+#: src/pages/Settings.tsx:302
 msgid "Choose your preferred theme"
 msgstr "Choose your preferred theme"
 
@@ -1196,8 +1209,8 @@ msgstr "Coins Synced"
 #~ msgstr "Coins to {0}"
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:25
-msgid "Coins you can hear"
-msgstr "Coins you can hear"
+#~ msgid "Coins you can hear"
+#~ msgstr "Coins you can hear"
 
 #: src/components/WalletCard.tsx:355
 msgid "Cold"
@@ -1969,6 +1982,10 @@ msgstr "Edition Total"
 msgid "Enable clawback"
 msgstr "Enable clawback"
 
+#: src/klimper/KlimperSettings.tsx:65
+msgid "Enable coins sound and feel"
+msgstr "Enable coins sound and feel"
+
 #: src/pages/Settings.tsx:1226
 #~ msgid "Enable Delta Sync"
 #~ msgstr "Enable Delta Sync"
@@ -2094,6 +2111,14 @@ msgstr "Enter your 12 or 24-word mnemonic seed phrase, private key, or public ke
 #: src/pages/ImportWallet.tsx:94
 #~ msgid "Enter your mnemonic, private key, or public key below. If it's a public key, it will be imported as a read-only cold wallet."
 #~ msgstr "Enter your mnemonic, private key, or public key below. If it's a public key, it will be imported as a read-only cold wallet."
+
+#: src/klimper/PasskeyGate.tsx:22
+msgid "erase"
+msgstr "erase"
+
+#: src/klimper/PasskeyGate.tsx:158
+msgid "Erase the keys"
+msgstr "Erase the keys"
 
 #: src/pages/Themes.tsx:84
 msgid "Error loading themes"
@@ -2542,6 +2567,10 @@ msgstr "Hide Zero Balance Tokens"
 #~ msgid "Hide zero balances"
 #~ msgstr "Hide zero balances"
 
+#: src/klimper/KlimperSettings.tsx:87
+msgid "Hides amounts and keeps the coins quiet and still. Confirmations still show amounts."
+msgstr "Hides amounts and keeps the coins quiet and still. Confirmations still show amounts."
+
 #: src/components/ConfirmationDialog.tsx:258
 msgid "High Transaction Fee"
 msgstr "High Transaction Fee"
@@ -2700,13 +2729,13 @@ msgstr "IP Address"
 msgid "IP Addresses"
 msgstr "IP Addresses"
 
-#: src/pages/TokenList.tsx:186
+#: src/pages/TokenList.tsx:181
 msgid "Issue new token"
 msgstr "Issue new token"
 
 #: src/pages/IssueToken.tsx:72
 #: src/pages/IssueToken.tsx:203
-#: src/pages/TokenList.tsx:190
+#: src/pages/TokenList.tsx:185
 msgid "Issue Token"
 msgstr "Issue Token"
 
@@ -2795,8 +2824,8 @@ msgstr "Klimper ended this connection"
 msgid "Klimper is asking the domain to prove it signed this code."
 msgstr "Klimper is asking the domain to prove it signed this code."
 
-#: src/klimper/PasskeyGate.tsx:84
-#: src/klimper/PasskeyGate.tsx:91
+#: src/klimper/PasskeyGate.tsx:89
+#: src/klimper/PasskeyGate.tsx:96
 msgid "Klimper is locked"
 msgstr "Klimper is locked"
 
@@ -2817,14 +2846,14 @@ msgid "Klimper sent the transaction for {dapp}."
 msgstr "Klimper sent the transaction for {dapp}."
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:18
-msgid "Klimper sound"
-msgstr "Klimper sound"
+#~ msgid "Klimper sound"
+#~ msgstr "Klimper sound"
 
 #: src/klimper/XchonnectDappSettings.tsx:579
 msgid "Klimper will stop refusing spends whose contract it cannot read. Nobody can tell you what such a contract does with your coins."
 msgstr "Klimper will stop refusing spends whose contract it cannot read. Nobody can tell you what such a contract does with your coins."
 
-#: src/pages/Settings.tsx:333
+#: src/pages/Settings.tsx:335
 msgid "Language"
 msgstr "Language"
 
@@ -3014,6 +3043,10 @@ msgstr "Logout"
 msgid "Looking up handle…"
 msgstr "Looking up handle…"
 
+#: src/klimper/PasskeyGate.tsx:114
+msgid "Lost your passkey?"
+msgstr "Lost your passkey?"
+
 #: src/components/Nav.tsx:52
 msgid "Main navigation"
 msgstr "Main navigation"
@@ -3163,7 +3196,7 @@ msgstr "More about this"
 msgid "More options"
 msgstr "More options"
 
-#: src/pages/Settings.tsx:313
+#: src/pages/Settings.tsx:315
 msgid "More Themes..."
 msgstr "More Themes..."
 
@@ -4097,7 +4130,7 @@ msgstr "Port:"
 msgid "Position the QR code within the frame"
 msgstr "Position the QR code within the frame"
 
-#: src/pages/Settings.tsx:297
+#: src/pages/Settings.tsx:299
 msgid "Preferences"
 msgstr "Preferences"
 
@@ -4141,6 +4174,10 @@ msgstr "Price per token: "
 #: src/pages/Themes.tsx:232
 msgid "Primary"
 msgstr "Primary"
+
+#: src/klimper/KlimperSettings.tsx:85
+msgid "Privacy mode"
+msgstr "Privacy mode"
 
 #: src/pages/Offer.tsx:58
 msgid "Processing offer data..."
@@ -4294,7 +4331,7 @@ msgstr "Refresh"
 msgid "Refresh Info"
 msgstr "Refresh Info"
 
-#: src/pages/TokenList.tsx:156
+#: src/pages/TokenList.tsx:150
 msgid "Refreshing token info..."
 msgstr "Refreshing token info..."
 
@@ -4383,7 +4420,7 @@ msgstr "Requesting in exchange:"
 msgid "Requests"
 msgstr "Requests"
 
-#: src/pages/Settings.tsx:322
+#: src/pages/Settings.tsx:324
 msgid "Require biometrics for sensitive actions"
 msgstr "Require biometrics for sensitive actions"
 
@@ -5305,7 +5342,7 @@ msgstr "Syncing {syncedCoins} / {totalCoins}"
 msgid "Syncing Defaults"
 msgstr "Syncing Defaults"
 
-#: src/pages/TokenList.tsx:218
+#: src/pages/TokenList.tsx:213
 msgid "Syncing in progress..."
 msgstr "Syncing in progress..."
 
@@ -5507,7 +5544,7 @@ msgstr "The transaction fee of {fee} applies to each offer being canceled."
 msgid "The wallet generates a new address after each transaction. Old ones stay valid."
 msgstr "The wallet generates a new address after each transaction. Old ones stay valid."
 
-#: src/pages/TokenList.tsx:221
+#: src/pages/TokenList.tsx:216
 msgid "The wallet is still syncing. Balances may not be accurate until it completes."
 msgstr "The wallet is still syncing. Balances may not be accurate until it completes."
 
@@ -5556,7 +5593,7 @@ msgid "The website withdrew the key this connection was made with, which is what
 msgstr "The website withdrew the key this connection was made with, which is what a website does when that key may have been stolen. Nothing can be asked through it any more. Connect again if you still use the website."
 
 #: src/components/NftCard.tsx:371
-#: src/pages/Settings.tsx:299
+#: src/pages/Settings.tsx:301
 msgid "Theme"
 msgstr "Theme"
 
@@ -5692,6 +5729,10 @@ msgstr "This domain mixes alphabets, which is how look-alike domains are built. 
 msgid "This domain uses letters outside the English alphabet. Check it character by character."
 msgstr "This domain uses letters outside the English alphabet. Check it character by character."
 
+#: src/klimper/PasskeyGate.tsx:122
+msgid "This erases the keys on this phone. Your money stays on the chain: restore each wallet afterwards with its recovery words. Without them it is gone."
+msgstr "This erases the keys on this phone. Your money stays on the chain: restore each wallet afterwards with its recovery words. Without them it is gone."
+
 #: src/components/HandleResolution.tsx:26
 msgid "This handle cannot receive payments right now"
 msgstr "This handle cannot receive payments right now"
@@ -5709,8 +5750,8 @@ msgid "This handle just changed. Check the address and try again"
 msgstr "This handle just changed. Check the address and try again"
 
 #: src/pages/TokenList.tsx:257
-msgid "This is an estimate only and does not account for liquidity"
-msgstr "This is an estimate only and does not account for liquidity"
+#~ msgid "This is an estimate only and does not account for liquidity"
+#~ msgstr "This is an estimate only and does not account for liquidity"
 
 #: src/pages/Themes.tsx:215
 msgid "This is how a card component looks with the current theme."
@@ -6054,13 +6095,17 @@ msgstr "Tokens must have a positive amount."
 msgid "Total Amount"
 msgstr "Total Amount"
 
+#: src/klimper/WalletTotal.tsx:19
+msgid "Total balance"
+msgstr "Total balance"
+
 #: src/pages/Settings.tsx:1694
 msgid "Total Duration"
 msgstr "Total Duration"
 
 #: src/pages/TokenList.tsx:248
-msgid "Total Estimated Balance"
-msgstr "Total Estimated Balance"
+#~ msgid "Total Estimated Balance"
+#~ msgstr "Total Estimated Balance"
 
 #: src/components/dialogs/MakeOfferConfirmationDialog.tsx:520
 msgid "Total fees for {numberOfOffers} offers:"
@@ -6225,6 +6270,10 @@ msgstr "Try again"
 msgid "Type"
 msgstr "Type"
 
+#: src/klimper/PasskeyGate.tsx:130
+msgid "Type “{word}” to confirm"
+msgstr "Type “{word}” to confirm"
+
 #: src/klimper/XchonnectConnect.tsx:406
 msgid "Type the code"
 msgstr "Type the code"
@@ -6319,7 +6368,7 @@ msgstr "Unless you create it as a cold wallet, your seed phrase will be viewable
 msgid "Unless you import it as a cold wallet, your seed phrase and/or secret key will be viewable from the wallet card on the login screen."
 msgstr "Unless you import it as a cold wallet, your seed phrase and/or secret key will be viewable from the wallet card on the login screen."
 
-#: src/klimper/PasskeyGate.tsx:98
+#: src/klimper/PasskeyGate.tsx:103
 msgid "Unlock with passkey"
 msgstr "Unlock with passkey"
 
@@ -6932,7 +6981,7 @@ msgstr "Your balance changes by"
 msgid "Your keys are protected by a passkey"
 msgstr "Your keys are protected by a passkey"
 
-#: src/klimper/PasskeyGate.tsx:94
+#: src/klimper/PasskeyGate.tsx:99
 msgid "Your keys open with your passkey."
 msgstr "Your keys open with your passkey."
 

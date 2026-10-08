@@ -27,6 +27,17 @@ It is a small touch, built to cost nothing when not in use and to touch nothing 
   accelerometer is stopped. The build flag removes the feature altogether.
 - Nothing plays or vibrates while the app is in the background.
 
+## Tilt, privacy mode, shake to undo
+
+- **Tilt.** With the coins armed and the hand calm, tilting the phone by about 18° lets a few
+  coins slide: one to three soft hits and gentle taps, quieter and slower than a shake. iOS
+  reads the gravity vector of the same motion updates; Android a `TYPE_GRAVITY` sensor.
+- **Privacy mode** (Settings, the Klimper card) keeps the coins quiet and still whatever the
+  sound switch says, and hides amounts (`src/klimper/privacy.tsx`).
+- **No "Undo Typing" on a shake.** iOS offers to undo typing when the phone is shaken; the
+  plugin turns that off for Klimper (`applicationSupportsShakeToEdit = false`), so shaking is
+  only ever the coins.
+
 ## Flag, switch, folder
 
 | What                          | Where                                                                                                                                                                                                                                   |
