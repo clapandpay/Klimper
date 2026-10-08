@@ -419,6 +419,10 @@ export default function XchonnectDappSettings() {
                 A request over a limit is refused before it reaches you — you
                 will not see a signing prompt for it. Leave a field empty for no
                 limit.
+              </Trans>{' '}
+              <Trans>
+                Limits count XCH only; tokens and NFTs are not limited. A day is
+                a UTC day.
               </Trans>
             </CardDescription>
           </CardHeader>

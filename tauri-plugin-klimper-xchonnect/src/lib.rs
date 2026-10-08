@@ -690,6 +690,15 @@ async fn set_dapp_policy<R: Runtime>(
     session_id: String,
     policy: DappPolicy,
 ) -> Result<SessionSummary> {
+    // A limit on an asset this build cannot read would be dropped on load and leave the asset
+    // unlimited: refuse it here instead.
+    if let Some(limits) = &policy.limits
+        && let Some(bad) = limits
+            .keys()
+            .find(|key| store::parse_asset_key(key).is_none())
+    {
+        return Err(Error::Protocol(format!("unknown asset in a limit: {bad}")));
+    }
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
     let stored = state
         .store

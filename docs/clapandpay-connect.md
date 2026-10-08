@@ -41,7 +41,11 @@ opens has to be exactly that origin, in the same browser.
    network setting.
 
 The app's one-time key travels in the link's fragment (`/connect#v=1&k=…`), which a browser
-never sends to the server; the page still reads an older app's query string (`?v=1&k=…`).
+never sends to the server, and the page takes it out of the address bar and the history as soon
+as it has read it. The first number is made from that public key: it catches the wrong page or a
+mixed-up request, not an attacker who controls the device or the browser. The second number is
+drawn from the secret the app and the page share, so an answer sealed by anyone else cannot show
+it, and nobody can search for one that does.
 
 The wallet appears as "Clap and Pay" 🟢, with the address the page shows. Remove the line from
 `.env.local` to talk to clapandpay.com again.

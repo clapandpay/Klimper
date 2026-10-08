@@ -138,7 +138,7 @@ export default function ClapAndPayConnect() {
 
   // The codes match: the answer is the page's. Now the network, then the import.
   const accept = async () => {
-    if (!confirm) return;
+    if (!confirm || pending) return; // one import, however fast the taps
     const { payload } = confirm;
     setConfirm(null);
     setPending(true);
@@ -168,10 +168,11 @@ export default function ClapAndPayConnect() {
       await commands.setNetwork({ name: elsewhere.network });
       await fetchState();
       await bringIn(elsewhere);
-      setElsewhere(null);
     } catch (error) {
       fail(error);
     } finally {
+      // The key leaves memory either way; paste again to retry.
+      setElsewhere(null);
       setPending(false);
     }
   };
@@ -312,7 +313,11 @@ export default function ClapAndPayConnect() {
                     {`${confirm.answerCode.slice(0, 3)} ${confirm.answerCode.slice(3)}`}
                   </p>
                   <div className='flex gap-2'>
-                    <Button className='flex-1' onClick={accept}>
+                    <Button
+                      className='flex-1'
+                      disabled={pending}
+                      onClick={accept}
+                    >
                       <Trans>Same number</Trans>
                     </Button>
                     <Button

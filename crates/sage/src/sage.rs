@@ -145,6 +145,13 @@ impl Sage {
             fs::write(&key_path, self.keychain.to_bytes()?)?;
         }
 
+        // Klimper: with a passkey envelope next to keys.bin (tauri-plugin-klimper-passkey), the
+        // keychain stays locked until the passkey opens it, even with no secret in it yet, so
+        // nothing can be added under the empty password before the lock screen asks.
+        if self.path.join("passkey.json").try_exists()? {
+            self.keychain.lock();
+        }
+
         Ok(())
     }
 

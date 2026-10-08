@@ -189,12 +189,14 @@ export default function XchonnectConnect() {
   useEffect(() => {
     if (sas === null) return;
     setRemaining(secondsLeft(sas.deadline));
-    const timer = setInterval(
-      () => setRemaining(secondsLeft(sas.deadline)),
-      1000,
-    );
+    const timer = setInterval(() => {
+      const left = secondsLeft(sas.deadline);
+      setRemaining(left);
+      // Out of time: a dead end like any other failure, never a screen stuck at 0s.
+      if (left <= 0) fail(t`The website did not answer in time.`);
+    }, 1000);
     return () => clearInterval(timer);
-  }, [sas]);
+  }, [sas, fail]);
 
   const onScanResult = useCallback(
     (text: string) => {

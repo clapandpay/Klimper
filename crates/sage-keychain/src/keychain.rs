@@ -81,16 +81,47 @@ impl Keychain {
         self.password.0 = None;
     }
 
-    /// Checks the password against the stored secrets and keeps it in memory.
+    /// Checks the password against every stored secret and keeps it in memory. All of them,
+    /// not one picked by map order: a keychain whose secrets disagree must fail every time,
+    /// not on some launches.
     pub fn unlock(&mut self, password: &[u8]) -> Result<(), KeychainError> {
-        if let Some(KeyData::Secret { encrypted, .. }) = self
-            .keys
-            .values()
-            .find(|key_data| matches!(key_data, KeyData::Secret { .. }))
-        {
-            decrypt::<SecretKeyData>(encrypted, password)?;
+        for key_data in self.keys.values() {
+            if let KeyData::Secret { encrypted, .. } = key_data {
+                decrypt::<SecretKeyData>(encrypted, password)?;
+            }
         }
 
+        self.password.0 = Some(Zeroizing::new(password.to_vec()));
+        Ok(())
+    }
+
+    /// Seals every secret under `password`, taking each one that still opens under the empty
+    /// password and keeping each one that already opens under `password`. Repairs a keychain an
+    /// interrupted re-keying (or a key added before the lock) left with both. Fails, changing
+    /// nothing, if any secret opens under neither. Leaves the keychain unlocked with `password`.
+    pub fn adopt_password(&mut self, password: &[u8]) -> Result<(), KeychainError> {
+        let mut keys = HashMap::with_capacity(self.keys.len());
+        for (fingerprint, key_data) in &self.keys {
+            let key_data = match key_data {
+                KeyData::Secret {
+                    master_pk,
+                    entropy,
+                    encrypted,
+                } if decrypt::<SecretKeyData>(encrypted, password).is_err() => {
+                    let mut data = decrypt::<SecretKeyData>(encrypted, b"")?;
+                    let encrypted = encrypt(password, &mut self.rng, &data);
+                    data.0.zeroize();
+                    KeyData::Secret {
+                        master_pk: *master_pk,
+                        entropy: *entropy,
+                        encrypted: encrypted?,
+                    }
+                }
+                _ => key_data.clone(),
+            };
+            keys.insert(*fingerprint, key_data);
+        }
+        self.keys = keys;
         self.password.0 = Some(Zeroizing::new(password.to_vec()));
         Ok(())
     }
@@ -321,6 +352,29 @@ mod tests {
         open.change_password(b"wallet key").unwrap();
         let sealed = Keychain::from_bytes(&open.to_bytes().unwrap()).unwrap();
         assert!(sealed.is_locked(), "a passkey keychain starts locked");
+    }
+
+    #[test]
+    fn mixed_passwords_fail_every_unlock_and_adopting_one_repairs_them() {
+        let mut keychain = Keychain::default();
+        keychain.add_mnemonic(&mnemonic(), b"").unwrap();
+        keychain.change_password(b"wallet key").unwrap();
+        // A second key added under the empty password, as before the lock existed.
+        let mut other = Keychain::default();
+        let second = other
+            .add_mnemonic(&Mnemonic::from_entropy(&[9; 32]).unwrap(), b"")
+            .unwrap();
+        keychain.keys.extend(other.keys);
+
+        assert!(matches!(
+            keychain.unlock(b"wallet key"),
+            Err(KeychainError::Decrypt)
+        ));
+        assert!(matches!(keychain.unlock(b""), Err(KeychainError::Decrypt)));
+
+        keychain.adopt_password(b"wallet key").unwrap();
+        keychain.unlock(b"wallet key").unwrap();
+        assert!(keychain.extract_secrets(second, b"wallet key").is_ok());
     }
 
     #[test]

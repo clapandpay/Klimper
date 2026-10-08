@@ -88,6 +88,9 @@ fn time_left(expires_at: u64) -> Duration {
 struct Waiting {
     approval: Approval,
     answer: mpsc::Sender<bool>,
+    /// The deadline on the monotonic clock the waiting thread times out by, so an answer is
+    /// refused exactly when the thread stops listening.
+    deadline: std::time::Instant,
 }
 
 /// Who withdrew a request.
@@ -150,7 +153,12 @@ impl ApprovalBridge {
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
         let (tx, rx) = mpsc::channel();
-        let expires_at = approval.expires_at;
+        let wait = time_left(approval.expires_at);
+        // Already past its deadline: never shown, never signed.
+        if wait.is_zero() {
+            return false;
+        }
+        let deadline = std::time::Instant::now() + wait;
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
         {
             let Ok(mut registry) = self.registry.lock() else {
@@ -171,6 +179,7 @@ impl ApprovalBridge {
                 Waiting {
                     approval,
                     answer: tx,
+                    deadline,
                 },
             );
         }
@@ -180,7 +189,10 @@ impl ApprovalBridge {
         // A timeout and a closed channel are both rejections: the only path to `true` is
         // the user pressing approve, before the request's own deadline. A request the dApp
         // has already given up on (and may have sent again) is never signed late.
-        let decision = matches!(rx.recv_timeout(time_left(expires_at)), Ok(true));
+        let decision = matches!(
+            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())),
+            Ok(true)
+        );
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
         }
@@ -201,7 +213,7 @@ impl ApprovalBridge {
                 let key = (w.approval.session_id.clone(), w.approval.request_id.clone());
                 // Past its deadline: the waiting thread is about to give up, and an approval
                 // that slipped in now would sign a request the dApp no longer expects.
-                let live = time_left(w.approval.expires_at) > Duration::ZERO;
+                let live = std::time::Instant::now() < w.deadline;
                 (live && !registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
             })
         };

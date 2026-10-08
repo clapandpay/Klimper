@@ -155,10 +155,10 @@ fn seal_keychain(sage: &mut Sage, envelope: &Envelope, wallet_key: &[u8; 32]) ->
 fn open_keychain(sage: &mut Sage, wallet_key: &[u8; 32]) -> Result<()> {
     match sage.keychain.unlock(wallet_key) {
         Ok(()) => Ok(()),
-        // Enrolment was interrupted after the envelope was written: finish re-keying.
+        // Some secrets are still under the empty password (enrolment was interrupted after the
+        // envelope was written, or a key was added before the lock): seal each of them too.
         Err(sage_keychain::KeychainError::Decrypt) => {
-            sage.keychain.unlock(b"")?;
-            sage.keychain.change_password(wallet_key)?;
+            sage.keychain.adopt_password(wallet_key)?;
             sage.save_keychain()?;
             Ok(())
         }
@@ -168,7 +168,13 @@ fn open_keychain(sage: &mut Sage, wallet_key: &[u8; 32]) -> Result<()> {
 
 /// Back to Sage's empty password; keys.bin first, so a crash leaves a state unlock repairs.
 fn unseal_keychain(sage: &mut Sage, wallet_key: &[u8; 32]) -> Result<()> {
-    sage.keychain.unlock(wallet_key)?;
+    // Already back under the empty password (an earlier removal stopped before the envelope
+    // was deleted): only the envelope is left to go.
+    if sage.keychain.unlock(wallet_key).is_err() {
+        sage.keychain.unlock(b"")?;
+        Envelope::delete(&sage.path)?;
+        return Ok(());
+    }
     sage.keychain.change_password(b"")?;
     sage.save_keychain()?;
     Envelope::delete(&sage.path)?;
@@ -276,7 +282,9 @@ async fn unlock<R: Runtime>(
 #[command]
 async fn lock(state: State<'_, AppState>, unlocked: State<'_, Unlocked>) -> Result<()> {
     let mut sage = state.lock().await;
-    if Envelope::load(&sage.path)?.is_some() {
+    // The file decides, not whether it parses: an envelope that cannot be read must not leave
+    // the keys open in memory.
+    if sage.path.join(envelope::FILE_NAME).exists() {
         unlocked.0.store(false, Ordering::SeqCst);
         sage.keychain.lock();
     }

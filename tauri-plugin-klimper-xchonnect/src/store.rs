@@ -508,7 +508,8 @@ impl SessionStore {
         let Some(blob) = self.secrets.get(&Self::limits_key(fingerprint, id))? else {
             return Ok(DailySpend::default());
         };
-        let stored: StoredDailySpend = serde_json::from_slice(&blob).unwrap_or_default();
+        // Unreadable totals are not zero totals: refuse rather than hand out a fresh budget.
+        let stored: StoredDailySpend = serde_json::from_slice(&blob).map_err(Error::internal)?;
         Ok(DailySpend {
             day: stored.day,
             spent: stored
