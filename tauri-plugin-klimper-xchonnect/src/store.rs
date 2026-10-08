@@ -4,8 +4,8 @@
 //! Xchonnect session state is epoch keys, mailbox ids, capability tokens and sequence
 //! counters: a transport secret, not signing material. It lives in the **OS keyring**
 //! under its own service name, `com.clapandpay.klimper.xchonnect`, and never in
-//! `keys.bin` (the Sage signing keychain), the wallet `SQLite` database, a log line or a
-//! device backup. Compromising a session key must not reach signing material, so the two
+//! `keys.bin` (the Sage signing keychain), the wallet `SQLite` database, a log line or an
+//! iPhone backup (this-device-only items, TASK-116). Compromising a session key must not reach signing material, so the two
 //! stores share nothing: `sage-keychain` is untouched by this module.
 //!
 //! Two keyring entries exist per session, so that the message loop (which owns the
@@ -53,12 +53,170 @@ pub trait SecretStore: std::fmt::Debug + Send + Sync {
 }
 
 /// The OS keyring: macOS and iOS Keychain, Windows Credential Manager, the Linux Secret
-/// Service. On Apple platforms `keyring` stores a generic password item, which the system
-/// keeps out of iCloud Keychain unless it is marked synchronisable — it is not.
+/// Service. On Apple platforms it is a generic password item, never marked synchronisable,
+/// so it stays out of iCloud Keychain. On iOS the items are also this-device-only
+/// ([`ios_keychain`]): they are not in an iPhone backup and do not move to a new phone, where
+/// a session would have to be paired again anyway.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OsKeyring;
 
-#[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "ios")]
+impl SecretStore for OsKeyring {
+    fn put(&self, key: &str, bytes: &[u8]) -> Result<()> {
+        ios_keychain::put(KEYRING_SERVICE, key, bytes).map_err(keychain_error)
+    }
+
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        ios_keychain::get(KEYRING_SERVICE, key).map_err(keychain_error)
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        ios_keychain::delete(KEYRING_SERVICE, key).map_err(keychain_error)
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn keychain_error(status: i32) -> Error {
+    Error::Keyring(format!("keychain status {status}"))
+}
+
+/// Generic password items marked `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`: readable
+/// while the phone is unlocked, never in a backup, never on another device. An item written
+/// by an earlier version (plain `WhenUnlocked`) is re-marked the first time it is read.
+// The only unsafe code in the plugin: calls into Apple's Security framework. Every pointer
+// handed over is a Core Foundation object this module owns for the duration of the call; the
+// constants are the framework's own statics; the one object returned (SecItemCopyMatching's
+// data) is taken over with the create rule, so it is released exactly once.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+mod ios_keychain {
+    use std::collections::HashSet;
+    use std::sync::{LazyLock, Mutex};
+
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::data::CFData;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::{CFString, CFStringRef};
+    use security_framework_sys::access_control::kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
+    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound};
+    use security_framework_sys::item::{
+        kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
+        kSecValueData,
+    };
+    use security_framework_sys::keychain_item::{
+        SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate,
+    };
+
+    unsafe extern "C" {
+        static kSecAttrAccessible: CFStringRef;
+    }
+
+    /// Items already re-marked this run.
+    static MARKED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
+
+    fn key(constant: CFStringRef) -> CFString {
+        unsafe { CFString::wrap_under_get_rule(constant) }
+    }
+
+    fn item(service: &str, account: &str) -> Vec<(CFString, CFType)> {
+        vec![
+            (
+                key(unsafe { kSecClass }),
+                key(unsafe { kSecClassGenericPassword }).into_CFType(),
+            ),
+            (
+                key(unsafe { kSecAttrService }),
+                CFString::new(service).into_CFType(),
+            ),
+            (
+                key(unsafe { kSecAttrAccount }),
+                CFString::new(account).into_CFType(),
+            ),
+        ]
+    }
+
+    fn this_device_only() -> (CFString, CFType) {
+        (
+            key(unsafe { kSecAttrAccessible }),
+            key(unsafe { kSecAttrAccessibleWhenUnlockedThisDeviceOnly }).into_CFType(),
+        )
+    }
+
+    fn check(status: i32) -> Result<(), i32> {
+        if status == 0 { Ok(()) } else { Err(status) }
+    }
+
+    /// Data and accessibility in one call: an existing item is updated in place, never
+    /// deleted and re-added, so a crash cannot lose it.
+    pub fn put(service: &str, account: &str, bytes: &[u8]) -> Result<(), i32> {
+        let data = (
+            key(unsafe { kSecValueData }),
+            CFData::from_buffer(bytes).into_CFType(),
+        );
+        let mut add = item(service, account);
+        add.push(this_device_only());
+        add.push(data.clone());
+        let add = CFDictionary::from_CFType_pairs(&add);
+        let status = unsafe { SecItemAdd(add.as_concrete_TypeRef(), std::ptr::null_mut()) };
+        if status != errSecDuplicateItem {
+            return check(status);
+        }
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        let update = CFDictionary::from_CFType_pairs(&[this_device_only(), data]);
+        check(unsafe { SecItemUpdate(query.as_concrete_TypeRef(), update.as_concrete_TypeRef()) })
+    }
+
+    pub fn get(service: &str, account: &str) -> Result<Option<Vec<u8>>, i32> {
+        let mut query = item(service, account);
+        query.push((
+            key(unsafe { kSecReturnData }),
+            CFBoolean::true_value().into_CFType(),
+        ));
+        let query = CFDictionary::from_CFType_pairs(&query);
+        let mut found: CFTypeRef = std::ptr::null();
+        let status = unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &raw mut found) };
+        if status == errSecItemNotFound {
+            return Ok(None);
+        }
+        check(status)?;
+        if found.is_null() {
+            return Err(-50);
+        }
+        let data = unsafe { CFData::wrap_under_create_rule(found.cast()) };
+        let bytes = data.bytes().to_vec();
+        mark_once(service, account);
+        Ok(Some(bytes))
+    }
+
+    pub fn delete(service: &str, account: &str) -> Result<(), i32> {
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        match unsafe { SecItemDelete(query.as_concrete_TypeRef()) } {
+            status if status == errSecItemNotFound => Ok(()),
+            status => check(status),
+        }
+    }
+
+    /// An item from before this version: make it this-device-only too (no new data).
+    fn mark_once(service: &str, account: &str) {
+        let Ok(mut marked) = MARKED.lock() else {
+            return;
+        };
+        if !marked.insert(account.to_owned()) {
+            return;
+        }
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        let update = CFDictionary::from_CFType_pairs(&[this_device_only()]);
+        let status =
+            unsafe { SecItemUpdate(query.as_concrete_TypeRef(), update.as_concrete_TypeRef()) };
+        if status != 0 {
+            tracing::warn!("xchonnect: could not mark a keychain item this-device-only: {status}");
+            marked.remove(account);
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 impl SecretStore for OsKeyring {
     fn put(&self, key: &str, bytes: &[u8]) -> Result<()> {
         entry(key)?
@@ -82,14 +240,19 @@ impl SecretStore for OsKeyring {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn entry(key: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(KEYRING_SERVICE, key).map_err(|e| Error::Keyring(e.to_string()))
 }
 
 /// Platforms without a credential store: refuse rather than fall back to a file, which
 /// would put session keys on disk unencrypted.
-#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux"
+)))]
 impl SecretStore for OsKeyring {
     fn put(&self, _key: &str, _bytes: &[u8]) -> Result<()> {
         Err(Error::Keyring("no OS keyring on this platform".to_owned()))

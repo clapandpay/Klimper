@@ -47,8 +47,14 @@ chia-wallet-sdk = { workspace = true }
 
 # Session keys live in the OS keyring under their own service name, never in the Sage
 # signing keychain (clapandpay TASK-073, xchonnect spec 11.3).
-[target.'cfg(target_vendor = "apple")'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+
+# iOS writes the keychain items itself, to mark them this-device-only (TASK-116): keyring's
+# iOS backend sets no accessibility, so its items went into backups and to a new phone.
+[target.'cfg(target_os = "ios")'.dependencies]
+security-framework-sys = "2"
+core-foundation = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3" }

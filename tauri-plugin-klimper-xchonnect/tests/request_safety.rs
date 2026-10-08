@@ -655,7 +655,10 @@ fn a_hidden_key_answers_like_a_strangers() {
     let hidden = BlsPair::new(2);
     let stranger = BlsPair::new(3);
     let mut harness = Harness::new(who.clone(), true);
-    harness.ownership.p2_puzzle_hashes.insert(hidden.puzzle_hash);
+    harness
+        .ownership
+        .p2_puzzle_hashes
+        .insert(hidden.puzzle_hash);
 
     let mine_but_hidden = send(&mut Simulator::new(), &hidden, 500);
     let theirs = send(&mut Simulator::new(), &stranger, 500);
