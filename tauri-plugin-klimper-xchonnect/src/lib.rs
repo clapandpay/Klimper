@@ -100,6 +100,7 @@ fn now() -> u64 {
 struct Live {
     end_requested: Arc<AtomicBool>,
     rotate_requested: Arc<AtomicBool>,
+    permissions_changed: Arc<AtomicBool>,
     interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
 }
@@ -117,6 +118,13 @@ impl Live {
 
     fn request_rotation(&self) {
         self.rotate_requested.store(true, Ordering::SeqCst);
+        self.interrupt.notify_one();
+        let _ = self.wake.try_send(());
+    }
+
+    /// The exposed keys changed: the loop tells the dApp at its next pass.
+    fn announce_permissions(&self) {
+        self.permissions_changed.store(true, Ordering::SeqCst);
         self.interrupt.notify_one();
         let _ = self.wake.try_send(());
     }
@@ -207,6 +215,9 @@ pub struct SessionSummary {
     pub limits: BTreeMap<String, StoredLimit>,
     pub allow_agg_sig_unsafe: bool,
     pub allow_unknown_contracts: bool,
+    /// The website sees every receive address, not only its own (the user allowed it, or it
+    /// was paired before websites had an address of their own).
+    pub all_receive_keys: bool,
     /// The message loop is running for this session.
     pub connected: bool,
 }
@@ -228,6 +239,10 @@ pub struct DappPolicy {
     /// Restrict the allowed CHIP-0002 methods.
     #[serde(default)]
     pub methods: Option<Vec<String>>,
+    /// Let the website see every receive address (it can then build spends from all the
+    /// user's coins, and link them), or only its own. Off by default; a confirmation in the UI.
+    #[serde(default)]
+    pub all_receive_keys: Option<bool>,
 }
 
 /// Describe one stored session for the webview.
@@ -257,8 +272,50 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         limits: stored.record.permissions.limits.clone(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
+        all_receive_keys: stored.record.own_key.is_none()
+            || stored.record.permissions.exposed_keys.len() > 1,
         connected,
     }
+}
+
+/// The receive key that is a website's own: the one it had before (kept per domain), or the
+/// highest receive key no other website has, so Sage's next receive address is not it and
+/// websites never share one. `None` only for a wallet without receive keys.
+fn own_key_for(
+    store: &SessionStore,
+    fingerprint: u32,
+    dapp: &str,
+    receive_keys: &[chia_bls::PublicKey],
+) -> Result<Option<chia_bls::PublicKey>> {
+    if let Some(remembered) = store
+        .load_domain(fingerprint, dapp)?
+        .and_then(|memory| memory.own_key)
+        .and_then(|hex_key| store::parse_public_key(&hex_key))
+        && receive_keys.contains(&remembered)
+    {
+        return Ok(Some(remembered));
+    }
+    let taken: std::collections::HashSet<chia_bls::PublicKey> = store
+        .list(fingerprint)?
+        .iter()
+        .filter(|s| s.record.dapp != dapp)
+        .filter_map(|s| {
+            s.record
+                .own_key
+                .as_deref()
+                .and_then(store::parse_public_key)
+        })
+        .collect();
+    Ok(receive_keys
+        .iter()
+        .rev()
+        .find(|key| !taken.contains(key))
+        .or_else(|| receive_keys.last())
+        .copied())
+}
+
+fn key_hex(key: &chia_bls::PublicKey) -> String {
+    format!("0x{}", hex::encode(key.to_bytes()))
 }
 
 impl<R: Runtime> Xchonnect<R> {
@@ -279,6 +336,7 @@ impl<R: Runtime> Xchonnect<R> {
         let relay = relay::RelayClient::new(&stored.record.relay, developer_mode)?;
         let end_requested = Arc::new(AtomicBool::new(false));
         let rotate_requested = Arc::new(AtomicBool::new(false));
+        let permissions_changed = Arc::new(AtomicBool::new(false));
         let interrupt = Arc::new(tokio::sync::Notify::new());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
@@ -293,6 +351,7 @@ impl<R: Runtime> Xchonnect<R> {
             info: relay::RelayInfo::default(),
             end_requested: end_requested.clone(),
             rotate_requested: rotate_requested.clone(),
+            permissions_changed: permissions_changed.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
             push: self.push.clone(),
@@ -305,6 +364,7 @@ impl<R: Runtime> Xchonnect<R> {
             Live {
                 end_requested,
                 rotate_requested,
+                permissions_changed,
                 interrupt,
                 wake: wake_tx,
             },
@@ -457,15 +517,32 @@ async fn inspect_pairing_uri<R: Runtime>(
     uri: String,
 ) -> Result<PairingPreview> {
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
-    let attempt = pairing::inspect(
+    let mut attempt = pairing::inspect(
         &uri,
         now(),
         developer_mode_allowed(),
         snapshot.fingerprint,
         snapshot.network.chain_id().to_owned(),
-        snapshot.receive_keys,
+        Vec::new(),
     )
     .await?;
+    // Now that the domain is verified: its own key, and the limits remembered for it.
+    let dapp = attempt.verified.uri().domain.clone();
+    let own = own_key_for(
+        &state.store,
+        snapshot.fingerprint,
+        &dapp,
+        &snapshot.receive_keys,
+    )?;
+    attempt.permissions.exposed_keys = own.into_iter().collect();
+    if let Some(memory) = state.store.load_domain(snapshot.fingerprint, &dapp)? {
+        attempt.permissions.limits = store::StoredPermissions {
+            limits: memory.limits,
+            ..Default::default()
+        }
+        .to_kit()
+        .limits;
+    }
     let preview = attempt.preview();
     let mut attempts = state.attempts.lock().await;
     // A preview the user walked away from is never cancelled; one past its deadline is
@@ -700,9 +777,41 @@ async fn set_dapp_policy<R: Runtime>(
         return Err(Error::Protocol(format!("unknown asset in a limit: {bad}")));
     }
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
+    // Which keys the website sees: all receive keys, or its own (picked now for a website
+    // paired before it had one).
+    let keys = match policy.all_receive_keys {
+        None => None,
+        Some(true) => Some((None, snapshot.receive_keys.iter().map(key_hex).collect())),
+        Some(false) => {
+            let current = state.store.load(snapshot.fingerprint, &session_id)?;
+            let own = match current
+                .record
+                .own_key
+                .as_deref()
+                .and_then(store::parse_public_key)
+            {
+                Some(own) => Some(own),
+                None => own_key_for(
+                    &state.store,
+                    snapshot.fingerprint,
+                    &current.record.dapp,
+                    &snapshot.receive_keys,
+                )?,
+            };
+            let own = own.map(|key| key_hex(&key));
+            Some((own.clone(), own.into_iter().collect::<Vec<_>>()))
+        }
+    };
+    let keys_changed = keys.is_some();
     let stored = state
         .store
         .update_policy(snapshot.fingerprint, &session_id, |record| {
+            if let Some((own, exposed)) = keys {
+                if own.is_some() {
+                    record.own_key = own;
+                }
+                record.permissions.exposed_keys = exposed;
+            }
             if let Some(limits) = policy.limits {
                 record.permissions.limits = limits;
             }
@@ -716,13 +825,23 @@ async fn set_dapp_policy<R: Runtime>(
                 record.allow_unknown_contracts = allow;
             }
         })?;
+    // Remembered for the domain, so connecting again brings both back.
+    let memory = store::DomainMemory {
+        own_key: stored.record.own_key.clone(),
+        limits: stored.record.permissions.limits.clone(),
+    };
+    state
+        .store
+        .save_domain(snapshot.fingerprint, &stored.record.dapp, &memory)?;
     let keys = KeyState::stored(&stored);
-    let connected = state
-        .live
-        .lock()
-        .await
-        .get(&session_id)
-        .is_some_and(Live::running);
+    let connected = {
+        let live = state.live.lock().await;
+        let entry = live.get(&session_id);
+        if keys_changed && let Some(entry) = entry {
+            entry.announce_permissions();
+        }
+        entry.is_some_and(Live::running)
+    };
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(summary(&stored, keys, connected))
 }
@@ -866,5 +985,36 @@ mod lib_tests {
         // The constant is the only switch; there is no setting and no environment
         // variable that turns developer mode on in a release build.
         assert_eq!(developer_mode_allowed(), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn each_website_gets_its_own_key_and_keeps_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store =
+            SessionStore::open(dir.path(), Box::new(store::MemorySecrets::default())).unwrap();
+        let keys: Vec<chia_bls::PublicKey> = (0u8..4)
+            .map(|i| chia_bls::SecretKey::from_seed(&[i; 64]).public_key())
+            .collect();
+
+        // The highest receive key: Sage hands out the lowest unused one as the user's own.
+        let first = own_key_for(&store, 1, "pengui.xyz", &keys)
+            .unwrap()
+            .unwrap();
+        assert_eq!(first, keys[3]);
+        store
+            .save_domain(
+                1,
+                "pengui.xyz",
+                &store::DomainMemory {
+                    own_key: Some(key_hex(&first)),
+                    limits: BTreeMap::new(),
+                },
+            )
+            .unwrap();
+        // The same website again: the same key.
+        assert_eq!(
+            own_key_for(&store, 1, "pengui.xyz", &keys).unwrap(),
+            Some(first)
+        );
     }
 }

@@ -102,6 +102,8 @@ export interface SessionSummary {
   limits: Record<string, AssetLimit>;
   allowAggSigUnsafe: boolean;
   allowUnknownContracts: boolean;
+  /** It sees every receive address, not only its own one. */
+  allReceiveKeys: boolean;
   /** The message loop is running. */
   connected: boolean;
 }
@@ -111,6 +113,7 @@ export interface DappPolicy {
   allowAggSigUnsafe?: boolean;
   allowUnknownContracts?: boolean;
   methods?: string[];
+  allReceiveKeys?: boolean;
 }
 
 /** What wallet-kit computed, as JSON. See xchonnect docs/wallet-integration.md §5. */

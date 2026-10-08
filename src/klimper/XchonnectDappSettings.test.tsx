@@ -225,6 +225,29 @@ describe('a dangerous permission needs its own confirmation', () => {
     );
   });
 
+  it('asks before letting a website see all receive addresses', async () => {
+    openSettings();
+    await waitFor(() =>
+      screen.getByLabelText(/Let it see all my receive addresses/),
+    );
+
+    fireEvent.click(
+      screen.getByLabelText(/Let it see all my receive addresses/),
+    );
+    expect(setDappPolicy).not.toHaveBeenCalled();
+    const dialog = await waitFor(() => screen.getByTestId('dangerous-confirm'));
+    expect(dialog.textContent).toMatch(/connect them to you/);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'I understand, turn it on' }),
+    );
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        allReceiveKeys: true,
+      }),
+    );
+  });
+
   it('turns one off without a dialog, because that is the safe direction', async () => {
     openSettings({ ...fresh, allowAggSigUnsafe: true });
     await waitFor(() => screen.getByLabelText(/Allow unsafe signatures/));

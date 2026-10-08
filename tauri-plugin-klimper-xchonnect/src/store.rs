@@ -157,6 +157,16 @@ pub fn parse_asset_key(key: &str) -> Option<AssetId> {
     Some(AssetId::Cat(chia_protocol::Bytes32::from(hash)))
 }
 
+/// What Klimper keeps about a website across connections (per wallet and verified domain):
+/// the receive key that is its own, and the limits the user set. Removing a connection
+/// leaves it, so connecting again gets the same address and the same limits back.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DomainMemory {
+    pub own_key: Option<String>,
+    #[serde(default)]
+    pub limits: BTreeMap<String, StoredLimit>,
+}
+
 /// What this dApp may do, persisted. Keys are hex `0x…` so the record is readable and
 /// stable across BLS crate versions.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -272,6 +282,11 @@ pub struct SessionRecord {
     /// sees why the connection is gone.
     #[serde(default)]
     pub revoked: bool,
+    /// The one receive key that is this website's own (hex), exposed unless the user lets it
+    /// see every receive address. `None`: paired before websites got a key of their own, and
+    /// sees every receive address until the user turns that off.
+    #[serde(default)]
+    pub own_key: Option<String>,
     /// The push token registered with the relay for this session (clapandpay TASK-087);
     /// `None` until the phone has a device token and a gateway is configured.
     #[serde(default)]
@@ -346,6 +361,30 @@ impl SessionStore {
 
     fn limits_key(fingerprint: u32, id: &str) -> String {
         format!("limits:{fingerprint}:{id}")
+    }
+
+    /// Daily totals and the remembered policy are kept per verified domain, not per session,
+    /// so connecting the same website again neither resets its budget nor its limits.
+    fn domain_limits_key(fingerprint: u32, dapp: &str) -> String {
+        format!("limits:{fingerprint}:domain:{dapp}")
+    }
+
+    fn domain_key(fingerprint: u32, dapp: &str) -> String {
+        format!("domain:{fingerprint}:{dapp}")
+    }
+
+    /// What Klimper remembers about a website across connections, if anything.
+    pub fn load_domain(&self, fingerprint: u32, dapp: &str) -> Result<Option<DomainMemory>> {
+        self.secrets
+            .get(&Self::domain_key(fingerprint, dapp))?
+            .map(|blob| serde_json::from_slice(&blob).map_err(Error::internal))
+            .transpose()
+    }
+
+    pub fn save_domain(&self, fingerprint: u32, dapp: &str, memory: &DomainMemory) -> Result<()> {
+        let blob = serde_json::to_vec(memory).map_err(Error::internal)?;
+        self.secrets
+            .put(&Self::domain_key(fingerprint, dapp), &blob)
     }
 
     fn write_index(&self, index: &Index) -> Result<()> {
@@ -480,6 +519,7 @@ impl SessionStore {
     pub fn remove(&self, fingerprint: u32, id: &str) -> Result<()> {
         let _write = self.writes.lock().map_err(Error::internal)?;
         self.secrets.delete(&Self::session_key(fingerprint, id))?;
+        // Only a pre-domain total: the domain's totals outlive the connection on purpose.
         self.secrets.delete(&Self::limits_key(fingerprint, id))?;
         let mut index = self.index.lock().map_err(Error::internal)?;
         index.sessions.retain(|e| e.id != id);
@@ -504,9 +544,17 @@ impl SessionStore {
         Ok(ids)
     }
 
-    fn load_limits(&self, fingerprint: u32, id: &str) -> Result<DailySpend> {
-        let Some(blob) = self.secrets.get(&Self::limits_key(fingerprint, id))? else {
-            return Ok(DailySpend::default());
+    fn load_limits(&self, fingerprint: u32, dapp: &str, id: &str) -> Result<DailySpend> {
+        // The session's own totals from before they moved to the domain still count.
+        let blob = match self
+            .secrets
+            .get(&Self::domain_limits_key(fingerprint, dapp))?
+        {
+            Some(blob) => blob,
+            None => match self.secrets.get(&Self::limits_key(fingerprint, id))? {
+                Some(blob) => blob,
+                None => return Ok(DailySpend::default()),
+            },
         };
         // Unreadable totals are not zero totals: refuse rather than hand out a fresh budget.
         let stored: StoredDailySpend = serde_json::from_slice(&blob).map_err(Error::internal)?;
@@ -520,7 +568,7 @@ impl SessionStore {
         })
     }
 
-    fn save_limits(&self, fingerprint: u32, id: &str, record: &DailySpend) -> Result<()> {
+    fn save_limits(&self, fingerprint: u32, dapp: &str, record: &DailySpend) -> Result<()> {
         let stored = StoredDailySpend {
             day: record.day,
             spent: record
@@ -530,7 +578,8 @@ impl SessionStore {
                 .collect(),
         };
         let blob = serde_json::to_vec(&stored).map_err(Error::internal)?;
-        self.secrets.put(&Self::limits_key(fingerprint, id), &blob)
+        self.secrets
+            .put(&Self::domain_limits_key(fingerprint, dapp), &blob)
     }
 }
 
@@ -549,14 +598,23 @@ struct StoredDailySpend {
 pub struct PersistentLimits {
     store: std::sync::Arc<SessionStore>,
     fingerprint: u32,
+    dapp: String,
     session_id: String,
 }
 
 impl PersistentLimits {
-    pub fn new(store: std::sync::Arc<SessionStore>, fingerprint: u32, session_id: String) -> Self {
+    /// Totals of the verified domain `dapp`; `session_id` only finds totals kept per session
+    /// by an earlier version.
+    pub fn new(
+        store: std::sync::Arc<SessionStore>,
+        fingerprint: u32,
+        dapp: String,
+        session_id: String,
+    ) -> Self {
         PersistentLimits {
             store,
             fingerprint,
+            dapp,
             session_id,
         }
     }
@@ -565,7 +623,7 @@ impl PersistentLimits {
 impl xchonnect_wallet_kit::LimitStore for PersistentLimits {
     fn load(&self) -> std::result::Result<DailySpend, PermissionError> {
         self.store
-            .load_limits(self.fingerprint, &self.session_id)
+            .load_limits(self.fingerprint, &self.dapp, &self.session_id)
             .map_err(|error| {
                 tracing::error!("xchonnect limit store read failed: {error}");
                 PermissionError::Storage
@@ -574,7 +632,7 @@ impl xchonnect_wallet_kit::LimitStore for PersistentLimits {
 
     fn save(&self, record: &DailySpend) -> std::result::Result<(), PermissionError> {
         self.store
-            .save_limits(self.fingerprint, &self.session_id, record)
+            .save_limits(self.fingerprint, &self.dapp, record)
             .map_err(|error| {
                 tracing::error!("xchonnect limit store write failed: {error}");
                 PermissionError::Storage
@@ -608,6 +666,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            own_key: None,
         }
     }
 
@@ -776,13 +835,13 @@ mod tests {
     }
 
     #[test]
-    fn daily_limits_survive_a_restart_of_the_store() {
+    fn daily_limits_survive_a_restart_and_a_new_connection_to_the_same_website() {
         let dir = tempfile::tempdir().unwrap();
         let secrets = Arc::new(MemorySecrets::default());
         let open =
             || Arc::new(SessionStore::open(dir.path(), Box::new(Shared(secrets.clone()))).unwrap());
 
-        let limits = PersistentLimits::new(open(), 1234, "four".to_owned());
+        let limits = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let mut record = DailySpend {
             day: 20_000,
             spent: BTreeMap::new(),
@@ -791,12 +850,15 @@ mod tests {
         limits.save(&record).unwrap();
 
         // A fresh store object (a restarted app) sees the same totals.
-        let after_restart = PersistentLimits::new(open(), 1234, "four".to_owned());
+        let after_restart = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let loaded = after_restart.load().unwrap();
         assert_eq!(loaded.day, 20_000);
         assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&500));
-        // A different session has its own record.
-        let other = PersistentLimits::new(open(), 1234, "five".to_owned());
+        // Connecting the same website again (a new session) does not reset its budget.
+        let again = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "five".into());
+        assert_eq!(again.load().unwrap().spent.get(&AssetId::Xch), Some(&500));
+        // Another website has its own.
+        let other = PersistentLimits::new(open(), 1234, "dexie.space".into(), "six".into());
         assert!(other.load().unwrap().spent.is_empty());
     }
 

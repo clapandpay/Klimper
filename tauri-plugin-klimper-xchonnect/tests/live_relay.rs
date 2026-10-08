@@ -473,6 +473,7 @@ fn start_loop_push(
             origin_kid: origin_kid.map(str::to_owned),
             revoked: false,
             push: None,
+            own_key: None,
         },
         session_hex: hex::encode(wallet_session.to_bytes().unwrap()),
     };
@@ -503,6 +504,7 @@ fn start_loop_push(
         info: RelayInfo::default(),
         end_requested: end_requested.clone(),
         rotate_requested: Arc::new(AtomicBool::new(rotate)),
+        permissions_changed: Arc::new(AtomicBool::new(false)),
         interrupt: interrupt.clone(),
         wake,
         push,

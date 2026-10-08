@@ -113,6 +113,9 @@ pub struct SessionLoop {
     pub end_requested: Arc<AtomicBool>,
     /// Set by `rotate_session_keys`: the loop offers new keys at its next pass.
     pub rotate_requested: Arc<AtomicBool>,
+    /// Set by `set_dapp_policy` when the exposed keys changed: the loop sends the dApp a
+    /// fresh `session.permissions` at its next pass.
+    pub permissions_changed: Arc<AtomicBool>,
     /// Notified alongside either request, to cut a long poll short.
     pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and by a push wake-up.
@@ -194,6 +197,11 @@ impl SessionLoop {
                 }
             } else if asked {
                 tracing::info!(session = %id, "a key rotation is already in progress");
+            }
+            if self.permissions_changed.swap(false, Ordering::SeqCst)
+                && let Err(error) = self.announce_permissions(&mut session, &mut stored).await
+            {
+                tracing::warn!(session = %id, "could not send the new permissions: {error}");
             }
             self.ensure_push(&session, &mut stored, &mut push_retry_at)
                 .await;
@@ -367,6 +375,29 @@ impl SessionLoop {
             EVENT_SESSION,
             json!({ "sessionId": id, "state": "revoked", "dapp": stored.record.dapp }),
         );
+    }
+
+    /// Tell the dApp what it may see now (`session.permissions`, spec 9.3), from the record
+    /// as just reloaded, after the user changed which keys it sees.
+    async fn announce_permissions(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+    ) -> Result<()> {
+        if let Ok(fresh) = self
+            .store
+            .load(stored.record.fingerprint, &stored.record.id)
+        {
+            stored.record.permissions = fresh.record.permissions;
+            stored.record.own_key = fresh.record.own_key;
+        }
+        let message = Message::SessionPermissions(stored.record.permissions.to_kit().to_message());
+        let outgoing = session
+            .seal(&mut OsEntropy, now(), message, 3600)
+            .map_err(Error::protocol)?;
+        stored.session_hex = encode(session)?;
+        self.store.save(stored)?;
+        self.relay.post_retrying(&outgoing).await
     }
 
     /// Offer new keys (spec 9.2.1, this side as initiator): a fresh mailbox, then
@@ -1053,6 +1084,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            own_key: None,
         };
         assert!(requests::check_usable(&record).is_err());
         record.sas_confirmed = true;

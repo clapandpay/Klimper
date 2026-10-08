@@ -212,7 +212,7 @@ impl Harness {
         let approver = UiApprover::new(self.webview.bridge.clone(), self.meta(method));
         let mut signer = CountingSigner::new(&self.who);
         signer.faulty = self.faulty;
-        let limits = PersistentLimits::new(self.store.clone(), 1, "s1".to_owned());
+        let limits = PersistentLimits::new(self.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
         let context = RequestContext {
             dapp: DAPP,
             network: Network::Testnet11,
@@ -440,7 +440,7 @@ fn an_approved_spend_is_signed_and_recorded() {
     assert!(shown.contains("\"net\":-500"), "{shown}");
 
     // The loss was committed to the persistent limit store.
-    let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
     assert_eq!(limits.load().unwrap().spent.get(&AssetId::Xch), Some(&500));
 }
 
@@ -455,7 +455,7 @@ fn a_rejected_request_signs_nothing() {
     assert_eq!(outcome.unwrap_err().code, codes::USER_REJECTED);
     assert_eq!(calls, 0, "the signer was never reached");
 
-    let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
     assert!(limits.load().unwrap().spent.is_empty());
 }
 
@@ -473,7 +473,7 @@ fn a_cancelled_authentication_cancels_the_request() {
     );
     let mut signer = CountingSigner::new(&who);
     signer.cancel = true;
-    let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
     let context = RequestContext {
         dapp: DAPP,
         network: Network::Testnet11,
@@ -646,6 +646,25 @@ fn agg_sig_unsafe_is_refused_by_default() {
     assert!(harness.webview.prompts().is_empty());
 }
 
+/// A coin the wallet owns under a key the dApp was not given gets the answer a stranger's
+/// coin gets: no prompt and the same code (TASK-122). `requests::run` hands wallet-kit only
+/// the exposed keys for dApp-built requests, which is what `keys` stands for here.
+#[test]
+fn a_hidden_key_answers_like_a_strangers() {
+    let who = BlsPair::new(1);
+    let hidden = BlsPair::new(2);
+    let stranger = BlsPair::new(3);
+    let mut harness = Harness::new(who.clone(), true);
+    harness.ownership.p2_puzzle_hashes.insert(hidden.puzzle_hash);
+
+    let mine_but_hidden = send(&mut Simulator::new(), &hidden, 500);
+    let theirs = send(&mut Simulator::new(), &stranger, 500);
+    let (a, _) = harness.call("signCoinSpends", &params_for(&mine_but_hidden, false));
+    let (b, _) = harness.call("signCoinSpends", &params_for(&theirs, false));
+    assert_eq!(a.unwrap_err().code, b.unwrap_err().code);
+    assert!(harness.webview.prompts().is_empty());
+}
+
 /// A spend of a puzzle the wallet does not recognise is refused with the CHIP-0002
 /// unsupported-content code, and never prompted (spec 11.1 item 3).
 #[test]
@@ -691,11 +710,11 @@ fn limits_refuse_before_prompting_and_survive_a_restart() {
     // One backing store, two `SessionStore` objects: an app that restarted.
     let shared: Arc<MemorySecrets> = Arc::new(secrets);
     let first = Arc::new(SessionStore::open(&path, Box::new(Shared(shared.clone()))).unwrap());
-    PersistentLimits::new(first, 1, "s1".to_owned())
+    PersistentLimits::new(first, 1, DAPP.to_owned(), "s1".to_owned())
         .save(&record)
         .unwrap();
     let second = Arc::new(SessionStore::open(&path, Box::new(Shared(shared))).unwrap());
-    let loaded = PersistentLimits::new(second, 1, "s1".to_owned())
+    let loaded = PersistentLimits::new(second, 1, DAPP.to_owned(), "s1".to_owned())
         .load()
         .unwrap();
     assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&700));
@@ -711,7 +730,7 @@ fn a_faulty_signer_produces_nothing() {
     let spends = send(&mut Simulator::new(), &who, 500);
     let (outcome, _) = harness.call("signCoinSpends", &params_for(&spends, false));
     assert_eq!(outcome.unwrap_err().code, codes::NO_SECRET_KEY);
-    let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
     assert!(limits.load().unwrap().spent.is_empty());
 }
 
@@ -742,7 +761,7 @@ fn a_request_for_another_network_is_refused() {
     let who = BlsPair::new(1);
     let harness = Harness::new(who.clone(), true);
     let spends = send(&mut Simulator::new(), &who, 500);
-    let limits = PersistentLimits::new(harness.store.clone(), 1, "s1".to_owned());
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
     let approver = UiApprover::new(
         harness.webview.bridge.clone(),
         harness.meta("signCoinSpends"),

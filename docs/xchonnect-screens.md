@@ -191,12 +191,36 @@ That is also what an encrypted notification preview may say (TASK-088); a previe
 missing, malformed, unauthenticated or expired produces exactly this text, so the user
 cannot tell the difference and no preview can ever drive a decision.
 
+Checked 2026-10-08 (TASK-123): the gateway's alert is a pure function of its own
+configuration (`XCHONNECT_GATEWAY_APNS_ALERT_*`, default "Signing request / Open your wallet
+to review it."), never of the request, the mailbox or the device; nothing in our deployment
+overrides it. An encrypted preview rides along as a custom key that only a Notification
+Service Extension could open, and Klimper has none, so nothing a website sends reaches the
+lock screen. Klimper keeps the preview key with the registration for a future extension.
+
 ### 5. Permissions and limits — `/xchonnect/dapp/:sessionId` (TASK-083)
 
 Allowed methods (as checkboxes over the methods the session was granted), the exposed key,
-a per-request and a per-day limit per asset, and the two dangerous switches. Defaults are
-spec 9.3: the CHIP-0002 required methods, **one fresh key**, no auto-approval, both
-switches off, no limits.
+a per-request and a per-day limit per asset (XCH and every token the wallet holds), and the
+dangerous switches. Defaults are spec 9.3: the CHIP-0002 required methods, **one key of the
+website's own**, no auto-approval, every switch off, no limits.
+
+**One address per website** (TASK-120). Pairing gives the website one receive key: the
+highest one no other website has, so Sage's next receive address is never it and websites
+never share one. Websites therefore cannot link the user's addresses, and a message signed
+for one website is signed by a key no other website knows. Requests the website builds itself
+(`signCoinSpends`, `submitCoinSpends`, `signMessage`) are signed with the keys it was given
+only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send`,
+which Klimper builds from its own coins, uses the whole wallet. "Let it see all my receive
+addresses" is a third dangerous switch, for websites that build trades from the user's coins
+(Pengui); it re-sends `session.permissions` with every receive key. Websites paired before
+this keep seeing every address until the switch is turned off.
+
+**Kept per website** (TASK-121). Its own key, its limits and its daily totals are stored per
+wallet and verified domain, not per connection: removing a connection and pairing again
+brings the same address and limits back and does not reset the day's budget. A day is a UTC
+day. After three sends it asked for could not be built within ten minutes, a website's
+further sends are refused without building, so the refusals stop telling it the balance.
 
 Each dangerous switch opens its own confirmation dialog, which names the consequence in
 one sentence and requires the explicit button; cancelling leaves the switch off. Turning

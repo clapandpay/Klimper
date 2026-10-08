@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { commands } from '@/bindings';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { t } from '@lingui/core/macro';
@@ -51,7 +52,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { AssetLimit, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
-import { CAT_PRECISION, catLabel, XCH_PRECISION } from './xchonnectPrompt';
+import {
+  CAT_PRECISION,
+  catLabel,
+  claimedText,
+  XCH_PRECISION,
+} from './xchonnectPrompt';
 import { useXchonnectSessions } from './useXchonnectSessions';
 import { useTicker } from './useTicker';
 import './xchonnect.css';
@@ -156,6 +162,7 @@ export function shortKey(key: string): string {
 
 /** The keys this website was given, one line, the explanation in a tooltip. */
 function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
+  const count = keys.length;
   return (
     <div
       className='flex flex-wrap items-center gap-2 text-sm'
@@ -169,11 +176,17 @@ function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
           <Trans>Shared keys</Trans>
         )}
       </span>
-      {keys.map((key) => (
-        <span key={key} className='xc-chip font-mono' title={key}>
-          {shortKey(key)}
+      {keys.length > 3 ? (
+        <span className='xc-chip'>
+          <Trans>all {count} receive addresses</Trans>
         </span>
-      ))}
+      ) : null}
+      {keys.length <= 3 &&
+        keys.map((key) => (
+          <span key={key} className='xc-chip font-mono' title={key}>
+            {shortKey(key)}
+          </span>
+        ))}
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -197,7 +210,18 @@ function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
   );
 }
 
-type Dangerous = 'unsafe' | 'unknown';
+type Dangerous = 'unsafe' | 'unknown' | 'addresses';
+
+function policyFor(which: Dangerous, on: boolean): DappPolicy {
+  switch (which) {
+    case 'unsafe':
+      return { allowAggSigUnsafe: on };
+    case 'unknown':
+      return { allowUnknownContracts: on };
+    case 'addresses':
+      return { allReceiveKeys: on };
+  }
+}
 
 export default function XchonnectDappSettings() {
   const navigate = useNavigate();
@@ -225,6 +249,34 @@ export default function XchonnectDappSettings() {
   useEffect(() => {
     if (session !== null && draft === null) setDraft(draftOf(session));
   }, [session, draft]);
+
+  // The wallet's tokens, so each can be given a limit too (a token with none is unlimited).
+  const [tokens, setTokens] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    let live = true;
+    commands
+      .getCats({})
+      .then(({ cats }) => {
+        if (!live) return;
+        const found = new Map<string, string>();
+        for (const cat of cats) {
+          if (cat.asset_id) found.set(`cat:${cat.asset_id}`, cat.ticker ?? '');
+        }
+        setTokens(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (draft === null) return;
+    const missing = [...tokens.keys()].filter((key) => !(key in draft.limits));
+    if (missing.length === 0) return;
+    const limits = { ...draft.limits };
+    for (const key of missing) limits[key] = { perRequest: '', perDay: '' };
+    setDraft({ ...draft, limits });
+  }, [tokens, draft]);
 
   if (loading && session === null) {
     return (
@@ -316,22 +368,14 @@ export default function XchonnectDappSettings() {
       setAsking(which);
       return;
     }
-    void apply(
-      which === 'unsafe'
-        ? { allowAggSigUnsafe: false }
-        : { allowUnknownContracts: false },
-    );
+    void apply(policyFor(which, false));
   };
 
   const confirmDangerous = () => {
     const which = asking;
     setAsking(null);
     if (which === null) return;
-    void apply(
-      which === 'unsafe'
-        ? { allowAggSigUnsafe: true }
-        : { allowUnknownContracts: true },
-    );
+    void apply(policyFor(which, true));
   };
 
   const assetKeys = Object.keys(draft.limits).sort((left, right) =>
@@ -421,15 +465,22 @@ export default function XchonnectDappSettings() {
                 limit.
               </Trans>{' '}
               <Trans>
-                Limits count XCH only; tokens and NFTs are not limited. A day is
-                a UTC day.
+                A token with no limit here is not limited, and NFTs never are. A
+                day is a UTC day.
               </Trans>
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>
             {assetKeys.map((key) => (
               <div key={key} className='space-y-2'>
-                <div className='font-medium'>{assetLabel(key, ticker)}</div>
+                <div className='font-medium'>
+                  {assetLabel(key, ticker)}
+                  {tokens.get(key) ? (
+                    <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                      {claimedText(tokens.get(key))}
+                    </span>
+                  ) : null}
+                </div>
                 <div className='grid grid-cols-2 gap-3'>
                   <div className='space-y-1'>
                     <Label htmlFor={`per-request-${key}`}>
@@ -504,12 +555,28 @@ export default function XchonnectDappSettings() {
             </CardTitle>
             <CardDescription>
               <Trans>
-                Both are off for every new website. Turn one on only if you know
+                All are off for every new website. Turn one on only if you know
                 exactly why this one needs it.
               </Trans>
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>
+            <div className='flex items-start justify-between gap-3'>
+              <Label htmlFor='all-addresses' className='font-normal'>
+                <Trans>Let it see all my receive addresses</Trans>
+                <p className='text-sm text-muted-foreground mt-1'>
+                  <Trans>
+                    Otherwise it sees one address of its own. Websites that
+                    build trades from your coins, like Pengui, need this.
+                  </Trans>
+                </p>
+              </Label>
+              <Switch
+                id='all-addresses'
+                checked={session.allReceiveKeys}
+                onCheckedChange={(value) => dangerous('addresses', value)}
+              />
+            </div>
             <div className='flex items-start justify-between gap-3'>
               <Label htmlFor='allow-unsafe' className='font-normal'>
                 <Trans>Allow unsafe signatures</Trans>
@@ -554,6 +621,8 @@ export default function XchonnectDappSettings() {
               <DialogTitle className='text-destructive'>
                 {asking === 'unsafe' ? (
                   <Trans>Allow unsafe signatures?</Trans>
+                ) : asking === 'addresses' ? (
+                  <Trans>Show it all your receive addresses?</Trans>
                 ) : (
                   <Trans>Allow unreadable contracts?</Trans>
                 )}
@@ -564,6 +633,11 @@ export default function XchonnectDappSettings() {
                     A signature this website asks for could then be reused in a
                     completely different spend, including one that takes
                     everything. Almost nothing needs this.
+                  </Trans>
+                ) : asking === 'addresses' ? (
+                  <Trans>
+                    It can then see every coin at those addresses, and connect
+                    them to you. Every request still needs your approval.
                   </Trans>
                 ) : (
                   <Trans>

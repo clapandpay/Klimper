@@ -464,9 +464,13 @@ export default function XchonnectConnect() {
                 <Fact label={<Trans>Addresses it will see</Trans>}>
                   {keyCount > 0 ? (
                     <span className='inline-flex items-center gap-1'>
-                      <Trans>{keyCount} receive addresses</Trans>
+                      <Trans>One address of its own</Trans>
                       <Hint>
-                        <Trans>So it can show your balances.</Trans>
+                        <Trans>
+                          Not your other addresses, so it cannot link them or
+                          see their coins. You can allow that later in its
+                          permissions.
+                        </Trans>
                       </Hint>
                     </span>
                   ) : (

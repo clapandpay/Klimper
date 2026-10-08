@@ -275,7 +275,12 @@ fn run(
     now: u64,
 ) -> std::result::Result<String, RpcError> {
     let permissions = record.permissions.to_kit();
-    let limits = PersistentLimits::new(store.clone(), record.fingerprint, record.id.clone());
+    let limits = PersistentLimits::new(
+        store.clone(),
+        record.fingerprint,
+        record.dapp.clone(),
+        record.id.clone(),
+    );
     let approver = UiApprover::new(approvals.clone(), meta.clone());
     // One approval per request, one key unlock per request (xchonnect-wiki 04).
     let signer = KlimperSigner::new(state.clone(), snapshot);
@@ -284,6 +289,17 @@ fn run(
     // dApp was given.
     let chain = crate::chain::KlimperChain::new(state.clone());
 
+    // What the dApp builds itself may only be signed with the keys it was given: a key of
+    // the wallet's it does not know then looks exactly like a stranger's, so a guessed key
+    // cannot be confirmed by whether a prompt appears. The send Klimper builds from its own
+    // coins (chia_send) is the one request that signs with every key of the wallet.
+    let exposed: std::collections::HashSet<chia_bls::PublicKey> = permissions
+        .exposed_keys
+        .iter()
+        .filter(|key| snapshot.keys.contains(key))
+        .copied()
+        .collect();
+    let wallet_built = canonical_method(&meta.method) == execute::CHIA_SEND;
     let context = RequestContext {
         dapp: &record.dapp,
         network: snapshot.network.clone(),
@@ -292,7 +308,11 @@ fn run(
         allow_agg_sig_unsafe: record.allow_agg_sig_unsafe,
         allow_unknown_contracts: record.allow_unknown_contracts,
         ownership: &snapshot.ownership,
-        keys: &snapshot.keys,
+        keys: if wallet_built {
+            &snapshot.keys
+        } else {
+            &exposed
+        },
         limits: &limits,
         now,
         chain: Some(&chain),
@@ -439,6 +459,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            own_key: None,
         }
     }
 
