@@ -67,6 +67,7 @@ const fresh: SessionSummary = {
   limits: {},
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
+  allReceiveKeys: false,
   connected: true,
 };
 

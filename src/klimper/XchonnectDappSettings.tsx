@@ -50,7 +50,7 @@ import { AlertTriangle, Info, KeyRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
-import { AssetLimit, SessionSummary, xchonnect } from './xchonnect';
+import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
   CAT_PRECISION,

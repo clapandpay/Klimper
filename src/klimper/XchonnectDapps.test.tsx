@@ -74,6 +74,7 @@ const session: SessionSummary = {
   limits: {},
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
+  allReceiveKeys: false,
   connected: true,
 };
 
