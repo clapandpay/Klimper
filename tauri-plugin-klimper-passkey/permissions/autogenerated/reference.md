@@ -1,6 +1,6 @@
 ## Default Permission
 
-Status, enrolment, unlock, lock and removal of the Klimper passkey.
+Status, enrolment, unlock, lock and removal of the Klimper passkey, and erasing the keys when the passkey is lost.
 
 #### This default permission set includes the following:
 
@@ -9,6 +9,7 @@ Status, enrolment, unlock, lock and removal of the Klimper passkey.
 - `allow-unlock`
 - `allow-lock`
 - `allow-remove`
+- `allow-erase`
 
 ## Permission Table
 
@@ -41,6 +42,32 @@ Enables the enroll command without any pre-configured scope.
 <td>
 
 Denies the enroll command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-passkey:allow-erase`
+
+</td>
+<td>
+
+Enables the erase command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-passkey:deny-erase`
+
+</td>
+<td>
+
+Denies the erase command without any pre-configured scope.
 
 </td>
 </tr>

@@ -18,6 +18,8 @@ export const passkey = {
   unlock: () => call<null>('unlock'),
   lock: () => call<null>('lock'),
   remove: () => call<null>('remove'),
+  /** Passkey lost: throw away the keys on this phone (restore from recovery words). */
+  erase: () => call<null>('erase'),
 };
 
 // Lets the settings screen tell the gate that enrolment or removal changed the status.

@@ -16,6 +16,7 @@ use tauri::{
     plugin::{Builder, TauriPlugin},
 };
 use tokio::sync::Mutex;
+use zeroize::Zeroizing;
 
 pub mod envelope;
 mod platform;
@@ -129,9 +130,8 @@ async fn prf_from_assertion<R: Runtime>(
         prf_salt: envelope.prf_salt.clone(),
     };
     let response = blocking(move || passkeys.assert(request)).await?;
-    Ok(decode_prf_output(
-        &response.prf_output.ok_or(Error::NoPrf)?,
-    )?)
+    let output = Zeroizing::new(response.prf_output.ok_or(Error::NoPrf)?);
+    Ok(decode_prf_output(&output)?)
 }
 
 /// Re-keys the keychain to the wallet key and stores the envelope next to it.
@@ -240,7 +240,7 @@ async fn enroll<R: Runtime>(
     .await?;
 
     // Some authenticators evaluate the PRF only on assertion: ask once more if needed.
-    let prf = if let Some(output) = registration.prf_output {
+    let prf = if let Some(output) = registration.prf_output.map(Zeroizing::new) {
         decode_prf_output(&output)?
     } else {
         let request = AssertRequest {
@@ -297,14 +297,35 @@ fn still_enrolled(sage: &Sage, envelope: &Envelope) -> Result<()> {
 
 #[command]
 async fn lock(state: State<'_, AppState>, unlocked: State<'_, Unlocked>) -> Result<()> {
-    let mut sage = state.lock().await;
-    // The file decides, not whether it parses: an envelope that cannot be read must not leave
-    // the keys open in memory.
+    lock_if_enrolled(&mut *state.lock().await, &unlocked);
+    Ok(())
+}
+
+/// The file decides, not whether it parses: an envelope that cannot be read must not leave
+/// the keys open in memory.
+fn lock_if_enrolled(sage: &mut Sage, unlocked: &Unlocked) {
     if sage.path.join(envelope::FILE_NAME).exists() {
         unlocked.0.store(false, Ordering::SeqCst);
         sage.keychain.lock();
     }
-    Ok(())
+}
+
+/// The app went to the background: lock now, from Rust, without the webview (TASK-117). If a
+/// command holds the wallet this instant, lock the moment it lets go.
+fn lock_on_background<R: Runtime>(app: &AppHandle<R>) {
+    let (Some(state), Some(_)) = (app.try_state::<AppState>(), app.try_state::<Unlocked>()) else {
+        return;
+    };
+    let state = state.inner().clone();
+    if let Ok(mut sage) = state.try_lock() {
+        lock_if_enrolled(&mut sage, &app.state::<Unlocked>());
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut sage = state.lock().await;
+        lock_if_enrolled(&mut sage, &app.state::<Unlocked>());
+    });
 }
 
 /// Back to Sage's empty password. Needs the passkey once more, so a stolen unlocked phone
@@ -323,6 +344,30 @@ async fn remove<R: Runtime>(
     still_enrolled(&sage, &envelope)?;
     unseal_keychain(&mut sage, &wallet_key)?;
     unlocked.0.store(false, Ordering::SeqCst);
+    Ok(())
+}
+
+/// The passkey is lost (TASK-118): erase the keys on this phone and the passkey envelope, and
+/// log out, so the wallets can be restored from their recovery words. Works while locked
+/// because it reveals nothing: the keys are thrown away, never read. The wallet databases
+/// (public data: coins, transactions) stay, so a restored wallet is back in sync quickly.
+#[command]
+async fn erase(state: State<'_, AppState>, unlocked: State<'_, Unlocked>) -> Result<()> {
+    let mut sage = state.lock().await;
+    erase_keys(&mut sage)?;
+    unlocked.0.store(false, Ordering::SeqCst);
+    // No wallet is open any more: close the one that was.
+    sage.switch_wallet().await?;
+    Ok(())
+}
+
+/// Keys first, then everything that points at them.
+fn erase_keys(sage: &mut Sage) -> Result<()> {
+    sage.config.global.fingerprint = None;
+    sage.save_config()?;
+    sage.keychain = sage_keychain::Keychain::default();
+    sage.save_keychain()?;
+    Envelope::delete(&sage.path)?;
     Ok(())
 }
 
@@ -346,12 +391,28 @@ fn keep_out_of_backups<R: Runtime>(passkeys: Passkeys<R>, dir: std::path::PathBu
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-passkey")
         .invoke_handler(tauri::generate_handler![
-            status, enroll, unlock, lock, remove
+            status, enroll, unlock, lock, remove, erase
         ])
         .setup(|app, api| {
             let passkeys = platform::init(app, api)?;
             if passkeys.supported() {
                 keep_out_of_backups(passkeys.clone(), app.path().app_data_dir()?);
+            }
+            if passkeys.supported() {
+                let handle = app.clone();
+                let channel = tauri::ipc::Channel::new(move |_| {
+                    lock_on_background(&handle);
+                    Ok(())
+                });
+                let watcher = passkeys.clone();
+                // Off the main thread, where setup runs and the Swift side answers.
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(error) = watcher.on_background(channel) {
+                        tracing::error!(
+                            "could not watch for the app going to the background: {error}"
+                        );
+                    }
+                });
             }
             app.manage(passkeys);
             app.manage(Unlocked::default());
@@ -478,5 +539,22 @@ mod tests {
         sage.keychain.lock();
         assert!(open_keychain(&mut sage, &random_secret()).is_err());
         assert!(sage.keychain.is_locked());
+    }
+
+    #[test]
+    fn erasing_throws_the_keys_away_and_logs_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut sage, fingerprint) = sage_with_wallet(dir.path());
+        sage.config.global.fingerprint = Some(fingerprint);
+        std::fs::write(dir.path().join(envelope::FILE_NAME), b"{}").unwrap();
+
+        erase_keys(&mut sage).unwrap();
+
+        assert!(!sage.keychain.contains(fingerprint));
+        assert_eq!(sage.config.global.fingerprint, None);
+        assert!(!dir.path().join(envelope::FILE_NAME).exists());
+        // And it stays so: the saved keychain has no keys either.
+        let saved = std::fs::read(dir.path().join("keys.bin")).unwrap();
+        assert!(!Keychain::from_bytes(&saved).unwrap().contains(fingerprint));
     }
 }

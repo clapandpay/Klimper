@@ -49,6 +49,18 @@ impl<R: Runtime> Passkeys<R> {
         self.run("assert", request)
     }
 
+    /// Calls `channel` each time the app goes to the background (iOS
+    /// `didEnterBackgroundNotification`), so Rust can lock the wallet without waiting for the
+    /// webview, which iOS may suspend first.
+    pub fn on_background(&self, channel: tauri::ipc::Channel<serde_json::Value>) -> Result<()> {
+        #[derive(Serialize)]
+        struct Request {
+            channel: tauri::ipc::Channel<serde_json::Value>,
+        }
+        self.run::<_, serde::de::IgnoredAny>("watchBackground", Request { channel })?;
+        Ok(())
+    }
+
     /// Leaves the directory and everything in it out of iCloud and device backups.
     pub fn exclude_from_backup(&self, dir: &Path) -> Result<()> {
         #[derive(Serialize)]
