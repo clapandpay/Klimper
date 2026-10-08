@@ -31,7 +31,7 @@
         "font-src": "'self' https: data:",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss://relay.walletconnect.org",
         "object-src": "'none'",
-        "frame-src": "'none'",
+        "frame-src": "https://verify.walletconnect.org https://verify.walletconnect.com",
         "base-uri": "'self'",
         "form-action": "'none'"
       }

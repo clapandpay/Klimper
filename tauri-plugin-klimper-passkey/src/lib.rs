@@ -168,12 +168,15 @@ fn open_keychain(sage: &mut Sage, wallet_key: &[u8; 32]) -> Result<()> {
 
 /// Back to Sage's empty password; keys.bin first, so a crash leaves a state unlock repairs.
 fn unseal_keychain(sage: &mut Sage, wallet_key: &[u8; 32]) -> Result<()> {
-    // Already back under the empty password (an earlier removal stopped before the envelope
-    // was deleted): only the envelope is left to go.
     if sage.keychain.unlock(wallet_key).is_err() {
-        sage.keychain.unlock(b"")?;
-        Envelope::delete(&sage.path)?;
-        return Ok(());
+        // Already back under the empty password (an earlier removal stopped before the
+        // envelope was deleted): only the envelope is left to go.
+        if sage.keychain.unlock(b"").is_ok() {
+            Envelope::delete(&sage.path)?;
+            return Ok(());
+        }
+        // Some secrets under each: bring them all under the wallet key first.
+        sage.keychain.adopt_password(wallet_key)?;
     }
     sage.keychain.change_password(b"")?;
     sage.save_keychain()?;
@@ -190,8 +193,8 @@ async fn status<R: Runtime>(
     let mut sage = state.lock().await;
     let enrolled = Envelope::load(&sage.path)?.is_some();
 
-    // The keychain starts unlocked with Sage's empty password; with a passkey it stays
-    // locked until the passkey opens it.
+    // Sage already loads a passkey keychain locked (sage-keychain `from_bytes`, and
+    // `setup_keys` when passkey.json exists); this keeps it so until the passkey opens it.
     if enrolled && !unlocked.0.load(Ordering::SeqCst) {
         sage.keychain.lock();
     }
@@ -274,9 +277,22 @@ async fn unlock<R: Runtime>(
     let prf = prf_from_assertion(&app, &envelope).await?;
     let wallet_key = envelope.open(&prf)?;
 
-    open_keychain(&mut *state.lock().await, &wallet_key)?;
+    let mut sage = state.lock().await;
+    still_enrolled(&sage, &envelope)?;
+    open_keychain(&mut sage, &wallet_key)?;
     unlocked.0.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+/// The passkey prompt runs without the Sage lock held. Before the keys are touched, the same
+/// envelope must still be there: a removal (or a new enrolment) that finished meanwhile would
+/// otherwise have the keys sealed to a passkey whose envelope is gone, or opened by one that
+/// no longer protects them.
+fn still_enrolled(sage: &Sage, envelope: &Envelope) -> Result<()> {
+    match Envelope::load(&sage.path)? {
+        Some(current) if current.credential_id == envelope.credential_id => Ok(()),
+        _ => Err(Error::NotEnrolled),
+    }
 }
 
 #[command]
@@ -303,7 +319,9 @@ async fn remove<R: Runtime>(
     let prf = prf_from_assertion(&app, &envelope).await?;
     let wallet_key = envelope.open(&prf)?;
 
-    unseal_keychain(&mut *state.lock().await, &wallet_key)?;
+    let mut sage = state.lock().await;
+    still_enrolled(&sage, &envelope)?;
+    unseal_keychain(&mut sage, &wallet_key)?;
     unlocked.0.store(false, Ordering::SeqCst);
     Ok(())
 }

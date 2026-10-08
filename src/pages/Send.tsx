@@ -221,8 +221,8 @@ export default function Send() {
     },
   );
 
-  const onSubmit = () => {
-    const values = form.getValues();
+  // The values that were checked, not what the field holds by the time the check finished.
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
     // Only a check made for exactly this input: an older one may finish last.
     const checked = resolvedAddress.current;
     const address =

@@ -145,6 +145,8 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     controller: ASAuthorizationController,
     didCompleteWithAuthorization authorization: ASAuthorization
   ) {
+    // A prompt that was superseded by a newer one never answers the newer request.
+    guard controller === self.controller else { return }
     guard #available(iOS 18.0, *) else {
       finish(.failure("passkeys with PRF need iOS 18"))
       return
@@ -180,6 +182,7 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
   func authorizationController(
     controller: ASAuthorizationController, didCompleteWithError error: Error
   ) {
+    guard controller === self.controller else { return }
     finish(.failure(error.localizedDescription))
   }
 }

@@ -169,7 +169,7 @@ msgstr ""
 msgid "{label}: {contentText} (navigate within app)"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:732
+#: src/klimper/XchonnectPromptView.tsx:736
 msgid "{length} characters"
 msgstr ""
 
@@ -298,7 +298,7 @@ msgstr ""
 msgid "A handle is 3 to 63 letters and digits"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:350
+#: src/klimper/XchonnectDappSettings.tsx:356
 msgid "A limit has to be a plain amount, like 1.5."
 msgstr ""
 
@@ -310,7 +310,7 @@ msgstr ""
 msgid "A request could not be shown. Open requests"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:462
+#: src/klimper/XchonnectDappSettings.tsx:468
 msgid "A request over a limit is refused before it reaches you — you will not see a signing prompt for it. Leave a field empty for no limit."
 msgstr ""
 
@@ -318,11 +318,11 @@ msgstr ""
 msgid "A request-only offer requires a network fee."
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:632
+#: src/klimper/XchonnectDappSettings.tsx:638
 msgid "A signature this website asks for could then be reused in a completely different spend, including one that takes everything. Almost nothing needs this."
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:467
+#: src/klimper/XchonnectDappSettings.tsx:473
 msgid "A token with no limit here is not limited, and NFTs never are. A day is a UTC day."
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 msgid "All Addresses"
 msgstr "Alle Adressen"
 
-#: src/klimper/XchonnectDappSettings.tsx:557
+#: src/klimper/XchonnectDappSettings.tsx:563
 msgid "All are off for every new website. Turn one on only if you know exactly why this one needs it."
 msgstr ""
 
@@ -535,19 +535,19 @@ msgstr ""
 msgid "All Sources"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:598
+#: src/klimper/XchonnectDappSettings.tsx:604
 msgid "Allow contracts Klimper cannot read"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:627
+#: src/klimper/XchonnectDappSettings.tsx:633
 msgid "Allow unreadable contracts?"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:582
+#: src/klimper/XchonnectDappSettings.tsx:588
 msgid "Allow unsafe signatures"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:623
+#: src/klimper/XchonnectDappSettings.tsx:629
 msgid "Allow unsafe signatures?"
 msgstr ""
 
@@ -555,7 +555,7 @@ msgstr ""
 msgid "Allow Unsigned Transactions"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:446
+#: src/klimper/XchonnectDappSettings.tsx:452
 msgid "always allowed"
 msgstr ""
 
@@ -584,7 +584,7 @@ msgstr "Der Betrag enthält"
 msgid "an address Klimper cannot show"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:584
+#: src/klimper/XchonnectDappSettings.tsx:590
 msgid "An unsafe signature is valid in any spend, not just the one you were shown."
 msgstr ""
 
@@ -1377,7 +1377,7 @@ msgstr "Verbunden mit {totalPeersCount} Peers"
 
 #: src/klimper/XchonnectApproval.tsx:190
 #: src/klimper/XchonnectDapps.tsx:276
-#: src/klimper/XchonnectDappSettings.tsx:309
+#: src/klimper/XchonnectDappSettings.tsx:315
 #: src/klimper/XchonnectSettings.tsx:33
 msgid "Connected websites"
 msgstr ""
@@ -1604,7 +1604,7 @@ msgstr ""
 msgid "Current Theme: {currentThemeName}"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:554
+#: src/klimper/XchonnectDappSettings.tsx:560
 msgid "Dangerous permissions"
 msgstr ""
 
@@ -1824,7 +1824,7 @@ msgstr ""
 
 #: src/components/ConfirmationDialog.tsx:233
 #: src/components/WalletCard.tsx:284
-#: src/klimper/XchonnectPromptView.tsx:792
+#: src/klimper/XchonnectPromptView.tsx:796
 msgid "Details"
 msgstr "Details"
 
@@ -2286,7 +2286,7 @@ msgstr "Gebühr übersteigt das empfohlene Maximum von 0.001 {ticker}"
 msgid "Fee per offer:"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:641
+#: src/klimper/XchonnectPromptView.tsx:678
 msgid "Fee reserved by the spend"
 msgstr ""
 
@@ -2554,7 +2554,7 @@ msgstr ""
 msgid "Hours"
 msgstr "Stunden"
 
-#: src/klimper/XchonnectDappSettings.tsx:459
+#: src/klimper/XchonnectDappSettings.tsx:465
 msgid "How much it may cost"
 msgstr ""
 
@@ -2566,7 +2566,7 @@ msgstr ""
 msgid "I have my recovery words, create the passkey"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:656
+#: src/klimper/XchonnectDappSettings.tsx:662
 msgid "I understand, turn it on"
 msgstr ""
 
@@ -2632,7 +2632,7 @@ msgstr ""
 msgid "In order to proceed with the update, the wallet will be fully resynced. This means custom asset names will be removed, but you can manually add them again after if needed."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:596
+#: src/klimper/XchonnectPromptView.tsx:633
 msgid "In total, with the fee"
 msgstr ""
 
@@ -2706,7 +2706,7 @@ msgstr "Token ausgeben"
 msgid "It calls itself"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:638
+#: src/klimper/XchonnectDappSettings.tsx:644
 msgid "It can then see every coin at those addresses, and connect them to you. Every request still needs your approval."
 msgstr ""
 
@@ -2755,11 +2755,11 @@ msgstr "Sorte ist erforderlich"
 msgid "Klimper built this from your own coins and sends it to the network itself."
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:600
+#: src/klimper/XchonnectDappSettings.tsx:606
 msgid "Klimper can still show you the net effect, but not what the contract does afterwards."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:807
+#: src/klimper/XchonnectPromptView.tsx:811
 msgid "Klimper cannot read this request"
 msgstr ""
 
@@ -2775,7 +2775,7 @@ msgstr ""
 msgid "Klimper does not know this code"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:668
+#: src/klimper/XchonnectPromptView.tsx:595
 msgid "Klimper does not recognise this contract. Nobody can tell you what it does with your coins."
 msgstr ""
 
@@ -2812,7 +2812,7 @@ msgstr ""
 msgid "Klimper sound"
 msgstr "Klimper-Klang"
 
-#: src/klimper/XchonnectDappSettings.tsx:643
+#: src/klimper/XchonnectDappSettings.tsx:649
 msgid "Klimper will stop refusing spends whose contract it cannot read. Nobody can tell you what such a contract does with your coins."
 msgstr ""
 
@@ -2851,11 +2851,11 @@ msgstr ""
 msgid "Learn more"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:653
+#: src/klimper/XchonnectDappSettings.tsx:659
 msgid "Leave it off"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:566
+#: src/klimper/XchonnectDappSettings.tsx:572
 msgid "Let it see all my receive addresses"
 msgstr ""
 
@@ -3155,7 +3155,7 @@ msgstr ""
 msgid "More Themes..."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:721
+#: src/klimper/XchonnectPromptView.tsx:725
 msgid "moves no money"
 msgstr ""
 
@@ -3210,7 +3210,7 @@ msgid "Network"
 msgstr "Netzwerk"
 
 #: src/klimper/XchonnectPromptView.tsx:543
-#: src/klimper/XchonnectPromptView.tsx:624
+#: src/klimper/XchonnectPromptView.tsx:661
 msgid "Network fee"
 msgstr ""
 
@@ -3243,7 +3243,7 @@ msgstr ""
 msgid "Network fee amount"
 msgstr "Netzwerkgebührenbetrag"
 
-#: src/klimper/XchonnectPromptView.tsx:609
+#: src/klimper/XchonnectPromptView.tsx:646
 msgid "Network fee unknown"
 msgstr ""
 
@@ -3367,7 +3367,7 @@ msgstr ""
 msgid "No change"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:586
+#: src/klimper/XchonnectPromptView.tsx:623
 msgid "No change to your assets."
 msgstr ""
 
@@ -3831,7 +3831,7 @@ msgstr ""
 #~ msgid "Or type the code"
 #~ msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:568
+#: src/klimper/XchonnectDappSettings.tsx:574
 msgid "Otherwise it sees one address of its own. Websites that build trades from your coins, like Pengui, need this."
 msgstr ""
 
@@ -3989,11 +3989,11 @@ msgstr ""
 msgid "Pending..."
 msgstr "Ausstehend..."
 
-#: src/klimper/XchonnectDappSettings.tsx:510
+#: src/klimper/XchonnectDappSettings.tsx:516
 msgid "Per day"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:487
+#: src/klimper/XchonnectDappSettings.tsx:493
 msgid "Per request"
 msgstr ""
 
@@ -4479,7 +4479,7 @@ msgstr ""
 msgid "Same number on the page, next to the answer?"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:536
+#: src/klimper/XchonnectDappSettings.tsx:542
 msgid "Save"
 msgstr ""
 
@@ -4495,7 +4495,7 @@ msgstr "Mnemonic speichern"
 msgid "Save Theme"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:543
+#: src/klimper/XchonnectDappSettings.tsx:549
 msgid "Saved. It applies to the next request."
 msgstr ""
 
@@ -4780,7 +4780,7 @@ msgid "Selection options"
 msgstr ""
 
 #: src/components/TokenCard.tsx:149
-#: src/klimper/XchonnectPromptView.tsx:827
+#: src/klimper/XchonnectPromptView.tsx:831
 msgid "Send"
 msgstr "Senden"
 
@@ -4916,7 +4916,7 @@ msgstr ""
 #~ msgid "Show hidden tokens"
 #~ msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:625
+#: src/klimper/XchonnectDappSettings.tsx:631
 msgid "Show it all your receive addresses?"
 msgstr ""
 
@@ -4965,7 +4965,7 @@ msgstr ""
 msgid "Showing {shownDerivations} of {totalDerivations} addresses"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:736
+#: src/klimper/XchonnectPromptView.tsx:740
 msgid "shown shortened"
 msgstr ""
 
@@ -4973,19 +4973,19 @@ msgstr ""
 msgid "Sidebar navigation"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:825
+#: src/klimper/XchonnectPromptView.tsx:829
 msgid "Sign a message"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:832
+#: src/klimper/XchonnectPromptView.tsx:836
 msgid "Sign a spend"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:828
+#: src/klimper/XchonnectPromptView.tsx:832
 msgid "Sign and send"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:830
+#: src/klimper/XchonnectPromptView.tsx:834
 msgid "Sign one half of a trade"
 msgstr ""
 
@@ -4993,11 +4993,11 @@ msgstr ""
 msgid "Sign Transaction"
 msgstr "Transaktion signieren"
 
-#: src/klimper/XchonnectPromptView.tsx:767
+#: src/klimper/XchonnectPromptView.tsx:771
 msgid "Signatures other people still owe: {foreign}"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:763
+#: src/klimper/XchonnectPromptView.tsx:767
 msgid "Signatures you would produce: {ours}"
 msgstr ""
 
@@ -5005,7 +5005,7 @@ msgstr ""
 msgid "Signed"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:711
+#: src/klimper/XchonnectPromptView.tsx:715
 msgid "Signing proves you hold the key. It moves no money."
 msgstr ""
 
@@ -5308,7 +5308,7 @@ msgstr "Offer nehmen"
 msgid "Taken"
 msgstr "Genommen"
 
-#: src/klimper/XchonnectDappSettings.tsx:420
+#: src/klimper/XchonnectDappSettings.tsx:426
 msgid "Taking a method away means the website is refused when it tries. Nothing here is approved automatically."
 msgstr ""
 
@@ -5337,7 +5337,7 @@ msgstr ""
 msgid "That answer was made for another request. Open the page again from here."
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:304
+#: src/klimper/XchonnectDappSettings.tsx:310
 msgid "That connection no longer exists"
 msgstr ""
 
@@ -5365,7 +5365,7 @@ msgstr ""
 msgid "That Klimper link is not a pairing or request link."
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:349
+#: src/klimper/XchonnectDappSettings.tsx:355
 msgid "That limit is too large for Klimper to store exactly. Use a smaller one."
 msgstr ""
 
@@ -5493,11 +5493,11 @@ msgstr "Die Wallet generiert nach jeder Transaktion eine neue Adresse. Die alten
 msgid "The wallet is still syncing. Balances may not be accurate until it completes."
 msgstr "Die Wallet synchronisiert noch. Der Guthaben ist möglicherweise nicht korrekt, bis der Vorgang abgeschlossen ist."
 
-#: src/klimper/XchonnectPromptView.tsx:715
+#: src/klimper/XchonnectPromptView.tsx:719
 msgid "The website asks you to sign this data"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:717
+#: src/klimper/XchonnectPromptView.tsx:721
 msgid "The website asks you to sign this text"
 msgstr ""
 
@@ -5517,8 +5517,16 @@ msgstr ""
 msgid "The website says"
 msgstr ""
 
+#: src/klimper/XchonnectDappSettings.tsx:203
+msgid "The website sees only this key and the address made from it — nothing else in your wallet."
+msgstr ""
+
 #: src/klimper/XchonnectDappSettings.tsx:202
-msgid "The website sees only this key and the addresses made from it — nothing else in your wallet."
+#~ msgid "The website sees only this key and the addresses made from it — nothing else in your wallet."
+#~ msgstr ""
+
+#: src/klimper/XchonnectDappSettings.tsx:208
+msgid "The website sees these keys and the addresses made from them."
 msgstr ""
 
 #: src/klimper/XchonnectConnect.tsx:515
@@ -5614,7 +5622,7 @@ msgstr ""
 msgid "This asset can be revoked by its issuer."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:809
+#: src/klimper/XchonnectPromptView.tsx:813
 msgid "This build does not understand what is being asked. Reject it: there is nothing here you could agree to."
 msgstr ""
 
@@ -5776,7 +5784,7 @@ msgstr ""
 msgid "This profile will be transferred to the address below."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:611
+#: src/klimper/XchonnectPromptView.tsx:648
 msgid "This request spends coins it does not include, so Klimper cannot work out the network fee."
 msgstr ""
 
@@ -5784,7 +5792,7 @@ msgstr ""
 msgid "This screen could not be shown. Your wallet and your money are not affected."
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:686
+#: src/klimper/XchonnectPromptView.tsx:613
 msgid "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
 msgstr ""
 
@@ -6265,7 +6273,7 @@ msgstr ""
 msgid "Unknown Collection"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:665
+#: src/klimper/XchonnectPromptView.tsx:592
 msgid "Unknown contract"
 msgstr ""
 
@@ -6322,11 +6330,11 @@ msgstr ""
 #~ msgid "Unnamed Profile"
 #~ msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:826
+#: src/klimper/XchonnectPromptView.tsx:830
 msgid "Unreadable request"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:684
+#: src/klimper/XchonnectPromptView.tsx:611
 msgid "Unsafe signature"
 msgstr ""
 
@@ -6699,7 +6707,7 @@ msgstr ""
 msgid "What does the website see?"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:417
+#: src/klimper/XchonnectDappSettings.tsx:423
 msgid "What it may ask for"
 msgstr ""
 
@@ -6707,9 +6715,9 @@ msgstr ""
 msgid "What it may do"
 msgstr ""
 
-#: src/klimper/XchonnectDappSettings.tsx:285
-#: src/klimper/XchonnectDappSettings.tsx:297
-#: src/klimper/XchonnectDappSettings.tsx:388
+#: src/klimper/XchonnectDappSettings.tsx:291
+#: src/klimper/XchonnectDappSettings.tsx:303
+#: src/klimper/XchonnectDappSettings.tsx:394
 msgid "What this website may do"
 msgstr ""
 
@@ -6733,7 +6741,7 @@ msgstr "Obwohl 12-Wort-Mnemonics ausreichend schwer zu knacken sind, können Sie
 msgid "with {syncedCoins} / {totalCoins} coins synced"
 msgstr ""
 
-#: src/klimper/XchonnectPromptView.tsx:744
+#: src/klimper/XchonnectPromptView.tsx:748
 msgid "With this key"
 msgstr ""
 

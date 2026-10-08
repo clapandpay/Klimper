@@ -15,8 +15,8 @@
 // Two six-digit codes, each shown on both screens. The check code (from the app's public key)
 // comes first, before the page seals anything: it catches the wrong page or a mixed-up request.
 // It is made from public data, so it cannot stop someone who sees the key first and searches for
-// another key with the same six digits; that takes control of the device or the browser, and no
-// code a person reads can stop it. The answer code comes last: the page shows it next to the
+// another key with the same six digits, nor a link someone made up and sent: then there is no
+// Klimper screen to compare with at all. Only open the page from Klimper itself. The answer code comes last: the page shows it next to the
 // answer and the app after opening it, before anything is imported. It is drawn from the ECDH
 // secret, which only the app and that page hold, so an answer sealed by anyone else (a swapped
 // clipboard) shows another number, and no search can help: the number to match is secret. The

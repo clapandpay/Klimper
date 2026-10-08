@@ -205,10 +205,17 @@ a per-request and a per-day limit per asset (XCH and every token the wallet hold
 dangerous switches. Defaults are spec 9.3: the CHIP-0002 required methods, **one key of the
 website's own**, no auto-approval, every switch off, no limits.
 
-**One address per website** (TASK-120). Pairing gives the website one receive key: the
-highest one no other website has, so Sage's next receive address is never it and websites
-never share one. Websites therefore cannot link the user's addresses, and a message signed
-for one website is signed by a key no other website knows. Requests the website builds itself
+**One address per website** (TASK-120). When the six digits match, the website is given one
+of the wallet's **hardened** keys: the first one no website has ever had (a per-wallet list,
+`websites:<fingerprint>` in the keyring, outlives every connection, and the claim is made
+under the store's write lock). Sage never hands out a hardened key as a receive or change
+address, and coins paid to one do not move Sage's next receive address, so a website's key
+never overlaps the user's own addresses or another website's, and "see all my receive
+addresses" (unhardened keys) never includes another website's key. A wallet without a free
+hardened key gives the website none. Websites therefore cannot link the user's addresses
+through Klimper, and a message signed for one website is signed by a key no other website
+knows. A payment the wallet makes on chain still shows its input coins and change address to
+anyone who looks; that is how Chia coins work, not something Klimper can hide. Requests the website builds itself
 (`signCoinSpends`, `submitCoinSpends`, `signMessage`) are signed with the keys it was given
 only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send`,
 which Klimper builds from its own coins, uses the whole wallet. "Let it see all my receive

@@ -2,9 +2,9 @@
 // What one website may do, and how much it may cost (clapandpay TASK-083, spec 9.3 and
 // 11.1 item 5).
 //
-// The defaults are the spec's: the five required CHIP-0002 methods, one fresh key, no
-// limits, no auto-approval, and both dangerous switches off. Everything here narrows that;
-// nothing here can widen what pairing granted.
+// The defaults are the spec's: the five required CHIP-0002 methods, one key of the website's
+// own, no limits, no auto-approval, and every dangerous switch off. Everything here narrows
+// that, except the dangerous switches, each of which needs its own confirmation.
 //
 // Limits are enforced in Rust, by wallet-kit, on the **guaranteed** loss — what leaves the
 // user's coins minus what comes back through the user's own spends, plus the fees those
@@ -199,10 +199,16 @@ function SharedKeys({ keys }: { readonly keys: readonly string[] }) {
             </button>
           </TooltipTrigger>
           <TooltipContent className='max-w-xs'>
-            <Trans>
-              The website sees only this key and the addresses made from it —
-              nothing else in your wallet.
-            </Trans>
+            {count === 1 ? (
+              <Trans>
+                The website sees only this key and the address made from it —
+                nothing else in your wallet.
+              </Trans>
+            ) : (
+              <Trans>
+                The website sees these keys and the addresses made from them.
+              </Trans>
+            )}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

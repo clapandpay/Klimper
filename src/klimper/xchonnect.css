@@ -736,6 +736,8 @@
   position: absolute;
   inset: 0;
   z-index: 2;
+  /* Keyboard and assistive presses only: never a tap, even while it shows its focus ring. */
+  pointer-events: none;
   border-radius: 9999px;
   color: transparent;
   background: transparent;

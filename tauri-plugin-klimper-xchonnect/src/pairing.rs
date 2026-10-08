@@ -373,7 +373,6 @@ pub async fn confirm(
     store.save(&mut stored)?;
     // Remember the website: its own address and its limits come back if it connects again.
     let memory = crate::store::DomainMemory {
-        own_key: stored.record.own_key.clone(),
         limits: stored.record.permissions.limits.clone(),
     };
     if let Err(error) = store.save_domain(attempt.fingerprint, &uri.domain, &memory) {

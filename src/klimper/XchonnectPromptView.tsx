@@ -580,6 +580,43 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
     <div className='space-y-4'>
       <Handling view={view} />
 
+      {/*
+        What could go wrong comes first: the sheet scrolls and the slider is always in view,
+        so a warning under a long list of outputs could otherwise never be seen.
+      */}
+      <Binding binding={view.binding} partial={view.partial} />
+
+      {view.unknownPuzzles.length > 0 && (
+        <Danger
+          testId='prompt-unknown-contract'
+          title={<Trans>Unknown contract</Trans>}
+        >
+          <p>
+            <Trans>
+              Klimper does not recognise this contract. Nobody can tell you what
+              it does with your coins.
+            </Trans>
+          </p>
+          {view.unknownPuzzles.map((hash) => (
+            <div key={hash} className='font-mono text-xs break-all mt-1'>
+              {hash}
+            </div>
+          ))}
+        </Danger>
+      )}
+
+      {view.hasUnsafe && (
+        <Danger
+          testId='prompt-unsafe-signature'
+          title={<Trans>Unsafe signature</Trans>}
+        >
+          <Trans>
+            This signature would be valid in any spend, not just this one.
+            Reject it unless you know exactly why it is needed.
+          </Trans>
+        </Danger>
+      )}
+
       <div className='xc-verdict space-y-4'>
         {view.assets.length === 0 ? (
           <p className='text-sm'>
@@ -656,39 +693,6 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
       )}
 
       <TimeLocks locks={view.timeLocks} />
-
-      <Binding binding={view.binding} partial={view.partial} />
-
-      {view.unknownPuzzles.length > 0 && (
-        <Danger
-          testId='prompt-unknown-contract'
-          title={<Trans>Unknown contract</Trans>}
-        >
-          <p>
-            <Trans>
-              Klimper does not recognise this contract. Nobody can tell you what
-              it does with your coins.
-            </Trans>
-          </p>
-          {view.unknownPuzzles.map((hash) => (
-            <div key={hash} className='font-mono text-xs break-all mt-1'>
-              {hash}
-            </div>
-          ))}
-        </Danger>
-      )}
-
-      {view.hasUnsafe && (
-        <Danger
-          testId='prompt-unsafe-signature'
-          title={<Trans>Unsafe signature</Trans>}
-        >
-          <Trans>
-            This signature would be valid in any spend, not just this one.
-            Reject it unless you know exactly why it is needed.
-          </Trans>
-        </Danger>
-      )}
 
       <ComputedDetail view={view}>
         <SignatureCounts

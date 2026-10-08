@@ -321,11 +321,10 @@ pub fn parse_asset_key(key: &str) -> Option<AssetId> {
 }
 
 /// What Klimper keeps about a website across connections (per wallet and verified domain):
-/// the receive key that is its own, and the limits the user set. Removing a connection
-/// leaves it, so connecting again gets the same address and the same limits back.
+/// the limits the user set. Removing a connection leaves it, so connecting again brings the
+/// same limits back. (Its own key is kept in the website key list, [`SessionStore::claim_website_key`].)
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DomainMemory {
-    pub own_key: Option<String>,
     #[serde(default)]
     pub limits: BTreeMap<String, StoredLimit>,
 }
@@ -536,6 +535,70 @@ impl SessionStore {
         format!("domain:{fingerprint}:{dapp}")
     }
 
+    fn website_keys_key(fingerprint: u32) -> String {
+        format!("websites:{fingerprint}")
+    }
+
+    fn website_keys(&self, fingerprint: u32) -> Result<BTreeMap<String, String>> {
+        self.secrets
+            .get(&Self::website_keys_key(fingerprint))?
+            .map_or(Ok(BTreeMap::new()), |blob| {
+                serde_json::from_slice(&blob).map_err(Error::internal)
+            })
+    }
+
+    /// The key that is `dapp`'s own: the one it was given before, or the first of `candidates`
+    /// (the wallet's hardened keys, in order) no website has ever been given. The list of who
+    /// has which key outlives every connection, so a key is never given to a second website,
+    /// and it is written under the store's write lock, so two pairings cannot take the same one.
+    /// `None` when the wallet has no free hardened key.
+    pub fn claim_website_key(
+        &self,
+        fingerprint: u32,
+        dapp: &str,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Result<Option<chia_bls::PublicKey>> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut keys = self.website_keys(fingerprint)?;
+        if let Some(own) = keys.get(dapp).and_then(|hex_key| parse_public_key(hex_key)) {
+            return Ok(Some(own));
+        }
+        let Some(own) = Self::first_free(&keys, candidates) else {
+            return Ok(None);
+        };
+        keys.insert(
+            dapp.to_owned(),
+            format!("0x{}", hex::encode(own.to_bytes())),
+        );
+        let blob = serde_json::to_vec(&keys).map_err(Error::internal)?;
+        self.secrets
+            .put(&Self::website_keys_key(fingerprint), &blob)?;
+        Ok(Some(own))
+    }
+
+    /// The key [`SessionStore::claim_website_key`] would give `dapp`, without claiming it.
+    pub fn peek_website_key(
+        &self,
+        fingerprint: u32,
+        dapp: &str,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Result<Option<chia_bls::PublicKey>> {
+        let keys = self.website_keys(fingerprint)?;
+        Ok(keys
+            .get(dapp)
+            .and_then(|hex_key| parse_public_key(hex_key))
+            .or_else(|| Self::first_free(&keys, candidates)))
+    }
+
+    fn first_free(
+        keys: &BTreeMap<String, String>,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Option<chia_bls::PublicKey> {
+        let taken: std::collections::HashSet<chia_bls::PublicKey> =
+            keys.values().filter_map(|k| parse_public_key(k)).collect();
+        candidates.iter().find(|key| !taken.contains(key)).copied()
+    }
+
     /// What Klimper remembers about a website across connections, if anything.
     pub fn load_domain(&self, fingerprint: u32, dapp: &str) -> Result<Option<DomainMemory>> {
         self.secrets
@@ -580,6 +643,7 @@ impl SessionStore {
             stored.record.permissions = current.record.permissions;
             stored.record.allow_agg_sig_unsafe = current.record.allow_agg_sig_unsafe;
             stored.record.allow_unknown_contracts = current.record.allow_unknown_contracts;
+            stored.record.own_key = current.record.own_key;
             stored.record.state_version = stored
                 .record
                 .state_version

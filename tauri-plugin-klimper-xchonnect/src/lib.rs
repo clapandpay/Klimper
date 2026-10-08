@@ -278,42 +278,6 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
     }
 }
 
-/// The receive key that is a website's own: the one it had before (kept per domain), or the
-/// highest receive key no other website has, so Sage's next receive address is not it and
-/// websites never share one. `None` only for a wallet without receive keys.
-fn own_key_for(
-    store: &SessionStore,
-    fingerprint: u32,
-    dapp: &str,
-    receive_keys: &[chia_bls::PublicKey],
-) -> Result<Option<chia_bls::PublicKey>> {
-    if let Some(remembered) = store
-        .load_domain(fingerprint, dapp)?
-        .and_then(|memory| memory.own_key)
-        .and_then(|hex_key| store::parse_public_key(&hex_key))
-        && receive_keys.contains(&remembered)
-    {
-        return Ok(Some(remembered));
-    }
-    let taken: std::collections::HashSet<chia_bls::PublicKey> = store
-        .list(fingerprint)?
-        .iter()
-        .filter(|s| s.record.dapp != dapp)
-        .filter_map(|s| {
-            s.record
-                .own_key
-                .as_deref()
-                .and_then(store::parse_public_key)
-        })
-        .collect();
-    Ok(receive_keys
-        .iter()
-        .rev()
-        .find(|key| !taken.contains(key))
-        .or_else(|| receive_keys.last())
-        .copied())
-}
-
 fn key_hex(key: &chia_bls::PublicKey) -> String {
     format!("0x{}", hex::encode(key.to_bytes()))
 }
@@ -526,14 +490,12 @@ async fn inspect_pairing_uri<R: Runtime>(
         Vec::new(),
     )
     .await?;
-    // Now that the domain is verified: its own key, and the limits remembered for it.
+    // Now that the domain is verified: the key it would get (claimed only once the user has
+    // compared the six digits), and the limits remembered for it.
     let dapp = attempt.verified.uri().domain.clone();
-    let own = own_key_for(
-        &state.store,
-        snapshot.fingerprint,
-        &dapp,
-        &snapshot.receive_keys,
-    )?;
+    let own = state
+        .store
+        .peek_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
     attempt.permissions.exposed_keys = own.into_iter().collect();
     if let Some(memory) = state.store.load_domain(snapshot.fingerprint, &dapp)? {
         attempt.permissions.limits = store::StoredPermissions {
@@ -581,7 +543,7 @@ async fn cancel_pairing<R: Runtime>(
 /// The user compared the digits. `matches: false` ends the session and deletes everything.
 #[command]
 async fn confirm_sas<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     state: State<'_, Xchonnect<R>>,
     pairing_id: String,
     matches: bool,
@@ -599,6 +561,18 @@ async fn confirm_sas<R: Runtime>(
     if attempt.session.is_none() {
         return Err(Error::UnknownPairing);
     }
+    // The six digits match: claim the website's own key now, under the store's lock, so two
+    // pairings can never take the same one.
+    let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
+    if snapshot.fingerprint != attempt.fingerprint {
+        return Err(Error::NoWallet);
+    }
+    let dapp = attempt.verified.uri().domain.clone();
+    attempt.permissions.exposed_keys = state
+        .store
+        .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?
+        .into_iter()
+        .collect();
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
         Ok(stored) => stored,
         Err(error) => {
@@ -791,11 +765,10 @@ async fn set_dapp_policy<R: Runtime>(
                 .and_then(store::parse_public_key)
             {
                 Some(own) => Some(own),
-                None => own_key_for(
-                    &state.store,
+                None => state.store.claim_website_key(
                     snapshot.fingerprint,
                     &current.record.dapp,
-                    &snapshot.receive_keys,
+                    &snapshot.website_keys,
                 )?,
             };
             let own = own.map(|key| key_hex(&key));
@@ -825,9 +798,8 @@ async fn set_dapp_policy<R: Runtime>(
                 record.allow_unknown_contracts = allow;
             }
         })?;
-    // Remembered for the domain, so connecting again brings both back.
+    // Remembered for the domain, so connecting again brings the limits back.
     let memory = store::DomainMemory {
-        own_key: stored.record.own_key.clone(),
         limits: stored.record.permissions.limits.clone(),
     };
     state
@@ -988,33 +960,41 @@ mod lib_tests {
     }
 
     #[test]
-    fn each_website_gets_its_own_key_and_keeps_it() {
+    fn websites_never_share_a_key_even_after_one_is_removed() {
         let dir = tempfile::tempdir().unwrap();
         let store =
             SessionStore::open(dir.path(), Box::new(store::MemorySecrets::default())).unwrap();
-        let keys: Vec<chia_bls::PublicKey> = (0u8..4)
+        let hardened: Vec<chia_bls::PublicKey> = (0u8..4)
             .map(|i| chia_bls::SecretKey::from_seed(&[i; 64]).public_key())
             .collect();
 
-        // The highest receive key: Sage hands out the lowest unused one as the user's own.
-        let first = own_key_for(&store, 1, "pengui.xyz", &keys)
-            .unwrap()
-            .unwrap();
-        assert_eq!(first, keys[3]);
-        store
-            .save_domain(
-                1,
-                "pengui.xyz",
-                &store::DomainMemory {
-                    own_key: Some(key_hex(&first)),
-                    limits: BTreeMap::new(),
-                },
-            )
-            .unwrap();
-        // The same website again: the same key.
+        // The first free hardened key, in order.
+        let a = store.claim_website_key(1, "a.example", &hardened).unwrap();
+        assert_eq!(a, Some(hardened[0]));
+        // A preview shows what a pairing would get, without taking it.
         assert_eq!(
-            own_key_for(&store, 1, "pengui.xyz", &keys).unwrap(),
-            Some(first)
+            store.peek_website_key(1, "b.example", &hardened).unwrap(),
+            Some(hardened[1])
+        );
+        // A's connection is gone (the list does not care): B still gets another key.
+        let b = store.claim_website_key(1, "b.example", &hardened).unwrap();
+        assert_eq!(b, Some(hardened[1]));
+        // A comes back: its own key again, never B's.
+        assert_eq!(
+            store.claim_website_key(1, "a.example", &hardened).unwrap(),
+            a
+        );
+        // Another wallet has its own list.
+        assert_eq!(
+            store.claim_website_key(2, "b.example", &hardened).unwrap(),
+            Some(hardened[0])
+        );
+        // No free key left: none, rather than a shared one.
+        store.claim_website_key(1, "c.example", &hardened).unwrap();
+        store.claim_website_key(1, "d.example", &hardened).unwrap();
+        assert_eq!(
+            store.claim_website_key(1, "e.example", &hardened).unwrap(),
+            None
         );
     }
 }

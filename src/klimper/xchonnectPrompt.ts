@@ -224,6 +224,12 @@ function hexOf(value: unknown, maxBytes: number): string | null {
   return /^[0-9a-fA-F]+$/.test(body) ? body.toLowerCase() : null;
 }
 
+/** Hex of exactly `bytes` bytes: an id, a puzzle hash, a key. A shorter one is not that. */
+function exactHex(value: unknown, bytes: number): string | null {
+  const hex = hexOf(value, bytes);
+  return hex !== null && hex.length === bytes * 2 ? hex : null;
+}
+
 /**
  * The asset, from wallet-kit's `{ "type": "xch" }` / `{ "type": "cat", "asset_id": … }`.
  *
@@ -238,12 +244,13 @@ function assetOf(
   isXch: boolean;
   assetId: string | null;
 } {
-  if (!isRecord(value)) return { label: xchLabel, isXch: true, assetId: null };
+  // wallet-kit always names the asset (`{ "type": … }`): one missing is not XCH by default.
+  if (!isRecord(value)) throw new UnreadableAmount();
   if (value.type === 'cat') {
-    const assetId = hexOf(value.asset_id, 32);
-    return assetId === null
-      ? { label: 'Unknown CAT', isXch: false, assetId: null }
-      : { label: catLabel(assetId), isXch: false, assetId };
+    // A token whose id is not a full 32 bytes cannot be named: nobody can consent to it.
+    const assetId = exactHex(value.asset_id, 32);
+    if (assetId === null) throw new UnreadableAmount();
+    return { label: catLabel(assetId), isXch: false, assetId };
   }
   // A kind of asset this build does not know is not shown as XCH: nobody can consent to it.
   if (value.type !== 'xch') throw new UnreadableAmount();
@@ -273,7 +280,7 @@ function outputViewOf(entry: unknown, xchLabel: string): OutputView | null {
     isXch: asset.isXch,
     precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
     amount: amountOf(entry.amount),
-    recipient: hexOf(entry.recipient, 32),
+    recipient: exactHex(entry.recipient, 32),
     toUser: boolOf(entry.to_user),
   };
 }
@@ -297,7 +304,7 @@ function intentOf(value: unknown, xchLabel: string): IntentView | null {
     const asset = assetOf(entry.asset, xchLabel);
     const precision = asset.isXch ? XCH_PRECISION : CAT_PRECISION;
     if (entry.type === 'recipient') {
-      const recipient = hexOf(entry.puzzle_hash, 32);
+      const recipient = exactHex(entry.puzzle_hash, 32);
       if (recipient === null) continue;
       verified.push({
         type: 'recipient',
@@ -456,7 +463,7 @@ function readPromptStrict(
       messageHex,
       truncated: cleaned?.truncated ?? false,
       length: cleaned?.length ?? messageHex.length / 2,
-      publicKey: hexOf(prompt.public_key, 48) ?? '',
+      publicKey: exactHex(prompt.public_key, 48) ?? '',
     };
   }
 
@@ -485,7 +492,7 @@ function readPromptStrict(
   for (const entry of arrayOf(plan.ours)) {
     if (!isRecord(entry)) continue;
     signatures.push({
-      publicKey: hexOf(entry.public_key, 48) ?? '',
+      publicKey: exactHex(entry.public_key, 48) ?? '',
       isUnsafe: boolOf(entry.is_unsafe),
       opcode: intOf(entry.opcode),
     });
@@ -493,7 +500,7 @@ function readPromptStrict(
 
   const unknownPuzzles: string[] = [];
   for (const entry of arrayOf(summary.unknown_puzzles)) {
-    const hash = hexOf(entry, 32);
+    const hash = exactHex(entry, 32);
     if (hash !== null) unknownPuzzles.push(hash);
   }
 

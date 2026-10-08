@@ -8,7 +8,7 @@ wiki's `architecture/passkey-handoff.md`.
 
 ## Against the live page
 
-Nothing to set up. Klimper opens `https://envelope.clapandpay.com/connect?...`. The wallet's passkey
+Nothing to set up. Klimper opens `https://envelope.clapandpay.com/connect#...`. The wallet's passkey
 still belongs to `clapandpay.com`: the web wallet names that domain as its relying party on every
 subdomain of it, which is why the same key comes back in Klimper.
 
