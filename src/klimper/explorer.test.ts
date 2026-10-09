@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { mempoolBlockUrl, mempoolTxUrl } from './explorer';
+import {
+  mempoolBlockUrl,
+  mempoolCoinUrl,
+  mempoolNftUrl,
+  mempoolTxUrl,
+} from './explorer';
 
 const ID = 'cd'.repeat(32);
 
@@ -33,5 +38,35 @@ describe('mempoolBlockUrl', () => {
   it('links nothing else', () => {
     expect(mempoolBlockUrl('abc', false)).toBeNull();
     expect(mempoolBlockUrl(undefined, false)).toBeNull();
+  });
+});
+
+describe('mempoolCoinUrl', () => {
+  it('links a coin', () => {
+    expect(mempoolCoinUrl(ID, false)).toBe(
+      `https://mempoolxch.space/coin/0x${ID}`,
+    );
+    expect(mempoolCoinUrl(`0X${ID.toUpperCase()}`, true)).toBe(
+      `https://mempoolxch.space/coin/0x${ID}?network=testnet11`,
+    );
+  });
+  it('links nothing else', () => {
+    expect(mempoolCoinUrl('', false)).toBeNull();
+    expect(mempoolCoinUrl(`${ID}/../x`, false)).toBeNull();
+  });
+});
+
+describe('mempoolNftUrl', () => {
+  it('links an NFT by its launcher id', () => {
+    expect(mempoolNftUrl(ID, false)).toBe(
+      `https://mempoolxch.space/nft/0x${ID}`,
+    );
+    expect(mempoolNftUrl(ID, true)).toBe(
+      `https://mempoolxch.space/nft/0x${ID}?network=testnet11`,
+    );
+  });
+  it('links nothing else', () => {
+    expect(mempoolNftUrl(undefined, false)).toBeNull();
+    expect(mempoolNftUrl('nft1abc', false)).toBeNull();
   });
 });

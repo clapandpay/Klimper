@@ -7,14 +7,19 @@ import { LabeledItem } from '@/components/LabeledItem';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNetwork } from '@/hooks/useNetwork';
-import spacescanLogo from '@/images/spacescan-logo-192.png';
+import { mempoolCoinUrl } from '@/klimper/explorer';
 import { offersEnabled } from '@/lib/features';
 import { formatTimestamp, getOfferStatus } from '@/lib/utils';
-import { spacescanCoinUrl } from '@/lib/urls';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertCircle, Calendar, Clock, FilePenLine } from 'lucide-react';
+import {
+  AlertCircle,
+  Calendar,
+  Clock,
+  ExternalLink,
+  FilePenLine,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -290,16 +295,13 @@ export default function Option() {
                 <Button
                   variant='outline'
                   onClick={() => {
-                    openUrl(spacescanCoinUrl(option.coin_id, isTestnet));
+                    const url = mempoolCoinUrl(option.coin_id, isTestnet);
+                    if (url) openUrl(url);
                   }}
                   disabled={!network || network === 'unknown'}
                 >
-                  <img
-                    src={spacescanLogo}
-                    className='h-4 w-4 mr-2'
-                    alt='Spacescan.io logo'
-                  />
-                  Spacescan.io
+                  <ExternalLink className='h-4 w-4 mr-2' aria-hidden='true' />
+                  mempoolxch.space
                 </Button>
               </CardContent>
             </Card>

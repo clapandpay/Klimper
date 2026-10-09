@@ -9,13 +9,8 @@ import { CustomError } from '@/contexts/ErrorContext';
 import { useErrors } from '@/hooks/useErrors';
 import { useNetwork } from '@/hooks/useNetwork';
 import missing from '@/images/missing.png';
-import spacescanLogo from '@/images/spacescan-logo-192.png';
 import { getMintGardenProfile } from '@/lib/marketplaces';
-import {
-  mintGardenCollectionUrl,
-  mintGardenDidUrl,
-  spacescanCollectionUrl,
-} from '@/lib/urls';
+import { mintGardenCollectionUrl, mintGardenDidUrl } from '@/lib/urls';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -300,27 +295,6 @@ export default function CollectionMetaData() {
                       aria-hidden='true'
                     />
                     <Trans>View on MintGarden</Trans>
-                  </Button>
-
-                  <Button
-                    variant='outline'
-                    className='w-full mt-1'
-                    onClick={() =>
-                      openUrl(
-                        spacescanCollectionUrl(
-                          collection.collection_id,
-                          isTestnet,
-                        ),
-                      )
-                    }
-                  >
-                    <img
-                      src={spacescanLogo}
-                      className='h-4 w-4 mr-2'
-                      alt='Spacescan.io logo'
-                      aria-hidden='true'
-                    />
-                    <Trans>View on Spacescan.io</Trans>
                   </Button>
                 </LabeledItem>
               </div>

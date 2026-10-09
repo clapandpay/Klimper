@@ -3,7 +3,7 @@ import { AssetIcon } from '@/components/AssetIcon';
 import { CopyButton } from '@/components/CopyButton';
 import { NumberFormat } from '@/components/NumberFormat';
 import { useNetwork } from '@/hooks/useNetwork';
-import { spacescanCoinUrl } from '@/lib/urls';
+import { mempoolCoinUrl } from '@/klimper/explorer';
 import { formatAddress, fromMojos, getAssetDisplayName } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -17,7 +17,7 @@ interface AssetCoinProps {
 
 export function AssetCoin({ asset, amount, coinId }: AssetCoinProps) {
   const { isTestnet } = useNetwork();
-  const url = coinId ? spacescanCoinUrl(coinId, isTestnet) : null;
+  const url = mempoolCoinUrl(coinId, isTestnet);
   const coinIdLabel = coinId ?? '';
 
   return (
@@ -27,7 +27,7 @@ export function AssetCoin({ asset, amount, coinId }: AssetCoinProps) {
         onClick={() => {
           if (url) openUrl(url);
         }}
-        aria-label={t`View coin ${coinIdLabel} on Spacescan.io`}
+        aria-label={t`View coin ${coinIdLabel} on mempoolxch.space`}
         role='button'
         tabIndex={0}
         onKeyDown={(e) => {

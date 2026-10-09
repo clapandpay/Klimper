@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useErrors } from '@/hooks/useErrors';
 import { useNetwork } from '@/hooks/useNetwork';
-import spacescanLogo from '@/images/spacescan-logo-192.png';
+import { mempoolNftUrl } from '@/klimper/explorer';
 import { offersEnabled } from '@/lib/features';
 import { getMintGardenProfile } from '@/lib/marketplaces';
 import { isAudio, isImage, isJson, isText, nftUri } from '@/lib/nftUri';
@@ -16,17 +16,20 @@ import {
   fetchOfferedDexieOffersFromNftId,
   fetchRequestedDexieOffersFromNftId,
 } from '@/lib/offerData';
-import {
-  dexieOfferUrl,
-  mintGardenDidUrl,
-  mintGardenNftUrl,
-  spacescanNftUrl,
-} from '@/lib/urls';
+import { dexieOfferUrl, mintGardenDidUrl, mintGardenNftUrl } from '@/lib/urls';
 import { formatTimestamp, getOfferStatus } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { FileImage, FileText, HandCoins, Hash, Tag, Users } from 'lucide-react';
+import {
+  ExternalLink,
+  FileImage,
+  FileText,
+  HandCoins,
+  Hash,
+  Tag,
+  Users,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from 'theme-o-rama';
@@ -323,19 +326,14 @@ export default function Nft() {
                   <Button
                     variant='outline'
                     className='w-full mt-1'
+                    disabled={!mempoolNftUrl(nft?.launcher_id, isTestnet)}
                     onClick={() => {
-                      openUrl(
-                        spacescanNftUrl(nft?.launcher_id ?? '', isTestnet),
-                      );
+                      const url = mempoolNftUrl(nft?.launcher_id, isTestnet);
+                      if (url) openUrl(url);
                     }}
                   >
-                    <img
-                      src={spacescanLogo}
-                      className='h-4 w-4 mr-2'
-                      alt='Spacescan.io logo'
-                      aria-hidden='true'
-                    />
-                    <Trans>View on Spacescan.io</Trans>
+                    <ExternalLink className='h-4 w-4 mr-2' aria-hidden='true' />
+                    <Trans>View on mempoolxch.space</Trans>
                   </Button>
                 </LabeledItem>
               </div>

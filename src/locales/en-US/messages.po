@@ -401,7 +401,7 @@ msgstr "Actions for selected NFTs"
 
 #: src/components/OptionCard.tsx:212
 #: src/components/OptionColumns.tsx:158
-#: src/pages/Option.tsx:127
+#: src/pages/Option.tsx:132
 msgid "Active"
 msgstr "Active"
 
@@ -491,8 +491,8 @@ msgstr "Added {addedCount} {nfts} to offer"
 #: src/components/AddressList.tsx:23
 #: src/components/TransactionColumns.tsx:132
 #: src/components/TransferDialog.tsx:119
-#: src/pages/Nft.tsx:622
-#: src/pages/Option.tsx:279
+#: src/pages/Nft.tsx:624
+#: src/pages/Option.tsx:284
 #: src/pages/Send.tsx:345
 msgid "Address"
 msgstr "Address"
@@ -750,8 +750,8 @@ msgstr "Assign profile for {nftName}"
 #~ msgid "at peak {peerMaxHeight}"
 #~ msgstr "at peak {peerMaxHeight}"
 
-#: src/pages/CollectionMetaData.tsx:337
-#: src/pages/Nft.tsx:352
+#: src/pages/CollectionMetaData.tsx:311
+#: src/pages/Nft.tsx:354
 msgid "Attributes"
 msgstr "Attributes"
 
@@ -812,7 +812,7 @@ msgstr "Balance"
 msgid "Balance copied to clipboard"
 msgstr "Balance copied to clipboard"
 
-#: src/pages/CollectionMetaData.tsx:184
+#: src/pages/CollectionMetaData.tsx:179
 msgid "Banner for {collectionName}"
 msgstr "Banner for {collectionName}"
 
@@ -836,7 +836,7 @@ msgstr "Biometric authentication failed or was cancelled"
 #~ msgid "Block #{transactionHeight}"
 #~ msgstr "Block #{transactionHeight}"
 
-#: src/pages/Option.tsx:172
+#: src/pages/Option.tsx:177
 #: src/pages/Transaction.tsx:123
 msgid "Block Height"
 msgstr "Block Height"
@@ -1216,8 +1216,8 @@ msgstr "coin"
 
 #: src/components/AssetCoin.tsx:97
 #: src/components/CoinList.tsx:73
-#: src/pages/Nft.tsx:623
-#: src/pages/Option.tsx:278
+#: src/pages/Nft.tsx:625
+#: src/pages/Option.tsx:283
 msgid "Coin ID"
 msgstr "Coin ID"
 
@@ -1277,7 +1277,7 @@ msgstr "Cold wallets cannot sign transactions. Copy the JSON and sign externally
 msgid "Collapse sidebar"
 msgstr "Collapse sidebar"
 
-#: src/pages/Nft.tsx:282
+#: src/pages/Nft.tsx:289
 msgid "Collection"
 msgstr "Collection"
 
@@ -1285,8 +1285,8 @@ msgstr "Collection"
 msgid "Collection {cardName}"
 msgstr "Collection {cardName}"
 
-#: src/pages/CollectionMetaData.tsx:204
-#: src/pages/CollectionMetaData.tsx:385
+#: src/pages/CollectionMetaData.tsx:199
+#: src/pages/CollectionMetaData.tsx:359
 msgid "Collection ID"
 msgstr "Collection ID"
 
@@ -1294,7 +1294,7 @@ msgstr "Collection ID"
 msgid "Collection ID copied to clipboard"
 msgstr "Collection ID copied to clipboard"
 
-#: src/pages/CollectionMetaData.tsx:380
+#: src/pages/CollectionMetaData.tsx:354
 msgid "Collection Information"
 msgstr "Collection Information"
 
@@ -1302,11 +1302,11 @@ msgstr "Collection Information"
 #~ msgid "Collection Name"
 #~ msgstr "Collection Name"
 
-#: src/pages/CollectionMetaData.tsx:149
+#: src/pages/CollectionMetaData.tsx:144
 msgid "Collection Not Found"
 msgstr "Collection Not Found"
 
-#: src/pages/CollectionMetaData.tsx:174
+#: src/pages/CollectionMetaData.tsx:169
 msgid "Collection Preview"
 msgstr "Collection Preview"
 
@@ -1468,7 +1468,7 @@ msgstr "Connection keys live in the system keychain under {keyringService}, sepa
 msgid "Connection stopped"
 msgstr "Connection stopped"
 
-#: src/pages/Option.tsx:185
+#: src/pages/Option.tsx:190
 msgid "Contract Details"
 msgstr "Contract Details"
 
@@ -1613,8 +1613,8 @@ msgid "Create Wallet"
 msgstr "Create Wallet"
 
 #: src/components/OfferCard.tsx:158
-#: src/pages/Nft.tsx:295
-#: src/pages/Option.tsx:146
+#: src/pages/Nft.tsx:302
+#: src/pages/Option.tsx:151
 #: src/pages/Transaction.tsx:111
 msgid "Created"
 msgstr "Created"
@@ -1624,8 +1624,8 @@ msgstr "Created"
 #~ msgid "Created: {0}"
 #~ msgstr "Created: {0}"
 
-#: src/pages/Nft.tsx:584
-#: src/pages/Option.tsx:241
+#: src/pages/Nft.tsx:586
+#: src/pages/Option.tsx:246
 msgid "Created: {createdAt}"
 msgstr "Created: {createdAt}"
 
@@ -1681,7 +1681,7 @@ msgstr "Dangerous permissions"
 msgid "Data"
 msgstr "Data"
 
-#: src/pages/Nft.tsx:637
+#: src/pages/Nft.tsx:639
 msgid "Data and License Details"
 msgstr "Data and License Details"
 
@@ -1689,7 +1689,7 @@ msgstr "Data and License Details"
 msgid "Data copied to clipboard"
 msgstr "Data copied to clipboard"
 
-#: src/pages/Nft.tsx:690
+#: src/pages/Nft.tsx:692
 msgid "Data Hash"
 msgstr "Data Hash"
 
@@ -1697,7 +1697,7 @@ msgstr "Data Hash"
 msgid "Data table"
 msgstr "Data table"
 
-#: src/pages/Nft.tsx:642
+#: src/pages/Nft.tsx:644
 msgid "Data URIs"
 msgstr "Data URIs"
 
@@ -1865,8 +1865,8 @@ msgstr "Descending"
 #~ msgid "Described by the website as"
 #~ msgstr "Described by the website as"
 
-#: src/pages/CollectionMetaData.tsx:241
-#: src/pages/Nft.tsx:277
+#: src/pages/CollectionMetaData.tsx:236
+#: src/pages/Nft.tsx:284
 msgid "Description"
 msgstr "Description"
 
@@ -1901,8 +1901,8 @@ msgstr "Developer mode: this code uses a local relay without encryption in trans
 msgid "Development build: local relays without encryption in transit are accepted."
 msgstr "Development build: local relays without encryption in transit are accepted."
 
-#: src/pages/Nft.tsx:494
-#: src/pages/Nft.tsx:546
+#: src/pages/Nft.tsx:496
+#: src/pages/Nft.tsx:548
 msgid "Dexie"
 msgstr "Dexie"
 
@@ -2010,7 +2010,7 @@ msgstr "Edit profile for {selectedCount} selected NFTs"
 msgid "Edit Token Details"
 msgstr "Edit Token Details"
 
-#: src/pages/Nft.tsx:271
+#: src/pages/Nft.tsx:278
 msgid "Edition"
 msgstr "Edition"
 
@@ -2230,7 +2230,7 @@ msgstr "Expiration must be at least 1 second in the future"
 #: src/components/OfferCard.tsx:145
 #: src/components/OptionCard.tsx:201
 #: src/components/OptionColumns.tsx:120
-#: src/pages/Option.tsx:129
+#: src/pages/Option.tsx:134
 msgid "Expired"
 msgstr "Expired"
 
@@ -2239,7 +2239,7 @@ msgid "Expired at:"
 msgstr "Expired at:"
 
 #: src/components/OfferCard.tsx:172
-#: src/pages/Option.tsx:162
+#: src/pages/Option.tsx:167
 msgid "Expires"
 msgstr "Expires"
 
@@ -2284,9 +2284,9 @@ msgstr "Export tokens"
 msgid "Export transactions"
 msgstr "Export transactions"
 
-#: src/pages/CollectionMetaData.tsx:283
-#: src/pages/Nft.tsx:304
-#: src/pages/Option.tsx:286
+#: src/pages/CollectionMetaData.tsx:278
+#: src/pages/Nft.tsx:311
+#: src/pages/Option.tsx:291
 msgid "External Links"
 msgstr "External Links"
 
@@ -2663,7 +2663,7 @@ msgstr "I have my recovery words, create the passkey"
 msgid "I understand, turn it on"
 msgstr "I understand, turn it on"
 
-#: src/pages/CollectionMetaData.tsx:194
+#: src/pages/CollectionMetaData.tsx:189
 msgid "Icon for {collectionName}"
 msgstr "Icon for {collectionName}"
 
@@ -2935,7 +2935,7 @@ msgid "Launcher Id"
 msgstr "Launcher Id"
 
 #: src/components/AssetCoin.tsx:89
-#: src/pages/Nft.tsx:264
+#: src/pages/Nft.tsx:271
 msgid "Launcher ID"
 msgstr "Launcher ID"
 
@@ -2968,11 +2968,11 @@ msgstr "Leave it off"
 msgid "License"
 msgstr "License"
 
-#: src/pages/Nft.tsx:702
+#: src/pages/Nft.tsx:704
 msgid "License Hash"
 msgstr "License Hash"
 
-#: src/pages/Nft.tsx:674
+#: src/pages/Nft.tsx:676
 msgid "License URIs"
 msgstr "License URIs"
 
@@ -3013,7 +3013,7 @@ msgstr "Loading"
 msgid "Loading collection"
 msgstr "Loading collection"
 
-#: src/pages/CollectionMetaData.tsx:134
+#: src/pages/CollectionMetaData.tsx:129
 msgid "Loading Collection..."
 msgstr "Loading Collection..."
 
@@ -3060,12 +3060,12 @@ msgstr "Loading transactions..."
 msgid "Loading..."
 msgstr "Loading..."
 
-#: src/pages/Nft.tsx:577
-#: src/pages/Option.tsx:234
+#: src/pages/Nft.tsx:579
+#: src/pages/Option.tsx:239
 msgid "Local Offer"
 msgstr "Local Offer"
 
-#: src/pages/Option.tsx:212
+#: src/pages/Option.tsx:217
 msgid "Local Offers"
 msgstr "Local Offers"
 
@@ -3169,8 +3169,8 @@ msgstr "Memo must be valid hex bytes (even length, 0-9, a-f)"
 msgid "Metadata"
 msgstr "Metadata"
 
-#: src/pages/CollectionMetaData.tsx:233
-#: src/pages/CollectionMetaData.tsx:390
+#: src/pages/CollectionMetaData.tsx:228
+#: src/pages/CollectionMetaData.tsx:364
 msgid "Metadata Collection ID"
 msgstr "Metadata Collection ID"
 
@@ -3178,11 +3178,11 @@ msgstr "Metadata Collection ID"
 #~ msgid "Metadata Collection ID copied to clipboard"
 #~ msgstr "Metadata Collection ID copied to clipboard"
 
-#: src/pages/Nft.tsx:696
+#: src/pages/Nft.tsx:698
 msgid "Metadata Hash"
 msgstr "Metadata Hash"
 
-#: src/pages/Nft.tsx:658
+#: src/pages/Nft.tsx:660
 msgid "Metadata URIs"
 msgstr "Metadata URIs"
 
@@ -3217,8 +3217,8 @@ msgstr "Mint Option"
 msgid "Minter {cardName}"
 msgstr "Minter {cardName}"
 
-#: src/pages/CollectionMetaData.tsx:210
-#: src/pages/Nft.tsx:386
+#: src/pages/CollectionMetaData.tsx:205
+#: src/pages/Nft.tsx:388
 msgid "Minter DID"
 msgstr "Minter DID"
 
@@ -3433,7 +3433,7 @@ msgstr "NFT ID copied to clipboard"
 #~ msgid "NFT preview"
 #~ msgstr "NFT preview"
 
-#: src/pages/Nft.tsx:182
+#: src/pages/Nft.tsx:189
 msgid "NFT Preview"
 msgstr "NFT Preview"
 
@@ -3502,11 +3502,11 @@ msgstr "No collection"
 msgid "No Collection"
 msgstr "No Collection"
 
-#: src/pages/CollectionMetaData.tsx:153
+#: src/pages/CollectionMetaData.tsx:148
 msgid "No Collection Found"
 msgstr "No Collection Found"
 
-#: src/pages/Nft.tsx:450
+#: src/pages/Nft.tsx:452
 msgid "No Dexie offers requesting this NFT"
 msgstr "No Dexie offers requesting this NFT"
 
@@ -3749,7 +3749,7 @@ msgstr "Offered"
 #~ msgid "Offered {0} amount must be a positive number."
 #~ msgstr "Offered {0} amount must be a positive number."
 
-#: src/pages/Nft.tsx:459
+#: src/pages/Nft.tsx:461
 msgid "Offered in exchange:"
 msgstr "Offered in exchange:"
 
@@ -3774,7 +3774,7 @@ msgstr "Offers"
 msgid "Offers Created"
 msgstr "Offers Created"
 
-#: src/pages/Nft.tsx:445
+#: src/pages/Nft.tsx:447
 msgid "Offers Requesting This NFT"
 msgstr "Offers Requesting This NFT"
 
@@ -3870,11 +3870,11 @@ msgid "Option"
 msgstr "Option"
 
 #: src/components/confirmations/MintOptionConfirmation.tsx.tsx:155
-#: src/pages/Option.tsx:90
+#: src/pages/Option.tsx:95
 msgid "Option Contract"
 msgstr "Option Contract"
 
-#: src/pages/Option.tsx:110
+#: src/pages/Option.tsx:115
 msgid "Option Contract Details"
 msgstr "Option Contract Details"
 
@@ -3882,7 +3882,7 @@ msgstr "Option Contract Details"
 msgid "Option contract filtering and sorting options"
 msgstr "Option contract filtering and sorting options"
 
-#: src/pages/Option.tsx:94
+#: src/pages/Option.tsx:99
 msgid "Option contract not found"
 msgstr "Option contract not found"
 
@@ -3905,7 +3905,7 @@ msgstr "Option Details"
 #: src/components/AssetCoin.tsx:93
 #: src/components/confirmations/OptionConfirmation.tsx:94
 #: src/components/OptionCard.tsx:191
-#: src/pages/Option.tsx:275
+#: src/pages/Option.tsx:280
 msgid "Option ID"
 msgstr "Option ID"
 
@@ -3985,7 +3985,7 @@ msgstr "Override the default network for this wallet"
 msgid "Owned Coins"
 msgstr "Owned Coins"
 
-#: src/pages/Nft.tsx:413
+#: src/pages/Nft.tsx:415
 msgid "Owner DID"
 msgstr "Owner DID"
 
@@ -3997,7 +3997,7 @@ msgstr "Owner DID"
 msgid "Owner Profiles"
 msgstr "Owner Profiles"
 
-#: src/pages/Nft.tsx:380
+#: src/pages/Nft.tsx:382
 msgid "Ownership"
 msgstr "Ownership"
 
@@ -4097,11 +4097,11 @@ msgstr "peers"
 #: src/components/OfferCard.tsx:140
 #: src/components/OptionColumns.tsx:154
 #: src/components/TransactionColumns.tsx:59
-#: src/pages/Option.tsx:125
+#: src/pages/Option.tsx:130
 msgid "Pending"
 msgstr "Pending"
 
-#: src/pages/Option.tsx:154
+#: src/pages/Option.tsx:159
 msgid "Pending confirmation"
 msgstr "Pending confirmation"
 
@@ -4484,7 +4484,7 @@ msgstr "Requested"
 msgid "Requesting"
 msgstr "Requesting"
 
-#: src/pages/Nft.tsx:523
+#: src/pages/Nft.tsx:525
 msgid "Requesting in exchange:"
 msgstr "Requesting in exchange:"
 
@@ -4558,7 +4558,7 @@ msgstr "Revocable CAT"
 msgid "Revocable CAT Warning"
 msgstr "Revocable CAT Warning"
 
-#: src/pages/Nft.tsx:437
+#: src/pages/Nft.tsx:439
 msgid "Royalties {royaltyPercentage}%"
 msgstr "Royalties {royaltyPercentage}%"
 
@@ -4618,7 +4618,7 @@ msgstr "Save mnemonic"
 #~ msgid "Save Offer"
 #~ msgstr "Save Offer"
 
-#: src/pages/Nft.tsx:257
+#: src/pages/Nft.tsx:264
 msgid "Save Theme"
 msgstr "Save Theme"
 
@@ -4626,7 +4626,7 @@ msgstr "Save Theme"
 msgid "Saved. It applies to the next request."
 msgstr "Saved. It applies to the next request."
 
-#: src/pages/Nft.tsx:256
+#: src/pages/Nft.tsx:263
 msgid "Saving..."
 msgstr "Saving..."
 
@@ -5293,8 +5293,8 @@ msgstr "Status"
 #~ msgid "Status: {0}"
 #~ msgstr "Status: {0}"
 
-#: src/pages/Nft.tsx:580
-#: src/pages/Option.tsx:237
+#: src/pages/Nft.tsx:582
+#: src/pages/Option.tsx:242
 msgid "Status: {offerStatus}"
 msgstr "Status: {offerStatus}"
 
@@ -5315,7 +5315,7 @@ msgstr "Stopped"
 #: src/components/confirmations/MintOptionConfirmation.tsx.tsx:105
 #: src/components/OptionColumns.tsx:80
 #: src/pages/MintOption.tsx:209
-#: src/pages/Option.tsx:197
+#: src/pages/Option.tsx:202
 msgid "Strike Asset"
 msgstr "Strike Asset"
 
@@ -5463,8 +5463,8 @@ msgstr "Taking this offer will send the assets you are paying to the recipient."
 msgid "Target Peers"
 msgstr "Target Peers"
 
-#: src/pages/Nft.tsx:618
-#: src/pages/Option.tsx:270
+#: src/pages/Nft.tsx:620
+#: src/pages/Option.tsx:275
 msgid "Technical Information"
 msgstr "Technical Information"
 
@@ -5693,7 +5693,7 @@ msgstr "Theme"
 msgid "Theme deleted successfully"
 msgstr "Theme deleted successfully"
 
-#: src/pages/Nft.tsx:254
+#: src/pages/Nft.tsx:261
 msgid "Theme Saved"
 msgstr "Theme Saved"
 
@@ -5785,7 +5785,7 @@ msgstr "This CAT is already in your wallet"
 msgid "This CAT is not in your wallet yet"
 msgstr "This CAT is not in your wallet yet"
 
-#: src/pages/CollectionMetaData.tsx:156
+#: src/pages/CollectionMetaData.tsx:151
 msgid "This collection ID does not exist."
 msgstr "This collection ID does not exist."
 
@@ -5865,7 +5865,7 @@ msgstr "This is the raw JSON spend bundle for this transaction. If you sign it, 
 msgid "This is what Klimper worked out by running the spend itself, not what the website says it does."
 msgstr "This is what Klimper worked out by running the spend itself, not what the website says it does."
 
-#: src/pages/Nft.tsx:512
+#: src/pages/Nft.tsx:514
 msgid "This NFT is not currently offered for sale on Dexie"
 msgstr "This NFT is not currently offered for sale on Dexie"
 
@@ -5874,7 +5874,7 @@ msgstr "This NFT is not currently offered for sale on Dexie"
 msgid "This NFT is part of an open offer"
 msgstr "This NFT is part of an open offer"
 
-#: src/pages/Nft.tsx:507
+#: src/pages/Nft.tsx:509
 msgid "This NFT Offered For Sale"
 msgstr "This NFT Offered For Sale"
 
@@ -5898,7 +5898,7 @@ msgstr "This option contract will be created on the blockchain."
 msgid "This option expires in {expiration}"
 msgstr "This option expires in {expiration}"
 
-#: src/pages/Option.tsx:136
+#: src/pages/Option.tsx:141
 msgid "This option has expired"
 msgstr "This option has expired"
 
@@ -6388,7 +6388,7 @@ msgstr "Type the code"
 #: src/components/OptionCard.tsx:252
 #: src/components/OptionColumns.tsx:51
 #: src/pages/MintOption.tsx:158
-#: src/pages/Option.tsx:189
+#: src/pages/Option.tsx:194
 msgid "Underlying Asset"
 msgstr "Underlying Asset"
 
@@ -6428,7 +6428,7 @@ msgstr "Unknown App"
 msgid "Unknown CAT"
 msgstr "Unknown CAT"
 
-#: src/pages/CollectionMetaData.tsx:168
+#: src/pages/CollectionMetaData.tsx:163
 msgid "Unknown Collection"
 msgstr "Unknown Collection"
 
@@ -6444,7 +6444,7 @@ msgstr "Unknown error"
 msgid "Unknown Minter"
 msgstr "Unknown Minter"
 
-#: src/pages/Nft.tsx:176
+#: src/pages/Nft.tsx:183
 msgid "Unknown NFT"
 msgstr "Unknown NFT"
 
@@ -6470,7 +6470,7 @@ msgid "Unnamed"
 msgstr "Unnamed"
 
 #: src/components/NftGroupCard.tsx:125
-#: src/pages/CollectionMetaData.tsx:164
+#: src/pages/CollectionMetaData.tsx:159
 msgid "Unnamed Collection"
 msgstr "Unnamed Collection"
 
@@ -6481,7 +6481,7 @@ msgid "Unnamed NFT"
 msgstr "Unnamed NFT"
 
 #: src/components/OptionColumns.tsx:39
-#: src/pages/Option.tsx:104
+#: src/pages/Option.tsx:109
 msgid "Unnamed Option"
 msgstr "Unnamed Option"
 
@@ -6691,18 +6691,26 @@ msgstr "View {name} token details"
 #~ msgstr "View coin {0} on Spacescan.io"
 
 #: src/components/CoinList.tsx:102
-msgid "View coin {coinId} on Spacescan.io"
-msgstr "View coin {coinId} on Spacescan.io"
+msgid "View coin {coinId} on mempoolxch.space"
+msgstr "View coin {coinId} on mempoolxch.space"
+
+#: src/components/CoinList.tsx:102
+#~ msgid "View coin {coinId} on Spacescan.io"
+#~ msgstr "View coin {coinId} on Spacescan.io"
 
 #: src/components/AssetCoin.tsx:30
-msgid "View coin {coinIdLabel} on Spacescan.io"
-msgstr "View coin {coinIdLabel} on Spacescan.io"
+msgid "View coin {coinIdLabel} on mempoolxch.space"
+msgstr "View coin {coinIdLabel} on mempoolxch.space"
+
+#: src/components/AssetCoin.tsx:30
+#~ msgid "View coin {coinIdLabel} on Spacescan.io"
+#~ msgstr "View coin {coinIdLabel} on Spacescan.io"
 
 #: src/pages/DidList.tsx:80
 msgid "View hidden"
 msgstr "View hidden"
 
-#: src/pages/Option.tsx:255
+#: src/pages/Option.tsx:260
 msgid "View Local Offer"
 msgstr "View Local Offer"
 
@@ -6711,8 +6719,8 @@ msgid "View Metadata"
 msgstr "View Metadata"
 
 #: src/components/dialogs/ViewOfferDialog.tsx:49
-#: src/pages/Nft.tsx:480
-#: src/pages/Nft.tsx:599
+#: src/pages/Nft.tsx:482
+#: src/pages/Nft.tsx:601
 #: src/pages/Offers.tsx:263
 msgid "View Offer"
 msgstr "View Offer"
@@ -6731,6 +6739,7 @@ msgid "View on dexie"
 msgstr "View on dexie"
 
 #: src/klimper/xchonnect/XchonnectApprovalHost.tsx:149
+#: src/pages/Nft.tsx:340
 #: src/pages/Transaction.tsx:100
 msgid "View on mempoolxch.space"
 msgstr "View on mempoolxch.space"
@@ -6740,14 +6749,14 @@ msgstr "View on mempoolxch.space"
 msgid "View on Mintgarden"
 msgstr "View on Mintgarden"
 
-#: src/pages/CollectionMetaData.tsx:302
+#: src/pages/CollectionMetaData.tsx:297
 msgid "View on MintGarden"
 msgstr "View on MintGarden"
 
 #: src/pages/CollectionMetaData.tsx:323
 #: src/pages/Nft.tsx:338
-msgid "View on Spacescan.io"
-msgstr "View on Spacescan.io"
+#~ msgid "View on Spacescan.io"
+#~ msgstr "View on Spacescan.io"
 
 #: src/components/NftOptions.tsx:124
 #: src/components/OptionOptions.tsx:129
