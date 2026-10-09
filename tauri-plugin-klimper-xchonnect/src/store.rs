@@ -457,6 +457,11 @@ pub struct SessionRecord {
     /// `None` until the phone has a device token and a gateway is configured.
     #[serde(default)]
     pub push: Option<crate::push::Registration>,
+    /// When the origin document was last fetched and still listed this session's key (unix
+    /// seconds). A loop that starts more than 24 hours later checks before reading anything,
+    /// so a website's revocation holds across restarts (spec 6.1, TASK-125 review).
+    #[serde(default)]
+    pub origin_checked_at: Option<u64>,
 }
 
 /// A session record plus the opaque `Session::to_bytes()` blob.
@@ -897,6 +902,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
             own_key: None,
         }
     }

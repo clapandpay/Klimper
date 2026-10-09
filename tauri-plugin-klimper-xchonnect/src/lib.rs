@@ -103,8 +103,8 @@ struct Live {
     permissions_changed: Arc<AtomicBool>,
     interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
-    /// Notified each time the loop finished a pass over its mailboxes.
-    passed: Arc<tokio::sync::Notify>,
+    /// Background wake-ups: ask for a full read, and hear when it was done.
+    drain: Arc<session_loop::Drain>,
 }
 
 impl Live {
@@ -338,7 +338,7 @@ impl<R: Runtime> Xchonnect<R> {
         let rotate_requested = Arc::new(AtomicBool::new(false));
         let permissions_changed = Arc::new(AtomicBool::new(false));
         let interrupt = Arc::new(tokio::sync::Notify::new());
-        let passed = Arc::new(tokio::sync::Notify::new());
+        let drain = Arc::new(session_loop::Drain::default());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
         let message_loop = SessionLoop {
@@ -355,7 +355,7 @@ impl<R: Runtime> Xchonnect<R> {
             permissions_changed: permissions_changed.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
-            passed: passed.clone(),
+            drain: drain.clone(),
             push: self.push.clone(),
             answer: session_loop::default_answerer(),
         };
@@ -369,7 +369,7 @@ impl<R: Runtime> Xchonnect<R> {
                 permissions_changed,
                 interrupt,
                 wake: wake_tx,
-                passed,
+                drain,
             },
         );
         Ok(true)
@@ -452,26 +452,38 @@ impl<R: Runtime> Xchonnect<R> {
         // Launched by the push itself: the loops start once the app's screen has loaded
         // (`list_sessions`). Give them a moment rather than telling iOS "done" at once.
         let started = std::time::Instant::now();
-        let passes: Vec<_> = loop {
-            let passes: Vec<_> = {
+        let drains: Vec<_> = loop {
+            let drains: Vec<_> = {
                 let live = self.live.lock().await;
                 live.values()
                     .filter(|live| live.running())
-                    .map(|live| live.passed.clone())
+                    .map(|live| live.drain.clone())
                     .collect()
             };
-            if !passes.is_empty() || started.elapsed() >= LOOPS_START_WAIT {
-                break passes;
+            if !drains.is_empty() || started.elapsed() >= LOOPS_START_WAIT {
+                break drains;
             }
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         };
-        // Waiting is set up before the wake, so a pass that ends at once is not missed (a
-        // `Notified` hears `notify_waiters` from the moment it exists).
-        let waits: Vec<_> = passes.iter().map(|passed| passed.notified()).collect();
+        // Done means: a read that started after this wake-up has finished in every loop.
+        let before: Vec<u64> = drains
+            .iter()
+            .map(|drain| {
+                let done = drain.done.load(Ordering::SeqCst);
+                drain.requested.store(true, Ordering::SeqCst);
+                done
+            })
+            .collect();
         self.wake_all().await;
         let _ = tokio::time::timeout(BACKGROUND_DRAIN, async {
-            for wait in waits {
-                wait.await;
+            for (drain, before) in drains.iter().zip(before) {
+                loop {
+                    let passed = drain.passed.notified();
+                    if drain.done.load(Ordering::SeqCst) > before {
+                        break;
+                    }
+                    passed.await;
+                }
             }
         })
         .await;
@@ -721,14 +733,20 @@ async fn list_sessions<R: Runtime>(
         if ending.contains(&stored.record.id) {
             continue;
         }
-        let mut exposed = stored.record.permissions.exposed_keys.clone();
-        let reordered = own_key_last(&mut exposed, stored.record.own_key.as_deref());
+        let mut reordered = own_key_last(
+            &mut stored.record.permissions.exposed_keys.clone(),
+            stored.record.own_key.as_deref(),
+        );
         if reordered {
+            // Reordered on the record as it is under the store's lock, so a permission change
+            // the user made a moment ago is never written back over (TASK-125 review).
             stored =
                 state
                     .store
                     .update_policy(snapshot.fingerprint, &stored.record.id, |record| {
-                        record.permissions.exposed_keys = exposed;
+                        let own = record.own_key.clone();
+                        reordered =
+                            own_key_last(&mut record.permissions.exposed_keys, own.as_deref());
                     })?;
         }
         let keys = KeyState::stored(&stored);

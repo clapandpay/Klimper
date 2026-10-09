@@ -365,6 +365,8 @@ pub async fn confirm(
             origin_kid: Some(uri.kid.clone()),
             revoked: false,
             push: None,
+            // The origin document was fetched and verified for this pairing just now.
+            origin_checked_at: Some(now),
             own_key: attempt
                 .own_key
                 .as_ref()

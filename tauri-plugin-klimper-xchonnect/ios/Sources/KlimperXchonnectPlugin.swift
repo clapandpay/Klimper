@@ -62,11 +62,13 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
   // The user switched to the browser: keep answering for a little while.
   @objc private func didEnterBackground() {
     endLeaveTask()
-    leaveTask = UIApplication.shared.beginBackgroundTask(withName: "klimper-xchonnect") {
+    let task = UIApplication.shared.beginBackgroundTask(withName: "klimper-xchonnect") {
       self.endLeaveTask()
     }
+    leaveTask = task
+    // Ends this task only: a later stay in the background has its own.
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.backgroundSeconds) {
-      self.endLeaveTask()
+      if self.leaveTask == task { self.endLeaveTask() }
     }
   }
 

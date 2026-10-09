@@ -485,6 +485,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
             own_key: None,
         }
     }

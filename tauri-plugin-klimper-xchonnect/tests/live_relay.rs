@@ -59,7 +59,9 @@ use tauri_plugin_klimper_xchonnect::origin;
 use tauri_plugin_klimper_xchonnect::push::{GatewayConfig, Kind, PushHandle};
 use tauri_plugin_klimper_xchonnect::relay::{RelayClient, RelayInfo};
 use tauri_plugin_klimper_xchonnect::requests::{AnswerInputs, Progress};
-use tauri_plugin_klimper_xchonnect::session_loop::{Answerer, SessionLoop, default_answerer};
+use tauri_plugin_klimper_xchonnect::session_loop::{
+    Answerer, Drain, SessionLoop, default_answerer,
+};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, SessionRecord, SessionStore, StoredPermissions, StoredSession,
 };
@@ -473,6 +475,7 @@ fn start_loop_push(
             origin_kid: origin_kid.map(str::to_owned),
             revoked: false,
             push: None,
+            origin_checked_at: None,
             own_key: None,
         },
         session_hex: hex::encode(wallet_session.to_bytes().unwrap()),
@@ -507,7 +510,7 @@ fn start_loop_push(
         permissions_changed: Arc::new(AtomicBool::new(false)),
         interrupt: interrupt.clone(),
         wake,
-        passed: Arc::new(Notify::new()),
+        drain: Arc::new(Drain::default()),
         push,
         answer,
     };

@@ -83,11 +83,26 @@ const POLL_WAIT: u64 = 20;
 const BACKOFF: Duration = Duration::from_secs(5);
 /// "No such mailbox" answers in a row, a pause apart, before a connection counts as gone.
 const GONE_STRIKES: u32 = 3;
+/// Reads answered while one request waits for the user; beyond, 4029.
+const MAX_READS_WHILE_WAITING: usize = 32;
 /// Most messages held while a request waits for the user. Requests beyond it are refused
 /// with 4029; anything else beyond it (pings) is dropped.
 const MAX_DEFERRED: usize = 16;
 /// Spec 6.1: an origin document is cached for no more than 24 hours.
 const ORIGIN_RECHECK_S: u64 = 24 * 60 * 60;
+/// After a failed origin fetch (the website down), the next try.
+const ORIGIN_RETRY_S: u64 = 10 * 60;
+
+/// What re-fetching the origin document said.
+enum OriginCheck {
+    /// Fetched, and it still lists the key this session was paired under (or the session
+    /// predates keeping the key, and cannot be checked).
+    Kept,
+    /// Fetched and parsed, and the key is gone: the website revoked it.
+    Removed,
+    /// Not fetched (the website is down, or a disconnect cut it short).
+    Unknown,
+}
 
 /// Answers one request. [`default_answerer`] in the app; the live tests put a stand-in
 /// here, because the real one needs an unlocked Sage wallet.
@@ -129,18 +144,29 @@ pub struct SessionLoop {
     pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
-    /// Notified after every pass over the mailboxes, for a background wake-up waiting to
-    /// let the app be suspended again.
-    pub passed: Arc<Notify>,
+    /// A background wake-up's request for one full read, and the report that it was done.
+    pub drain: Arc<Drain>,
     /// The gateway and the phone's device token, for registering this session's wake-ups.
     pub push: Arc<crate::push::PushHandle>,
     /// Answers requests: [`default_answerer`].
     pub answer: Answerer,
 }
 
+/// One loop's side of a background wake-up (TASK-125.04): the wake-up sets `requested`, the
+/// loop's next pass reads without waiting and counts it in `done`, and `passed` is notified
+/// after every pass.
+#[derive(Debug, Default)]
+pub struct Drain {
+    pub requested: AtomicBool,
+    pub done: std::sync::atomic::AtomicU64,
+    pub passed: Notify,
+}
+
 /// Pauses between posts of an answer that did not go out (doubling up to the cap).
 const DELIVER_FIRST_RETRY: Duration = Duration::from_millis(500);
 const DELIVER_MAX_RETRY: Duration = Duration::from_secs(5);
+/// Longest an answer is posted again, whatever the request's own expiry.
+const DELIVER_WINDOW_S: u64 = 120;
 
 /// Pause after a failed push registration before the next try.
 const PUSH_RETRY_S: u64 = 300;
@@ -182,7 +208,10 @@ impl SessionLoop {
         let mut info_known = false;
         let mut first_pass = true;
         let mut gone = 0;
-        let mut origin_checked_at: Option<u64> = None;
+        // Persisted: a restart does not reset it, and a loop whose last check is older than a
+        // day checks before reading anything (spec 6.1).
+        let mut origin_checked_at = stored.record.origin_checked_at;
+        let mut origin_retry_at = 0;
         let mut push_retry_at = 0;
         loop {
             if self.end_requested.load(Ordering::SeqCst) {
@@ -198,13 +227,46 @@ impl SessionLoop {
             {
                 tracing::warn!(session = %id, "could not send the new permissions: {error}");
             }
+            // A website that withdrew its origin key gets nothing more answered, not even on
+            // the first pass after a restart.
+            let now_s = now();
+            if now_s >= origin_retry_at
+                && origin_checked_at.is_none_or(|at| now_s.saturating_sub(at) >= ORIGIN_RECHECK_S)
+            {
+                match self.origin_check(&stored).await {
+                    OriginCheck::Kept => {
+                        origin_checked_at = Some(now_s);
+                        stored.record.origin_checked_at = Some(now_s);
+                        if let Err(error) = self.store.save(&mut stored) {
+                            tracing::warn!(session = %id, "could not store the origin check: {error}");
+                        }
+                    }
+                    OriginCheck::Removed => {
+                        self.revoke(&mut session, &mut stored).await;
+                        return;
+                    }
+                    // The website is down, or the user is disconnecting: not a check. Again in
+                    // a while, not at every pass.
+                    OriginCheck::Unknown => origin_retry_at = now_s + ORIGIN_RETRY_S,
+                }
+                if self.end_requested.load(Ordering::SeqCst) {
+                    continue;
+                }
+            }
             // Read first: what a website sends right after pairing, or while Klimper was in
             // the background, is answered before any housekeeping below. The first pass only
             // takes what is there, so the housekeeping is not held up by a long poll either.
-            let wait = if first_pass { 0 } else { POLL_WAIT };
+            // A background wake-up asks for one full read: no long poll, and no wake-up can cut
+            // it short (it would end the pass with nothing read, and iOS would suspend the app
+            // before the request is handled).
+            let draining = self.drain.requested.swap(false, Ordering::SeqCst);
+            let wait = if first_pass || draining { 0 } else { POLL_WAIT };
             first_pass = false;
             let pumped = self.pump(&mut session, &mut stored, wait).await;
-            self.passed.notify_waiters();
+            if draining {
+                self.drain.done.fetch_add(1, Ordering::SeqCst);
+            }
+            self.drain.passed.notify_waiters();
             if !matches!(pumped, Err(Error::PairingCodeUsed)) {
                 gone = 0;
             }
@@ -273,13 +335,6 @@ impl SessionLoop {
                         }
                     }
                     () = self.interrupt.notified() => {}
-                }
-            }
-            if origin_checked_at.is_none_or(|at| now().saturating_sub(at) >= ORIGIN_RECHECK_S) {
-                origin_checked_at = Some(now());
-                if self.origin_key_removed(&stored).await {
-                    self.revoke(&mut session, &mut stored).await;
-                    return;
                 }
             }
             let asked = self.rotate_requested.swap(false, Ordering::SeqCst);
@@ -398,22 +453,34 @@ impl SessionLoop {
     /// counts as a removal: a website that is down, slow or serving garbage must not be
     /// able to end its users' connections by accident, and a session paired before the
     /// `kid` was kept cannot be checked at all.
-    async fn origin_key_removed(&self, stored: &StoredSession) -> bool {
+    ///
+    /// Only a disconnect cuts the fetch short: a wake-up (push, coming to the front) must not
+    /// turn into "checked" without a check.
+    async fn origin_check(&self, stored: &StoredSession) -> OriginCheck {
         let Some(kid) = stored.record.origin_kid.as_deref() else {
-            return false;
+            return OriginCheck::Kept;
         };
         let options = ParseOptions {
             developer_mode: stored.record.developer_mode && developer_mode_allowed(),
         };
-        let document = tokio::select! {
-            document = origin::fetch(&stored.record.dapp, options) => document,
-            () = self.interrupt.notified() => return false,
+        let fetch = origin::fetch(&stored.record.dapp, options);
+        tokio::pin!(fetch);
+        let document = loop {
+            tokio::select! {
+                document = &mut fetch => break document,
+                () = self.interrupt.notified() => {
+                    if self.end_requested.load(Ordering::SeqCst) {
+                        return OriginCheck::Unknown;
+                    }
+                }
+            }
         };
         match document {
-            Ok(document) => !document.keys.iter().any(|key| key.kid == kid),
+            Ok(document) if document.keys.iter().any(|key| key.kid == kid) => OriginCheck::Kept,
+            Ok(_) => OriginCheck::Removed,
             Err(error) => {
                 tracing::debug!(dapp = %stored.record.dapp, "origin document not checked: {error}");
-                false
+                OriginCheck::Unknown
             }
         }
     }
@@ -519,10 +586,15 @@ impl SessionLoop {
         let mailbox = session.own_mailbox();
         let read = session.own_read_token().clone();
         // The only await raced against a disconnect: nothing has changed yet, so dropping
-        // the poll loses nothing, and the relay keeps any message it was about to deliver.
-        let messages = tokio::select! {
-            messages = self.relay.fetch(mailbox, &read, wait, &self.info) => messages?,
-            () = self.interrupt.notified() => return Ok(Outcome::Continue),
+        // the poll loses nothing, and the relay keeps any message it was about to deliver. A
+        // read that does not wait is not raced: it returns at once anyway.
+        let messages = if wait == 0 {
+            self.relay.fetch(mailbox, &read, 0, &self.info).await?
+        } else {
+            tokio::select! {
+                messages = self.relay.fetch(mailbox, &read, wait, &self.info) => messages?,
+                () = self.interrupt.notified() => return Ok(Outcome::Continue),
+            }
         };
         self.consume(session, stored, mailbox, &read, messages)
             .await
@@ -696,6 +768,7 @@ impl SessionLoop {
         let mailbox = session.own_mailbox();
         let read = session.own_read_token().clone();
         let mut deferred: Vec<Inner> = Vec::new();
+        let mut reads = 0;
         let mut polling = true;
         let outcome = loop {
             tokio::select! {
@@ -715,6 +788,7 @@ impl SessionLoop {
                                 request_id,
                                 messages,
                                 &mut deferred,
+                                &mut reads,
                             )
                             .await
                         }
@@ -831,12 +905,21 @@ impl SessionLoop {
             (self.answer)(self.inputs(stored, inner.id, inner.exp, &method, params, None, now()))
                 .await;
         let message = match outcome {
-            Ok(result) => rpc::result(inner.id, &result).map_err(Error::protocol)?,
+            Ok(result) => rpc::result(inner.id, &result),
             Err(RpcError {
                 code,
                 message,
                 data,
-            }) => rpc::error(inner.id, code, &message, data.as_deref()).map_err(Error::protocol)?,
+            }) => rpc::error(inner.id, code, &message, data.as_deref()),
+        };
+        // An answer that cannot be built is logged: the request still waiting must keep its
+        // cancel handling, which a returned error would stop.
+        let message = match message {
+            Ok(message) => message,
+            Err(error) => {
+                tracing::info!(session = %stored.record.id, "could not build an answer: {error}");
+                return Ok(());
+            }
         };
         if session.is_ended() {
             return Ok(());
@@ -861,14 +944,32 @@ impl SessionLoop {
             .map_err(Error::protocol)?;
         stored.session_hex = encode(session)?;
         self.store.save(stored)?;
+        // Never longer than DELIVER_WINDOW_S: `exp` is the website's to choose (up to 7 days),
+        // and a loop posting one answer again reads nothing else.
+        let until = request_exp.min(now() + DELIVER_WINDOW_S);
         let mut delay = DELIVER_FIRST_RETRY;
+        let mut gone = 0;
         loop {
             match self.relay.post(&outgoing).await {
                 Ok(()) => return Ok(()),
-                Err(error @ Error::PairingCodeUsed) => return Err(error),
-                Err(error) if now() >= request_exp || self.end_requested.load(Ordering::SeqCst) => {
+                // A gone mailbox counts like everywhere else: three times, not once.
+                Err(error @ Error::PairingCodeUsed) if gone + 1 >= GONE_STRIKES => {
+                    return Err(error);
+                }
+                Err(error)
+                    if !crate::relay::worth_retrying(&error)
+                        || now() >= until
+                        || self.end_requested.load(Ordering::SeqCst) =>
+                {
                     tracing::warn!(session = %stored.record.id, "gave up on an answer: {error}");
                     return Ok(());
+                }
+                Err(Error::PairingCodeUsed) => {
+                    gone += 1;
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.interrupt.notified() => {}
+                    }
                 }
                 Err(error) => {
                     tracing::info!(session = %stored.record.id, "answer not posted yet: {error}");
@@ -913,6 +1014,7 @@ impl SessionLoop {
         current: [u8; 16],
         messages: Vec<(String, Vec<u8>)>,
         deferred: &mut Vec<Inner>,
+        reads: &mut usize,
     ) -> Result<()> {
         for (msg_id, envelope) in messages {
             let ids = [msg_id];
@@ -954,10 +1056,24 @@ impl SessionLoop {
                 }
                 // A read never waits behind a prompt: the website's wallet info arrives while
                 // the user is still deciding (TASK-125.03).
+                // A budget per wait, so a website cannot keep the loop busy with reads while a
+                // prompt is open.
                 Message::RpcRequest { ref method, .. }
                     if answers_without_prompt(method) && !session.is_ended() =>
                 {
-                    self.answer_read(session, stored, inner).await?;
+                    if *reads < MAX_READS_WHILE_WAITING {
+                        *reads += 1;
+                        self.answer_read(session, stored, inner).await?;
+                    } else {
+                        let busy = rpc::error(
+                            inner.id,
+                            rpc::codes::LIMIT_EXCEEDED,
+                            "too many requests waiting",
+                            None,
+                        )
+                        .map_err(Error::protocol)?;
+                        self.send(session, stored, busy, 3600).await?;
+                    }
                 }
                 // A request beyond the cap is refused at once rather than queued as yet
                 // another prompt: a dApp cannot line up prompts faster than the user answers.
@@ -1245,6 +1361,7 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
             own_key: None,
         };
         assert!(requests::check_usable(&record).is_err());
