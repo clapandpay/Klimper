@@ -81,6 +81,8 @@ pub const EVENT_REQUEST: &str = "klimper-xchonnect://request";
 const POLL_WAIT: u64 = 20;
 /// Pause after a relay failure before trying again.
 const BACKOFF: Duration = Duration::from_secs(5);
+/// "No such mailbox" answers in a row, a pause apart, before a connection counts as gone.
+const GONE_STRIKES: u32 = 3;
 /// Most messages held while a request waits for the user. Requests beyond it are refused
 /// with 4029; anything else beyond it (pings) is dropped.
 const MAX_DEFERRED: usize = 16;
@@ -127,6 +129,9 @@ pub struct SessionLoop {
     pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
+    /// Notified after every pass over the mailboxes, for a background wake-up waiting to
+    /// let the app be suspended again.
+    pub passed: Arc<Notify>,
     /// The gateway and the phone's device token, for registering this session's wake-ups.
     pub push: Arc<crate::push::PushHandle>,
     /// Answers requests: [`default_answerer`].
@@ -176,6 +181,7 @@ impl SessionLoop {
         }
         let mut info_known = false;
         let mut first_pass = true;
+        let mut gone = 0;
         let mut origin_checked_at: Option<u64> = None;
         let mut push_retry_at = 0;
         loop {
@@ -197,20 +203,52 @@ impl SessionLoop {
             // takes what is there, so the housekeeping is not held up by a long poll either.
             let wait = if first_pass { 0 } else { POLL_WAIT };
             first_pass = false;
-            match self.pump(&mut session, &mut stored, wait).await {
+            let pumped = self.pump(&mut session, &mut stored, wait).await;
+            self.passed.notify_waiters();
+            if !matches!(pumped, Err(Error::PairingCodeUsed)) {
+                gone = 0;
+            }
+            match pumped {
                 Ok(Outcome::Continue) => {}
                 Ok(Outcome::Ended) => {
                     self.cleanup(&session, fingerprint, &id).await;
-                    (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
+                    // The website ended it: the user is told (TASK-125.05).
+                    (self.emit)(
+                        EVENT_SESSION,
+                        json!({
+                            "sessionId": id,
+                            "state": "ended",
+                            "by": "website",
+                            "dapp": stored.record.dapp,
+                        }),
+                    );
                     return;
                 }
+                Err(Error::PairingCodeUsed) if gone + 1 < GONE_STRIKES => {
+                    // Once is not enough to forget a connection (TASK-125.05): a relay being
+                    // redeployed, or a proxy in front of it, can answer like that for a moment.
+                    gone += 1;
+                    tracing::info!(session = %id, "the relay does not know a mailbox ({gone})");
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.interrupt.notified() => {}
+                    }
+                }
                 Err(Error::PairingCodeUsed) => {
-                    // The relay says a mailbox is gone: the dApp ended the session, or it
-                    // expired. The full clean-up still runs: our own mailbox may be the
-                    // one that is left, and a prompt may still be waiting for the user.
+                    // The relay keeps saying a mailbox is gone: the dApp ended the session, or
+                    // it expired. The full clean-up still runs: our own mailbox may be the one
+                    // that is left, and a prompt may still be waiting for the user.
                     tracing::info!(session = %id, "the relay no longer has this mailbox");
                     self.cleanup(&session, fingerprint, &id).await;
-                    (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
+                    (self.emit)(
+                        EVENT_SESSION,
+                        json!({
+                            "sessionId": id,
+                            "state": "ended",
+                            "by": "website",
+                            "dapp": stored.record.dapp,
+                        }),
+                    );
                     return;
                 }
                 Err(error) => {

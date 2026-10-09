@@ -32,6 +32,7 @@ import { useTicker } from '../useTicker';
 import {
   onXchonnectEvent,
   SentEvent,
+  SessionEvent,
   xchonnect,
   XCHONNECT_EVENTS,
 } from './xchonnect';
@@ -169,6 +170,25 @@ export function XchonnectApprovalHost() {
           <SentToast event={event} testnet={testnetRef.current} />,
           { autoClose: 12_000 },
         );
+      },
+    );
+    return () => {
+      void subscription.then((stop) => stop());
+    };
+  }, []);
+
+  // The website ended the connection (or it is gone from the relay): say so, on any screen,
+  // so a connection never just disappears (TASK-125.05).
+  useEffect(() => {
+    if (!xchonnectEnabled) return;
+    const subscription = onXchonnectEvent<SessionEvent>(
+      XCHONNECT_EVENTS.session,
+      (event) => {
+        if (event.state !== 'ended' || event.by !== 'website') return;
+        const dapp = event.dapp ?? '';
+        toast.info(t`${dapp} ended the connection.`, {
+          toastId: `ended-${event.sessionId}`,
+        });
       },
     );
     return () => {

@@ -103,6 +103,8 @@ struct Live {
     permissions_changed: Arc<AtomicBool>,
     interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
+    /// Notified each time the loop finished a pass over its mailboxes.
+    passed: Arc<tokio::sync::Notify>,
 }
 
 impl Live {
@@ -137,6 +139,9 @@ impl Live {
         let _ = self.wake.try_send(());
     }
 }
+
+/// Longest wait for the loops after a background wake-up, inside the time iOS allows.
+const BACKGROUND_DRAIN: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// A pairing attempt, locked on its own: a poll for `session.confirm` on one attempt never
 /// holds up cancelling it, confirming it, or starting another.
@@ -331,6 +336,7 @@ impl<R: Runtime> Xchonnect<R> {
         let rotate_requested = Arc::new(AtomicBool::new(false));
         let permissions_changed = Arc::new(AtomicBool::new(false));
         let interrupt = Arc::new(tokio::sync::Notify::new());
+        let passed = Arc::new(tokio::sync::Notify::new());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
         let message_loop = SessionLoop {
@@ -347,6 +353,7 @@ impl<R: Runtime> Xchonnect<R> {
             permissions_changed: permissions_changed.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
+            passed: passed.clone(),
             push: self.push.clone(),
             answer: session_loop::default_answerer(),
         };
@@ -360,6 +367,7 @@ impl<R: Runtime> Xchonnect<R> {
                 permissions_changed,
                 interrupt,
                 wake: wake_tx,
+                passed,
             },
         );
         Ok(true)
@@ -383,6 +391,9 @@ impl<R: Runtime> Xchonnect<R> {
                             this.set_device_token(platform, &token).await;
                         }
                         native_push::NativeEvent::Wake => this.wake_all().await,
+                        native_push::NativeEvent::BackgroundWake => {
+                            this.drain_in_background().await;
+                        }
                     }
                 });
             });
@@ -429,6 +440,32 @@ impl<R: Runtime> Xchonnect<R> {
             live.interrupt.notify_one();
             let _ = live.wake.try_send(());
         }
+    }
+
+    /// A push woke the app in the background (TASK-125.04): every loop reads its mailbox,
+    /// answers what needs no one, stores what needs the user (shown when Klimper is opened),
+    /// and then iOS is told it may suspend the app again. Bounded, since iOS allows about
+    /// 30 seconds.
+    async fn drain_in_background(&self) {
+        let passes: Vec<_> = {
+            let live = self.live.lock().await;
+            live.values()
+                .filter(|live| live.running())
+                .map(|live| live.passed.clone())
+                .collect()
+        };
+        // Waiting is set up before the wake, so a pass that ends at once is not missed (a
+        // `Notified` hears `notify_waiters` from the moment it exists).
+        let waits: Vec<_> = passes.iter().map(|passed| passed.notified()).collect();
+        self.wake_all().await;
+        let _ = tokio::time::timeout(BACKGROUND_DRAIN, async {
+            for wait in waits {
+                wait.await;
+            }
+        })
+        .await;
+        let native = self.native.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || native.background_done()).await;
     }
 
     /// Sessions the user has disconnected whose loop is still posting `session.end`.

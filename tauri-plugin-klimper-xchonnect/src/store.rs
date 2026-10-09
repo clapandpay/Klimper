@@ -80,9 +80,13 @@ fn keychain_error(status: i32) -> Error {
     Error::Keyring(format!("keychain status {status}"))
 }
 
-/// Generic password items marked `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`: readable
-/// while the phone is unlocked, never in a backup, never on another device. An item written
-/// by an earlier version (plain `WhenUnlocked`) is re-marked the first time it is read.
+/// Generic password items marked `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`: never in
+/// a backup, never on another device, and readable while the phone is locked once it has been
+/// unlocked after starting (TASK-125.04). A website's request must reach Klimper with the
+/// phone in a pocket: the message loop opens, persists and answers it in the background, and
+/// that needs the session state. Signing needs the user anyway (the passkey, the slider). An
+/// item written by an earlier version (`WhenUnlocked`, `WhenUnlockedThisDeviceOnly`) is
+/// re-marked the first time it is read.
 // The only unsafe code in the plugin: calls into Apple's Security framework. Every pointer
 // handed over is a Core Foundation object this module owns for the duration of the call; the
 // constants are the framework's own statics; the one object returned (SecItemCopyMatching's
@@ -98,7 +102,7 @@ mod ios_keychain {
     use core_foundation::data::CFData;
     use core_foundation::dictionary::CFDictionary;
     use core_foundation::string::{CFString, CFStringRef};
-    use security_framework_sys::access_control::kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
+    use security_framework_sys::access_control::kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
     use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound};
     use security_framework_sys::item::{
         kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
@@ -139,7 +143,7 @@ mod ios_keychain {
     fn this_device_only() -> (CFString, CFType) {
         (
             key(unsafe { kSecAttrAccessible }),
-            key(unsafe { kSecAttrAccessibleWhenUnlockedThisDeviceOnly }).into_CFType(),
+            key(unsafe { kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly }).into_CFType(),
         )
     }
 

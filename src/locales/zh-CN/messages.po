@@ -113,7 +113,7 @@ msgstr ""
 msgid "{coinCount} coins"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:114
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:115
 msgid "{count} requests waiting · {time}"
 msgstr ""
 
@@ -133,7 +133,11 @@ msgstr ""
 #~ msgid "{dapp} asks you to sign"
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:229
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:189
+msgid "{dapp} ended the connection."
+msgstr ""
+
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:249
 msgid "{dapp} has your approval."
 msgstr ""
 
@@ -266,6 +270,10 @@ msgstr "已选择 {selectedCount}"
 #~ msgid "{transactionSpentCount} inputs, {transactionCreatedCount} outputs"
 #~ msgstr ""
 
+#: src/klimper/KlimperNavLinks.tsx:75
+msgid "{waiting, plural, one {# request waiting} other {# requests waiting}}"
+msgstr ""
+
 #: src/klimper/XchonnectApprovalDetail.tsx:174
 #~ msgid "{waiting} more waiting"
 #~ msgstr ""
@@ -286,7 +294,7 @@ msgstr ""
 msgid "1 combined coin"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:112
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:113
 msgid "1 request waiting · {time}"
 msgstr ""
 
@@ -362,7 +370,7 @@ msgstr ""
 msgid "A website asked for your signature, but nothing has arrived yet. Klimper is checking its mailbox; if nothing appears, ask the website to try again."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:267
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:287
 msgid "A website asks you to sign"
 msgstr ""
 
@@ -2893,7 +2901,7 @@ msgstr ""
 msgid "Klimper only sees a request from a website while it is open. To be told when one arrives, turn notifications on for Klimper in your phone's settings. Notifications never show amounts or addresses."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:140
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:141
 msgid "Klimper sent the transaction for {dapp}."
 msgstr ""
 
@@ -2913,7 +2921,7 @@ msgstr "语言"
 msgid "Large Cards"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:281
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:301
 msgid "Later"
 msgstr ""
 
@@ -3818,7 +3826,7 @@ msgstr ""
 msgid "Open external link: {content}"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:294
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:314
 msgid "Open in requests"
 msgstr ""
 
@@ -4614,7 +4622,7 @@ msgstr ""
 msgid "Saving..."
 msgstr ""
 
-#: src/klimper/KlimperNavLinks.tsx:31
+#: src/klimper/KlimperNavLinks.tsx:36
 #: src/klimper/Scanner.tsx:115
 #: src/klimper/xchonnect/XchonnectConnect.tsx:376
 #: src/klimper/xchonnect/XchonnectUi.tsx:39
@@ -4741,7 +4749,7 @@ msgstr ""
 msgid "Secret Key"
 msgstr "私钥"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:292
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:312
 msgid "See all {total} requests"
 msgstr ""
 
@@ -5596,7 +5604,7 @@ msgstr ""
 msgid "The recovery words and keys are encrypted with a key only your passkey can open, with Face ID each time Klimper opens."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:223
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:243
 msgid "The request from {dapp} was no longer waiting. Nothing was signed."
 msgstr ""
 
@@ -6712,7 +6720,7 @@ msgstr ""
 msgid "View on dexie"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:148
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:149
 #: src/pages/Transaction.tsx:100
 msgid "View on mempoolxch.space"
 msgstr ""
@@ -6844,7 +6852,7 @@ msgstr "警告"
 msgid "Warning: This is a one-sided offer. You are not requesting anything in return."
 msgstr ""
 
-#: src/klimper/KlimperNavLinks.tsx:40
+#: src/klimper/KlimperNavLinks.tsx:60
 msgid "Websites"
 msgstr ""
 
@@ -7015,7 +7023,7 @@ msgstr ""
 msgid "You can also paste an offer using"
 msgstr "也可以粘贴报价通过"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:240
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:260
 msgid "You cancelled the request from {dapp}."
 msgstr ""
 
@@ -7043,7 +7051,7 @@ msgstr ""
 msgid "You Receive"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:231
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:251
 msgid "You rejected the request from {dapp}."
 msgstr ""
 

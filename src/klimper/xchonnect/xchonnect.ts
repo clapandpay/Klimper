@@ -189,7 +189,7 @@ export const XCHONNECT_EVENTS = {
   pairing: 'klimper-xchonnect://pairing',
   /** `{}` — the list of connected dApps changed. */
   sessions: 'klimper-xchonnect://sessions',
-  /** `{ sessionId, state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair', epoch?, dapp? }` */
+  /** `{ sessionId, state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair', epoch?, dapp?, by? }`; `by: 'website'` when the website ended it or is gone */
   session: 'klimper-xchonnect://session',
   /** `{ sessionId, dapp, method }` — a request arrived. */
   request: 'klimper-xchonnect://request',
@@ -223,6 +223,8 @@ export interface SessionEvent {
   state: 'ended' | 'rotating' | 'rotated' | 'revoked' | 'needsRepair';
   epoch?: number;
   dapp?: string;
+  /** `'website'`: the website ended the connection, or its mailbox is gone. */
+  by?: 'website';
 }
 
 export const onXchonnectEvent = <T>(

@@ -9,6 +9,12 @@
 // iOS reports the device token and silent arrivals to the application delegate, which is tao's
 // and has no push methods. They are added to its class at run time (class_addMethod), so
 // Sage's window code stays untouched.
+//
+// Requests with the phone locked (clapandpay TASK-125.04): a push that carries content-available
+// wakes the app in the background. Rust reads every mailbox and calls backgroundDone; only then
+// is iOS told the fetch finished, at the latest after 25 seconds. And when the user leaves
+// Klimper (for the browser, right after pairing or approving), the app asks for about 25 more
+// seconds, so the website's next reads are answered before iOS suspends it.
 
 import ObjectiveC
 import SwiftRs
@@ -27,6 +33,13 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
   // A notification can start the app, and its tap reaches us before Rust has given us a
   // channel. One flag is enough: a wake-up carries nothing else.
   private var wakeBeforeChannel = false
+  // Background fetches waiting for Rust to have read the mailboxes, and the time asked for.
+  private var pendingFetches: [(UIBackgroundFetchResult) -> Void] = []
+  private var fetchTask: UIBackgroundTaskIdentifier = .invalid
+  private var leaveTask: UIBackgroundTaskIdentifier = .invalid
+
+  // Inside the roughly 30 seconds iOS allows either way.
+  private static let backgroundSeconds: TimeInterval = 25
 
   override init() {
     super.init()
@@ -34,6 +47,75 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
     onMain {
       UNUserNotificationCenter.current().delegate = self
       self.installApplicationDelegateHooks()
+      let center = NotificationCenter.default
+      center.addObserver(
+        self, selector: #selector(self.didEnterBackground),
+        name: UIApplication.didEnterBackgroundNotification, object: nil)
+      center.addObserver(
+        self, selector: #selector(self.willEnterForeground),
+        name: UIApplication.willEnterForegroundNotification, object: nil)
+    }
+  }
+
+  // MARK: Background time
+
+  // The user switched to the browser: keep answering for a little while.
+  @objc private func didEnterBackground() {
+    endLeaveTask()
+    leaveTask = UIApplication.shared.beginBackgroundTask(withName: "klimper-xchonnect") {
+      self.endLeaveTask()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.backgroundSeconds) {
+      self.endLeaveTask()
+    }
+  }
+
+  @objc private func willEnterForeground() {
+    endLeaveTask()
+  }
+
+  private func endLeaveTask() {
+    if leaveTask != .invalid {
+      UIApplication.shared.endBackgroundTask(leaveTask)
+      leaveTask = .invalid
+    }
+  }
+
+  // A content-available push: wake Rust, and hold iOS's completion until it has read.
+  fileprivate func backgroundWake(_ completion: @escaping (UIBackgroundFetchResult) -> Void) {
+    onMain {
+      self.pendingFetches.append(completion)
+      if self.fetchTask == .invalid {
+        self.fetchTask = UIApplication.shared.beginBackgroundTask(withName: "klimper-push") {
+          self.finishFetches()
+        }
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.backgroundSeconds) {
+        self.finishFetches()
+      }
+      if self.channel == nil {
+        self.wakeBeforeChannel = true
+      } else {
+        self.send(["kind": "backgroundWake"])
+      }
+    }
+  }
+
+  private func finishFetches() {
+    let fetches = pendingFetches
+    pendingFetches = []
+    for completion in fetches { completion(.newData) }
+    if fetchTask != .invalid {
+      UIApplication.shared.endBackgroundTask(fetchTask)
+      fetchTask = .invalid
+    }
+  }
+
+  // Rust has read every mailbox after a background wake-up.
+  @objc public func backgroundDone(_ invoke: Invoke) {
+    onMain {
+      self.finishFetches()
+      invoke.resolve()
     }
   }
 
@@ -152,15 +234,18 @@ class KlimperXchonnectPlugin: Plugin, UNUserNotificationCenterDelegate {
       target, #selector(UIApplicationDelegate.application(_:didFailToRegisterForRemoteNotificationsWithError:)),
       failed, "v@:@@")
 
-    // Only reached when a push carries content-available; the gateway's alerts do not, but a
-    // wake is harmless either way.
+    // Reached when a push carries content-available, in front or in the background (with the
+    // phone locked, too). The payload is not read: the mailbox is.
     let received:
       @convention(block) (
         AnyObject, UIApplication, [AnyHashable: Any],
         @escaping (UIBackgroundFetchResult) -> Void
       ) -> Void = { _, _, _, completion in
-        KlimperXchonnectPlugin.current?.wake()
-        completion(.newData)
+        guard let plugin = KlimperXchonnectPlugin.current else {
+          completion(.noData)
+          return
+        }
+        plugin.backgroundWake(completion)
       }
     add(
       target,

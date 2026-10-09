@@ -12,6 +12,11 @@
 //
 // Order is arrival order, and only the first one is ever rendered: a queue the user can
 // answer out of order is a queue where the wrong thing gets approved.
+//
+// Phones (clapandpay TASK-125.04): a request can reach the wallet while the app is in the
+// background or the phone is locked, when the webview hears no event. The queue is read again
+// whenever the app comes to the front, and once more a moment later, for a request the
+// message loop fetches right as the app resumes.
 
 import { xchonnectEnabled } from '@/lib/features';
 import { useCallback, useEffect, useState } from 'react';
@@ -37,6 +42,9 @@ export interface ApprovalQueue {
   readonly reload: () => Promise<void>;
 }
 
+/** The second look after coming to the front. */
+const RELOAD_AGAIN_MS = 1500;
+
 export function useXchonnectApprovals(): ApprovalQueue {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +60,15 @@ export function useXchonnectApprovals(): ApprovalQueue {
 
   useEffect(() => {
     void reload();
+    let later: ReturnType<typeof setTimeout> | undefined;
+    const onFront = () => {
+      if (document.visibilityState !== 'visible') return;
+      void reload();
+      clearTimeout(later);
+      later = setTimeout(() => void reload(), RELOAD_AGAIN_MS);
+    };
+    document.addEventListener('visibilitychange', onFront);
+    window.addEventListener('focus', onFront);
     const subscriptions = [
       onXchonnectEvent<Approval>(XCHONNECT_EVENTS.approval, (approval) =>
         setApprovals((current) =>
@@ -69,6 +86,9 @@ export function useXchonnectApprovals(): ApprovalQueue {
       ),
     ];
     return () => {
+      clearTimeout(later);
+      document.removeEventListener('visibilitychange', onFront);
+      window.removeEventListener('focus', onFront);
       for (const subscription of subscriptions) {
         void subscription.then((stop) => stop());
       }
