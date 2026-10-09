@@ -7,15 +7,17 @@ import { mempoolCoinUrl } from '@/klimper/explorer';
 import { formatAddress, fromMojos, getAssetDisplayName } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { ReactNode } from 'react';
 import { toast } from 'react-toastify';
 
 interface AssetCoinProps {
   asset: Asset;
   amount: Amount;
   coinId: string | null;
+  children?: ReactNode;
 }
 
-export function AssetCoin({ asset, amount, coinId }: AssetCoinProps) {
+export function AssetCoin({ asset, amount, coinId, children }: AssetCoinProps) {
   const { isTestnet } = useNetwork();
   const url = mempoolCoinUrl(coinId, isTestnet);
   const coinIdLabel = coinId ?? '';
@@ -40,6 +42,7 @@ export function AssetCoin({ asset, amount, coinId }: AssetCoinProps) {
         {asset.asset_id && <Id kind={asset.kind} id={asset.asset_id} />}
         {coinId && <Id kind='coin' id={coinId} />}
       </div>
+      {children}
     </div>
   );
 }

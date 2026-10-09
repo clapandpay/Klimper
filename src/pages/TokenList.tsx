@@ -22,6 +22,7 @@ import { toast } from 'react-toastify';
 import { commands, events, TokenRecord } from '../bindings';
 import { useWalletState } from '../state';
 import { usePageValue } from '@/klimper/pageValue';
+import { MyHandles } from '@/klimper/MyHandles';
 import { WalletTotal } from '@/klimper/WalletTotal';
 
 export function TokenList() {
@@ -175,6 +176,7 @@ export function TokenList() {
       </Header>
       <Container>
         {pricedTokens.length > 0 && <WalletTotal usd={totalUsdBalance} />}
+        <MyHandles />
         {tokenIssuingEnabled && (
           <ReadOnlyButton
             onClick={() => navigate('/wallet/issue-token')}

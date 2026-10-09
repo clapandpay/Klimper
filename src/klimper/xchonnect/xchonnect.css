@@ -207,6 +207,8 @@
 }
 
 .xc-approval-title {
+  /* A long domain breaks where it must, not at every letter. */
+  overflow-wrap: anywhere;
   font-family: var(--font-heading);
   font-size: 1.375rem;
   font-weight: 800;
@@ -218,7 +220,26 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1.25rem 1.5rem;
+  /*
+   * Scroll shadows: a soft edge appears at the top or bottom while there is more to read
+   * there. The covers scroll with the content (local), the shadows stay put (scroll), so
+   * each shadow shows only once its cover has moved away. No script, no layout.
+   */
+  background:
+    linear-gradient(var(--card) 30%, rgb(255 255 255 / 0)) top / 100% 2.5rem
+      no-repeat local,
+    linear-gradient(rgb(255 255 255 / 0), var(--card) 70%) bottom / 100% 2.5rem
+      no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgb(17 18 23 / 0.14), transparent)
+      top / 100% 0.75rem no-repeat scroll,
+    radial-gradient(
+        farthest-side at 50% 100%,
+        rgb(17 18 23 / 0.14),
+        transparent
+      )
+      bottom / 100% 0.75rem no-repeat scroll;
 }
 
 /* The verdict: what happens to the money, in the display face, on a quiet panel. */
@@ -291,15 +312,62 @@
   inset: 0;
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
   outline: none;
 }
 
+/*
+ * On a phone the sheet is the whole screen, and the card's own colour runs under the notch
+ * and the home indicator (its padding keeps the content clear of them), so no dimmed band
+ * shows above or below it. Tighter spacing leaves the scrolling middle as much room as it
+ * can get between the pinned head and the pinned slider.
+ */
 .xc-overlay > .xc-approval {
   flex: 1 1 auto;
   border-radius: 0;
   border: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 639px) {
+  .xc-approval-head {
+    gap: 0.75rem;
+    padding: 1rem 1rem 0.875rem;
+  }
+
+  .xc-approval-head .xc-coin {
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 1.25rem;
+  }
+
+  .xc-approval-title {
+    font-size: 1.1875rem;
+  }
+
+  .xc-approval-body {
+    padding: 1rem;
+  }
+
+  /* One scrolling area: a long message reads in the body, not in a box inside it. */
+  .xc-approval-body pre {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .xc-approval-actions {
+    gap: 0.625rem;
+    padding: 0.75rem 1rem 0.875rem;
+  }
+
+  .xc-approval .xc-verdict [data-testid='asset-net'].text-2xl {
+    font-size: 1.625rem;
+    line-height: 2rem;
+  }
+
+  .xc-see-all {
+    margin: -0.25rem 0 0.75rem;
+  }
 }
 
 @media (min-width: 640px) {
@@ -310,6 +378,9 @@
     width: min(44rem, calc(100vw - 2rem));
     max-height: min(52rem, calc(100vh - 3rem));
     transform: translate(-50%, -50%);
+  }
+
+  .xc-overlay > .xc-approval {
     padding: 0;
   }
 
@@ -565,8 +636,7 @@
     inset 0 -1px 0 rgb(0 0 0 / 0.05),
     inset 0 2px 10px rgb(0 0 0 / 0.06),
     0 10px 30px -14px rgb(255 122 31 / 0.6);
-  backdrop-filter: blur(16px) saturate(1.6);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  cursor: grab;
 }
 
 :root.theme-dark .xc-slide {
@@ -605,10 +675,13 @@
 .xc-slide-label {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-left: calc(var(--knob) * 0.6);
+  display: block;
+  padding: 0 1rem 0 calc(var(--knob) + 0.75rem);
+  line-height: calc(var(--knob) + 6px);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--foreground);
@@ -617,8 +690,8 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .xc-slide[data-done='false'][data-disabled='false']:not([data-dragging])
-    .xc-slide-label {
+  .xc-slide[data-done='false'][data-disabled='false']
+    .xc-slide-label:not(.xc-slide-release) {
     background: linear-gradient(
         100deg,
         var(--foreground) 40%,
@@ -630,6 +703,10 @@
     background-clip: text;
     color: transparent;
     animation: xc-shine 2.6s linear infinite;
+  }
+
+  .xc-slide[data-dragging] .xc-slide-label {
+    animation-play-state: paused;
   }
 }
 
@@ -654,7 +731,6 @@
   justify-content: center;
   border-radius: 9999px;
   color: var(--ink, var(--primary-foreground));
-  cursor: grab;
   touch-action: none;
   transform: translateX(calc(var(--travel, 0px) * var(--p)));
   background:
@@ -669,13 +745,14 @@
     inset 0 -2px 4px rgb(0 0 0 / 0.12),
     0 6px 14px -4px rgb(255 59 31 / 0.55);
   transition:
-    transform 380ms cubic-bezier(0.34, 1.4, 0.64, 1),
-    box-shadow 200ms;
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms,
+    background 160ms;
 }
 
 .xc-slide-fill {
   transition:
-    clip-path 380ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    clip-path 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 200ms;
 }
 
@@ -690,8 +767,12 @@
   transition: none;
 }
 
+.xc-slide[data-dragging],
 .xc-slide[data-dragging] .xc-slide-knob {
   cursor: grabbing;
+}
+
+.xc-slide[data-dragging] .xc-slide-knob {
   will-change: transform;
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 0.7),
@@ -721,6 +802,36 @@
   outline-offset: -3px;
 }
 
+/* The icons: chevrons while sliding, a check once letting go approves and once done. */
+.xc-slide-check,
+.xc-slide[data-armed] .xc-slide-go,
+.xc-slide[data-done='true'] .xc-slide-go {
+  display: none;
+}
+
+.xc-slide[data-armed] .xc-slide-check,
+.xc-slide[data-done='true'] .xc-slide-check {
+  display: block;
+}
+
+/* Past the point of no return: the other text, and the trail at full strength. */
+.xc-slide-release {
+  opacity: 0;
+  color: var(--foreground);
+  background: none;
+  animation: none;
+}
+
+.xc-slide[data-armed] .xc-slide-release {
+  opacity: 1;
+  padding: 0 calc(var(--knob) + 0.75rem) 0 1rem;
+}
+
+.xc-slide[data-armed] .xc-slide-fill {
+  opacity: 1;
+}
+
+.xc-slide[data-armed] .xc-slide-knob,
 .xc-slide[data-done='true'] .xc-slide-knob {
   color: #ffffff;
   background:
@@ -737,6 +848,7 @@
   opacity: 0.55;
 }
 
+.xc-slide[data-disabled='true'],
 .xc-slide[data-disabled='true'] .xc-slide-knob {
   cursor: default;
 }

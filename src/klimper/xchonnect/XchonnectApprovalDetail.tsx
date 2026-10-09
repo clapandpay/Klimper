@@ -181,7 +181,7 @@ export function XchonnectApprovalDetail({
         <div className='min-w-0 flex-1 space-y-1.5'>
           <h2
             id={titleId}
-            className='xc-approval-title break-all'
+            className='xc-approval-title'
             data-testid='approval-title'
           >
             {/*
@@ -237,6 +237,20 @@ export function XchonnectApprovalDetail({
               <Trans>Slide to approve</Trans>
             )
           }
+          releaseHint={
+            broadcasts ? (
+              <Trans>Let go to approve and send</Trans>
+            ) : (
+              <Trans>Let go to approve</Trans>
+            )
+          }
+          offHint={
+            expired ? (
+              <Trans>Time is up</Trans>
+            ) : view.kind === 'unreadable' ? (
+              <Trans>Klimper cannot read this request</Trans>
+            ) : undefined
+          }
           onConfirm={onApprove}
           disabled={disabled || view.kind === 'unreadable'}
           resetKey={`${approval.id}:${slides}`}
@@ -279,7 +293,10 @@ export function XchonnectApprovalDetail({
           if (!open) setSlides((n) => n + 1);
         }}
       >
-        <DialogContent data-testid='unknown-contract-confirm'>
+        <DialogContent
+          className='w-[calc(100%-2rem)] rounded-2xl'
+          data-testid='unknown-contract-confirm'
+        >
           <DialogHeader>
             <DialogTitle className='text-destructive'>
               <Trans>This spend uses a contract Klimper cannot read</Trans>

@@ -52,8 +52,8 @@ const down = (el: Element, x = 0) =>
     button: 0,
     clientX: x,
   });
-const move = (el: Element, x: number) =>
-  fireEvent.pointerMove(el, { pointerId: 1, clientX: x });
+const move = (el: Element, x: number, y = 0) =>
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: x, clientY: y });
 const up = (el: Element) => fireEvent.pointerUp(el, { pointerId: 1 });
 
 describe('slide to approve', () => {
@@ -114,6 +114,55 @@ describe('slide to approve', () => {
     fireEvent.click(press);
     fireEvent.click(press);
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes a finger anywhere on the track, but only a slide counts', () => {
+    const onConfirm = vi.fn();
+    slider(onConfirm);
+    const track = screen.getByTestId('slide');
+    down(track, 200);
+    up(track);
+    expect(onConfirm).not.toHaveBeenCalled();
+    down(track, 10);
+    move(track, 249);
+    up(track);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows when letting go approves', () => {
+    const { knob } = slider(vi.fn());
+    const track = screen.getByTestId('slide');
+    down(knob);
+    move(knob, 200);
+    expect(track.hasAttribute('data-armed')).toBe(false);
+    move(knob, 230);
+    expect(track.hasAttribute('data-armed')).toBe(true);
+    move(knob, 100);
+    expect(track.hasAttribute('data-armed')).toBe(false);
+  });
+
+  it('lets go when the finger turns into a vertical scroll', () => {
+    const onConfirm = vi.fn();
+    const { knob } = slider(onConfirm);
+    down(knob);
+    move(knob, 120, 10);
+    move(knob, 239, 90);
+    up(knob);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('says why it is off', () => {
+    render(
+      <SlideToApprove
+        label='Approve'
+        hint='Slide to approve'
+        offHint='Time is up'
+        onConfirm={vi.fn()}
+        disabled
+      />,
+    );
+    expect(screen.getByText('Time is up')).toBeTruthy();
+    expect(screen.queryByText('Slide to approve')).toBeNull();
   });
 
   it('does nothing while turned off', () => {
