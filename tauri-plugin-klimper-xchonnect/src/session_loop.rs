@@ -105,7 +105,7 @@ enum OriginCheck {
 }
 
 /// Answers one request. [`default_answerer`] in the app; the live tests put a stand-in
-/// here, because the real one needs an unlocked Sage wallet.
+/// here, because the real one needs an open Sage wallet.
 pub type Answerer = Arc<
     dyn Fn(
             AnswerInputs,
@@ -1194,7 +1194,7 @@ async fn post_end(relay: &RelayClient, outgoing: &xchonnect_core::session::Outgo
     }
 }
 
-/// End a session whose loop is not running (the wallet was locked when it started, the
+/// End a session whose loop is not running (no wallet was open when it started, the
 /// loop stopped, the session needs re-pairing). The website is told all the same:
 /// `session.end` is sealed from the stored state and posted, and this side's mailboxes are
 /// deleted, so even a website that missed the message finds the session gone on its next

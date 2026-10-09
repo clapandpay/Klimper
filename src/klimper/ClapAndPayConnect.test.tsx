@@ -37,10 +37,6 @@ vi.mock('@/contexts/WalletContext', () => ({ useWallet: () => wallet }));
 // that makes the request, forever.
 const errors = vi.hoisted(() => ({ addError: () => undefined }));
 vi.mock('@/hooks/useErrors', () => ({ useErrors: () => errors }));
-vi.mock('@/klimper/passkey', () => ({
-  passkey: { status: () => Promise.resolve(null), enroll: vi.fn() },
-  notifyPasskeyChanged: vi.fn(),
-}));
 vi.mock('@/lib/features', () => ({
   clapAndPayOrigin: 'https://envelope.test',
 }));
@@ -54,7 +50,6 @@ vi.mock('@/bindings', () => ({
     importKey: (...args: unknown[]) => importKey(...args),
     getNetwork: () => Promise.resolve({ network: { name: 'testnet11' } }),
     getKey: () => Promise.resolve({ key: null }),
-    getKeys: () => Promise.resolve({ keys: [] }),
   },
 }));
 

@@ -1,3 +1,4 @@
 /.tauri
 /target
 /ios/Package.resolved
+/ios/.build

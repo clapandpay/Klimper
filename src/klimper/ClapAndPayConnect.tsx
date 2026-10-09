@@ -5,8 +5,8 @@
 // when somebody opened a Green Envelope) into Klimper. A passkey belongs to a website, so the
 // face or finger check happens on that page; the page answers with one line of text that only
 // this app instance can read (src/lib/clapandpayHandoff.ts). From there it is Sage's ordinary
-// key import: nothing in the engine or the app bridge is touched. Sage keeps that key under the
-// empty password, so where a passkey is available the next step offers to lock it (TASK-057).
+// key import: nothing in the engine or the app bridge is touched. Sage keeps that key as it keeps
+// every other one; its "Biometric Authentication" setting guards spending it.
 // Before anything is imported, the answer code is shown: the page shows the same six digits next
 // to its answer, and an answer that did not come from the page (a swapped clipboard) cannot
 // match them.
@@ -25,7 +25,6 @@ import {
 import { LoadingButton } from '@/components/ui/loading-button';
 import { useWallet } from '@/contexts/WalletContext';
 import { useErrors } from '@/hooks/useErrors';
-import { notifyPasskeyChanged, passkey } from '@/klimper/passkey';
 import {
   createHandoffRequest,
   HandoffError,
@@ -71,11 +70,6 @@ export default function ClapAndPayConnect() {
   } | null>(null);
   // An answer for another network than Klimper's: kept, so one tap can switch and finish.
   const [elsewhere, setElsewhere] = useState<HandoffPayload | null>(null);
-  // After the import: offer the passkey, and say so if it would lock other wallets too.
-  const [offerLock, setOfferLock] = useState<{ otherWallets: boolean } | null>(
-    null,
-  );
-  const [locking, setLocking] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -106,13 +100,6 @@ export default function ClapAndPayConnect() {
     await fetchState();
     const data = await commands.getKey({});
     setWallet(data.key);
-
-    const status = await passkey.status().catch(() => null);
-    if (status?.supported && !status.enrolled) {
-      const { keys } = await commands.getKeys({});
-      setOfferLock({ otherWallets: keys.length > 1 });
-      return;
-    }
     navigate('/wallet');
   };
 
@@ -178,75 +165,6 @@ export default function ClapAndPayConnect() {
   };
 
   const theirNetwork = elsewhere?.network ?? '';
-
-  const lock = async () => {
-    setLocking(true);
-    setProblem(null);
-    try {
-      await passkey.enroll();
-      notifyPasskeyChanged();
-      navigate('/wallet');
-    } catch (error) {
-      setProblem(String(error));
-    } finally {
-      setLocking(false);
-    }
-  };
-
-  if (offerLock) {
-    return (
-      <SafeAreaView>
-        <Header title={t`Clap and Pay`} />
-        <Container>
-          <Card className='max-w-xl mx-auto'>
-            <CardHeader className='text-center'>
-              <CardTitle>
-                <Trans>Lock it with Face ID</Trans>
-              </CardTitle>
-              <CardDescription>
-                <Trans>
-                  The money is in Klimper now. Right now anyone who can open
-                  Klimper on this phone can spend it. With a passkey, Klimper
-                  only opens with your face.
-                </Trans>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='space-y-3 text-center'>
-              {offerLock.otherWallets && (
-                <p className='text-sm text-muted-foreground'>
-                  <Trans>
-                    The passkey locks your other wallets in Klimper too. Have
-                    their recovery words written down first.
-                  </Trans>
-                </p>
-              )}
-              <LoadingButton
-                className='w-full'
-                loading={locking}
-                loadingText={t`Waiting for Face ID…`}
-                onClick={lock}
-              >
-                <Trans>Lock with Face ID</Trans>
-              </LoadingButton>
-              <Button
-                className='w-full'
-                variant='ghost'
-                disabled={locking}
-                onClick={() => navigate('/wallet')}
-              >
-                <Trans>Not now</Trans>
-              </Button>
-              {problem && (
-                <Alert variant='destructive'>
-                  <AlertDescription>{problem}</AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Container>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView>
@@ -366,9 +284,9 @@ export default function ClapAndPayConnect() {
 
             <p className='text-sm text-muted-foreground'>
               <Trans>
-                The key then lives in Klimper on this device. On a phone it
-                never goes into a backup. If you lose the device, open{' '}
-                {pageHost} again: your passkey brings the money back.
+                The key then lives in Klimper on this device. If you lose the
+                device, open {pageHost} again: your passkey brings the money
+                back.
               </Trans>
             </p>
           </CardContent>

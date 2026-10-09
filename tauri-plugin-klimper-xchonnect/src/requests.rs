@@ -434,8 +434,8 @@ pub fn prompt_deadline(now: u64, request_exp: u64) -> u64 {
     }
 }
 
-/// A CHIP-0002 rejection for an approval the user never saw, e.g. because the wallet is
-/// locked.
+/// A CHIP-0002 rejection for an approval the user never saw, e.g. because no wallet is
+/// open.
 pub fn rejected() -> RpcError {
     rpc_error(codes::USER_REJECTED, "user rejected request")
 }
@@ -443,8 +443,8 @@ pub fn rejected() -> RpcError {
 impl From<Error> for RpcError {
     fn from(error: Error) -> Self {
         match error {
-            Error::WalletLocked | Error::NoWallet => {
-                rpc_error(codes::NO_SECRET_KEY, "the wallet is locked")
+            Error::NoSigningKey | Error::NoWallet => {
+                rpc_error(codes::NO_SECRET_KEY, "the wallet cannot sign")
             }
             Error::SessionNotUsable => {
                 rpc_error(codes::UNAUTHORIZED, "this connection is not confirmed")

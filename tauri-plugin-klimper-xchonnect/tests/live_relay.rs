@@ -951,7 +951,7 @@ async fn developer_mode_is_refused_when_it_is_not_allowed() {
 /// The transaction id the stand-in reports as broadcast.
 const TX_ID: [u8; 32] = [0xab; 32];
 
-/// Stands in for `requests::answer`, which needs an unlocked Sage wallet: the same approval
+/// Stands in for `requests::answer`, which needs an open Sage wallet: the same approval
 /// bridge and the same progress reports, then a broadcast that only exists in this test.
 fn bridge_answerer() -> Answerer {
     Arc::new(|inputs: AnswerInputs| {

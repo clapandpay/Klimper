@@ -61,9 +61,9 @@ pub enum Error {
     #[error("the system keychain could not store this connection: {0}")]
     Keyring(String),
 
-    /// The wallet is locked, or there is no wallet.
-    #[error("unlock the wallet first")]
-    WalletLocked,
+    /// The wallet holds no secret key (a watch-only wallet).
+    #[error("this wallet has no signing key")]
+    NoSigningKey,
 
     /// No wallet is selected.
     #[error("no wallet is open")]
@@ -102,10 +102,7 @@ impl From<sage::Error> for Error {
 
 impl From<sage_keychain::KeychainError> for Error {
     fn from(error: sage_keychain::KeychainError) -> Self {
-        match error {
-            sage_keychain::KeychainError::Locked => Error::WalletLocked,
-            other => Error::Sage(other.to_string()),
-        }
+        Error::Sage(error.to_string())
     }
 }
 

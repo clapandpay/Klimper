@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The way into the Xchonnect screens (clapandpay TASK-072, TASK-084).
 //
-// Follows `PasskeySettings` exactly: a self-contained block in the settings screen that
-// returns `null` when the feature is off, so `Settings.tsx` — shared with upstream Sage —
-// carries one element and no condition.
+// A self-contained block in the settings screen that returns `null` when the feature is
+// off, so `Settings.tsx` — shared with upstream Sage — carries one element and no condition.
 //
 // The navigation has the quicker ways in, Scan and Websites (`KlimperNavLinks.tsx`); this
 // block stays so the settings screen still answers "which websites can reach my wallet".

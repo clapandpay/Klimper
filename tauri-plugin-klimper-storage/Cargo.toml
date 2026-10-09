@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-klimper-storage"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Klimper: keeps the wallet data out of iCloud and device backups (the one change from upstream Sage's key storage)."
+publish = false
+links = "tauri-plugin-klimper-storage"
+
+[lints]
+workspace = true
+
+[dependencies]
+tauri = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }

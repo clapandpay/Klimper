@@ -7,9 +7,8 @@
 //! `xchonnect-wallet-kit` (local simulation, signature policy, permissions, limits,
 //! binding checks, CHIP-0002 handlers). This plugin supplies only what a host has to:
 //! HTTP to the relay and to the dApp's origin document, session storage in the OS
-//! keyring, the approval UI, and signing through Klimper's own key storage. No Sage
-//! engine file is changed — the plugin follows `tauri-plugin-klimper-passkey` exactly,
-//! and the wiring points are listed in `klimper/docs/UPSTREAM.md`.
+//! keyring, the approval UI, and signing through Sage's own key storage. No Sage engine
+//! file is changed; the wiring points are listed in `klimper/docs/UPSTREAM.md`.
 //!
 //! ## Command and event surface
 //!
@@ -713,7 +712,7 @@ async fn push_status<R: Runtime>(
 
 /// The connected dApps of the active wallet. Also resumes the message loop of every
 /// session that is not already running, which is how sessions come back after a restart
-/// or after the wallet was unlocked.
+/// or after a wallet was opened.
 #[command]
 async fn list_sessions<R: Runtime>(
     app: AppHandle<R>,
@@ -811,7 +810,7 @@ async fn end_session<R: Runtime>(
         live.remove(&session_id);
     }
     drop(live);
-    // No loop running (the wallet was locked when it would have started, or the session
+    // No loop running (no wallet was open when it would have started, or the session
     // needs re-pairing): the website is still told, and this side's mailboxes go, so
     // disconnecting always unpairs both sides.
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
@@ -838,7 +837,7 @@ async fn rotate_session_keys<R: Runtime>(
             handle.request_rotation();
             Ok(())
         }
-        // Not listening (locked wallet, needs re-pairing, revoked, being ended): there is
+        // Not listening (no wallet open, needs re-pairing, revoked, being ended): there is
         // no loop to carry the offer, and a rotation needs the dApp to answer.
         _ => Err(Error::SessionNotUsable),
     }
@@ -1014,8 +1013,7 @@ fn spawn_confirm_poller<R: Runtime>(app: AppHandle<R>, pairing_id: String) {
     });
 }
 
-/// Register the plugin. Called from `src-tauri/src/lib.rs`, next to
-/// `tauri_plugin_klimper_passkey::init()`.
+/// Register the plugin. Called from `src-tauri/src/lib.rs`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-xchonnect")
         .invoke_handler(tauri::generate_handler![

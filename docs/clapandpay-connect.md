@@ -57,3 +57,12 @@ platform authenticator with PRF makes a passkey wallet on a dev server, Klimper'
 `src/lib/clapandpayHandoff.ts` makes the request, the page approves it, and the answer must
 decrypt to the key of the page's address and be refused by any other request. The Sage import
 itself is Sage's `import_key` with the hex master key, unchanged.
+
+## After the import
+
+Klimper keeps the imported key exactly as Sage keeps every key: in `keys.bin` under Sage's own
+password handling, guarded by the "Biometric Authentication" setting. The passkey is only the
+way in; Klimper never uses it to lock or sign (TASK-126). The one difference from Sage is that
+the wallet data stays out of phone backups (`tauri-plugin-klimper-storage`, `docs/UPSTREAM.md`),
+so a new phone imports the money again from the page, or restores the recovery words once the
+wallet has them (TASK-127, TASK-130).

@@ -132,9 +132,9 @@ and is gone.
 
 1. **One approval** of the whole request, on the overlay or the requests page.
 2. **One unlock**: `KlimperSigner::sign_all` opens the keychain once, derives every key the
-   approved plan needs, signs and verifies everything, and drops the key material. With a
-   passkey enrolled, `keychain.password()` fails with `Locked` until the passkey has opened
-   it, and nothing is signed. A fresh Touch ID prompt per request on macOS is a follow-up:
+   approved plan needs, signs and verifies everything, and drops the key material. The
+   keychain is Sage's own, opened with Sage's empty password like every Sage endpoint. A
+   fresh Touch ID prompt per request on macOS is a follow-up:
    it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out here.
 3. **Klimper broadcasts** (`execute.rs`): `chia_send` is built by Sage from the wallet's
    own coins, `xchonnect_submitCoinSpends` carries a bundle the website built; both are
@@ -146,8 +146,7 @@ and is gone.
    is verified claim by claim against the simulation; `chia_send` carries one Klimper
    derives from the request itself.
 
-Key material lives only inside one `sign_all` call. The
-keychain password is a `Zeroizing<Vec<u8>>`. `chia_bls::SecretKey` has neither `Drop` nor
+Key material lives only inside one `sign_all` call. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies
 `unsafe_code`, so that cannot be fixed from here. Worth proposing to chia-bls.
 

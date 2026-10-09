@@ -11,10 +11,6 @@
 //     screen keeps the rest of the app;
 //   * `KlimperRoot` wraps the approval overlay on its own: if a request cannot be shown,
 //     a pill points to the requests page and the wallet stays usable.
-//
-// The passkey gate is deliberately not wrapped on its own: a gate that failed must not
-// disappear and leave the wallet open, so its errors reach the app-wide boundary, which
-// shows the recovery screen instead of the app.
 
 import { Button } from '@/components/ui/button';
 import { t } from '@lingui/core/macro';

@@ -7019,7 +7019,6 @@ dependencies = [
  "serde",
  "serde_with",
  "thiserror 1.0.69",
- "zeroize",
 ]
 
 [[package]]
@@ -7079,7 +7078,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-klimper-jingle",
- "tauri-plugin-klimper-passkey",
+ "tauri-plugin-klimper-storage",
  "tauri-plugin-klimper-xchonnect",
  "tauri-plugin-opener",
  "tauri-plugin-os",
@@ -8389,26 +8388,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-klimper-passkey"
+name = "tauri-plugin-klimper-storage"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
- "base64 0.22.1",
- "bip39",
- "hkdf 0.12.4",
- "rand 0.8.5",
- "sage",
- "sage-keychain",
  "serde",
- "serde_json",
- "sha2 0.10.9",
  "tauri",
  "tauri-plugin",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
  "tracing",
- "zeroize",
 ]
 
 [[package]]
@@ -8449,7 +8435,6 @@ dependencies = [
  "tracing",
  "xchonnect-core",
  "xchonnect-wallet-kit",
- "zeroize",
 ]
 
 [[package]]
