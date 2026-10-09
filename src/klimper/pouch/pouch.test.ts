@@ -4,7 +4,8 @@
 
 import type { CoinRecord } from '@/bindings';
 import { describe, expect, it } from 'vitest';
-import { DUST_SELECT, layoutCoins, MAX_DISCS } from './layout';
+import { assetHue, DUST_SELECT, layoutCoins, MAX_DISCS } from './layout';
+import { stamp } from './sprite';
 import { Body, G, World } from './physics';
 
 function heap(n: number, r = 12): Body[] {
@@ -168,14 +169,50 @@ describe('the pouch layout', () => {
     expect(dust[0]).toBe('c1');
   });
 
-  it('shows coins in a transaction or an offer, but locked', () => {
+  it('marks coins in an offer and coins in a pending transaction apart', () => {
     const { discs } = layoutCoins(
-      [coin('free', 5), coin('offered', 5, { offer_id: 'o' })],
+      [
+        coin('free', 5),
+        coin('offered', 5, { offer_id: 'o' }),
+        coin('leaving', 5, { transaction_id: 'tx' }),
+      ],
       320,
       200,
       false,
     );
-    expect(discs.find((d) => d.id === 'offered')?.locked).toBe(true);
-    expect(discs.find((d) => d.id === 'free')?.locked).toBe(false);
+    const of = (id: string) => discs.find((d) => d.id === id);
+    expect([of('free')?.offered, of('free')?.pending]).toEqual([false, null]);
+    expect([of('offered')?.offered, of('offered')?.pending]).toEqual([
+      true,
+      null,
+    ]);
+    expect(of('leaving')?.pending).toBe('tx');
+  });
+
+  it('leaves coins in an offer out of the dust to select', () => {
+    const coins = Array.from({ length: MAX_DISCS + 3 }, (_, i) =>
+      coin(`c${i}`, i + 1, i === 1 ? { offer_id: 'o' } : {}),
+    );
+    const { dust } = layoutCoins(coins, 320, 200, false);
+    expect(dust).toEqual(['c0', 'c2']);
+  });
+});
+
+describe('what a coin shows', () => {
+  it('strikes the ticker as the asset spells it, at most 4 characters', () => {
+    expect(stamp('XCH', null)).toBe('XCH');
+    expect(stamp('wUSDC.b', 'a1')).toBe('wUSD');
+    expect(stamp('sbx', 'a1')).toBe('sbx');
+    // Never half of a character.
+    expect(stamp('🚀🚀🚀🚀🚀', 'a1')).toBe('🚀🚀🚀🚀');
+  });
+
+  it('gives a token that would read as XCH a plain coin and no green', () => {
+    for (const ticker of ['xch', 'XCH-PEPE', ' XCH fake', 'TXCH'])
+      expect(stamp(ticker, 'a1')).toBe('');
+    expect(stamp('TXCH', null)).toBe('TXCH');
+    expect(assetHue(null)).toBe(140);
+    for (let i = 0; i < 2000; i++)
+      expect(Math.abs(assetHue(`cat${i}`) - 140)).toBeGreaterThanOrEqual(30);
   });
 });

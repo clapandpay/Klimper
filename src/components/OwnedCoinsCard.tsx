@@ -23,6 +23,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { amount } from '@/lib/formTypes';
 import { fromMojos, toMojos } from '@/lib/utils';
 import { useWallet } from '@/contexts/WalletContext';
+import { useOfferCoinsWarning } from '@/klimper/OfferCoinsWarning';
 import { KlimperCoinPouch } from '@/klimper/pouch';
 import { MASK, useMaskAmounts } from '@/klimper/privacy';
 import { useWalletState } from '@/state';
@@ -277,6 +278,11 @@ export function OwnedCoinsCard({
     updateCoins(currentPage);
   }, [currentPage, updateCoins]);
 
+  // Klimper: coins locked in an offer can be combined and split; ask on submit first, since
+  // that cancels the offer (TASK-124).
+  const offerCoins = useOfferCoinsWarning();
+  const selectedRecordIds = () => selectedCoinRecords.map((r) => r.coin_id);
+
   const [combineOpen, setCombineOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [autoCombineOpen, setAutoCombineOpen] = useState(false);
@@ -293,7 +299,10 @@ export function OwnedCoinsCard({
     resolver: zodResolver(combineFormSchema),
   });
 
-  const onCombineSubmit = (values: z.infer<typeof combineFormSchema>) => {
+  const onCombineSubmit = (values: z.infer<typeof combineFormSchema>) =>
+    offerCoins.check('combine', selectedRecordIds(), () => combineNow(values));
+
+  const combineNow = (values: z.infer<typeof combineFormSchema>) => {
     const fee = toMojos(values.combineFee, walletState.sync.unit.precision);
 
     // Get IDs from the selected coin records
@@ -342,7 +351,10 @@ export function OwnedCoinsCard({
     },
   });
 
-  const onSplitSubmit = (values: z.infer<typeof splitFormSchema>) => {
+  const onSplitSubmit = (values: z.infer<typeof splitFormSchema>) =>
+    offerCoins.check('split', selectedRecordIds(), () => splitNow(values));
+
+  const splitNow = (values: z.infer<typeof splitFormSchema>) => {
     const fee = toMojos(values.splitFee, walletState.sync.unit.precision);
 
     // Get IDs from the selected coin records
@@ -538,6 +550,8 @@ export function OwnedCoinsCard({
           </div>
         )}
       </CardContent>
+
+      {offerCoins.dialog}
 
       <Dialog open={combineOpen} onOpenChange={setCombineOpen}>
         <DialogContent>

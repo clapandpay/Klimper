@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coins in the wallet (TASK-124): an asset's coins as discs in a pouch, lying, rolling and
 // knocking as the phone tilts. Tapping coins selects them; the selection is the coin list's
-// own, so Split and Combine below work on it exactly as on the list. It shows Chia's coin set
+// own, so Split and Combine below work on it exactly as on the list. A coin locked in an offer
+// shows a lock and can be selected too (the list asks before cancelling the offer); a coin
+// already being spent is faded and cannot. It shows Chia's coin set
 // model as it is: a balance is a handful of coins, a payment spends whole coins and gives change,
 // dust is many tiny ones.
 //
@@ -34,6 +36,7 @@ import { Hint } from '../Hint';
 import { Birth, change, Ghost, GONE_MS, grown, progress } from './changes';
 import { assetHue, layoutCoins } from './layout';
 import { Body, STEP, World } from './physics';
+import { CoinState, coinSprite, PAD, stamp } from './sprite';
 
 const HEIGHT = 200;
 const CLINK_MS = 45;
@@ -66,7 +69,9 @@ export function CoinPouch({
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const world = useRef(new World(1, HEIGHT));
-  const locked = useRef(new Set<string>());
+  // Coins in an offer (a lock) and coins being spent (faded, not selectable), by id.
+  const offered = useRef(new Set<string>());
+  const pending = useRef(new Set<string>());
   const selected = useRef(selectedCoins);
   selected.current = selectedCoins;
   const audibleRef = useRef(audible);
@@ -110,13 +115,12 @@ export function CoinPouch({
           setCoins((before) =>
             sameCoins(before, res.coins) ? before : res.coins,
           );
-          // Spent or now locked coins leave the selection, so Split and Combine never get
-          // them (only when every coin was loaded, else an unloaded one is not "spent").
+          // Spent coins and coins now being spent leave the selection, so Split and Combine
+          // never get them (only when every coin was loaded, else an unloaded one is not
+          // "spent"). A coin in an offer stays: it can still be combined or split.
           if (res.total <= FETCH_LIMIT) {
             const usable = new Set(
-              res.coins
-                .filter((c) => !c.transaction_id && !c.offer_id)
-                .map((c) => c.coin_id),
+              res.coins.filter((c) => !c.transaction_id).map((c) => c.coin_id),
             );
             setSelectedCoins((current) => {
               const kept = Object.keys(current).filter(
@@ -165,8 +169,11 @@ export function CoinPouch({
     if (!layout) return;
     const w = world.current;
     w.resize(width, HEIGHT);
-    locked.current = new Set(
-      layout.discs.filter((d) => d.locked).map((d) => d.id),
+    offered.current = new Set(
+      layout.discs.filter((d) => d.offered).map((d) => d.id),
+    );
+    pending.current = new Set(
+      layout.discs.filter((d) => d.pending).map((d) => d.id),
     );
     // Coins still waiting to appear count as there.
     const now = performance.now();
@@ -194,6 +201,7 @@ export function CoinPouch({
   }, [layout, width]);
 
   const hue = assetHue(asset.asset_id);
+  const struck = stamp(asset.ticker, asset.asset_id);
 
   // Drawing and the loop.
   useEffect(() => {
@@ -207,11 +215,18 @@ export function CoinPouch({
     ctx.scale(dpr, dpr);
     const sprites = new Map<string, HTMLCanvasElement>();
 
-    const spriteOf = (r: number, sel: boolean, lock: boolean) => {
-      const key = `${Math.round(r * 2)}|${sel}|${lock}`;
+    const spriteOf = (r: number, sel: boolean, state: CoinState) => {
+      const key = `${Math.round(r * 2)}|${sel}|${state}`;
       let sprite = sprites.get(key);
       if (!sprite) {
-        sprite = coinSprite(Math.round(r * 2) / 2, hue, sel, lock, dpr);
+        sprite = coinSprite(
+          Math.round(r * 2) / 2,
+          hue,
+          struck,
+          sel,
+          state,
+          dpr,
+        );
         sprites.set(key, sprite);
       }
       return sprite;
@@ -236,7 +251,7 @@ export function CoinPouch({
         const t = progress(g.start, GONE_MS, now);
         ctx.globalAlpha = 1 - t * t;
         coin(
-          spriteOf(g.r, false, true),
+          spriteOf(g.r, false, 'pending'),
           g.x + (g.tx - g.x) * t,
           g.y + (g.ty - g.y) * t,
           g.r,
@@ -250,7 +265,11 @@ export function CoinPouch({
         const sprite = spriteOf(
           b.r,
           !!selected.current[b.id],
-          locked.current.has(b.id),
+          pending.current.has(b.id)
+            ? 'pending'
+            : offered.current.has(b.id)
+              ? 'offered'
+              : 'free',
         );
         coin(sprite, b.x, b.y, b.r, scale);
       }
@@ -339,7 +358,7 @@ export function CoinPouch({
       cancelAnimationFrame(frame);
       wake.current = () => undefined;
     };
-  }, [width, hue]);
+  }, [width, hue, struck]);
 
   // A selection made in the list shows on the coins, even at rest.
   useEffect(() => {
@@ -392,7 +411,7 @@ export function CoinPouch({
   };
   const toggle = useCallback(
     (id: string) => {
-      if (locked.current.has(id)) return;
+      if (pending.current.has(id)) return;
       setSelectedCoins((current) =>
         current[id]
           ? Object.fromEntries(
@@ -479,7 +498,8 @@ export function CoinPouch({
             Each coin is one disc: the bigger, the more it holds. A payment
             spends whole coins and gives change back as a new coin. Tilt the
             phone to move them, tap coins to select them, then split or combine
-            them below.
+            them below. A coin with a lock is in an offer: combining or
+            splitting it cancels the offer. A faded coin is being spent.
           </Trans>
         </Hint>
         {dust.length > 0 && (
@@ -500,65 +520,6 @@ export function CoinPouch({
       </div>
     </div>
   );
-}
-
-/** Room around a coin's sprite for the selection ring. */
-const PAD = 3;
-
-/** One coin, drawn once per size and state: a metal disc lit from the top left, rim and edge. */
-function coinSprite(
-  r: number,
-  hue: number,
-  selected: boolean,
-  locked: boolean,
-  dpr: number,
-): HTMLCanvasElement {
-  const half = r + PAD;
-  const sprite = document.createElement('canvas');
-  sprite.width = sprite.height = Math.ceil(half * 2 * dpr);
-  const ctx = sprite.getContext('2d');
-  if (!ctx) return sprite;
-  ctx.scale(dpr, dpr);
-  ctx.globalAlpha = locked ? 0.4 : 1;
-  const face = ctx.createRadialGradient(
-    half - r * 0.35,
-    half - r * 0.4,
-    r * 0.05,
-    half,
-    half,
-    r,
-  );
-  face.addColorStop(0, `hsl(${hue} 70% 82%)`);
-  face.addColorStop(0.5, `hsl(${hue} 55% 52%)`);
-  face.addColorStop(1, `hsl(${hue} 60% 28%)`);
-  ctx.fillStyle = face;
-  ctx.beginPath();
-  ctx.arc(half, half, r, 0, Math.PI * 2);
-  ctx.fill();
-  // The rim, and the raised edge just inside it.
-  ctx.lineWidth = Math.max(1, r * 0.08);
-  ctx.strokeStyle = `hsl(${hue} 50% 22% / 0.8)`;
-  ctx.beginPath();
-  ctx.arc(half, half, r * 0.95, 0, Math.PI * 2);
-  ctx.stroke();
-  if (r > 6) {
-    ctx.lineWidth = Math.max(0.75, r * 0.04);
-    ctx.strokeStyle = `hsl(${hue} 70% 88% / 0.4)`;
-    ctx.beginPath();
-    ctx.arc(half, half, r * 0.72, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  if (selected) {
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = 'white';
-    ctx.shadowColor = `hsl(${hue} 90% 60%)`;
-    ctx.shadowBlur = 6;
-    ctx.beginPath();
-    ctx.arc(half, half, r + 1, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  return sprite;
 }
 
 export default CoinPouch;

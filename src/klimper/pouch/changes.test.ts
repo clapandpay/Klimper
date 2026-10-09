@@ -18,7 +18,7 @@ const body = (id: string, x: number, y: number, r = 10): Body => ({
 const disc = (id: string, r = 10, pending: string | null = null): Disc => ({
   id,
   r,
-  locked: pending !== null,
+  offered: false,
   pending,
 });
 const fixed = () => 0.5;

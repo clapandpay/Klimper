@@ -20,9 +20,15 @@ const R_MAX = 42;
 export interface Disc {
   id: string;
   r: number;
-  /** In a pending transaction or an offer: shown, not selectable. */
-  locked: boolean;
-  /** The pending transaction spending it: its coins lean together until it confirms. */
+  /**
+   * Locked in an open offer: drawn with a lock, and still selectable. A combine or split of it
+   * cancels the offer, so the coin list asks first (`OfferCoinsWarning`).
+   */
+  offered: boolean;
+  /**
+   * The pending transaction already spending it: faded, not selectable (a second spend of it
+   * could only fail). Its coins lean together until it confirms.
+   */
   pending: string | null;
 }
 
@@ -42,8 +48,9 @@ export function layoutCoins(
     .slice()
     .sort((a, b) => BigNumber(b.amount).comparedTo(BigNumber(a.amount)) ?? 0);
   const shown = byAmount.slice(0, MAX_DISCS);
-  // Dust to select for a combine: the smallest free coins (not in a transaction or an offer,
-  // which would make the combine impossible), at most DUST_SELECT of them in one go.
+  // Dust to select for a combine: the smallest free coins, at most DUST_SELECT of them in one
+  // go. Not coins in a transaction (a combine of them could only fail) nor in an offer (one tap
+  // must not cancel offers; such a coin is selected on its own, and the list asks first).
   const dust = byAmount
     .slice(MAX_DISCS)
     .reverse()
@@ -75,18 +82,24 @@ export function layoutCoins(
     discs: shown.map((c, i) => ({
       id: c.coin_id,
       r: Math.max(3, radii[i] * scale),
-      locked: c.transaction_id !== null || c.offer_id !== null,
+      offered: c.offer_id !== null,
       pending: c.transaction_id,
     })),
     dust,
   };
 }
 
-/** A colour per asset that stays the same: Chia green for XCH, a hue from the id otherwise. */
+/** Chia's green: XCH's coins only. */
+const XCH_HUE = 140;
+
+/**
+ * A colour per asset that stays the same: Chia green for XCH, a hue from the id otherwise,
+ * never near the green (a token's id can be ground to land on any hue it likes).
+ */
 export function assetHue(assetId: string | null): number {
-  if (!assetId) return 140;
+  if (!assetId) return XCH_HUE;
   let h = 0;
   for (let i = 0; i < assetId.length; i++)
     h = (h * 31 + assetId.charCodeAt(i)) % 360;
-  return h;
+  return Math.abs(h - XCH_HUE) < 30 ? (h + 90) % 360 : h;
 }
