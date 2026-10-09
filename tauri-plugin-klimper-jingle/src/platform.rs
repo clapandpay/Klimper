@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The Swift side (`AVAudioPlayer`, `UIImpactFeedbackGenerator`, `CMMotionManager`) and the
+//! The Swift side (`AVAudioPlayer`, Core Haptics, `CMMotionManager`, the feedback generators) and the
 //! Kotlin side (`SoundPool`, `Vibrator`, `SensorManager`); elsewhere unsupported. Sound bytes
 //! cross the bridge base64-encoded, once per sound per run (the native side keeps the player).
 
@@ -12,10 +12,11 @@ use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use serde::{Serialize, de::DeserializeOwned};
 use tauri::{
     AppHandle, Runtime,
+    ipc::Channel,
     plugin::{PluginApi, PluginHandle},
 };
 
-use crate::{Error, Result, Tier};
+use crate::{Error, Feel, Result, Tier};
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_klimper_jingle);
@@ -71,6 +72,24 @@ struct ShakeArgs {
     grains: Option<Vec<String>>,
 }
 
+#[derive(Serialize)]
+struct PouchArgs {
+    channel: Option<Channel<serde_json::Value>>,
+    /// The coin hits, base64; `None` once the native side has them.
+    grains: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+struct ClinkArgs {
+    size: f64,
+    force: f64,
+}
+
+#[derive(Serialize)]
+struct FeelArgs {
+    kind: Feel,
+}
+
 #[cfg_attr(not(mobile), allow(clippy::unnecessary_wraps))]
 pub fn init<R: Runtime, C: DeserializeOwned>(
     _app: &AppHandle<R>,
@@ -114,6 +133,27 @@ impl<R: Runtime> Native<R> {
         );
         self.forget_if_failed(sound, &result);
         result
+    }
+
+    /// The pouch needs the coin hits even when the shake was never armed (no price yet).
+    pub fn pouch(&self, channel: Option<Channel<serde_json::Value>>) -> Result<()> {
+        let sound = Sound::Grains;
+        let grains = if channel.is_some() {
+            self.unless_sent(sound)?
+        } else {
+            None
+        };
+        let result = self.run("pouch", PouchArgs { channel, grains });
+        self.forget_if_failed(sound, &result);
+        result
+    }
+
+    pub fn clink(&self, size: f64, force: f64) -> Result<()> {
+        self.run("clink", ClinkArgs { size, force })
+    }
+
+    pub fn feel(&self, kind: Feel) -> Result<()> {
+        self.run("feel", FeelArgs { kind })
     }
 
     fn unless_sent(&self, sound: Sound) -> Result<Option<Vec<String>>> {

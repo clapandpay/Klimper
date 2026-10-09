@@ -100,8 +100,11 @@ fn now() -> u64 {
 struct Live {
     end_requested: Arc<AtomicBool>,
     rotate_requested: Arc<AtomicBool>,
+    permissions_changed: Arc<AtomicBool>,
     interrupt: Arc<tokio::sync::Notify>,
     wake: tokio::sync::mpsc::Sender<()>,
+    /// Background wake-ups: ask for a full read, and hear when it was done.
+    drain: Arc<session_loop::Drain>,
 }
 
 impl Live {
@@ -121,6 +124,13 @@ impl Live {
         let _ = self.wake.try_send(());
     }
 
+    /// The exposed keys changed: the loop tells the dApp at its next pass.
+    fn announce_permissions(&self) {
+        self.permissions_changed.store(true, Ordering::SeqCst);
+        self.interrupt.notify_one();
+        let _ = self.wake.try_send(());
+    }
+
     fn request_end(&self) {
         self.end_requested.store(true, Ordering::SeqCst);
         // `notify_one` keeps a permit when the loop is not waiting yet, so the end is
@@ -129,6 +139,11 @@ impl Live {
         let _ = self.wake.try_send(());
     }
 }
+
+/// Longest wait for the loops after a background wake-up, inside the time iOS allows.
+const BACKGROUND_DRAIN: std::time::Duration = std::time::Duration::from_secs(16);
+/// How long a wake-up that launched the app waits for the first loops to start.
+const LOOPS_START_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
 /// A pairing attempt, locked on its own: a poll for `session.confirm` on one attempt never
 /// holds up cancelling it, confirming it, or starting another.
@@ -207,6 +222,9 @@ pub struct SessionSummary {
     pub limits: BTreeMap<String, StoredLimit>,
     pub allow_agg_sig_unsafe: bool,
     pub allow_unknown_contracts: bool,
+    /// The website sees every receive address, not only its own (the user allowed it, or it
+    /// was paired before websites had an address of their own).
+    pub all_receive_keys: bool,
     /// The message loop is running for this session.
     pub connected: bool,
 }
@@ -228,6 +246,10 @@ pub struct DappPolicy {
     /// Restrict the allowed CHIP-0002 methods.
     #[serde(default)]
     pub methods: Option<Vec<String>>,
+    /// Let the website see every receive address (it can then build spends from all the
+    /// user's coins, and link them), or only its own. On by default on the pairing screen.
+    #[serde(default)]
+    pub all_receive_keys: Option<bool>,
 }
 
 /// Describe one stored session for the webview.
@@ -257,8 +279,43 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         limits: stored.record.permissions.limits.clone(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
+        all_receive_keys: stored.record.permissions.exposed_keys.len() > 1,
         connected,
     }
+}
+
+/// What a website sees: every receive key when the user allowed that, the wallet's first
+/// receive address first, and its own key last; or only its own key. Websites take the first
+/// key as "the wallet" (its address, its fingerprint), so that must be the address the user
+/// knows, not an empty key made for the website (clapandpay TASK-125.01). The own key stays
+/// in the list either way, so coins paid to the website's address never vanish from it.
+fn exposed_keys(
+    own: Option<chia_bls::PublicKey>,
+    all: bool,
+    receive_keys: &[chia_bls::PublicKey],
+) -> Vec<chia_bls::PublicKey> {
+    let mut keys: Vec<chia_bls::PublicKey> = Vec::new();
+    if all {
+        keys.extend(receive_keys.iter().filter(|key| Some(**key) != own));
+    }
+    keys.extend(own);
+    keys
+}
+
+/// A connection stored between 2026-10-08 and TASK-125.01 lists the website's own key first:
+/// move it last. `true` when the order changed.
+fn own_key_last(exposed: &mut [String], own: Option<&str>) -> bool {
+    match (exposed.first(), own) {
+        (Some(first), Some(own)) if exposed.len() > 1 && first == own => {
+            exposed.rotate_left(1);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn key_hex(key: &chia_bls::PublicKey) -> String {
+    format!("0x{}", hex::encode(key.to_bytes()))
 }
 
 impl<R: Runtime> Xchonnect<R> {
@@ -279,7 +336,9 @@ impl<R: Runtime> Xchonnect<R> {
         let relay = relay::RelayClient::new(&stored.record.relay, developer_mode)?;
         let end_requested = Arc::new(AtomicBool::new(false));
         let rotate_requested = Arc::new(AtomicBool::new(false));
+        let permissions_changed = Arc::new(AtomicBool::new(false));
         let interrupt = Arc::new(tokio::sync::Notify::new());
+        let drain = Arc::new(session_loop::Drain::default());
         let (wake_tx, wake_rx) = tokio::sync::mpsc::channel(8);
         let state: AppState = self.app.state::<AppState>().inner().clone();
         let message_loop = SessionLoop {
@@ -293,8 +352,10 @@ impl<R: Runtime> Xchonnect<R> {
             info: relay::RelayInfo::default(),
             end_requested: end_requested.clone(),
             rotate_requested: rotate_requested.clone(),
+            permissions_changed: permissions_changed.clone(),
             interrupt: interrupt.clone(),
             wake: wake_rx,
+            drain: drain.clone(),
             push: self.push.clone(),
             answer: session_loop::default_answerer(),
         };
@@ -305,8 +366,10 @@ impl<R: Runtime> Xchonnect<R> {
             Live {
                 end_requested,
                 rotate_requested,
+                permissions_changed,
                 interrupt,
                 wake: wake_tx,
+                drain,
             },
         );
         Ok(true)
@@ -330,6 +393,9 @@ impl<R: Runtime> Xchonnect<R> {
                             this.set_device_token(platform, &token).await;
                         }
                         native_push::NativeEvent::Wake => this.wake_all().await,
+                        native_push::NativeEvent::BackgroundWake => {
+                            this.drain_in_background().await;
+                        }
                     }
                 });
             });
@@ -376,6 +442,53 @@ impl<R: Runtime> Xchonnect<R> {
             live.interrupt.notify_one();
             let _ = live.wake.try_send(());
         }
+    }
+
+    /// A push woke the app in the background (TASK-125.04): every loop reads its mailbox,
+    /// answers what needs no one, stores what needs the user (shown when Klimper is opened),
+    /// and then iOS is told it may suspend the app again. Bounded, since iOS allows about
+    /// 30 seconds.
+    async fn drain_in_background(&self) {
+        // Launched by the push itself: the loops start once the app's screen has loaded
+        // (`list_sessions`). Give them a moment rather than telling iOS "done" at once.
+        let started = std::time::Instant::now();
+        let drains: Vec<_> = loop {
+            let drains: Vec<_> = {
+                let live = self.live.lock().await;
+                live.values()
+                    .filter(|live| live.running())
+                    .map(|live| live.drain.clone())
+                    .collect()
+            };
+            if !drains.is_empty() || started.elapsed() >= LOOPS_START_WAIT {
+                break drains;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        };
+        // Done means: a read that started after this wake-up has finished in every loop.
+        let before: Vec<u64> = drains
+            .iter()
+            .map(|drain| {
+                let done = drain.done.load(Ordering::SeqCst);
+                drain.requested.store(true, Ordering::SeqCst);
+                done
+            })
+            .collect();
+        self.wake_all().await;
+        let _ = tokio::time::timeout(BACKGROUND_DRAIN, async {
+            for (drain, before) in drains.iter().zip(before) {
+                loop {
+                    let passed = drain.passed.notified();
+                    if drain.done.load(Ordering::SeqCst) > before {
+                        break;
+                    }
+                    passed.await;
+                }
+            }
+        })
+        .await;
+        let native = self.native.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || native.background_done()).await;
     }
 
     /// Sessions the user has disconnected whose loop is still posting `session.end`.
@@ -457,15 +570,30 @@ async fn inspect_pairing_uri<R: Runtime>(
     uri: String,
 ) -> Result<PairingPreview> {
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
-    let attempt = pairing::inspect(
+    let mut attempt = pairing::inspect(
         &uri,
         now(),
         developer_mode_allowed(),
         snapshot.fingerprint,
         snapshot.network.chain_id().to_owned(),
-        snapshot.receive_keys,
+        Vec::new(),
     )
     .await?;
+    // Now that the domain is verified: the key it would get (claimed only once the user has
+    // compared the six digits), and the limits remembered for it.
+    let dapp = attempt.verified.uri().domain.clone();
+    let own = state
+        .store
+        .peek_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
+    attempt.permissions.exposed_keys = own.into_iter().collect();
+    if let Some(memory) = state.store.load_domain(snapshot.fingerprint, &dapp)? {
+        attempt.permissions.limits = store::StoredPermissions {
+            limits: memory.limits,
+            ..Default::default()
+        }
+        .to_kit()
+        .limits;
+    }
     let preview = attempt.preview();
     let mut attempts = state.attempts.lock().await;
     // A preview the user walked away from is never cancelled; one past its deadline is
@@ -504,10 +632,11 @@ async fn cancel_pairing<R: Runtime>(
 /// The user compared the digits. `matches: false` ends the session and deletes everything.
 #[command]
 async fn confirm_sas<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     state: State<'_, Xchonnect<R>>,
     pairing_id: String,
     matches: bool,
+    all_receive_keys: Option<bool>,
 ) -> Result<Option<SessionSummary>> {
     let shared = state.attempt(&pairing_id).await?;
     let mut attempt = shared.lock().await;
@@ -522,6 +651,21 @@ async fn confirm_sas<R: Runtime>(
     if attempt.session.is_none() {
         return Err(Error::UnknownPairing);
     }
+    // The six digits match: claim the website's own key now, under the store's lock, so two
+    // pairings can never take the same one.
+    let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
+    if snapshot.fingerprint != attempt.fingerprint {
+        return Err(Error::NoWallet);
+    }
+    let dapp = attempt.verified.uri().domain.clone();
+    let own = state
+        .store
+        .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
+    // Every receive key if the user chose that on the pairing screen, then its own key (the
+    // record keeps it as `own_key`).
+    attempt.own_key = own;
+    attempt.permissions.exposed_keys =
+        exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
         Ok(stored) => stored,
         Err(error) => {
@@ -583,14 +727,33 @@ async fn list_sessions<R: Runtime>(
     state.live.lock().await.retain(|_, live| live.running());
     let ending = state.ending().await;
     let mut out = Vec::with_capacity(sessions.len());
-    for stored in sessions {
+    for mut stored in sessions {
         // Disconnected a moment ago: gone as far as the user is concerned, while the loop
         // finishes telling the dApp.
         if ending.contains(&stored.record.id) {
             continue;
         }
+        let mut reordered = own_key_last(
+            &mut stored.record.permissions.exposed_keys.clone(),
+            stored.record.own_key.as_deref(),
+        );
+        if reordered {
+            // Reordered on the record as it is under the store's lock, so a permission change
+            // the user made a moment ago is never written back over (TASK-125 review).
+            stored =
+                state
+                    .store
+                    .update_policy(snapshot.fingerprint, &stored.record.id, |record| {
+                        let own = record.own_key.clone();
+                        reordered =
+                            own_key_last(&mut record.permissions.exposed_keys, own.as_deref());
+                    })?;
+        }
         let keys = KeyState::stored(&stored);
         let connected = state.ensure_loop(stored.clone()).await.unwrap_or(false);
+        if reordered && let Some(live) = state.live.lock().await.get(&stored.record.id) {
+            live.announce_permissions();
+        }
         out.push(summary(&stored, keys, connected));
     }
     Ok(out)
@@ -690,10 +853,52 @@ async fn set_dapp_policy<R: Runtime>(
     session_id: String,
     policy: DappPolicy,
 ) -> Result<SessionSummary> {
+    // A limit on an asset this build cannot read would be dropped on load and leave the asset
+    // unlimited: refuse it here instead.
+    if let Some(limits) = &policy.limits
+        && let Some(bad) = limits
+            .keys()
+            .find(|key| store::parse_asset_key(key).is_none())
+    {
+        return Err(Error::Protocol(format!("unknown asset in a limit: {bad}")));
+    }
     let snapshot = wallet::snapshot(&app.state::<AppState>().inner().clone()).await?;
+    // Which keys the website sees: its own key (claimed now for a website paired before it
+    // had one), and every receive key when the user allows that.
+    let keys = match policy.all_receive_keys {
+        None => None,
+        Some(all) => {
+            let current = state.store.load(snapshot.fingerprint, &session_id)?;
+            let own = match current
+                .record
+                .own_key
+                .as_deref()
+                .and_then(store::parse_public_key)
+                // A record from before own keys were claimed may name a receive key here.
+                .filter(|key| snapshot.website_keys.contains(key))
+            {
+                Some(own) => Some(own),
+                None => state.store.claim_website_key(
+                    snapshot.fingerprint,
+                    &current.record.dapp,
+                    &snapshot.website_keys,
+                )?,
+            };
+            let exposed = exposed_keys(own, all, &snapshot.receive_keys)
+                .iter()
+                .map(key_hex)
+                .collect::<Vec<_>>();
+            Some((own.map(|key| key_hex(&key)), exposed))
+        }
+    };
+    let keys_changed = keys.is_some();
     let stored = state
         .store
         .update_policy(snapshot.fingerprint, &session_id, |record| {
+            if let Some((own, exposed)) = keys {
+                record.own_key = own;
+                record.permissions.exposed_keys = exposed;
+            }
             if let Some(limits) = policy.limits {
                 record.permissions.limits = limits;
             }
@@ -707,13 +912,24 @@ async fn set_dapp_policy<R: Runtime>(
                 record.allow_unknown_contracts = allow;
             }
         })?;
+    // A prompt already on screen was checked against the old settings: withdraw it.
+    state.approvals.withdraw_waiting(&session_id);
+    // Remembered for the domain, so connecting again brings the limits back.
+    let memory = store::DomainMemory {
+        limits: stored.record.permissions.limits.clone(),
+    };
+    state
+        .store
+        .save_domain(snapshot.fingerprint, &stored.record.dapp, &memory)?;
     let keys = KeyState::stored(&stored);
-    let connected = state
-        .live
-        .lock()
-        .await
-        .get(&session_id)
-        .is_some_and(Live::running);
+    let connected = {
+        let live = state.live.lock().await;
+        let entry = live.get(&session_id);
+        if keys_changed && let Some(entry) = entry {
+            entry.announce_permissions();
+        }
+        entry.is_some_and(Live::running)
+    };
     (state.emit)(EVENT_SESSIONS, json!({}));
     Ok(summary(&stored, keys, connected))
 }
@@ -845,6 +1061,16 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             app.state::<Xchonnect<R>>().start_push();
             Ok(())
         })
+        // Back in front (TASK-125.02): a long poll opened before the phone suspended the app
+        // may sit on a dead socket, so every loop drops it and reads its mailbox now.
+        .on_event(|app, event| {
+            if matches!(event, tauri::RunEvent::Resumed) {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    app.state::<Xchonnect<R>>().wake_all().await;
+                });
+            }
+        })
         .build()
 }
 
@@ -857,5 +1083,69 @@ mod lib_tests {
         // The constant is the only switch; there is no setting and no environment
         // variable that turns developer mode on in a release build.
         assert_eq!(developer_mode_allowed(), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn all_addresses_keep_the_websites_own_one() {
+        let key = |i: u8| chia_bls::SecretKey::from_seed(&[i; 64]).public_key();
+        let receive = [key(1), key(2)];
+        assert_eq!(exposed_keys(Some(key(9)), false, &receive), vec![key(9)]);
+        // The wallet's first address first: websites read the first key as the wallet.
+        assert_eq!(
+            exposed_keys(Some(key(9)), true, &receive),
+            vec![key(1), key(2), key(9)]
+        );
+        assert_eq!(exposed_keys(None, true, &receive), receive.to_vec());
+    }
+
+    #[test]
+    fn a_connection_stored_with_its_own_key_first_gets_it_last() {
+        let mut exposed = vec!["own".to_owned(), "r0".to_owned(), "r1".to_owned()];
+        assert!(own_key_last(&mut exposed, Some("own")));
+        assert_eq!(exposed, ["r0", "r1", "own"]);
+        assert!(!own_key_last(&mut exposed, Some("own")));
+        let mut alone = vec!["own".to_owned()];
+        assert!(!own_key_last(&mut alone, Some("own")));
+        let mut old = vec!["r0".to_owned(), "r1".to_owned()];
+        assert!(!own_key_last(&mut old, None));
+    }
+
+    #[test]
+    fn websites_never_share_a_key_even_after_one_is_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store =
+            SessionStore::open(dir.path(), Box::new(store::MemorySecrets::default())).unwrap();
+        let hardened: Vec<chia_bls::PublicKey> = (0u8..4)
+            .map(|i| chia_bls::SecretKey::from_seed(&[i; 64]).public_key())
+            .collect();
+
+        // The first free hardened key, in order.
+        let a = store.claim_website_key(1, "a.example", &hardened).unwrap();
+        assert_eq!(a, Some(hardened[0]));
+        // A preview shows what a pairing would get, without taking it.
+        assert_eq!(
+            store.peek_website_key(1, "b.example", &hardened).unwrap(),
+            Some(hardened[1])
+        );
+        // A's connection is gone (the list does not care): B still gets another key.
+        let b = store.claim_website_key(1, "b.example", &hardened).unwrap();
+        assert_eq!(b, Some(hardened[1]));
+        // A comes back: its own key again, never B's.
+        assert_eq!(
+            store.claim_website_key(1, "a.example", &hardened).unwrap(),
+            a
+        );
+        // Another wallet has its own list.
+        assert_eq!(
+            store.claim_website_key(2, "b.example", &hardened).unwrap(),
+            Some(hardened[0])
+        );
+        // No free key left: none, rather than a shared one.
+        store.claim_website_key(1, "c.example", &hardened).unwrap();
+        store.claim_website_key(1, "d.example", &hardened).unwrap();
+        assert_eq!(
+            store.claim_website_key(1, "e.example", &hardened).unwrap(),
+            None
+        );
     }
 }

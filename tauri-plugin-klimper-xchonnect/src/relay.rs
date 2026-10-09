@@ -26,10 +26,35 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Total timeout for a non-polling call.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Phones (TASK-125.02): a socket iOS or Android cut while the app was in the background
+/// must fail fast rather than hold a request until its total timeout.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// A pooled connection idle this long is not reused: after a stay in the background it is
+/// most likely dead, and reusing it costs a full timeout.
+const POOL_IDLE: Duration = Duration::from_secs(10);
+const KEEPALIVE: Duration = Duration::from_secs(15);
+/// What a long poll may take beyond the wait it asked for before it counts as lost.
+const POLL_GRACE: Duration = Duration::from_secs(10);
+
 /// Attempts [`RelayClient::post_retrying`] makes, and the pause before the first retry
 /// (doubled each time).
 const POST_ATTEMPTS: u32 = 3;
 const POST_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+/// Whether trying the same post again could help: a network failure, a relay error (5xx) or
+/// a full mailbox (429). A refusal (413 too large, 400, 401...) stays a refusal.
+pub fn worth_retrying(error: &Error) -> bool {
+    match error {
+        // A gone mailbox: the caller decides (a proxy can answer 404 for a moment).
+        Error::PairingCodeUsed => true,
+        // `ok` writes relay refusals as "<status> (<code>)"; anything else is the network.
+        Error::Relay(text) => match text.get(..3).and_then(|s| s.parse::<u16>().ok()) {
+            Some(status) => status == 429 || status >= 500,
+            None => true,
+        },
+        _ => false,
+    }
+}
 
 /// What `GET /v1/info` tells us. Only the fields Klimper acts on.
 #[derive(Debug, Clone)]
@@ -78,7 +103,10 @@ impl DirectTransport {
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("Klimper")
-            .referer(false);
+            .referer(false)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .pool_idle_timeout(POOL_IDLE)
+            .tcp_keepalive(KEEPALIVE);
         if !developer_mode {
             builder = builder.https_only(true);
         }
@@ -331,7 +359,7 @@ impl RelayClient {
         info: &RelayInfo,
     ) -> Result<Vec<(String, Vec<u8>)>> {
         let wait = wait.min(info.max_wait_s);
-        let timeout = CALL_TIMEOUT + Duration::from_secs(wait);
+        let timeout = POLL_GRACE + Duration::from_secs(wait);
         let value = self
             .ok(
                 "GET",
@@ -422,6 +450,25 @@ fn describe(error: &reqwest::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_transient_failures_are_posted_again() {
+        for retry in [
+            "429 (rate_limited)",
+            "500 (unknown)",
+            "503 (unavailable)",
+            "timed out",
+        ] {
+            assert!(worth_retrying(&Error::Relay(retry.to_owned())), "{retry}");
+        }
+        assert!(worth_retrying(&Error::PairingCodeUsed));
+        for refused in ["413 (too_large)", "400 (bad_request)", "401 (unauthorized)"] {
+            assert!(
+                !worth_retrying(&Error::Relay(refused.to_owned())),
+                "{refused}"
+            );
+        }
+    }
 
     #[test]
     fn relay_info_falls_back_to_the_spec_defaults() {

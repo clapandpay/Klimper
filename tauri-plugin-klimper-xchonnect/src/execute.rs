@@ -302,6 +302,15 @@ pub fn send(
         return Err(invalid("amount"));
     }
     let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    // A send that cannot be built is answered without a prompt, which tells the dApp the
+    // wallet cannot afford it. A few are normal; a run of them is a search for the balance.
+    if failed_builds::too_many(ctx.dapp, ctx.now) {
+        return Err(error(
+            codes::SPENDABLE_BALANCE_EXCEEDED,
+            "the wallet could not build this send",
+            Some("build_failed"),
+        ));
+    }
     let memos: Vec<String> = params
         .get("memos")
         .and_then(Value::as_array)
@@ -349,8 +358,15 @@ pub fn send(
         }
     })
     .map_err(|e| {
+        // Sage's own words stay here: they name balances and coins, and a dApp could probe
+        // the wallet with them without the user ever seeing a prompt.
         tracing::info!("xchonnect: chia_send could not be built: {e}");
-        error(codes::SPENDABLE_BALANCE_EXCEEDED, &e, Some("build_failed"))
+        failed_builds::record(ctx.dapp, ctx.now);
+        error(
+            codes::SPENDABLE_BALANCE_EXCEEDED,
+            "the wallet could not build this send",
+            Some("build_failed"),
+        )
     })?;
     let puzzle_hash = on_sage(state, async move |sage| sage.parse_address(address))
         .map_err(|_| invalid("address"))?;
@@ -525,5 +541,62 @@ mod tests {
             solution: Program::from(vec![0x80]),
         };
         assert_eq!(from_json(&to_json(&cs)).unwrap(), cs);
+    }
+}
+
+/// Recent sends a website asked for that could not be built, per verified domain, in memory.
+/// After [`MAX`](failed_builds::MAX) within [`WINDOW_S`](failed_builds::WINDOW_S) its sends
+/// are refused without building, so the answers stop telling it anything about the balance.
+mod failed_builds {
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::{LazyLock, Mutex};
+
+    pub const MAX: usize = 3;
+    pub const WINDOW_S: u64 = 600;
+
+    static RECENT: LazyLock<Mutex<HashMap<String, VecDeque<u64>>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+
+    fn pruned(recent: &mut VecDeque<u64>, now: u64) {
+        while recent
+            .front()
+            .is_some_and(|at| now.saturating_sub(*at) >= WINDOW_S)
+        {
+            recent.pop_front();
+        }
+    }
+
+    pub fn record(dapp: &str, now: u64) {
+        if let Ok(mut all) = RECENT.lock() {
+            let recent = all.entry(dapp.to_owned()).or_default();
+            pruned(recent, now);
+            recent.push_back(now);
+        }
+    }
+
+    pub fn too_many(dapp: &str, now: u64) -> bool {
+        RECENT.lock().map_or(true, |mut all| {
+            all.get_mut(dapp).is_some_and(|recent| {
+                pruned(recent, now);
+                recent.len() >= MAX
+            })
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_run_of_failed_builds_closes_the_door_for_a_while() {
+            let dapp = "probe.example";
+            for at in 0..MAX as u64 {
+                assert!(!too_many(dapp, 1_000 + at));
+                record(dapp, 1_000 + at);
+            }
+            assert!(too_many(dapp, 1_010));
+            assert!(!too_many("other.example", 1_010));
+            assert!(!too_many(dapp, 1_000 + WINDOW_S + MAX as u64));
+        }
     }
 }

@@ -47,6 +47,23 @@ fn rpc_error(code: i64, message: &str) -> RpcError {
 ///
 /// Returned before the wallet is even looked at, so an unconfirmed session cannot be
 /// probed for the wallet's keys either.
+/// A request on a connection approved for another network than the wallet is on now. `data`
+/// names both, so the website can tell the user which one Klimper is on.
+pub fn wrong_network(wallet: &str, session: &str) -> RpcError {
+    RpcError {
+        code: codes::UNAUTHORIZED,
+        message: "this connection was approved for another network".to_owned(),
+        data: Some(
+            serde_json::json!({
+                "reason": "wrong_network",
+                "walletChainId": wallet,
+                "sessionChainId": session,
+            })
+            .to_string(),
+        ),
+    }
+}
+
 pub fn check_usable(record: &SessionRecord) -> std::result::Result<(), RpcError> {
     if record.revoked {
         return Err(rpc_error(
@@ -234,11 +251,16 @@ pub async fn answer(inputs: AnswerInputs) -> std::result::Result<String, RpcErro
         ));
     }
     if snapshot.network.chain_id() != record.chain_id {
-        return Err(RpcError {
-            code: codes::UNAUTHORIZED,
-            message: "this connection was approved for another network".to_owned(),
-            data: Some(r#"{"reason":"wrong_network"}"#.to_owned()),
-        });
+        // The user switched networks (TASK-125.05). The website may still learn which one
+        // the wallet is on now, so it can follow or say so; everything else stays refused
+        // (spec 11.1 item 6), naming both networks.
+        if matches!(canonical_method(&meta.method), "chainId" | "connect") {
+            return Ok(match canonical_method(&meta.method) {
+                "chainId" => serde_json::json!(snapshot.network.chain_id()).to_string(),
+                _ => "true".to_owned(),
+            });
+        }
+        return Err(wrong_network(snapshot.network.chain_id(), &record.chain_id));
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -275,7 +297,12 @@ fn run(
     now: u64,
 ) -> std::result::Result<String, RpcError> {
     let permissions = record.permissions.to_kit();
-    let limits = PersistentLimits::new(store.clone(), record.fingerprint, record.id.clone());
+    let limits = PersistentLimits::new(
+        store.clone(),
+        record.fingerprint,
+        record.dapp.clone(),
+        record.id.clone(),
+    );
     let approver = UiApprover::new(approvals.clone(), meta.clone());
     // One approval per request, one key unlock per request (xchonnect-wiki 04).
     let signer = KlimperSigner::new(state.clone(), snapshot);
@@ -284,6 +311,17 @@ fn run(
     // dApp was given.
     let chain = crate::chain::KlimperChain::new(state.clone());
 
+    // What the dApp builds itself may only be signed with the keys it was given: a key of
+    // the wallet's it does not know then looks exactly like a stranger's, so a guessed key
+    // cannot be confirmed by whether a prompt appears. The send Klimper builds from its own
+    // coins (chia_send) is the one request that signs with every key of the wallet.
+    let exposed: std::collections::HashSet<chia_bls::PublicKey> = permissions
+        .exposed_keys
+        .iter()
+        .filter(|key| snapshot.keys.contains(key))
+        .copied()
+        .collect();
+    let wallet_built = canonical_method(&meta.method) == execute::CHIA_SEND;
     let context = RequestContext {
         dapp: &record.dapp,
         network: snapshot.network.clone(),
@@ -292,7 +330,11 @@ fn run(
         allow_agg_sig_unsafe: record.allow_agg_sig_unsafe,
         allow_unknown_contracts: record.allow_unknown_contracts,
         ownership: &snapshot.ownership,
-        keys: &snapshot.keys,
+        keys: if wallet_built {
+            &snapshot.keys
+        } else {
+            &exposed
+        },
         limits: &limits,
         now,
         chain: Some(&chain),
@@ -304,11 +346,15 @@ fn run(
     };
     let outcome = match canonical_method(&meta.method) {
         execute::CHIA_SEND => {
-            if permissions.allows_method(execute::CHIA_SEND) {
+            if !permissions.allows_method(execute::CHIA_SEND) {
+                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
+            } else if approvals.paused(&record.id) {
+                // Refused before anything is built: whether a paused website's send could
+                // be built would tell it the wallet's balance without a prompt.
+                Err(rejected())
+            } else {
                 approver.mark_cross_checked();
                 execute::send(state, &context, &signer, &approver, &broadcaster, params)
-            } else {
-                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
             }
         }
         kit::SUBMIT_COIN_SPENDS => {
@@ -439,7 +485,19 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
+            own_key: None,
         }
+    }
+
+    #[test]
+    fn a_wrong_network_refusal_names_both_networks() {
+        let error = wrong_network("testnet11", "mainnet");
+        assert_eq!(error.code, codes::UNAUTHORIZED);
+        let data: serde_json::Value = serde_json::from_str(error.data.as_deref().unwrap()).unwrap();
+        assert_eq!(data["reason"], "wrong_network");
+        assert_eq!(data["walletChainId"], "testnet11");
+        assert_eq!(data["sessionChainId"], "mainnet");
     }
 
     /// A session that reached `session.ready` but whose SAS was never confirmed must not

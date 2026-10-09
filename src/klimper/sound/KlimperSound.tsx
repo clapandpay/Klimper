@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Klimper sound, running (clapandpay TASK-111.03, decision-009). Mounted once by
-// `KlimperRoot`, only when `VITE_ENABLE_KLIMPER_SOUND` is on, and loaded lazily so a build
+// `KlimperRoot`, only when `VITE_ENABLE_KLIMPER_COINS` is on, and loaded lazily so a build
 // without the flag ships none of this. Renders nothing.
 //
 // Two moments. Coins arrive: the balance Sage keeps goes up on a synced wallet, and the ding
@@ -25,7 +25,8 @@ import { lastPrices } from '@/klimper/price';
 import { useWalletState } from '@/state';
 import { useEffect } from 'react';
 import { onPhone, playDing, setShake } from './player';
-import { Coalescer, ReceiveDetector, sampleOf } from './receive';
+import { Coalescer, NO_WALLET, ReceiveDetector, sampleOf } from './receive';
+import { usePrivacy } from '../privacy';
 import { useKlimperSoundSetting } from './setting';
 import { Tier, tierOf, usdOf } from './tiers';
 
@@ -52,7 +53,10 @@ async function currentFingerprint(): Promise<number | null> {
 type Sync = ReturnType<typeof useWalletState.getState>['sync'];
 
 export function KlimperSound() {
-  const [on] = useKlimperSoundSetting();
+  const [soundOn] = useKlimperSoundSetting();
+  // Privacy mode keeps the coins quiet and still, whatever the sound switch says.
+  const [privacy] = usePrivacy();
+  const on = soundOn && !privacy;
 
   // Coins arrive: watch the balance Sage keeps.
   useEffect(() => {
@@ -82,7 +86,7 @@ export function KlimperSound() {
         coalescer.cancel();
       } else if (outcome.kind === 'received') {
         coalescer.add(outcome.mojos);
-      } else if (!fingerprintAsked && sync.receive_address !== 'Unknown') {
+      } else if (!fingerprintAsked && sync.receive_address !== NO_WALLET) {
         fingerprintAsked = true;
         void currentFingerprint().then((f) => {
           fingerprint ??= f;
@@ -112,7 +116,7 @@ export function KlimperSound() {
       let usd = page;
       if (page === null) {
         const { sync } = useWalletState.getState();
-        if (sync.receive_address === 'Unknown') return;
+        if (sync.receive_address === NO_WALLET) return;
         const { balance } = sampleOf(sync);
         usd = usdOf(balance, xchPrice());
       }

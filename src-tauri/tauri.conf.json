@@ -22,7 +22,19 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' https: http: data: blob:",
+        "media-src": "'self' https: http: data: blob:",
+        "font-src": "'self' https: data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https: wss://relay.walletconnect.org",
+        "object-src": "'none'",
+        "frame-src": "https://verify.walletconnect.org https://verify.walletconnect.com",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      }
     }
   },
   "bundle": {

@@ -29,7 +29,7 @@ import { createRoutesFromElements, Route, RouteObject } from 'react-router-dom';
 import ClapAndPayConnect from './ClapAndPayConnect';
 import { RouteRecovery } from './KlimperErrorBoundary';
 import { scannerRoutes } from './Scanner';
-import { xchonnectRoutes } from './XchonnectRoutes';
+import { xchonnectRoutes } from './xchonnect/XchonnectRoutes';
 
 /** Top-level paths of features that can be switched off. */
 const GATED: Readonly<Record<string, boolean>> = {

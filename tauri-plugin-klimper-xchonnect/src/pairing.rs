@@ -132,6 +132,10 @@ pub struct Attempt {
     /// Set once `session.confirm` arrived. Still unusable until the SAS is confirmed.
     pub session: Option<Session>,
     pub deadline: u64,
+    /// The website's own hardened key, claimed when the digits are confirmed. `None` when the
+    /// wallet has none free; never taken from `permissions.exposed_keys`, which may hold
+    /// receive keys too.
+    pub own_key: Option<chia_bls::PublicKey>,
 }
 
 impl std::fmt::Debug for Attempt {
@@ -216,11 +220,11 @@ pub async fn inspect(
         crate::origin::verify_pairing_uri(uri_text, now, allow_developer_mode).await?;
     let relay = RelayClient::new(&verified.uri().relay, developer_mode)?;
     let info = relay.info().await?;
-    // Spec 9.3: the required methods, plus the wallet's receive keys rather than one fresh
-    // key, so the dApp can read every receive address's coins from the chain in a few
-    // batched calls instead of asking the wallet for each balance (the pairing screen says
-    // how many addresses it will see). No limits are configured, so every request is
-    // prompted; a per-dApp limit is set afterwards (TASK-083).
+    // Spec 9.3: the required methods and one receive key that is this website's own
+    // (`receive_keys` holds just that key; the caller picks it), so websites cannot link the
+    // user's addresses or reuse a signed message elsewhere. Seeing every receive address is
+    // a switch on the pairing screen and in the website's settings. Limits remembered for the domain
+    // are set by the caller; otherwise every request is prompted.
     let permissions = DappPermissions {
         methods: granted_methods(),
         exposed_keys: receive_keys,
@@ -239,6 +243,7 @@ pub async fn inspect(
         own_read: None,
         session: None,
         deadline: now.saturating_add(CONFIRM_TIMEOUT_S),
+        own_key: None,
         verified,
     })
 }
@@ -360,12 +365,25 @@ pub async fn confirm(
             origin_kid: Some(uri.kid.clone()),
             revoked: false,
             push: None,
+            // The origin document was fetched and verified for this pairing just now.
+            origin_checked_at: Some(now),
+            own_key: attempt
+                .own_key
+                .as_ref()
+                .map(|key| format!("0x{}", hex::encode(key.to_bytes()))),
         },
         session_hex: hex::encode(session.to_bytes().map_err(Error::protocol)?),
     };
     // Persist before posting: a crash here must never leave the dApp holding an envelope
     // whose `seq` the wallet would reuse (integration guide §2).
     store.save(&mut stored)?;
+    // Remember the website: its own address and its limits come back if it connects again.
+    let memory = crate::store::DomainMemory {
+        limits: stored.record.permissions.limits.clone(),
+    };
+    if let Err(error) = store.save_domain(attempt.fingerprint, &uri.domain, &memory) {
+        tracing::warn!("could not remember the website: {error}");
+    }
 
     if let Some(ready) = ready
         && let Err(error) = attempt.relay.post_retrying(&ready).await
@@ -440,6 +458,7 @@ mod tests {
             own_read: None,
             session: None,
             deadline: testing::NOW + CONFIRM_TIMEOUT_S,
+            own_key: Some(key),
             verified,
         }
     }

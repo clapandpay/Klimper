@@ -26,11 +26,14 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
 import android.util.Base64
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
+import app.tauri.plugin.Channel
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
 import kotlin.math.ln
@@ -44,6 +47,23 @@ import kotlin.random.Random
 class PlayArgs {
     lateinit var tier: String
     var wav: String? = null
+}
+
+@InvokeArg
+class PouchArgs {
+    var channel: Channel? = null
+    var grains: List<String>? = null
+}
+
+@InvokeArg
+class ClinkArgs {
+    var size: Double = 0.0
+    var force: Double = 0.0
+}
+
+@InvokeArg
+class FeelArgs {
+    lateinit var kind: String
 }
 
 @InvokeArg
@@ -64,9 +84,16 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             "handful" to Tier(3..6, 0.9, 0.92..1.06, 0.85),
             "pouch" to Tier(5..8, 1.0, 0.9..1.04, 1.0),
         )
-        private const val JOLT_G = 1.3 // a turn of the hand
+        // Everyday handling stays quiet: only a deliberate shake or tilt moves the coins.
+        private const val JOLT_G = 1.8 // a turn of the hand
         private const val CALM_G = 0.6 // the hand has turned; the next jolt counts
-        private const val TURN_MS = 300L
+        private const val TURN_MS = 350L
+        private const val TILT_DEGREES = 30.0
+        private const val TILT_WITHIN_MS = 700L // a turn slower than this is not a tilt
+        private const val TILT_CALM_G = 0.3 // a tilt only counts with a steady hand
+        private const val SLIDE_EVERY_MS = 600L
+        private const val CLINK_MS = 25L
+        private const val ROLL_MS = 40L // the coins roll this long before the first lands
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -85,9 +112,16 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private var grains = listOf<Int>()
     private var tier = "coin"
     private var armed = false
+    /** The coin pouch is open (TASK-124): tilt and jolts go to the webview, whose coins knock and call [clink]. */
+    private var pouchChannel: Channel? = null
+    private var pouchGravity: DoubleArray? = null
+    private var lastClink = 0L
     private var resumed = true
     private var turned = true
     private var lastTurn = 0L
+    private var lastG = 0.0 // the hand's latest movement, in g
+    private var tiltFrom: DoubleArray? = null // gravity where the coins last settled
+    private var tiltAt = 0L // when [tiltFrom] was taken
     private var lastFirst = -1
 
     init {
@@ -137,7 +171,53 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
         args.grains?.let { wavs -> grains = wavs.mapIndexed { i, w -> load("grain-${i + 1}", w) } }
         tier = args.tier
         armed = args.enabled
-        if (armed) watch() else rest()
+        watchOrRest()
+        invoke.resolve()
+    }
+
+    @Command
+    fun pouch(invoke: Invoke) {
+        val args = invoke.parseArgs(PouchArgs::class.java)
+        args.grains?.let { wavs -> grains = wavs.mapIndexed { i, w -> load("grain-${i + 1}", w) } }
+        pouchChannel = args.channel
+        pouchGravity = null
+        rest()
+        watchOrRest()
+        invoke.resolve()
+    }
+
+    /** A knock in the pouch: one coin hit and its pulse, from the same pieces as a shake. */
+    @Command
+    fun clink(invoke: Invoke) {
+        val args = invoke.parseArgs(ClinkArgs::class.java)
+        invoke.resolve()
+        val t = TIERS[tier] ?: return
+        val now = SystemClock.elapsedRealtime()
+        // Knocks closer than CLINK_MS are one: the ear and the hand cannot tell them apart anyway.
+        if (pouchChannel == null || grains.isEmpty() || now - lastClink < CLINK_MS) return
+        lastClink = now
+        // A big coin sounds lower than a small one.
+        val rate = (t.rate.endInclusive - args.size * (t.rate.endInclusive - t.rate.start)).toFloat()
+        if (soundOn()) coin(grains.random(), (t.loud * (0.3 + 0.7 * args.force)).toFloat(), rate, 0L)
+        vibrate(longArrayOf(0L, 20L), intArrayOf(0, (min(1.0, t.weight * (0.45 + 0.55 * args.force)) * 255).toInt()))
+    }
+
+    private fun watchOrRest() {
+        if (armed || pouchChannel != null) watch() else rest()
+    }
+
+    /** A control's system haptic (the slide to approve); the phone's haptics setting decides. */
+    @Command
+    fun feel(invoke: Invoke) {
+        val kind = invoke.parseArgs(FeelArgs::class.java).kind
+        val constant = when (kind) {
+            "grab" -> HapticFeedbackConstants.VIRTUAL_KEY
+            "tick" -> HapticFeedbackConstants.CLOCK_TICK
+            "done" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM
+                else HapticFeedbackConstants.LONG_PRESS
+            else -> null
+        }
+        if (constant != null) activity.runOnUiThread { activity.window.decorView.performHapticFeedback(constant) }
         invoke.resolve()
     }
 
@@ -150,10 +230,17 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     private fun sensors() = activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
     private fun watch() {
-        if (!armed || !resumed || grains.isEmpty()) return
+        if (!(armed || pouchChannel != null) || !resumed || grains.isEmpty()) return
         val sensor = sensors().getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION) ?: return
         turned = true
+        tiltFrom = null
         sensors().registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+        // Tilting slowly lets the coins slide (where the phone has a gravity sensor).
+        sensors().getDefaultSensor(Sensor.TYPE_GRAVITY)?.let {
+            // The pouch's coins follow the tilt as it happens; the slide only needs a glance.
+            val rate = if (pouchChannel != null) SensorManager.SENSOR_DELAY_GAME else SensorManager.SENSOR_DELAY_UI
+            sensors().registerListener(this, it, rate)
+        }
     }
 
     private fun rest() {
@@ -164,14 +251,88 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onSensorChanged(event: SensorEvent) {
+        val pouch = pouchChannel
+        if (event.sensor.type == Sensor.TYPE_GRAVITY) {
+            if (pouch != null) feedGravity(pouch, event.values) else tilted(event.values)
+            return
+        }
         val (x, y, z) = event.values
         val g = sqrt((x * x + y * y + z * z).toDouble()) / SensorManager.GRAVITY_EARTH
+        lastG = g
         if (g < CALM_G) turned = true
         val now = SystemClock.elapsedRealtime()
         if (!turned || g < JOLT_G || now - lastTurn < TURN_MS || !resumed) return
         turned = false
         lastTurn = now
+        if (pouch != null) {
+            // The pouch's coins take the push and knock; nothing sounds here on its own. Signs
+            // the iOS way (Core Motion reads the other way round from Android's sensors).
+            pouch.send(JSObject().put("jx", -x / SensorManager.GRAVITY_EARTH).put("jy", -y / SensorManager.GRAVITY_EARTH))
+            return
+        }
         turnOfTheHand(min(1.0, (g - JOLT_G) / 2.5))
+    }
+
+    /**
+     * The pouch is open: gravity goes over (in g, in the phone's axes, pointing down as on iOS)
+     * only when it turned by a degree or so, so a resting phone sends nothing.
+     */
+    private fun feedGravity(pouch: Channel, values: FloatArray) {
+        val length = sqrt(values.sumOf { (it * it).toDouble() })
+        if (length == 0.0 || !resumed) return
+        // Android's gravity sensor reads up; iOS's gravity points down: send it the iOS way.
+        val gravity = DoubleArray(3) { -values[it] / length }
+        val from = pouchGravity
+        if (from != null && (0..2).sumOf { from[it] * gravity[it] } > kotlin.math.cos(Math.toRadians(1.5))) return
+        pouchGravity = gravity
+        pouch.send(JSObject().put("gx", gravity[0]).put("gy", gravity[1]))
+    }
+
+    /** A tilt of at least [TILT_DEGREES] within [TILT_WITHIN_MS], with a calm hand: the coins slide. */
+    private fun tilted(values: FloatArray) {
+        val length = sqrt(values.sumOf { (it * it).toDouble() })
+        if (length == 0.0 || !resumed) return
+        val gravity = DoubleArray(3) { values[it] / length }
+        val now = SystemClock.elapsedRealtime()
+        val from = tiltFrom
+        // Only a turn within TILT_WITHIN_MS counts: a phone slowly drifting, or set down, stays quiet.
+        if (from == null || now - tiltAt > TILT_WITHIN_MS) {
+            tiltFrom = gravity
+            tiltAt = now
+            return
+        }
+        if (lastG >= TILT_CALM_G || now - lastTurn < SLIDE_EVERY_MS) return
+        val dot = (0..2).sumOf { from[it] * gravity[it] }.coerceIn(-1.0, 1.0)
+        val angle = Math.toDegrees(kotlin.math.acos(dot))
+        if (angle < TILT_DEGREES) return
+        tiltFrom = gravity
+        tiltAt = now
+        lastTurn = now
+        slide(min(1.0, angle / 60))
+    }
+
+    /** The coins roll to the low side: a low rumble, then two to four firm taps; softer than a shake. */
+    private fun slide(amount: Double) {
+        val t = TIERS[tier] ?: return
+        val order = grains.indices.shuffled()
+        if (order.isEmpty()) return
+        val coins = min(order.size, (t.coins.random() + 1).coerceIn(2, 4))
+        val sound = soundOn()
+        var at = 0L
+        val timings = ArrayList<Long>()
+        val amplitudes = ArrayList<Int>()
+        for (k in 0 until coins) {
+            if (k > 0) at += Random.nextLong(40, 80)
+            val id = grains[order[k]]
+            val volume = (t.loud * (0.35 + 0.25 * amount) * 0.8.pow(k)).toFloat()
+            // Each coin lands ROLL_MS after its place in `at`, once the roll has started.
+            if (sound) coin(id, volume, 1f, at + ROLL_MS)
+            // The roll before the first coin, a low hum between the others.
+            timings.add(if (k == 0) ROLL_MS else at + ROLL_MS - timings.sum())
+            amplitudes.add(if (k == 0) (60 + 40 * amount).toInt() else 45)
+            timings.add(20L); amplitudes.add((t.weight * (0.65 + 0.3 * amount) * 0.88.pow(k) * 255).toInt().coerceIn(1, 255))
+        }
+        vibrate(timings.toLongArray(), amplitudes.toIntArray())
     }
 
     // A few coins landing in the hand: each a coin hit, and a pulse where the hand can tell them apart.
@@ -194,18 +355,27 @@ class KlimperJinglePlugin(private val activity: Activity) : Plugin(activity), Se
             val id = grains[order[k]]
             val volume = (if (k == 0) base else base * Random.nextDouble(0.2, 0.7) * 0.85.pow(k)).toFloat()
             val rate = Random.nextDouble(t.rate.start, t.rate.endInclusive).toFloat()
-            if (sound && id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, rate) }, (at * 1000).toLong())
+            if (sound) coin(id, volume, rate, (at * 1000).toLong())
             if (k > 0 && (at - lastPulse < 0.045 || pulses >= 4)) continue
-            val strength = if (k == 0) t.weight * (0.8 + 0.2 * force)
-            else max(0.35, t.weight * 0.82.pow(pulses) * Random.nextDouble(0.88, 1.12))
+            val strength = if (k == 0) max(0.85, t.weight * (0.9 + 0.2 * force))
+            else max(0.5, t.weight * 0.85.pow(pulses) * Random.nextDouble(0.92, 1.12))
             timings.add(if (k == 0) 0L else ((at - lastPulse) * 1000).toLong() - 20L); amplitudes.add(0)
             timings.add(20L); amplitudes.add((min(1.0, strength) * 255).toInt())
             lastPulse = at
             pulses++
         }
+        vibrate(timings.toLongArray(), amplitudes.toIntArray())
+    }
+
+    /** One coin hit, `delayMs` from now: the shake, the tilt and the pouch's knocks are made of these. */
+    private fun coin(id: Int, volume: Float, rate: Float, delayMs: Long) {
+        if (id in ready) main.postDelayed({ pool.play(id, volume, volume, 1, 0, rate) }, delayMs)
+    }
+
+    private fun vibrate(timings: LongArray, amplitudes: IntArray) {
         val vibrator = vibrator() ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasVibrator()) {
-            vibrator.vibrate(VibrationEffect.createWaveform(timings.toLongArray(), amplitudes.toIntArray(), -1))
+            vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
         }
     }
 

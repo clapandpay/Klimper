@@ -35,7 +35,7 @@ import {
   QrCameraOff,
 } from './QrCamera';
 import { classifyScan } from './scanTarget';
-import { offerXchonnectLink } from './xchonnectLinkHandoff';
+import { offerXchonnectLink } from './xchonnect/xchonnectLinkHandoff';
 
 export const SCANNER_ROUTE = '/scanner';
 /** Where Send for the native coin lives; the scanned address is handed to it there. */

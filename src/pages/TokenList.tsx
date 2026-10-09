@@ -1,18 +1,11 @@
 import Container from '@/components/Container';
 import Header from '@/components/Header';
-import { NumberFormat } from '@/components/NumberFormat';
 import { ReceiveAddress } from '@/components/ReceiveAddress';
 import { TokenGridView } from '@/components/TokenGridView';
 import { TokenListView } from '@/components/TokenListView';
 import { TokenOptions } from '@/components/TokenOptions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ReadOnlyButton } from '@/components/ReadOnlyButton';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useErrors } from '@/hooks/useErrors';
 import { usePrices } from '@/hooks/usePrices';
 import { TokenSortMode, useTokenParams } from '@/hooks/useTokenParams';
@@ -22,13 +15,14 @@ import { PricedTokenRecord } from '@/types/TokenViewProps';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { tokenIssuingEnabled } from '@/lib/features';
-import { Coins, InfoIcon, ShieldAlert } from 'lucide-react';
+import { Coins, InfoIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { commands, events, TokenRecord } from '../bindings';
 import { useWalletState } from '../state';
 import { usePageValue } from '@/klimper/pageValue';
+import { WalletTotal } from '@/klimper/WalletTotal';
 
 export function TokenList() {
   const navigate = useNavigate();
@@ -180,6 +174,7 @@ export function TokenList() {
         </div>
       </Header>
       <Container>
+        {pricedTokens.length > 0 && <WalletTotal usd={totalUsdBalance} />}
         {tokenIssuingEnabled && (
           <ReadOnlyButton
             onClick={() => navigate('/wallet/issue-token')}
@@ -237,41 +232,6 @@ export function TokenList() {
               tokens={pricedTokens}
               actionHandlers={tokenActionHandlers}
             />
-          </div>
-        )}
-
-        {pricedTokens.length > 0 && (
-          <div className='mt-6 pt-4 border-t border-border'>
-            <div className='flex justify-between items-center font-semibold text-lg'>
-              <div className='flex items-center gap-2'>
-                <span>
-                  <Trans>Total Estimated Balance</Trans>
-                </span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <ShieldAlert className='h-4 w-4 text-muted-foreground cursor-help' />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        <Trans>
-                          This is an estimate only and does not account for
-                          liquidity
-                        </Trans>
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <span className='foreground'>
-                <NumberFormat
-                  value={totalUsdBalance}
-                  style='currency'
-                  currency='USD'
-                  maximumFractionDigits={2}
-                />
-              </span>
-            </div>
           </div>
         )}
       </Container>

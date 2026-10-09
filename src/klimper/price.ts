@@ -30,9 +30,9 @@ export interface Prices {
 export const NODEXCH_PRICES_URL = 'https://nodexch.space/api/prices';
 const COINGECKO_URL =
   'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd';
-export const PRICE_TIMEOUT_MS = 5000;
+const PRICE_TIMEOUT_MS = 5000;
 
-export interface PriceDeps {
+interface PriceDeps {
   fetch: typeof fetch;
   now: () => number;
 }
@@ -99,7 +99,7 @@ export function parseNodexch(
 }
 
 /** dexie's `v3/prices/tickers`, as Sage read it. */
-export function parseDexie(body: unknown): Record<string, CatPrice> {
+function parseDexie(body: unknown): Record<string, CatPrice> {
   const cats: Record<string, CatPrice> = {};
   if (!isRecord(body) || !Array.isArray(body.tickers)) return cats;
   for (const ticker of body.tickers) {

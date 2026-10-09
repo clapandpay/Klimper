@@ -54,7 +54,7 @@ export type Outcome =
   /** Coins arrived: this many mojos more than before. */
   | { kind: 'received'; mojos: bigint };
 
-const NO_WALLET = 'Unknown';
+export const NO_WALLET = 'Unknown';
 
 export class ReceiveDetector {
   private baseline: Sample | null = null;

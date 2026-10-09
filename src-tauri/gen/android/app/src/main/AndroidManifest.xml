@@ -5,6 +5,9 @@
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- Klimper: a phone shows the app upright only (screenOrientation below); a screen that
+         cannot turn upright, such as a TV, may still install it. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -17,6 +20,7 @@
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:launchMode="singleTask"
+            android:screenOrientation="portrait"
             android:label="@string/main_activity_title"
             android:name=".MainActivity"
             android:exported="true">

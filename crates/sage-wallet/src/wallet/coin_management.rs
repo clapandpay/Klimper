@@ -169,4 +169,105 @@ mod tests {
 
         Ok(())
     }
+
+    /// Klimper (TASK-124): a coin locked in an open offer can still be combined. The combine is
+    /// the offer's cancellation (Sage cancels an offer the same way, by spending one of its
+    /// coins back to the wallet): the offer is marked cancelled, its coins are free again, and
+    /// the combined coin is an ordinary, selectable coin.
+    #[test(tokio::test)]
+    async fn test_combine_coins_locked_in_an_offer() -> anyhow::Result<()> {
+        use sage_database::OfferStatus;
+
+        use crate::{Offered, Requested};
+
+        let mut test = TestWallet::new(1000).await?;
+
+        let coins = test.wallet.db.selectable_xch_coins().await?;
+        let coin_spends = test
+            .wallet
+            .split(coins.iter().map(Coin::coin_id).collect(), 2, 0)
+            .await?;
+        test.transact(coin_spends).await?;
+        test.wait_for_coins().await;
+
+        // Lock one coin in an offer, the way `import_offer` does.
+        let coins = test.wallet.db.selectable_xch_coins().await?;
+        assert_eq!(coins.len(), 2);
+        let locked = coins[0].coin_id();
+        let offer = test
+            .wallet
+            .make_offer(
+                Offered {
+                    xch: 100,
+                    selected_coin_ids: vec![locked],
+                    ..Default::default()
+                },
+                Requested {
+                    xch: 1,
+                    ..Default::default()
+                },
+                None,
+            )
+            .await?;
+        let offer = test
+            .wallet
+            .sign_transaction(offer, &test.agg_sig, test.master_sk.clone(), true)
+            .await?;
+        let offer_id = offer.name();
+        let offer_coin_ids = Offer::from_spend_bundle(&mut SpendContext::new(), &offer)?
+            .cancellable_coin_spends()?
+            .into_iter()
+            .map(|cs| cs.coin.coin_id())
+            .collect::<Vec<_>>();
+        assert_eq!(offer_coin_ids, vec![locked]);
+
+        let mut tx = test.wallet.db.tx().await?;
+        tx.insert_offer(sage_database::OfferRow {
+            offer_id,
+            encoded_offer: chia_wallet_sdk::driver::encode_offer(&offer)?,
+            expiration_height: None,
+            expiration_timestamp: None,
+            fee: 0,
+            status: OfferStatus::Active,
+            inserted_timestamp: 0,
+        })
+        .await?;
+        tx.insert_offered_coin(offer_id, locked).await?;
+        tx.commit().await?;
+
+        // Locked: never picked by a send, but still spendable when chosen on purpose.
+        let selectable = test.wallet.db.selectable_xch_coins().await?;
+        assert_eq!(selectable.len(), 1);
+        assert!(selectable.iter().all(|coin| coin.coin_id() != locked));
+        let ids = coins
+            .iter()
+            .map(|coin| hex::encode(coin.coin_id()))
+            .collect::<Vec<_>>();
+        assert!(test.wallet.db.are_coins_spendable(&ids).await?);
+
+        let coin_spends = test
+            .wallet
+            .combine(coins.iter().map(Coin::coin_id).collect(), 0)
+            .await?;
+        test.transact(coin_spends).await?;
+        test.wait_for_coins().await;
+
+        // The offer is cancelled once its coin is spent (the offer queue looks every 100 ms in
+        // tests; its event may come before or after the coins'), and nothing stays locked.
+        let mut status = None;
+        for _ in 0..100 {
+            status = test.wallet.db.offer(offer_id).await?.map(|row| row.status);
+            if status == Some(OfferStatus::Cancelled) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(status, Some(OfferStatus::Cancelled));
+        assert_eq!(test.wallet.db.xch_balance().await?, 1000);
+        let selectable = test.wallet.db.selectable_xch_coins().await?;
+        assert_eq!(selectable.len(), 1);
+        assert_eq!(selectable[0].amount, 1000);
+
+        Ok(())
+    }
 }

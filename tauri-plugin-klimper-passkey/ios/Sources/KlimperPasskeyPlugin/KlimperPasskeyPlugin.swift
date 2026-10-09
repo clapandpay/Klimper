@@ -78,6 +78,8 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     let request = provider.createCredentialRegistrationRequest(
       challenge: challenge, name: args.userName, userID: userId)
     request.prf = .inputValues(.init(saltInput1: salt))
+    // Face ID or the passcode at enrolment too, not only at unlock.
+    request.userVerificationPreference = .required
     perform(request, invoke)
   }
 
@@ -125,6 +127,35 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     case failure(String)
   }
 
+  /// The app went to the background: tell Rust, which locks the wallet itself (TASK-117), so
+  /// the lock never waits on the webview, which iOS may suspend first.
+  private var background: Channel?
+  private var backgroundObserver: NSObjectProtocol?
+
+  @objc public func watchBackground(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(WatchBackgroundArgs.self)
+    background = args.channel
+    if backgroundObserver == nil {
+      backgroundObserver = NotificationCenter.default.addObserver(
+        forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        // Time to finish the lock before iOS suspends the process, even when a command
+        // holds the wallet for a moment. Ended once: by the timer or by iOS, whichever is
+        // first (both run on the main queue).
+        var task = UIBackgroundTaskIdentifier.invalid
+        let end = {
+          guard task != .invalid else { return }
+          UIApplication.shared.endBackgroundTask(task)
+          task = .invalid
+        }
+        task = UIApplication.shared.beginBackgroundTask(expirationHandler: end)
+        self?.background?.send([:] as JsonObject)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: end)
+      }
+    }
+    invoke.resolve()
+  }
+
   private func finish(_ outcome: Outcome) {
     guard let invoke = pending else { return }
     pending = nil
@@ -143,6 +174,8 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     controller: ASAuthorizationController,
     didCompleteWithAuthorization authorization: ASAuthorization
   ) {
+    // A prompt that was superseded by a newer one never answers the newer request.
+    guard controller === self.controller else { return }
     guard #available(iOS 18.0, *) else {
       finish(.failure("passkeys with PRF need iOS 18"))
       return
@@ -178,8 +211,13 @@ class KlimperPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
   func authorizationController(
     controller: ASAuthorizationController, didCompleteWithError error: Error
   ) {
+    guard controller === self.controller else { return }
     finish(.failure(error.localizedDescription))
   }
+}
+
+struct WatchBackgroundArgs: Decodable {
+  let channel: Channel
 }
 
 @_cdecl("init_plugin_klimper_passkey")

@@ -1,19 +1,16 @@
-import {
-  HandleResolution,
-  handleErrorMessage,
-} from '@/components/HandleResolution';
+import { HandleResolution, recheckHandle } from '@/components/HandleResolution';
 import { useHandle } from '@/hooks/useHandle';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
 import { handlesEnabled } from '@/lib/features';
+import { isHandleInput } from '@/lib/handles';
 import { amount } from '@/lib/formTypes';
-import { HandleError, isHandleInput, resolveHandle } from '@/lib/handles';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { PasteInput } from './PasteInput';
@@ -79,34 +76,28 @@ export function TransferDialog({
   const { network } = useNetwork();
   const handlePrefix = handlesEnabled && network === 'mainnet' ? 'xch' : null;
   const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
+  const shown = useRef<string | null>(null);
+  shown.current =
+    handleLookup.status === 'resolved' ? handleLookup.resolved.address : null;
+  useEffect(() => {
+    if (handleLookup.status === 'resolved') form.clearErrors('address');
+  }, [handleLookup.status, form]);
 
   const handler = async (values: z.infer<typeof schema>) => {
-    let address = values.address;
-    if (handlePrefix && isHandleInput(address)) {
-      // Resolve again: the address on screen is the one the user agreed to. If the handle now
-      // points somewhere else, stop and let them look again.
-      try {
-        address = (await resolveHandle(address, handlePrefix)).address;
-      } catch (error) {
-        form.setError('address', {
-          message: handleErrorMessage(
-            error instanceof HandleError ? error.code : 'unavailable',
-          ),
-        });
-        return;
-      }
-      const shown =
-        handleLookup.status === 'resolved'
-          ? handleLookup.resolved.address
-          : null;
-      if (shown !== address) {
-        form.setError('address', {
-          message: t`This handle just changed. Check the address and try again`,
-        });
-        return;
-      }
+    if (!handlePrefix && isHandleInput(values.address)) {
+      form.setError('address', { message: t`Handles work on mainnet only` });
+      return;
     }
-    onSubmit(address, values.fee);
+    const checked = await recheckHandle(
+      values.address,
+      handlePrefix,
+      () => shown.current,
+    );
+    if ('error' in checked) {
+      form.setError('address', { message: checked.error });
+      return;
+    }
+    onSubmit(checked.address, values.fee);
   };
 
   return (

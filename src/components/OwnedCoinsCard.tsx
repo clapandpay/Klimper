@@ -23,6 +23,9 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { amount } from '@/lib/formTypes';
 import { fromMojos, toMojos } from '@/lib/utils';
 import { useWallet } from '@/contexts/WalletContext';
+import { useOfferCoinsWarning } from '@/klimper/OfferCoinsWarning';
+import { KlimperCoinPouch } from '@/klimper/pouch';
+import { MASK, useMaskAmounts } from '@/klimper/privacy';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
@@ -108,6 +111,33 @@ export function OwnedCoinsCard({
       return [...currentPageRecords, ...existingSelectedRecords];
     });
   }, [selectedCoinIds, coins]);
+
+  // Klimper: coins selected outside this page (the coin pouch, TASK-124) are loaded by id, so
+  // Split and Combine act on every selected coin. Sets state only when it adds a coin.
+  useEffect(() => {
+    const missing = selectedCoinIds.filter(
+      (id) => !selectedCoinRecords.some((r) => r.coin_id === id),
+    );
+    if (missing.length === 0) return;
+    let isMounted = true;
+    commands
+      .getCoinsByIds({ coin_ids: missing })
+      .then((res) => {
+        if (!isMounted) return;
+        setSelectedCoinRecords((prev) => {
+          const added = res.coins.filter(
+            (c) =>
+              selectedCoinIds.includes(c.coin_id) &&
+              !prev.some((r) => r.coin_id === c.coin_id),
+          );
+          return added.length > 0 ? [...prev, ...added] : prev;
+        });
+      })
+      .catch(addError);
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCoinIds, selectedCoinRecords, addError]);
 
   const [canCombine, setCanCombine] = useState(false);
   const [canSplit, setCanSplit] = useState(false);
@@ -248,6 +278,11 @@ export function OwnedCoinsCard({
     updateCoins(currentPage);
   }, [currentPage, updateCoins]);
 
+  // Klimper: coins locked in an offer can be combined and split; ask on submit first, since
+  // that cancels the offer (TASK-124).
+  const offerCoins = useOfferCoinsWarning();
+  const selectedRecordIds = () => selectedCoinRecords.map((r) => r.coin_id);
+
   const [combineOpen, setCombineOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [autoCombineOpen, setAutoCombineOpen] = useState(false);
@@ -264,7 +299,10 @@ export function OwnedCoinsCard({
     resolver: zodResolver(combineFormSchema),
   });
 
-  const onCombineSubmit = (values: z.infer<typeof combineFormSchema>) => {
+  const onCombineSubmit = (values: z.infer<typeof combineFormSchema>) =>
+    offerCoins.check('combine', selectedRecordIds(), () => combineNow(values));
+
+  const combineNow = (values: z.infer<typeof combineFormSchema>) => {
     const fee = toMojos(values.combineFee, walletState.sync.unit.precision);
 
     // Get IDs from the selected coin records
@@ -313,7 +351,10 @@ export function OwnedCoinsCard({
     },
   });
 
-  const onSplitSubmit = (values: z.infer<typeof splitFormSchema>) => {
+  const onSplitSubmit = (values: z.infer<typeof splitFormSchema>) =>
+    offerCoins.check('split', selectedRecordIds(), () => splitNow(values));
+
+  const splitNow = (values: z.infer<typeof splitFormSchema>) => {
     const fee = toMojos(values.splitFee, walletState.sync.unit.precision);
 
     // Get IDs from the selected coin records
@@ -417,7 +458,9 @@ export function OwnedCoinsCard({
   const ticker = asset.ticker;
 
   // Calculate total value of selected coins
+  const masked = useMaskAmounts();
   const selectedCoinsTotal = useMemo(() => {
+    if (masked) return MASK;
     if (selectedCoinRecords.length === 0) return '0';
 
     const totalMojos = selectedCoinRecords.reduce((sum, coin) => {
@@ -425,7 +468,7 @@ export function OwnedCoinsCard({
     }, new BigNumber(0));
 
     return fromMojos(totalMojos, asset.precision).toString();
-  }, [selectedCoinRecords, asset.precision]);
+  }, [masked, selectedCoinRecords, asset.precision]);
 
   return (
     <Card className='max-w-full overflow-auto'>
@@ -435,6 +478,12 @@ export function OwnedCoinsCard({
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Klimper: the same coins as discs, sharing this selection (TASK-124). */}
+        <KlimperCoinPouch
+          asset={asset}
+          selectedCoins={selectedCoins}
+          setSelectedCoins={setSelectedCoins}
+        />
         <CoinList
           clawback={false}
           precision={asset.precision}
@@ -501,6 +550,8 @@ export function OwnedCoinsCard({
           </div>
         )}
       </CardContent>
+
+      {offerCoins.dialog}
 
       <Dialog open={combineOpen} onOpenChange={setCombineOpen}>
         <DialogContent>

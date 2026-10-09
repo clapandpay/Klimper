@@ -73,9 +73,24 @@ pub struct Approval {
     pub kind: ApprovalKind,
 }
 
+/// How long an approval may still wait: until its deadline, and never past
+/// [`DECISION_TIMEOUT`]. `expires_at` 0 means no deadline of its own.
+fn time_left(expires_at: u64) -> Duration {
+    if expires_at == 0 {
+        return DECISION_TIMEOUT;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    Duration::from_secs(expires_at.saturating_sub(now)).min(DECISION_TIMEOUT)
+}
+
 struct Waiting {
     approval: Approval,
     answer: mpsc::Sender<bool>,
+    /// The deadline on the monotonic clock the waiting thread times out by, so an answer is
+    /// refused exactly when the thread stops listening.
+    deadline: std::time::Instant,
 }
 
 /// Who withdrew a request.
@@ -105,6 +120,30 @@ struct Registry {
     /// Requests withdrawn before their answer was sent, by `(session, request)`. The
     /// session loop takes the entry when it answers the request, so nothing accumulates.
     withdrawn: BTreeMap<(String, String), Withdrawn>,
+    /// When the user last said no, per session, within [`REJECTION_WINDOW`].
+    rejections: BTreeMap<String, std::collections::VecDeque<std::time::Instant>>,
+}
+
+/// After this many rejections within [`REJECTION_WINDOW`], a session's requests are refused
+/// without a prompt until the oldest of them is out of the window (TASK-119): a website that
+/// keeps asking cannot wear the user down into a tap.
+pub const REJECTIONS_BEFORE_PAUSE: usize = 3;
+pub const REJECTION_WINDOW: Duration = Duration::from_mins(2);
+
+impl Registry {
+    /// Whether `session` is paused now, forgetting rejections out of the window.
+    fn paused(&mut self, session: &str, now: std::time::Instant) -> bool {
+        let Some(recent) = self.rejections.get_mut(session) else {
+            return false;
+        };
+        while recent
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= REJECTION_WINDOW)
+        {
+            recent.pop_front();
+        }
+        recent.len() >= REJECTIONS_BEFORE_PAUSE
+    }
 }
 
 impl std::fmt::Debug for ApprovalBridge {
@@ -137,7 +176,14 @@ impl ApprovalBridge {
     /// on screen (not when the request was refused before it could be shown).
     pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
         let id = approval.id.clone();
+        let key = (approval.session_id.clone(), approval.request_id.clone());
         let (tx, rx) = mpsc::channel();
+        let wait = time_left(approval.expires_at);
+        // Already past its deadline: never shown, never signed.
+        if wait.is_zero() {
+            return false;
+        }
+        let deadline = std::time::Instant::now() + wait;
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
         {
             let Ok(mut registry) = self.registry.lock() else {
@@ -149,8 +195,11 @@ impl ApprovalBridge {
                 return false;
             }
             // Withdrawn while it was being simulated: never shown.
-            let key = (approval.session_id.clone(), approval.request_id.clone());
             if registry.withdrawn.contains_key(&key) {
+                return false;
+            }
+            // The user just said no to this website several times: not asked again yet.
+            if registry.paused(&approval.session_id, std::time::Instant::now()) {
                 return false;
             }
             registry.waiting.insert(
@@ -158,6 +207,7 @@ impl ApprovalBridge {
                 Waiting {
                     approval,
                     answer: tx,
+                    deadline,
                 },
             );
         }
@@ -165,10 +215,24 @@ impl ApprovalBridge {
         on_shown();
 
         // A timeout and a closed channel are both rejections: the only path to `true` is
-        // the user pressing approve.
-        let decision = matches!(rx.recv_timeout(DECISION_TIMEOUT), Ok(true));
+        // the user pressing approve, before the request's own deadline. A request the dApp
+        // has already given up on (and may have sent again) is never signed late.
+        let decision = matches!(
+            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())),
+            Ok(true)
+        );
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
+            // Any prompt that was shown and not approved counts: a no, silence, the user's
+            // cancel, and the website withdrawing it too, or a website could keep the user
+            // prompted forever by cancelling each request itself.
+            if !decision {
+                registry
+                    .rejections
+                    .entry(key.0.clone())
+                    .or_default()
+                    .push_back(std::time::Instant::now());
+            }
         }
         (self.emit)(
             EVENT_APPROVAL_DONE,
@@ -185,7 +249,10 @@ impl ApprovalBridge {
                 // Already withdrawn (and answered "no"): an approval now would be reported
                 // as given although nothing will be signed.
                 let key = (w.approval.session_id.clone(), w.approval.request_id.clone());
-                (!registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
+                // Past its deadline: the waiting thread is about to give up, and an approval
+                // that slipped in now would sign a request the dApp no longer expects.
+                let live = std::time::Instant::now() < w.deadline;
+                (live && !registry.withdrawn.contains_key(&key)).then(|| w.answer.clone())
             })
         };
         let sender = sender.ok_or(Error::UnknownApproval)?;
@@ -256,6 +323,42 @@ impl ApprovalBridge {
         })
     }
 
+    /// Whether the user said no to this session too often lately ([`REJECTIONS_BEFORE_PAUSE`]).
+    /// Checked before any work for a request, so a paused website learns nothing from it.
+    pub fn paused(&self, session_id: &str) -> bool {
+        self.registry.lock().map_or(true, |mut r| {
+            r.paused(session_id, std::time::Instant::now())
+        })
+    }
+
+    /// The user changed this website's settings: whatever it is waiting on was checked
+    /// against the old ones, so it is withdrawn (the website is told, and may ask again).
+    pub fn withdraw_waiting(&self, session_id: &str) {
+        let senders: Vec<mpsc::Sender<bool>> = self
+            .registry
+            .lock()
+            .map(|mut r| {
+                let keys: Vec<(String, String)> = r
+                    .waiting
+                    .values()
+                    .filter(|x| x.approval.session_id == session_id)
+                    .map(|x| (x.approval.session_id.clone(), x.approval.request_id.clone()))
+                    .collect();
+                for key in keys {
+                    r.withdrawn.entry(key).or_insert(Withdrawn::ByUser);
+                }
+                r.waiting
+                    .values()
+                    .filter(|x| x.approval.session_id == session_id)
+                    .map(|x| x.answer.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        for sender in senders {
+            let _ = sender.send(false);
+        }
+    }
+
     /// The session ended: reject everything it is waiting on, and anything it would still
     /// ask, so a request that was mid-simulation when the user disconnected cannot open a
     /// prompt for a connection that no longer exists.
@@ -323,6 +426,71 @@ mod tests {
         assert!(worker.join().unwrap(), "approved");
         let events = seen.lock().unwrap().clone();
         assert_eq!(events, vec![EVENT_APPROVAL, EVENT_APPROVAL_DONE]);
+    }
+
+    #[test]
+    fn a_website_rejected_again_and_again_is_not_asked_for_a_while() {
+        let (bridge, seen) = bridge();
+        for round in 0..REJECTIONS_BEFORE_PAUSE {
+            let worker = {
+                let bridge = bridge.clone();
+                std::thread::spawn(move || bridge.ask(approval(&format!("r{round}"))))
+            };
+            for _ in 0..200 {
+                if bridge.resolve(&format!("r{round}"), false).is_ok() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(!worker.join().unwrap());
+        }
+        let shown = seen.lock().unwrap().len();
+        // The next one is refused at once and never reaches the screen.
+        assert!(!bridge.ask(approval("again")));
+        assert_eq!(seen.lock().unwrap().len(), shown);
+    }
+
+    #[test]
+    fn a_website_cannot_dodge_the_pause_by_withdrawing_its_own_prompts() {
+        let (bridge, _) = bridge();
+        for round in 0..REJECTIONS_BEFORE_PAUSE {
+            let id = format!("w{round}");
+            let worker = {
+                let bridge = bridge.clone();
+                let id = id.clone();
+                std::thread::spawn(move || bridge.ask(approval(&id)))
+            };
+            while bridge.outstanding().is_empty() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            bridge.withdraw_request("s1", &format!("r-{id}"), Withdrawn::ByDapp);
+            assert!(!worker.join().unwrap());
+        }
+        assert!(bridge.paused("s1"));
+    }
+
+    #[test]
+    fn changed_settings_withdraw_the_prompt_on_screen() {
+        let (bridge, _) = bridge();
+        let worker = {
+            let bridge = bridge.clone();
+            std::thread::spawn(move || bridge.ask(approval("p")))
+        };
+        while bridge.outstanding().is_empty() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        bridge.withdraw_waiting("s1");
+        assert!(!worker.join().unwrap());
+        assert_eq!(bridge.take_withdrawn("s1", "r-p"), Some(Withdrawn::ByUser));
+    }
+
+    #[test]
+    fn a_request_past_its_deadline_is_never_signed() {
+        let (bridge, _) = bridge();
+        let mut late = approval("late");
+        late.expires_at = 1; // long gone
+        assert!(!bridge.ask(late), "refused without waiting");
+        assert!(bridge.resolve("late", true).is_err());
     }
 
     #[test]

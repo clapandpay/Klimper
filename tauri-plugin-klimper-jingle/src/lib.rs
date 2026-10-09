@@ -14,6 +14,8 @@
 use serde::{Deserialize, Serialize, Serializer};
 use tauri::{
     AppHandle, Manager, Runtime, State, command,
+    ipc::Channel,
+    webview::PageLoadEvent,
     plugin::{Builder, TauriPlugin},
 };
 
@@ -89,6 +91,64 @@ async fn set_shake<R: Runtime>(
         .map_err(|error| Error::Platform(error.to_string()))?
 }
 
+/// The system haptics a control asks for: a finger takes hold, passes a mark, finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Feel {
+    Grab,
+    Tick,
+    Done,
+}
+
+/// One system haptic for a control (the slide to approve). The phone's own haptics setting
+/// decides whether it is felt; the Klimper sound switch does not, since this is feedback for a
+/// gesture rather than the coin sound.
+#[command]
+async fn feel<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    kind: Feel,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || native.feel(kind))
+        .await
+        .map_err(|error| Error::Platform(error.to_string()))?
+}
+
+/// The coin pouch is open (TASK-124): the phone's tilt and the jolts of the hand go to
+/// `channel` (`{ gx, gy }` in g, `{ jx, jy }` for a jolt), and the shake and tilt no longer sound
+/// on their own: the pouch's coins knock and call [`clink`]. `open: false` closes it (the
+/// channel is then ignored).
+#[command]
+async fn pouch<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    open: bool,
+    channel: Channel<serde_json::Value>,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || native.pouch(open.then_some(channel)))
+        .await
+        .map_err(|error| Error::Platform(error.to_string()))?
+}
+
+/// One knock between coins in the pouch: a coin hit and a tap, the same ones a shake is made
+/// of. `size` and `force` are 0..1.
+#[command]
+async fn clink<R: Runtime>(
+    _app: AppHandle<R>,
+    native: State<'_, Native<R>>,
+    size: f64,
+    force: f64,
+) -> Result<()> {
+    let native = native.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        native.clink(size.clamp(0.0, 1.0), force.clamp(0.0, 1.0))
+    })
+    .await
+    .map_err(|error| Error::Platform(error.to_string()))?
+}
+
 /// Single coin hits, one contact each, shared by every tier: the phone builds every turn of a
 /// shaking hand out of these at random.
 pub fn grains() -> [&'static [u8]; 8] {
@@ -115,11 +175,24 @@ pub fn grains() -> [&'static [u8]; 8] {
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-jingle")
-        .invoke_handler(tauri::generate_handler![play, set_shake])
+        .invoke_handler(tauri::generate_handler![play, set_shake, feel, pouch, clink])
         .setup(|app, api| {
             let native = platform::init(app, api)?;
             app.manage(native);
             Ok(())
+        })
+        // A page that (re)loads never closed the pouch it had open: close it, or the motion
+        // stream would run on for a channel nobody listens to, and the shake stay silent.
+        .on_page_load(|webview, payload| {
+            if payload.event() != PageLoadEvent::Started {
+                return;
+            }
+            if let Some(native) = webview.try_state::<Native<R>>() {
+                let native = native.inner().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let _ = native.pouch(None);
+                });
+            }
         })
         .build()
 }
@@ -136,6 +209,15 @@ mod tests {
             assert_eq!(&wav[8..12], b"WAVE");
             assert!(wav.len() < 200 * 1024, "{} bytes", wav.len());
         }
+    }
+
+    #[test]
+    fn feels_are_the_lowercase_names_the_webview_uses() {
+        assert_eq!(
+            serde_json::from_str::<Feel>("\"tick\"").unwrap(),
+            Feel::Tick
+        );
+        assert_eq!(serde_json::to_string(&Feel::Done).unwrap(), "\"done\"");
     }
 
     #[test]

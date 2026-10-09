@@ -5,9 +5,10 @@
 // sound is for the holder of the phone, not a readout, and four weights are enough to feel
 // the difference between a coin and a pouch. Bounds are in US dollars so a tier means the same
 // on every network. No value (no price: testnet, offline) or nothing worth a cent is silence,
-// not a coin: a wallet with nothing in it makes no sound. Two sounds per tier, written by
-// scripts/klimper-sound.py: the ding (coins arrive) and the rattle (the phone is shaken).
-// docs/sound.md quotes this table.
+// not a coin: a wallet with nothing in it makes no sound. Each tier has its ding (coins
+// arrive); a shake is built from eight coin hits shared by every tier, in the tier's numbers
+// (tauri-plugin-klimper-jingle). scripts/klimper-sound.py writes the files; docs/sound.md
+// quotes this table.
 
 export type Tier = 'coin' | 'few' | 'handful' | 'pouch';
 
@@ -17,8 +18,6 @@ export const TIER_BOUNDS_USD: readonly (readonly [Tier, number])[] = [
   ['handful', 20],
   ['pouch', 200],
 ];
-
-export const TIERS: readonly Tier[] = ['coin', 'few', 'handful', 'pouch'];
 
 /**
  * The tier of an amount of money, or `null` for silence. `usd` is the value of the coins
@@ -55,12 +54,4 @@ export function usdOf(
   }
   // 1 XCH = 10^12 mojos. Two-step division keeps the result exact enough for tier bounds.
   return (Number(mojos / 1_000_000n) / 1_000_000) * xchPriceUsd;
-}
-
-/** The bundled files: a ding per tier, and the coin hits every turn of a shake is built from. */
-export function soundFilesOf(tier: Tier): { ding: string; grains: string[] } {
-  return {
-    ding: `klimper-ding-${tier}.wav`,
-    grains: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `klimper-grain-${n}.wav`),
-  };
 }

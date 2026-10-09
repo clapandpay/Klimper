@@ -43,10 +43,12 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
+        # Klimper: a website's request wakes the app in the background, with the phone locked too
+        # (clapandpay TASK-125.04).
+        UIBackgroundModes: [remote-notification]
+        # Klimper: a phone shows the wallet upright only; an iPad keeps every orientation.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

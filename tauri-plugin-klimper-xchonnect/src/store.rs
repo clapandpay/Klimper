@@ -4,8 +4,8 @@
 //! Xchonnect session state is epoch keys, mailbox ids, capability tokens and sequence
 //! counters: a transport secret, not signing material. It lives in the **OS keyring**
 //! under its own service name, `com.clapandpay.klimper.xchonnect`, and never in
-//! `keys.bin` (the Sage signing keychain), the wallet `SQLite` database, a log line or a
-//! device backup. Compromising a session key must not reach signing material, so the two
+//! `keys.bin` (the Sage signing keychain), the wallet `SQLite` database, a log line or an
+//! iPhone backup (this-device-only items, TASK-116). Compromising a session key must not reach signing material, so the two
 //! stores share nothing: `sage-keychain` is untouched by this module.
 //!
 //! Two keyring entries exist per session, so that the message loop (which owns the
@@ -53,12 +53,174 @@ pub trait SecretStore: std::fmt::Debug + Send + Sync {
 }
 
 /// The OS keyring: macOS and iOS Keychain, Windows Credential Manager, the Linux Secret
-/// Service. On Apple platforms `keyring` stores a generic password item, which the system
-/// keeps out of iCloud Keychain unless it is marked synchronisable — it is not.
+/// Service. On Apple platforms it is a generic password item, never marked synchronisable,
+/// so it stays out of iCloud Keychain. On iOS the items are also this-device-only
+/// ([`ios_keychain`]): they are not in an iPhone backup and do not move to a new phone, where
+/// a session would have to be paired again anyway.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OsKeyring;
 
-#[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "ios")]
+impl SecretStore for OsKeyring {
+    fn put(&self, key: &str, bytes: &[u8]) -> Result<()> {
+        ios_keychain::put(KEYRING_SERVICE, key, bytes).map_err(keychain_error)
+    }
+
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        ios_keychain::get(KEYRING_SERVICE, key).map_err(keychain_error)
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        ios_keychain::delete(KEYRING_SERVICE, key).map_err(keychain_error)
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn keychain_error(status: i32) -> Error {
+    Error::Keyring(format!("keychain status {status}"))
+}
+
+/// Generic password items marked `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`: never in
+/// a backup, never on another device, and readable while the phone is locked once it has been
+/// unlocked after starting (TASK-125.04). A website's request must reach Klimper with the
+/// phone in a pocket: the message loop opens, persists and answers it in the background, and
+/// that needs the session state. Signing needs the user anyway (the passkey, the slider). An
+/// item written by an earlier version (`WhenUnlocked`, `WhenUnlockedThisDeviceOnly`) is
+/// re-marked the first time it is read.
+// The only unsafe code in the plugin: calls into Apple's Security framework. Every pointer
+// handed over is a Core Foundation object this module owns for the duration of the call; the
+// constants are the framework's own statics; the one object returned (SecItemCopyMatching's
+// data) is taken over with the create rule, so it is released exactly once.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+mod ios_keychain {
+    use std::collections::HashSet;
+    use std::sync::{LazyLock, Mutex};
+
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::data::CFData;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::{CFString, CFStringRef};
+    use security_framework_sys::access_control::kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound};
+    use security_framework_sys::item::{
+        kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
+        kSecValueData,
+    };
+    use security_framework_sys::keychain_item::{
+        SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate,
+    };
+
+    unsafe extern "C" {
+        static kSecAttrAccessible: CFStringRef;
+    }
+
+    /// Items already re-marked this run.
+    static MARKED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
+
+    fn key(constant: CFStringRef) -> CFString {
+        unsafe { CFString::wrap_under_get_rule(constant) }
+    }
+
+    fn item(service: &str, account: &str) -> Vec<(CFString, CFType)> {
+        vec![
+            (
+                key(unsafe { kSecClass }),
+                key(unsafe { kSecClassGenericPassword }).into_CFType(),
+            ),
+            (
+                key(unsafe { kSecAttrService }),
+                CFString::new(service).into_CFType(),
+            ),
+            (
+                key(unsafe { kSecAttrAccount }),
+                CFString::new(account).into_CFType(),
+            ),
+        ]
+    }
+
+    fn this_device_only() -> (CFString, CFType) {
+        (
+            key(unsafe { kSecAttrAccessible }),
+            key(unsafe { kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly }).into_CFType(),
+        )
+    }
+
+    fn check(status: i32) -> Result<(), i32> {
+        if status == 0 { Ok(()) } else { Err(status) }
+    }
+
+    /// Data and accessibility in one call: an existing item is updated in place, never
+    /// deleted and re-added, so a crash cannot lose it.
+    pub fn put(service: &str, account: &str, bytes: &[u8]) -> Result<(), i32> {
+        let data = (
+            key(unsafe { kSecValueData }),
+            CFData::from_buffer(bytes).into_CFType(),
+        );
+        let mut add = item(service, account);
+        add.push(this_device_only());
+        add.push(data.clone());
+        let add = CFDictionary::from_CFType_pairs(&add);
+        let status = unsafe { SecItemAdd(add.as_concrete_TypeRef(), std::ptr::null_mut()) };
+        if status != errSecDuplicateItem {
+            return check(status);
+        }
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        let update = CFDictionary::from_CFType_pairs(&[this_device_only(), data]);
+        check(unsafe { SecItemUpdate(query.as_concrete_TypeRef(), update.as_concrete_TypeRef()) })
+    }
+
+    pub fn get(service: &str, account: &str) -> Result<Option<Vec<u8>>, i32> {
+        let mut query = item(service, account);
+        query.push((
+            key(unsafe { kSecReturnData }),
+            CFBoolean::true_value().into_CFType(),
+        ));
+        let query = CFDictionary::from_CFType_pairs(&query);
+        let mut found: CFTypeRef = std::ptr::null();
+        let status = unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &raw mut found) };
+        if status == errSecItemNotFound {
+            return Ok(None);
+        }
+        check(status)?;
+        if found.is_null() {
+            return Err(-50);
+        }
+        let data = unsafe { CFData::wrap_under_create_rule(found.cast()) };
+        let bytes = data.bytes().to_vec();
+        mark_once(service, account);
+        Ok(Some(bytes))
+    }
+
+    pub fn delete(service: &str, account: &str) -> Result<(), i32> {
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        match unsafe { SecItemDelete(query.as_concrete_TypeRef()) } {
+            status if status == errSecItemNotFound => Ok(()),
+            status => check(status),
+        }
+    }
+
+    /// An item from before this version: make it this-device-only too (no new data).
+    fn mark_once(service: &str, account: &str) {
+        let Ok(mut marked) = MARKED.lock() else {
+            return;
+        };
+        if !marked.insert(account.to_owned()) {
+            return;
+        }
+        let query = CFDictionary::from_CFType_pairs(&item(service, account));
+        let update = CFDictionary::from_CFType_pairs(&[this_device_only()]);
+        let status =
+            unsafe { SecItemUpdate(query.as_concrete_TypeRef(), update.as_concrete_TypeRef()) };
+        if status != 0 {
+            tracing::warn!("xchonnect: could not mark a keychain item this-device-only: {status}");
+            marked.remove(account);
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 impl SecretStore for OsKeyring {
     fn put(&self, key: &str, bytes: &[u8]) -> Result<()> {
         entry(key)?
@@ -82,14 +244,19 @@ impl SecretStore for OsKeyring {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn entry(key: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(KEYRING_SERVICE, key).map_err(|e| Error::Keyring(e.to_string()))
 }
 
 /// Platforms without a credential store: refuse rather than fall back to a file, which
 /// would put session keys on disk unencrypted.
-#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux"
+)))]
 impl SecretStore for OsKeyring {
     fn put(&self, _key: &str, _bytes: &[u8]) -> Result<()> {
         Err(Error::Keyring("no OS keyring on this platform".to_owned()))
@@ -155,6 +322,15 @@ pub fn parse_asset_key(key: &str) -> Option<AssetId> {
         .try_into()
         .ok()?;
     Some(AssetId::Cat(chia_protocol::Bytes32::from(hash)))
+}
+
+/// What Klimper keeps about a website across connections (per wallet and verified domain):
+/// the limits the user set. Removing a connection leaves it, so connecting again brings the
+/// same limits back. (Its own key is kept in the website key list, [`SessionStore::claim_website_key`].)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DomainMemory {
+    #[serde(default)]
+    pub limits: BTreeMap<String, StoredLimit>,
 }
 
 /// What this dApp may do, persisted. Keys are hex `0x…` so the record is readable and
@@ -272,10 +448,20 @@ pub struct SessionRecord {
     /// sees why the connection is gone.
     #[serde(default)]
     pub revoked: bool,
+    /// The one receive key that is this website's own (hex), exposed unless the user lets it
+    /// see every receive address. `None`: paired before websites got a key of their own, and
+    /// sees every receive address until the user turns that off.
+    #[serde(default)]
+    pub own_key: Option<String>,
     /// The push token registered with the relay for this session (clapandpay TASK-087);
     /// `None` until the phone has a device token and a gateway is configured.
     #[serde(default)]
     pub push: Option<crate::push::Registration>,
+    /// When the origin document was last fetched and still listed this session's key (unix
+    /// seconds). A loop that starts more than 24 hours later checks before reading anything,
+    /// so a website's revocation holds across restarts (spec 6.1, TASK-125 review).
+    #[serde(default)]
+    pub origin_checked_at: Option<u64>,
 }
 
 /// A session record plus the opaque `Session::to_bytes()` blob.
@@ -348,6 +534,94 @@ impl SessionStore {
         format!("limits:{fingerprint}:{id}")
     }
 
+    /// Daily totals and the remembered policy are kept per verified domain, not per session,
+    /// so connecting the same website again neither resets its budget nor its limits.
+    fn domain_limits_key(fingerprint: u32, dapp: &str) -> String {
+        format!("limits:{fingerprint}:domain:{dapp}")
+    }
+
+    fn domain_key(fingerprint: u32, dapp: &str) -> String {
+        format!("domain:{fingerprint}:{dapp}")
+    }
+
+    fn website_keys_key(fingerprint: u32) -> String {
+        format!("websites:{fingerprint}")
+    }
+
+    fn website_keys(&self, fingerprint: u32) -> Result<BTreeMap<String, String>> {
+        self.secrets
+            .get(&Self::website_keys_key(fingerprint))?
+            .map_or(Ok(BTreeMap::new()), |blob| {
+                serde_json::from_slice(&blob).map_err(Error::internal)
+            })
+    }
+
+    /// The key that is `dapp`'s own: the one it was given before, or the first of `candidates`
+    /// (the wallet's hardened keys, in order) no website has ever been given. The list of who
+    /// has which key outlives every connection, so a key is never given to a second website,
+    /// and it is written under the store's write lock, so two pairings cannot take the same one.
+    /// `None` when the wallet has no free hardened key.
+    pub fn claim_website_key(
+        &self,
+        fingerprint: u32,
+        dapp: &str,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Result<Option<chia_bls::PublicKey>> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut keys = self.website_keys(fingerprint)?;
+        if let Some(own) = keys.get(dapp).and_then(|hex_key| parse_public_key(hex_key)) {
+            return Ok(Some(own));
+        }
+        let Some(own) = Self::first_free(&keys, candidates) else {
+            return Ok(None);
+        };
+        keys.insert(
+            dapp.to_owned(),
+            format!("0x{}", hex::encode(own.to_bytes())),
+        );
+        let blob = serde_json::to_vec(&keys).map_err(Error::internal)?;
+        self.secrets
+            .put(&Self::website_keys_key(fingerprint), &blob)?;
+        Ok(Some(own))
+    }
+
+    /// The key [`SessionStore::claim_website_key`] would give `dapp`, without claiming it.
+    pub fn peek_website_key(
+        &self,
+        fingerprint: u32,
+        dapp: &str,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Result<Option<chia_bls::PublicKey>> {
+        let keys = self.website_keys(fingerprint)?;
+        Ok(keys
+            .get(dapp)
+            .and_then(|hex_key| parse_public_key(hex_key))
+            .or_else(|| Self::first_free(&keys, candidates)))
+    }
+
+    fn first_free(
+        keys: &BTreeMap<String, String>,
+        candidates: &[chia_bls::PublicKey],
+    ) -> Option<chia_bls::PublicKey> {
+        let taken: std::collections::HashSet<chia_bls::PublicKey> =
+            keys.values().filter_map(|k| parse_public_key(k)).collect();
+        candidates.iter().find(|key| !taken.contains(key)).copied()
+    }
+
+    /// What Klimper remembers about a website across connections, if anything.
+    pub fn load_domain(&self, fingerprint: u32, dapp: &str) -> Result<Option<DomainMemory>> {
+        self.secrets
+            .get(&Self::domain_key(fingerprint, dapp))?
+            .map(|blob| serde_json::from_slice(&blob).map_err(Error::internal))
+            .transpose()
+    }
+
+    pub fn save_domain(&self, fingerprint: u32, dapp: &str, memory: &DomainMemory) -> Result<()> {
+        let blob = serde_json::to_vec(memory).map_err(Error::internal)?;
+        self.secrets
+            .put(&Self::domain_key(fingerprint, dapp), &blob)
+    }
+
     fn write_index(&self, index: &Index) -> Result<()> {
         if let Some(parent) = self.index_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::internal)?;
@@ -378,6 +652,7 @@ impl SessionStore {
             stored.record.permissions = current.record.permissions;
             stored.record.allow_agg_sig_unsafe = current.record.allow_agg_sig_unsafe;
             stored.record.allow_unknown_contracts = current.record.allow_unknown_contracts;
+            stored.record.own_key = current.record.own_key;
             stored.record.state_version = stored
                 .record
                 .state_version
@@ -480,6 +755,7 @@ impl SessionStore {
     pub fn remove(&self, fingerprint: u32, id: &str) -> Result<()> {
         let _write = self.writes.lock().map_err(Error::internal)?;
         self.secrets.delete(&Self::session_key(fingerprint, id))?;
+        // Only a pre-domain total: the domain's totals outlive the connection on purpose.
         self.secrets.delete(&Self::limits_key(fingerprint, id))?;
         let mut index = self.index.lock().map_err(Error::internal)?;
         index.sessions.retain(|e| e.id != id);
@@ -504,11 +780,20 @@ impl SessionStore {
         Ok(ids)
     }
 
-    fn load_limits(&self, fingerprint: u32, id: &str) -> Result<DailySpend> {
-        let Some(blob) = self.secrets.get(&Self::limits_key(fingerprint, id))? else {
-            return Ok(DailySpend::default());
+    fn load_limits(&self, fingerprint: u32, dapp: &str, id: &str) -> Result<DailySpend> {
+        // The session's own totals from before they moved to the domain still count.
+        let blob = match self
+            .secrets
+            .get(&Self::domain_limits_key(fingerprint, dapp))?
+        {
+            Some(blob) => blob,
+            None => match self.secrets.get(&Self::limits_key(fingerprint, id))? {
+                Some(blob) => blob,
+                None => return Ok(DailySpend::default()),
+            },
         };
-        let stored: StoredDailySpend = serde_json::from_slice(&blob).unwrap_or_default();
+        // Unreadable totals are not zero totals: refuse rather than hand out a fresh budget.
+        let stored: StoredDailySpend = serde_json::from_slice(&blob).map_err(Error::internal)?;
         Ok(DailySpend {
             day: stored.day,
             spent: stored
@@ -519,7 +804,7 @@ impl SessionStore {
         })
     }
 
-    fn save_limits(&self, fingerprint: u32, id: &str, record: &DailySpend) -> Result<()> {
+    fn save_limits(&self, fingerprint: u32, dapp: &str, record: &DailySpend) -> Result<()> {
         let stored = StoredDailySpend {
             day: record.day,
             spent: record
@@ -529,7 +814,8 @@ impl SessionStore {
                 .collect(),
         };
         let blob = serde_json::to_vec(&stored).map_err(Error::internal)?;
-        self.secrets.put(&Self::limits_key(fingerprint, id), &blob)
+        self.secrets
+            .put(&Self::domain_limits_key(fingerprint, dapp), &blob)
     }
 }
 
@@ -548,14 +834,23 @@ struct StoredDailySpend {
 pub struct PersistentLimits {
     store: std::sync::Arc<SessionStore>,
     fingerprint: u32,
+    dapp: String,
     session_id: String,
 }
 
 impl PersistentLimits {
-    pub fn new(store: std::sync::Arc<SessionStore>, fingerprint: u32, session_id: String) -> Self {
+    /// Totals of the verified domain `dapp`; `session_id` only finds totals kept per session
+    /// by an earlier version.
+    pub fn new(
+        store: std::sync::Arc<SessionStore>,
+        fingerprint: u32,
+        dapp: String,
+        session_id: String,
+    ) -> Self {
         PersistentLimits {
             store,
             fingerprint,
+            dapp,
             session_id,
         }
     }
@@ -564,7 +859,7 @@ impl PersistentLimits {
 impl xchonnect_wallet_kit::LimitStore for PersistentLimits {
     fn load(&self) -> std::result::Result<DailySpend, PermissionError> {
         self.store
-            .load_limits(self.fingerprint, &self.session_id)
+            .load_limits(self.fingerprint, &self.dapp, &self.session_id)
             .map_err(|error| {
                 tracing::error!("xchonnect limit store read failed: {error}");
                 PermissionError::Storage
@@ -573,7 +868,7 @@ impl xchonnect_wallet_kit::LimitStore for PersistentLimits {
 
     fn save(&self, record: &DailySpend) -> std::result::Result<(), PermissionError> {
         self.store
-            .save_limits(self.fingerprint, &self.session_id, record)
+            .save_limits(self.fingerprint, &self.dapp, record)
             .map_err(|error| {
                 tracing::error!("xchonnect limit store write failed: {error}");
                 PermissionError::Storage
@@ -607,6 +902,8 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
+            own_key: None,
         }
     }
 
@@ -775,13 +1072,13 @@ mod tests {
     }
 
     #[test]
-    fn daily_limits_survive_a_restart_of_the_store() {
+    fn daily_limits_survive_a_restart_and_a_new_connection_to_the_same_website() {
         let dir = tempfile::tempdir().unwrap();
         let secrets = Arc::new(MemorySecrets::default());
         let open =
             || Arc::new(SessionStore::open(dir.path(), Box::new(Shared(secrets.clone()))).unwrap());
 
-        let limits = PersistentLimits::new(open(), 1234, "four".to_owned());
+        let limits = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let mut record = DailySpend {
             day: 20_000,
             spent: BTreeMap::new(),
@@ -790,12 +1087,15 @@ mod tests {
         limits.save(&record).unwrap();
 
         // A fresh store object (a restarted app) sees the same totals.
-        let after_restart = PersistentLimits::new(open(), 1234, "four".to_owned());
+        let after_restart = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let loaded = after_restart.load().unwrap();
         assert_eq!(loaded.day, 20_000);
         assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&500));
-        // A different session has its own record.
-        let other = PersistentLimits::new(open(), 1234, "five".to_owned());
+        // Connecting the same website again (a new session) does not reset its budget.
+        let again = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "five".into());
+        assert_eq!(again.load().unwrap().spent.get(&AssetId::Xch), Some(&500));
+        // Another website has its own.
+        let other = PersistentLimits::new(open(), 1234, "dexie.space".into(), "six".into());
         assert!(other.load().unwrap().spent.is_empty());
     }
 

@@ -59,7 +59,9 @@ use tauri_plugin_klimper_xchonnect::origin;
 use tauri_plugin_klimper_xchonnect::push::{GatewayConfig, Kind, PushHandle};
 use tauri_plugin_klimper_xchonnect::relay::{RelayClient, RelayInfo};
 use tauri_plugin_klimper_xchonnect::requests::{AnswerInputs, Progress};
-use tauri_plugin_klimper_xchonnect::session_loop::{Answerer, SessionLoop, default_answerer};
+use tauri_plugin_klimper_xchonnect::session_loop::{
+    Answerer, Drain, SessionLoop, default_answerer,
+};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, SessionRecord, SessionStore, StoredPermissions, StoredSession,
 };
@@ -473,6 +475,8 @@ fn start_loop_push(
             origin_kid: origin_kid.map(str::to_owned),
             revoked: false,
             push: None,
+            origin_checked_at: None,
+            own_key: None,
         },
         session_hex: hex::encode(wallet_session.to_bytes().unwrap()),
     };
@@ -503,8 +507,10 @@ fn start_loop_push(
         info: RelayInfo::default(),
         end_requested: end_requested.clone(),
         rotate_requested: Arc::new(AtomicBool::new(rotate)),
+        permissions_changed: Arc::new(AtomicBool::new(false)),
         interrupt: interrupt.clone(),
         wake,
+        drain: Arc::new(Drain::default()),
         push,
         answer,
     };
@@ -1166,6 +1172,90 @@ async fn a_dapp_cancel_withdraws_the_prompt_and_is_answered_4102() {
         .unwrap();
     paired.relay.post(&ping).await.unwrap();
     read_dapp_until(&mut paired, |m| matches!(m, Message::SessionPong)).await;
+    stop(running, paired).await;
+}
+
+/// TASK-125.05: a mailbox the relay no longer knows ends the connection only after it said
+/// so three times, a pause apart, not at the first answer (a relay being redeployed).
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_gone_mailbox_ends_the_connection_only_after_three_answers() {
+    let paired = pair_over_relay().await;
+    let running = start_loop(&paired.wallet_session, &paired.domain, Some("k1"), false);
+    // Let the first pass happen, then take the wallet's mailbox away.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    paired
+        .relay
+        .delete(paired.wallet_mailbox, &paired.wallet_read)
+        .await;
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(30), running.task)
+        .await
+        .expect("the loop ends")
+        .unwrap();
+    assert!(
+        started.elapsed() >= Duration::from_secs(9),
+        "not at the first not_found: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(*running.events.lock().unwrap(), vec!["ended".to_owned()]);
+}
+
+/// TASK-125.03: a website's read is answered at once while a signing request still waits for
+/// the user, so its wallet info never waits behind a prompt.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_read_is_answered_while_a_prompt_waits() {
+    let mut paired = pair_over_relay().await;
+    let bridge = bridge_answerer();
+    let answer: Answerer = Arc::new(move |inputs: AnswerInputs| {
+        if inputs.meta.method == "chainId" {
+            Box::pin(async { Ok(r#""testnet11""#.to_owned()) })
+        } else {
+            bridge(inputs)
+        }
+    });
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        answer,
+    );
+    let send_id = post_send(&mut paired).await;
+    read_dapp_until(&mut paired, is_shown).await;
+
+    let read = paired
+        .dapp_session
+        .seal(
+            &mut OsEntropy,
+            now(),
+            rpc::request("chainId", "{}").unwrap(),
+            600,
+        )
+        .unwrap();
+    paired.relay.post(&read).await.unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert!(
+        matches!(
+            seen.last().unwrap(),
+            Message::RpcResponse { request_id, outcome: RpcOutcome::Result(result) }
+                if *request_id == read.id && result == r#""testnet11""#
+        ),
+        "the read is answered first"
+    );
+    assert_eq!(
+        running.approvals.outstanding().len(),
+        1,
+        "the send still waits for the user"
+    );
+
+    running.approvals.cancel("a1").unwrap();
+    read_dapp_until(
+        &mut paired,
+        |m| matches!(m, Message::RpcResponse { request_id, .. } if *request_id == send_id),
+    )
+    .await;
     stop(running, paired).await;
 }
 

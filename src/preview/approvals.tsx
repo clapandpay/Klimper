@@ -17,9 +17,9 @@ import {
 } from 'react-router-dom';
 import { ThemeProvider } from 'theme-o-rama';
 import '../setup.ts';
-import { XchonnectApprovalHost } from '@/klimper/XchonnectApprovalHost';
-import XchonnectApproval from '@/klimper/XchonnectApproval';
-import XchonnectDappSettings from '@/klimper/XchonnectDappSettings';
+import { XchonnectApprovalHost } from '@/klimper/xchonnect/XchonnectApprovalHost';
+import XchonnectApproval from '@/klimper/xchonnect/XchonnectApproval';
+import XchonnectDappSettings from '@/klimper/xchonnect/XchonnectDappSettings';
 
 i18n.loadAndActivate({ locale: 'en-US', messages: {} });
 

@@ -30,8 +30,15 @@
 //!
 //! While a request waits for the user, the loop keeps reading the mailbox (TASK-100): an
 //! `rpc.cancel` for it withdraws the prompt and is answered 4102, progress is reported as
-//! `rpc.status` (shown, approved, broadcast), and every other message waits until the
-//! request is answered, so messages are still handled one at a time and in order.
+//! `rpc.status` (shown, approved, broadcast), reads that never prompt (keys, network,
+//! balances, coins) are answered at once, and every other message waits until the request
+//! is answered (TASK-125.03): a website's wallet info never waits behind a signing prompt.
+//!
+//! Phones (TASK-125.02): the first long poll goes out before anything else a new loop does
+//! (the relay's limits, the origin check, push registration), since that is when a website
+//! that has just paired sends its first reads. A request is never dropped once opened: its
+//! delivery receipt is best-effort, and its answer is posted again until the request
+//! expires.
 //!
 //! A disconnect does not wait for the long poll: `interrupt` cuts the wait short, and no
 //! further message is dispatched once the end was asked for. Only the poll is raced, never
@@ -57,6 +64,7 @@ use xchonnect_wallet_kit::RpcError;
 use xchonnect_core::uri::ParseOptions;
 
 use crate::approval::{ApprovalBridge, Emitter, Withdrawn};
+use crate::developer_mode_allowed;
 use crate::error::{Error, Result};
 use crate::origin;
 use crate::relay::{RelayClient, RelayInfo};
@@ -73,11 +81,28 @@ pub const EVENT_REQUEST: &str = "klimper-xchonnect://request";
 const POLL_WAIT: u64 = 20;
 /// Pause after a relay failure before trying again.
 const BACKOFF: Duration = Duration::from_secs(5);
+/// "No such mailbox" answers in a row, a pause apart, before a connection counts as gone.
+const GONE_STRIKES: u32 = 3;
+/// Reads answered while one request waits for the user; beyond, 4029.
+const MAX_READS_WHILE_WAITING: usize = 32;
 /// Most messages held while a request waits for the user. Requests beyond it are refused
 /// with 4029; anything else beyond it (pings) is dropped.
 const MAX_DEFERRED: usize = 16;
 /// Spec 6.1: an origin document is cached for no more than 24 hours.
 const ORIGIN_RECHECK_S: u64 = 24 * 60 * 60;
+/// After a failed origin fetch (the website down), the next try.
+const ORIGIN_RETRY_S: u64 = 10 * 60;
+
+/// What re-fetching the origin document said.
+enum OriginCheck {
+    /// Fetched, and it still lists the key this session was paired under (or the session
+    /// predates keeping the key, and cannot be checked).
+    Kept,
+    /// Fetched and parsed, and the key is gone: the website revoked it.
+    Removed,
+    /// Not fetched (the website is down, or a disconnect cut it short).
+    Unknown,
+}
 
 /// Answers one request. [`default_answerer`] in the app; the live tests put a stand-in
 /// here, because the real one needs an unlocked Sage wallet.
@@ -112,15 +137,36 @@ pub struct SessionLoop {
     pub end_requested: Arc<AtomicBool>,
     /// Set by `rotate_session_keys`: the loop offers new keys at its next pass.
     pub rotate_requested: Arc<AtomicBool>,
+    /// Set by `set_dapp_policy` when the exposed keys changed: the loop sends the dApp a
+    /// fresh `session.permissions` at its next pass.
+    pub permissions_changed: Arc<AtomicBool>,
     /// Notified alongside either request, to cut a long poll short.
     pub interrupt: Arc<Notify>,
     /// Woken by a poll tick and by a push wake-up.
     pub wake: tokio::sync::mpsc::Receiver<()>,
+    /// A background wake-up's request for one full read, and the report that it was done.
+    pub drain: Arc<Drain>,
     /// The gateway and the phone's device token, for registering this session's wake-ups.
     pub push: Arc<crate::push::PushHandle>,
     /// Answers requests: [`default_answerer`].
     pub answer: Answerer,
 }
+
+/// One loop's side of a background wake-up (TASK-125.04): the wake-up sets `requested`, the
+/// loop's next pass reads without waiting and counts it in `done`, and `passed` is notified
+/// after every pass.
+#[derive(Debug, Default)]
+pub struct Drain {
+    pub requested: AtomicBool,
+    pub done: std::sync::atomic::AtomicU64,
+    pub passed: Notify,
+}
+
+/// Pauses between posts of an answer that did not go out (doubling up to the cap).
+const DELIVER_FIRST_RETRY: Duration = Duration::from_millis(500);
+const DELIVER_MAX_RETRY: Duration = Duration::from_secs(5);
+/// Longest an answer is posted again, whatever the request's own expiry.
+const DELIVER_WINDOW_S: u64 = 120;
 
 /// Pause after a failed push registration before the next try.
 const PUSH_RETRY_S: u64 = 300;
@@ -159,17 +205,13 @@ impl SessionLoop {
             self.mark_repair(&mut stored);
             return;
         }
-        // An unreachable relay keeps the defaults, and a disconnect does not wait for it.
-        tokio::select! {
-            info = self.relay.info() => {
-                if let Ok(info) = info {
-                    self.info = info;
-                }
-            }
-            () = self.interrupt.notified() => {}
-        }
-
-        let mut origin_checked_at: Option<u64> = None;
+        let mut info_known = false;
+        let mut first_pass = true;
+        let mut gone = 0;
+        // Persisted: a restart does not reset it, and a loop whose last check is older than a
+        // day checks before reading anything (spec 6.1).
+        let mut origin_checked_at = stored.record.origin_checked_at;
+        let mut origin_retry_at = 0;
         let mut push_retry_at = 0;
         loop {
             if self.end_requested.load(Ordering::SeqCst) {
@@ -179,11 +221,120 @@ impl SessionLoop {
                 (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
                 return;
             }
-            if origin_checked_at.is_none_or(|at| now().saturating_sub(at) >= ORIGIN_RECHECK_S) {
-                origin_checked_at = Some(now());
-                if self.origin_key_removed(&stored).await {
-                    self.revoke(&mut session, &mut stored).await;
+            // Asked for since the last pass: tell the dApp before reading on.
+            if self.permissions_changed.swap(false, Ordering::SeqCst)
+                && let Err(error) = self.announce_permissions(&mut session, &mut stored).await
+            {
+                tracing::warn!(session = %id, "could not send the new permissions: {error}");
+            }
+            // A website that withdrew its origin key gets nothing more answered, not even on
+            // the first pass after a restart.
+            let now_s = now();
+            if now_s >= origin_retry_at
+                && origin_checked_at.is_none_or(|at| now_s.saturating_sub(at) >= ORIGIN_RECHECK_S)
+            {
+                match self.origin_check(&stored).await {
+                    OriginCheck::Kept => {
+                        origin_checked_at = Some(now_s);
+                        stored.record.origin_checked_at = Some(now_s);
+                        if let Err(error) = self.store.save(&mut stored) {
+                            tracing::warn!(session = %id, "could not store the origin check: {error}");
+                        }
+                    }
+                    OriginCheck::Removed => {
+                        self.revoke(&mut session, &mut stored).await;
+                        return;
+                    }
+                    // The website is down, or the user is disconnecting: not a check. Again in
+                    // a while, not at every pass.
+                    OriginCheck::Unknown => origin_retry_at = now_s + ORIGIN_RETRY_S,
+                }
+                if self.end_requested.load(Ordering::SeqCst) {
+                    continue;
+                }
+            }
+            // Read first: what a website sends right after pairing, or while Klimper was in
+            // the background, is answered before any housekeeping below. The first pass only
+            // takes what is there, so the housekeeping is not held up by a long poll either.
+            // A background wake-up asks for one full read: no long poll, and no wake-up can cut
+            // it short (it would end the pass with nothing read, and iOS would suspend the app
+            // before the request is handled).
+            let draining = self.drain.requested.swap(false, Ordering::SeqCst);
+            let wait = if first_pass || draining { 0 } else { POLL_WAIT };
+            first_pass = false;
+            let pumped = self.pump(&mut session, &mut stored, wait).await;
+            if draining {
+                self.drain.done.fetch_add(1, Ordering::SeqCst);
+            }
+            self.drain.passed.notify_waiters();
+            if !matches!(pumped, Err(Error::PairingCodeUsed)) {
+                gone = 0;
+            }
+            match pumped {
+                Ok(Outcome::Continue) => {}
+                Ok(Outcome::Ended) => {
+                    self.cleanup(&session, fingerprint, &id).await;
+                    // The website ended it: the user is told (TASK-125.05).
+                    (self.emit)(
+                        EVENT_SESSION,
+                        json!({
+                            "sessionId": id,
+                            "state": "ended",
+                            "by": "website",
+                            "dapp": stored.record.dapp,
+                        }),
+                    );
                     return;
+                }
+                Err(Error::PairingCodeUsed) if gone + 1 < GONE_STRIKES => {
+                    // Once is not enough to forget a connection (TASK-125.05): a relay being
+                    // redeployed, or a proxy in front of it, can answer like that for a moment.
+                    gone += 1;
+                    tracing::info!(session = %id, "the relay does not know a mailbox ({gone})");
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.interrupt.notified() => {}
+                    }
+                }
+                Err(Error::PairingCodeUsed) => {
+                    // The relay keeps saying a mailbox is gone: the dApp ended the session, or
+                    // it expired. The full clean-up still runs: our own mailbox may be the one
+                    // that is left, and a prompt may still be waiting for the user.
+                    tracing::info!(session = %id, "the relay no longer has this mailbox");
+                    self.cleanup(&session, fingerprint, &id).await;
+                    (self.emit)(
+                        EVENT_SESSION,
+                        json!({
+                            "sessionId": id,
+                            "state": "ended",
+                            "by": "website",
+                            "dapp": stored.record.dapp,
+                        }),
+                    );
+                    return;
+                }
+                Err(error) => {
+                    tracing::warn!(session = %id, "xchonnect session loop: {error}");
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.interrupt.notified() => {}
+                    }
+                }
+            }
+            if self.end_requested.load(Ordering::SeqCst) {
+                continue;
+            }
+            // Housekeeping, after the read. An unreachable relay keeps the defaults, and a
+            // disconnect does not wait for it.
+            if !info_known {
+                tokio::select! {
+                    info = self.relay.info() => {
+                        if let Ok(info) = info {
+                            self.info = info;
+                            info_known = true;
+                        }
+                    }
+                    () = self.interrupt.notified() => {}
                 }
             }
             let asked = self.rotate_requested.swap(false, Ordering::SeqCst);
@@ -196,35 +347,8 @@ impl SessionLoop {
             }
             self.ensure_push(&session, &mut stored, &mut push_retry_at)
                 .await;
-            // The origin check may have taken the disconnect's notification: look at the
-            // flag itself before going into a long poll.
-            if self.end_requested.load(Ordering::SeqCst) {
-                continue;
-            }
-            match self.pump(&mut session, &mut stored).await {
-                Ok(Outcome::Continue) => {}
-                Ok(Outcome::Ended) => {
-                    self.cleanup(&session, fingerprint, &id).await;
-                    (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
-                    return;
-                }
-                Err(Error::PairingCodeUsed) => {
-                    // The relay says a mailbox is gone: the dApp ended the session, or it
-                    // expired. The full clean-up still runs: our own mailbox may be the
-                    // one that is left, and a prompt may still be waiting for the user.
-                    tracing::info!(session = %id, "the relay no longer has this mailbox");
-                    self.cleanup(&session, fingerprint, &id).await;
-                    (self.emit)(EVENT_SESSION, json!({ "sessionId": id, "state": "ended" }));
-                    return;
-                }
-                Err(error) => {
-                    tracing::warn!(session = %id, "xchonnect session loop: {error}");
-                    tokio::select! {
-                        () = tokio::time::sleep(BACKOFF) => {}
-                        () = self.interrupt.notified() => {}
-                    }
-                }
-            }
+            // The checks above may have taken the disconnect's notification: look at the flag
+            // itself before waiting.
             if self.end_requested.load(Ordering::SeqCst) {
                 continue;
             }
@@ -329,22 +453,34 @@ impl SessionLoop {
     /// counts as a removal: a website that is down, slow or serving garbage must not be
     /// able to end its users' connections by accident, and a session paired before the
     /// `kid` was kept cannot be checked at all.
-    async fn origin_key_removed(&self, stored: &StoredSession) -> bool {
+    ///
+    /// Only a disconnect cuts the fetch short: a wake-up (push, coming to the front) must not
+    /// turn into "checked" without a check.
+    async fn origin_check(&self, stored: &StoredSession) -> OriginCheck {
         let Some(kid) = stored.record.origin_kid.as_deref() else {
-            return false;
+            return OriginCheck::Kept;
         };
         let options = ParseOptions {
-            developer_mode: stored.record.developer_mode,
+            developer_mode: stored.record.developer_mode && developer_mode_allowed(),
         };
-        let document = tokio::select! {
-            document = origin::fetch(&stored.record.dapp, options) => document,
-            () = self.interrupt.notified() => return false,
+        let fetch = origin::fetch(&stored.record.dapp, options);
+        tokio::pin!(fetch);
+        let document = loop {
+            tokio::select! {
+                document = &mut fetch => break document,
+                () = self.interrupt.notified() => {
+                    if self.end_requested.load(Ordering::SeqCst) {
+                        return OriginCheck::Unknown;
+                    }
+                }
+            }
         };
         match document {
-            Ok(document) => !document.keys.iter().any(|key| key.kid == kid),
+            Ok(document) if document.keys.iter().any(|key| key.kid == kid) => OriginCheck::Kept,
+            Ok(_) => OriginCheck::Removed,
             Err(error) => {
                 tracing::debug!(dapp = %stored.record.dapp, "origin document not checked: {error}");
-                false
+                OriginCheck::Unknown
             }
         }
     }
@@ -366,6 +502,29 @@ impl SessionLoop {
             EVENT_SESSION,
             json!({ "sessionId": id, "state": "revoked", "dapp": stored.record.dapp }),
         );
+    }
+
+    /// Tell the dApp what it may see now (`session.permissions`, spec 9.3), from the record
+    /// as just reloaded, after the user changed which keys it sees.
+    async fn announce_permissions(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+    ) -> Result<()> {
+        if let Ok(fresh) = self
+            .store
+            .load(stored.record.fingerprint, &stored.record.id)
+        {
+            stored.record.permissions = fresh.record.permissions;
+            stored.record.own_key = fresh.record.own_key;
+        }
+        let message = Message::SessionPermissions(stored.record.permissions.to_kit().to_message());
+        let outgoing = session
+            .seal(&mut OsEntropy, now(), message, 3600)
+            .map_err(Error::protocol)?;
+        stored.session_hex = encode(session)?;
+        self.store.save(stored)?;
+        self.relay.post_retrying(&outgoing).await
     }
 
     /// Offer new keys (spec 9.2.1, this side as initiator): a fresh mailbox, then
@@ -398,7 +557,12 @@ impl SessionLoop {
     }
 
     /// One pass over the mailboxes.
-    async fn pump(&self, session: &mut Session, stored: &mut StoredSession) -> Result<Outcome> {
+    async fn pump(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        wait: u64,
+    ) -> Result<Outcome> {
         // Spec 9.2.1: the previous epoch's mailbox is read first and to exhaustion.
         if let Some((mailbox, read)) = session.draining_mailbox() {
             let (mailbox, read) = (mailbox, read.clone());
@@ -422,10 +586,15 @@ impl SessionLoop {
         let mailbox = session.own_mailbox();
         let read = session.own_read_token().clone();
         // The only await raced against a disconnect: nothing has changed yet, so dropping
-        // the poll loses nothing, and the relay keeps any message it was about to deliver.
-        let messages = tokio::select! {
-            messages = self.relay.fetch(mailbox, &read, POLL_WAIT, &self.info) => messages?,
-            () = self.interrupt.notified() => return Ok(Outcome::Continue),
+        // the poll loses nothing, and the relay keeps any message it was about to deliver. A
+        // read that does not wait is not raced: it returns at once anyway.
+        let messages = if wait == 0 {
+            self.relay.fetch(mailbox, &read, 0, &self.info).await?
+        } else {
+            tokio::select! {
+                messages = self.relay.fetch(mailbox, &read, wait, &self.info) => messages?,
+                () = self.interrupt.notified() => return Ok(Outcome::Continue),
+            }
         };
         self.consume(session, stored, mailbox, &read, messages)
             .await
@@ -572,35 +741,34 @@ impl SessionLoop {
         );
         // Delivery receipt, so the dApp can stop guessing whether the wallet is awake while
         // the user decides. A request answered at once needs none: the answer is the
-        // receipt, and skipping it saves a relay round trip before the answer.
-        if !answers_without_prompt(method) {
-            self.send(session, stored, Message::RpcReceived { request_id }, 3600)
-                .await?;
+        // receipt, and skipping it saves a relay round trip before the answer. Best-effort:
+        // the request is opened and the session persisted already, so a failed post must not
+        // end this pass, or the request would come back as a replay and never be answered.
+        if !answers_without_prompt(method)
+            && let Err(error) = self
+                .send(session, stored, Message::RpcReceived { request_id }, 3600)
+                .await
+        {
+            tracing::info!(session = %stored.record.id, "could not send rpc.received: {error}");
         }
 
         let request_b64 = b64::encode(&request_id);
         let (progress, mut progress_rx) = tokio::sync::mpsc::unbounded_channel();
-        let answer = (self.answer)(AnswerInputs {
-            state: self.state.clone(),
-            store: self.store.clone(),
-            approvals: self.approvals.clone(),
-            record: stored.record.clone(),
-            meta: RequestMeta {
-                session_id: stored.record.id.clone(),
-                dapp: stored.record.dapp.clone(),
-                method: method.to_owned(),
-                request_id: request_b64.clone(),
-                expires_at: requests::prompt_deadline(now_s, request_exp),
-                progress: Some(progress),
-            },
+        let answer = (self.answer)(self.inputs(
+            stored,
+            request_id,
+            request_exp,
+            method,
             params,
-            now: now_s,
-        });
+            Some(progress),
+            now_s,
+        ));
         tokio::pin!(answer);
 
         let mailbox = session.own_mailbox();
         let read = session.own_read_token().clone();
         let mut deferred: Vec<Inner> = Vec::new();
+        let mut reads = 0;
         let mut polling = true;
         let outcome = loop {
             tokio::select! {
@@ -620,6 +788,7 @@ impl SessionLoop {
                                 request_id,
                                 messages,
                                 &mut deferred,
+                                &mut reads,
                             )
                             .await
                         }
@@ -687,8 +856,131 @@ impl SessionLoop {
         };
         // The one message that must arrive: the transaction may already be on its way, and
         // a dApp left without the answer could ask again.
-        self.send_retrying(session, stored, message, 3600).await?;
+        self.deliver(session, stored, message, request_exp).await?;
         Ok(deferred)
+    }
+
+    /// What [`Answerer`] gets for one request.
+    #[allow(clippy::too_many_arguments)]
+    fn inputs(
+        &self,
+        stored: &StoredSession,
+        request_id: [u8; 16],
+        request_exp: u64,
+        method: &str,
+        params: String,
+        progress: Option<tokio::sync::mpsc::UnboundedSender<Progress>>,
+        now_s: u64,
+    ) -> AnswerInputs {
+        AnswerInputs {
+            state: self.state.clone(),
+            store: self.store.clone(),
+            approvals: self.approvals.clone(),
+            record: stored.record.clone(),
+            meta: RequestMeta {
+                session_id: stored.record.id.clone(),
+                dapp: stored.record.dapp.clone(),
+                method: method.to_owned(),
+                request_id: b64::encode(&request_id),
+                expires_at: requests::prompt_deadline(now_s, request_exp),
+                progress,
+            },
+            params,
+            now: now_s,
+        }
+    }
+
+    /// Answer a read that never prompts at once, while another request waits for the user
+    /// (TASK-125.03). A failed post is logged: the waiting request must not be abandoned.
+    async fn answer_read(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        inner: Inner,
+    ) -> Result<()> {
+        let Message::RpcRequest { method, params } = inner.message else {
+            return Ok(());
+        };
+        let outcome =
+            (self.answer)(self.inputs(stored, inner.id, inner.exp, &method, params, None, now()))
+                .await;
+        let message = match outcome {
+            Ok(result) => rpc::result(inner.id, &result),
+            Err(RpcError {
+                code,
+                message,
+                data,
+            }) => rpc::error(inner.id, code, &message, data.as_deref()),
+        };
+        // An answer that cannot be built is logged: the request still waiting must keep its
+        // cancel handling, which a returned error would stop.
+        let message = match message {
+            Ok(message) => message,
+            Err(error) => {
+                tracing::info!(session = %stored.record.id, "could not build an answer: {error}");
+                return Ok(());
+            }
+        };
+        if session.is_ended() {
+            return Ok(());
+        }
+        if let Err(error) = self.deliver(session, stored, message, inner.exp).await {
+            tracing::info!(session = %stored.record.id, "could not answer a read: {error}");
+        }
+        Ok(())
+    }
+
+    /// Seal and persist an answer, then post it until it arrives or the request it answers
+    /// has expired (the dApp has given up on it by then). Only a gone mailbox stops it early.
+    async fn deliver(
+        &self,
+        session: &mut Session,
+        stored: &mut StoredSession,
+        message: Message,
+        request_exp: u64,
+    ) -> Result<()> {
+        let outgoing = session
+            .seal(&mut OsEntropy, now(), message, 3600)
+            .map_err(Error::protocol)?;
+        stored.session_hex = encode(session)?;
+        self.store.save(stored)?;
+        // Never longer than DELIVER_WINDOW_S: `exp` is the website's to choose (up to 7 days),
+        // and a loop posting one answer again reads nothing else.
+        let until = request_exp.min(now() + DELIVER_WINDOW_S);
+        let mut delay = DELIVER_FIRST_RETRY;
+        let mut gone = 0;
+        loop {
+            match self.relay.post(&outgoing).await {
+                Ok(()) => return Ok(()),
+                // A gone mailbox counts like everywhere else: three times, not once.
+                Err(error @ Error::PairingCodeUsed) if gone + 1 >= GONE_STRIKES => {
+                    return Err(error);
+                }
+                Err(error)
+                    if !crate::relay::worth_retrying(&error)
+                        || now() >= until
+                        || self.end_requested.load(Ordering::SeqCst) =>
+                {
+                    tracing::warn!(session = %stored.record.id, "gave up on an answer: {error}");
+                    return Ok(());
+                }
+                Err(Error::PairingCodeUsed) => {
+                    gone += 1;
+                    tokio::select! {
+                        () = tokio::time::sleep(BACKOFF) => {}
+                        () = self.interrupt.notified() => {}
+                    }
+                }
+                Err(error) => {
+                    tracing::info!(session = %stored.record.id, "answer not posted yet: {error}");
+                    tokio::select! {
+                        () = tokio::time::sleep(delay) => {}
+                        () = self.interrupt.notified() => {}
+                    }
+                    delay = (delay * 2).min(DELIVER_MAX_RETRY);
+                }
+            }
+        }
     }
 
     /// `rpc.status` is informative: a post that fails is logged and never ends the wait,
@@ -722,6 +1014,7 @@ impl SessionLoop {
         current: [u8; 16],
         messages: Vec<(String, Vec<u8>)>,
         deferred: &mut Vec<Inner>,
+        reads: &mut usize,
     ) -> Result<()> {
         for (msg_id, envelope) in messages {
             let ids = [msg_id];
@@ -760,6 +1053,27 @@ impl SessionLoop {
                     // The dApp is gone: close its prompt now, end after the answer.
                     self.approvals.withdraw_session(&stored.record.id);
                     deferred.push(inner);
+                }
+                // A read never waits behind a prompt: the website's wallet info arrives while
+                // the user is still deciding (TASK-125.03).
+                // A budget per wait, so a website cannot keep the loop busy with reads while a
+                // prompt is open.
+                Message::RpcRequest { ref method, .. }
+                    if answers_without_prompt(method) && !session.is_ended() =>
+                {
+                    if *reads < MAX_READS_WHILE_WAITING {
+                        *reads += 1;
+                        self.answer_read(session, stored, inner).await?;
+                    } else {
+                        let busy = rpc::error(
+                            inner.id,
+                            rpc::codes::LIMIT_EXCEEDED,
+                            "too many requests waiting",
+                            None,
+                        )
+                        .map_err(Error::protocol)?;
+                        self.send(session, stored, busy, 3600).await?;
+                    }
                 }
                 // A request beyond the cap is refused at once rather than queued as yet
                 // another prompt: a dApp cannot line up prompts faster than the user answers.
@@ -815,22 +1129,6 @@ impl SessionLoop {
         Ok(())
     }
 
-    /// [`SessionLoop::send`], retrying the post with backoff.
-    async fn send_retrying(
-        &self,
-        session: &mut Session,
-        stored: &mut StoredSession,
-        message: Message,
-        ttl: u64,
-    ) -> Result<()> {
-        let outgoing = session
-            .seal(&mut OsEntropy, now(), message, ttl)
-            .map_err(Error::protocol)?;
-        stored.session_hex = encode(session)?;
-        self.store.save(stored)?;
-        self.relay.post_retrying(&outgoing).await
-    }
-
     /// Seal, persist, then post. The order is the point of this function existing.
     async fn send(
         &self,
@@ -874,11 +1172,17 @@ fn cancelled(request_id: [u8; 16]) -> Result<Message> {
 }
 
 /// Methods wallet-kit answers without asking the user (spec 9.1: `connect` is answered
-/// without a prompt; `chainId` and the exposed keys are read straight from the session).
+/// without a prompt; `chainId` and the exposed keys are read straight from the session; the
+/// balance and coin reads from the wallet database, scoped to the exposed keys).
 fn answers_without_prompt(method: &str) -> bool {
     matches!(
         rpc::canonical_method(method),
-        "chainId" | "connect" | "getPublicKeys"
+        "chainId"
+            | "connect"
+            | "getPublicKeys"
+            | "getAssetBalance"
+            | "getAssetCoins"
+            | "filterUnlockedCoins"
     )
 }
 
@@ -897,7 +1201,8 @@ async fn post_end(relay: &RelayClient, outgoing: &xchonnect_core::session::Outgo
 /// request instead of waiting on a mailbox nobody reads. Only a session whose stored state
 /// cannot be read at all can end locally alone.
 pub async fn end_without_loop(store: &SessionStore, stored: &mut StoredSession) {
-    let Ok(relay) = RelayClient::new(&stored.record.relay, stored.record.developer_mode) else {
+    let developer_mode = stored.record.developer_mode && developer_mode_allowed();
+    let Ok(relay) = RelayClient::new(&stored.record.relay, developer_mode) else {
         return;
     };
     let Some(mut session) = stored
@@ -976,12 +1281,15 @@ mod tests {
     use crate::testing;
 
     #[test]
-    fn only_instant_answers_skip_the_delivery_receipt() {
+    fn only_reads_skip_the_receipt_and_never_wait_behind_a_prompt() {
         for method in [
             "chainId",
             "connect",
             "getPublicKeys",
             "chip0002_getPublicKeys",
+            "getAssetBalance",
+            "getAssetCoins",
+            "filterUnlockedCoins",
         ] {
             assert!(answers_without_prompt(method), "{method}");
         }
@@ -989,7 +1297,9 @@ mod tests {
             "signCoinSpends",
             "chip0002_signCoinSpends",
             "signMessage",
-            "getAssetBalance",
+            "sendTransaction",
+            "chia_send",
+            "xchonnect_submitCoinSpends",
         ] {
             assert!(!answers_without_prompt(method), "{method}");
         }
@@ -1051,6 +1361,8 @@ mod tests {
             origin_kid: None,
             revoked: false,
             push: None,
+            origin_checked_at: None,
+            own_key: None,
         };
         assert!(requests::check_usable(&record).is_err());
         record.sas_confirmed = true;

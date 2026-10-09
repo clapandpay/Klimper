@@ -12,7 +12,7 @@
 // is claimed here rather than falling through to `unknown`.
 
 import { isValidAddress } from '@/lib/utils';
-import { parseXchonnectLink } from './xchonnectLink';
+import { parseXchonnectLink } from './xchonnect/xchonnectLink';
 
 export type ScanTarget =
   | { kind: 'xchonnect' }

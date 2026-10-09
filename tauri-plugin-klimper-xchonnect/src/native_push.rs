@@ -36,8 +36,14 @@ struct Reply {
 #[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum NativeEvent {
-    Token { platform: Kind, token: String },
+    Token {
+        platform: Kind,
+        token: String,
+    },
     Wake,
+    /// A push woke the app in the background (iOS `content-available`): read every mailbox,
+    /// then [`NativePush::background_done`], so iOS suspends the app again.
+    BackgroundWake,
 }
 
 /// Parse one event from the channel. A device token must look like its service's tokens
@@ -115,6 +121,18 @@ impl<R: Runtime> NativePush<R> {
     /// Show the permission prompt (once; later calls only report). Blocks.
     pub fn request_permission(&self) -> Option<PermissionState> {
         self.run("requestPermission", ())
+    }
+
+    /// The mailboxes were read after a [`NativeEvent::BackgroundWake`]: iOS may suspend the
+    /// app again. Blocks.
+    #[cfg_attr(not(mobile), allow(clippy::unused_self))]
+    pub fn background_done(&self) {
+        #[cfg(mobile)]
+        if let Some(handle) = &self.0
+            && let Err(error) = handle.run_mobile_plugin::<serde_json::Value>("backgroundDone", ())
+        {
+            tracing::warn!("push: backgroundDone: {error}");
+        }
     }
 
     #[cfg_attr(not(mobile), allow(unused_variables, clippy::unused_self))]

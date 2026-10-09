@@ -9,7 +9,7 @@ what is shown, in what words, and what the user is **not** offered.
 
 Normative behaviour is xchonnect's `docs/spec/xchonnect-spec.md`; what a wallet owes the
 user is its `docs/wallet-integration.md` (§1, §5, §6 and the MUST checklist). The typed
-command surface is `src/klimper/xchonnect.ts`.
+command surface is `src/klimper/xchonnect/xchonnect.ts`.
 
 ## The four rules nothing may drop
 
@@ -46,6 +46,15 @@ The second question has a short answer, and the long one goes behind a disclosur
 | Verified-domain slab | `text-xl font-semibold break-all`      | the domain, always the largest text on a pairing screen                |
 | SAS                  | `text-5xl font-mono tracking-[0.3em]`  | the six digits                                                         |
 | Claimed text         | `text-muted-foreground` + "it claims"  | `dappName`, the `signMessage` body                                     |
+
+**Short on screen, the why behind a dot.** Every screen keeps one short line per fact. The
+sentence that explains it (why a domain counts as verified, what "simulated" means, what
+happens when the countdown ends) sits behind an info dot (`Hint`, `src/klimper/Hint.tsx`), which
+opens on a tap as well as on hover, since a phone has no hover. What is never moved behind a
+dot: a danger panel and its sentence, a homograph warning, the dead-end sentence, "only the
+domain is verified" next to "Domain verified", "if they are different, somebody is in the
+middle" under the six digits, what Klimper checked about a trade, "these are the only payments
+to anyone else", and the "only if the counterparty completes" line. Those stay on screen.
 
 Both themes come from the existing theme tokens rather than literal colours, so light and
 dark follow the app (`theme-o-rama`); `text-destructive` and `border-destructive` are the
@@ -119,26 +128,50 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 
 ```
 ┌──────────────────────────────────────────┐
-│ pengui.xyz asks you to sign              │  verified domain, ASCII form too when it differs
-│ [Sign a spend] signCoinSpends · ⏱ 4:31   │  refused by itself in 4:31; red in the last minute
+│ (p) pengui.xyz                     Later │  verified domain only
+│     [Sign a spend] ⏱ 4:31  +1 waiting ⓘ │  chip names the method on hover; red in the last minute
 ├──────────────────────────────────────────┤
-│ You pay          − 1.5 XCH               │  the verdict line, per asset
-│ You receive        + 0 XCH               │
-│ Only if the counterparty completes:      │  never added to a total
-│                  + 250 CAT 1a2b3c4d…     │
-│ Network fee        0.0000005 XCH         │
+│ [Simulated by Klimper ⓘ] [Checked twice ⓘ]│  badges, the sentence behind each dot
+│ X You pay            − 1.5 XCH           │  the verdict line, per asset
+│                  ≈ $18.20 · then 3.2 XCH │  dollars (XCH only) and the balance afterwards
+│ C You receive   + 250 CAT 1a2b3c4d…      │  a CAT by its id, always
+│   your wallet: USDC.b                    │  the wallet's ticker beside it, never in its place
+│   Only if the counterparty completes     │  never added to a total
+│ ➤ 1.5 XCH → xch1qz4…k9f2                 │  where it goes
+│ Network fee   0.0000005 XCH   <$0.01     │
 ├──────────────────────────────────────────┤
 │ ⚠ Unknown contract                       │  danger panel, puzzle hash in full
 │ ⚠ Unsafe signature                       │  danger panel, red, the loudest thing present
+│ ▸ Details                                │  signature counts and the parsed view
 ├──────────────────────────────────────────┤
-│ ▸ Everything Klimper computed            │  disclosure: the whole prompt, verbatim JSON
-├──────────────────────────────────────────┤
-│ [ Approve ]  [ Reject ]                  │
+│ ( ⟫  Slide to approve               )    │  glass track, sun knob
+│ [ ✕ Reject ]              [ Withdraw ]   │
 └──────────────────────────────────────────┘
 ```
 
+- **Slide to approve.** Approving is a slide, not a tap (`SlideToApprove.tsx`): the knob has
+  to travel nearly the whole track, a short or abandoned slide springs back, and no tap, long
+  press or slow click on the knob approves. One finger at a time, and a slide counts only for
+  the request it began on. The phone ticks at the half and at the point where letting go
+  approves, and confirms with a success haptic (`feel` in the jingle plugin; the phone's
+  haptics setting decides, not the Klimper sound switch). The knob answers pointers only.
+  Keyboards and assistive technology get a separate button named "Approve" (or "Approve and
+  send"), out of sight until it has focus, which approves at once since pressing it is
+  deliberate. The drag never re-renders React: it sets one CSS custom property, the knob
+  moves by transform and the trail by clip.
+- **The deadline holds.** When the countdown reaches zero the slider turns off, and the
+  approval bridge refuses an answer after the request's own deadline: a website that gave
+  up on a request (and may have sent it again) never has the old one signed late.
+- **What the wallet knows about each asset.** "then …" is the wallet's balance plus the net
+  (`getToken`). XCH also shows its dollar value from the last price fetch (no request of its
+  own; none on testnet). A CAT stays named `CAT <8 hex>…` in the verdict line: its ticker was
+  registered by whoever made it, and a CAT can be called "XCH", so the wallet's ticker appears
+  only beside it, small ("your wallet: USDC.b"), and a CAT gets no picture and no price here,
+  only a lettered coin; one the wallet holds none of says "not in your wallet". The id shows
+  both ends (`CAT 1a2b3c4d…9f8e7d`), since matching the first 32 bits is cheap. A
+  CAT whose id did not parse gets none of this. None of it comes from the website.
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
-  which shows the puzzle hash and has its own Approve.
+  which shows the puzzle hash and has its own Approve. Going back puts the slider back.
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
   "Later" and navigating away only postpone within that time, and the countdown says
   when it runs out.
@@ -158,12 +191,47 @@ That is also what an encrypted notification preview may say (TASK-088); a previe
 missing, malformed, unauthenticated or expired produces exactly this text, so the user
 cannot tell the difference and no preview can ever drive a decision.
 
+Checked 2026-10-08 (TASK-123): the gateway's alert is a pure function of its own
+configuration (`XCHONNECT_GATEWAY_APNS_ALERT_*`, default "Signing request / Open your wallet
+to review it."), never of the request, the mailbox or the device; nothing in our deployment
+overrides it. An encrypted preview rides along as a custom key that only a Notification
+Service Extension could open, and Klimper has none, so nothing a website sends reaches the
+lock screen. Klimper keeps the preview key with the registration for a future extension.
+
 ### 5. Permissions and limits — `/xchonnect/dapp/:sessionId` (TASK-083)
 
 Allowed methods (as checkboxes over the methods the session was granted), the exposed key,
-a per-request and a per-day limit per asset, and the two dangerous switches. Defaults are
-spec 9.3: the CHIP-0002 required methods, **one fresh key**, no auto-approval, both
-switches off, no limits.
+a per-request and a per-day limit per asset (XCH and every token the wallet holds), and the
+two dangerous switches (unsafe signatures, unreadable contracts). Defaults: the CHIP-0002
+required methods, the receive addresses plus one key of the website's own, no
+auto-approval, both dangerous switches off, no limits.
+
+**What a website sees** (TASK-120). Pairing has one switch, **Can see my receive addresses**,
+**on by default** (owner, 2026-10-08): a website such as Pengui then sees the user's receive
+addresses with their coins and can show balances and build transfers and offers from them.
+Every request still needs the user's approval. The same switch is in the website's settings,
+without a confirmation dialog; changing it re-sends `session.permissions`.
+
+Either way, when the six digits match the website is also given one of the wallet's
+**hardened** keys as its own address: the first one no website has ever had (a per-wallet
+list, `websites:<fingerprint>` in the keyring, outlives every connection, and the claim is
+made under the store's write lock). Sage never hands out a hardened key as a receive or change
+address, and coins paid to one do not move Sage's next receive address, so a website's key
+never overlaps the user's addresses or another website's, and the receive addresses never
+include another website's key. With the switch **off**, that own address is all the website
+sees: it cannot link the user's addresses through Klimper, and a message it asks to have
+signed is signed by a key no other website knows. Requests a website builds itself
+(`signCoinSpends`, `submitCoinSpends`, `signMessage`) are signed with the keys it was given
+only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send`,
+which Klimper builds from its own coins, uses the whole wallet. A payment the wallet makes on
+chain still shows its input coins and change address to anyone who looks, and a page that
+sees the addresses asks some chain service about them; Klimper cannot hide either.
+
+**Kept per website** (TASK-121). Its own key, its limits and its daily totals are stored per
+wallet and verified domain, not per connection: removing a connection and pairing again
+brings the same address and limits back and does not reset the day's budget. A day is a UTC
+day. After three sends it asked for could not be built within ten minutes, a website's
+further sends are refused without building, so the refusals stop telling it the balance.
 
 Each dangerous switch opens its own confirmation dialog, which names the consequence in
 one sentence and requires the explicit button; cancelling leaves the switch off. Turning
@@ -175,7 +243,7 @@ nothing appeared can find the reason.
 
 ## Rendering table
 
-Every field the view may read, and nothing else. `src/klimper/xchonnectPrompt.ts` reads
+Every field the view may read, and nothing else. `src/klimper/xchonnect/xchonnectPrompt.ts` reads
 exactly this list by explicit key and validated type; any other key in the prompt JSON —
 including anything a dApp managed to influence — is dropped before the view sees it.
 
@@ -193,7 +261,7 @@ including anything a dApp managed to influence — is dropped before the view se
 | `summary.unknown_puzzles[]`                                     | danger panel, every puzzle hash in full and selectable; gates a second confirmation                                                                                                                                                                                                                                             | "Unknown contract"                        |
 | `summary.time_locks`                                            | one line per lock, with the absolute time                                                                                                                                                                                                                                                                                       | "Not spendable before" / "Expires"        |
 | `plan.ours[].is_unsafe` or `plan.has_unsafe`                    | the loudest danger panel on the screen, red, icon, never collapsed                                                                                                                                                                                                                                                              | "Unsafe signature"                        |
-| `plan.ours.length`                                              | a soft line                                                                                                                                                                                                                                                                                                                     | "Signatures you would produce"            |
+| `plan.ours.length`                                              | a soft line inside "Details"                                                                                                                                                                                                                                                                                                    | "Signatures you would produce"            |
 | `plan.foreign`                                                  | count only, inside the disclosure                                                                                                                                                                                                                                                                                               | —                                         |
 | `partial`                                                       | a panel explaining that this is one side of a multi-party spend                                                                                                                                                                                                                                                                 | "This is one half of a trade"             |
 | `binding.all_bound` = true                                      | inside that panel                                                                                                                                                                                                                                                                                                               | "Klimper checked the other side is bound" |

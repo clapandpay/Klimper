@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the enroll command without any pre-configured scope."
         },
         {
+          "description": "Enables the erase command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-erase",
+          "markdownDescription": "Enables the erase command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the erase command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-erase",
+          "markdownDescription": "Denies the erase command without any pre-configured scope."
+        },
+        {
           "description": "Enables the lock command without any pre-configured scope.",
           "type": "string",
           "const": "allow-lock",
@@ -355,10 +367,10 @@
           "markdownDescription": "Denies the unlock command without any pre-configured scope."
         },
         {
-          "description": "Status, enrolment, unlock, lock and removal of the Klimper passkey.\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-enroll`\n- `allow-unlock`\n- `allow-lock`\n- `allow-remove`",
+          "description": "Status, enrolment, unlock, lock and removal of the Klimper passkey, and erasing the keys when the passkey is lost.\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-enroll`\n- `allow-unlock`\n- `allow-lock`\n- `allow-remove`\n- `allow-erase`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Status, enrolment, unlock, lock and removal of the Klimper passkey.\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-enroll`\n- `allow-unlock`\n- `allow-lock`\n- `allow-remove`"
+          "markdownDescription": "Status, enrolment, unlock, lock and removal of the Klimper passkey, and erasing the keys when the passkey is lost.\n#### This default permission set includes:\n\n- `allow-status`\n- `allow-enroll`\n- `allow-unlock`\n- `allow-lock`\n- `allow-remove`\n- `allow-erase`"
         }
       ]
     }

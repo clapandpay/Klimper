@@ -14,7 +14,7 @@ import { Trans } from '@lingui/react/macro';
 import jsQR from 'jsqr';
 import { CameraOff, QrCode } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import './xchonnect.css';
+import './xchonnect/xchonnect.css';
 
 /** Longest edge a frame is scaled to before decoding: enough for a QR on a screen. */
 const DECODE_EDGE = 640;

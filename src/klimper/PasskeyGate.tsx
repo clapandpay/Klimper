@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { KeyRound } from 'lucide-react';
@@ -15,6 +16,10 @@ export function PasskeyGate() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const prompted = useRef(false);
+  // Lost passkey: the way out, behind a typed word so it is never a slip of the thumb.
+  const [erasing, setErasing] = useState(false);
+  const [typed, setTyped] = useState('');
+  const word = t`erase`.toLowerCase();
 
   const refresh = useCallback(async () => {
     try {
@@ -99,6 +104,73 @@ export function PasskeyGate() {
             </Button>
             {error && (
               <p className='max-w-sm text-sm text-destructive'>{error}</p>
+            )}
+            {!erasing ? (
+              <button
+                type='button'
+                className='text-sm text-muted-foreground underline underline-offset-4'
+                onClick={() => setErasing(true)}
+              >
+                <Trans>Lost your passkey?</Trans>
+              </button>
+            ) : (
+              <div
+                className='w-full max-w-sm space-y-3 rounded-2xl border border-destructive p-4 text-left'
+                data-testid='erase-keys'
+              >
+                <p className='text-sm'>
+                  <Trans>
+                    This erases the keys on this phone. Your money stays on the
+                    chain: restore each wallet afterwards with its recovery
+                    words. Without them it is gone.
+                  </Trans>
+                </p>
+                <label className='block space-y-1 text-sm'>
+                  <span className='text-muted-foreground'>
+                    <Trans>Type “{word}” to confirm</Trans>
+                  </span>
+                  <Input
+                    value={typed}
+                    autoCapitalize='off'
+                    autoCorrect='off'
+                    onChange={(event) => setTyped(event.target.value)}
+                  />
+                </label>
+                <div className='flex gap-2'>
+                  <Button
+                    variant='destructive'
+                    className='flex-1'
+                    disabled={busy || typed.trim().toLowerCase() !== word}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError(null);
+                      try {
+                        await passkey.erase();
+                      } catch (err) {
+                        setError(String(err));
+                        setBusy(false);
+                        await refresh();
+                        return;
+                      }
+                      // The wallet the screens still hold is gone: start over on the
+                      // login screen, where it can be restored from its words.
+                      // (Without the #route, so the hash router opens on '/'.)
+                      window.location.replace(window.location.pathname);
+                    }}
+                  >
+                    <Trans>Erase the keys</Trans>
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onClick={() => {
+                      setErasing(false);
+                      setTyped('');
+                    }}
+                  >
+                    <Trans>Cancel</Trans>
+                  </Button>
+                </div>
+              </div>
             )}
           </>
         )}

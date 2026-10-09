@@ -68,6 +68,10 @@ pub struct WalletSnapshot {
     /// [`MAX_EXPOSED_KEYS`]. Exposed to a paired dApp so it can read the wallet's balances
     /// from the chain itself instead of asking the wallet for each one.
     pub receive_keys: Vec<PublicKey>,
+    /// The wallet's hardened keys in derivation order: where each website's own key comes
+    /// from. Sage never hands one out as a receive or change address, and coins paid to one
+    /// do not move Sage's next receive address, so a website's key never overlaps the user's.
+    pub website_keys: Vec<PublicKey>,
 }
 
 /// Map Sage's configured network onto wallet-kit's. The chain id is the network's own
@@ -91,6 +95,7 @@ struct DerivationSet {
     keys: HashSet<PublicKey>,
     derivations: HashMap<PublicKey, Derivation>,
     receive_keys: Vec<PublicKey>,
+    website_keys: Vec<PublicKey>,
 }
 
 /// What a cached [`DerivationSet`] is valid for. Derivations are append-only, so the same
@@ -113,6 +118,7 @@ async fn read_derivations(db: &sage_database::Database) -> Result<DerivationSet>
     let mut keys = HashSet::new();
     let mut derivations = HashMap::new();
     let mut receive: Vec<(u32, PublicKey)> = Vec::new();
+    let mut hardened_keys: Vec<(u32, PublicKey)> = Vec::new();
     for hardened in [false, true] {
         let mut offset = 0;
         loop {
@@ -130,7 +136,9 @@ async fn read_derivations(db: &sage_database::Database) -> Result<DerivationSet>
                         is_hardened: row.hardened,
                     },
                 );
-                if !hardened {
+                if hardened {
+                    hardened_keys.push((row.index, row.synthetic_key));
+                } else {
                     receive.push((row.index, row.synthetic_key));
                 }
             }
@@ -141,10 +149,12 @@ async fn read_derivations(db: &sage_database::Database) -> Result<DerivationSet>
     }
     receive.sort_by_key(|(index, _)| *index);
     receive.truncate(MAX_EXPOSED_KEYS);
+    hardened_keys.sort_by_key(|(index, _)| *index);
     Ok(DerivationSet {
         keys,
         derivations,
         receive_keys: receive.into_iter().map(|(_, key)| key).collect(),
+        website_keys: hardened_keys.into_iter().map(|(_, key)| key).collect(),
     })
 }
 
@@ -192,6 +202,7 @@ pub async fn snapshot(state: &AppState) -> Result<WalletSnapshot> {
         keys: set.keys.clone(),
         derivations: set.derivations.clone(),
         receive_keys: set.receive_keys.clone(),
+        website_keys: set.website_keys.clone(),
     })
 }
 

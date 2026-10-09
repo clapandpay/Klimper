@@ -7,11 +7,11 @@
 # no dependencies, deterministic: `python3 scripts/klimper-sound.py` always writes byte-identical
 # files into src/klimper/sound/:
 #
-#   klimper-ding-<tier>.wav          coins arrive: a small rattle, longer and fuller per tier
-#   klimper-knock-<tier>-{a,b,c}.wav one turn of a shaking hand: a few coins knocking, slowed;
-#                                    the phone plays one per turn, with a haptic tap
+#   klimper-ding-<tier>.wav   coins arrive: a small rattle, longer and fuller per tier
+#   klimper-grain-<1..8>.wav  single coin hits; the phone builds every turn of a shaking hand
+#                             out of these, at random, and taps with each
 #
-# Tiers (USD bounds in src/klimper/sound/tiers.ts): coin, few, handful, pouch. A tier's weight is
+# Tiers (USD bounds in src/klimper/sound/tiers.ts): coin, few, handful, pouch. A ding's weight is
 # made of layers (more coins), speed (heavy coins move slower and sound lower) and, for the
 # pouch, a low-passed body underneath. Listening notes in docs/sound.md.
 
@@ -121,12 +121,8 @@ def trim(x, floor=0.006, air=0.03):
 
 # ---- the sounds ----------------------------------------------------------------------------
 #
-# The recordings are single gestures: a clink of 0.1 to 0.25 s and silence. So they are used as
-# grains: many copies spread through a loop at seeded offsets, speeds and gains, which is what
-# a hand full of coins is anyway. Seeds are fixed, so the files are reproducible.
-
-import random
-
+# The recordings are single gestures: a clink of 0.1 to 0.25 s and silence. The dings layer a
+# few of them; the grains are single hits cut out of them.
 
 
 def build():
@@ -200,9 +196,6 @@ def grain(x, t, nxt, longest=0.14):
 
 def main():
     bounds = {"ding": (0.15, 1.6), "grain": (0.02, 0.16)}
-    for stale in os.listdir(SOUND):
-        if stale.startswith(("klimper-knock-", "klimper-rattle-")):
-            os.remove(os.path.join(SOUND, stale))
     for name, samples in build().items():
         kind = name.split("-")[0]
         if kind == "ding":  # trim, then fade, so the file ends on silence
