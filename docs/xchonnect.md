@@ -91,6 +91,38 @@ behind it. An entry whose `state_version` is below the index is restored state: 
 - **Still open:** an end the app quits in the middle of is not resumed at the next start
   (the session comes back and can be ended again).
 
+## On phones (TASK-125)
+
+What keeps a website's messages flowing when the browser and Klimper take turns in front:
+
+- **What a website sees first.** `getPublicKeys` and `session.permissions` list the wallet's
+  receive addresses first and the website's own key last; websites read the first key as the
+  wallet. Connections stored the other way round (2026-10-08 to TASK-125.01) are reordered
+  when they load, and the website is told.
+- **Reads never wait.** Keys, network, balances and coins are answered without a receipt,
+  and at once even while a signing request waits for the user.
+- **Nothing dropped.** A request is persisted when opened; its receipt is best-effort and
+  its answer is posted again until the request expires. A loop reads first and does its
+  housekeeping (relay limits, origin check, push registration) afterwards.
+- **Back in front.** `RunEvent::Resumed` wakes every loop and drops a long poll that may sit
+  on a socket the phone cut; the relay client has a 5 s connect timeout, a 10 s pool idle
+  limit and keepalive. The requests queue and the connection list are read again.
+- **Leaving Klimper.** iOS keeps the app running about 25 s after the user switches to the
+  browser (a background task), so the website's next reads are answered.
+- **Locked phone.** Session secrets are `AfterFirstUnlockThisDeviceOnly`; a push with
+  `content-available` (remote-notification background mode) wakes the app, Rust reads every
+  mailbox, and only then is iOS told the fetch finished. A request that needs the user waits
+  in the queue; the Websites entry shows the count, and opening Klimper shows the pop-up. The
+  gateway must send `content-available` for this (xchonnect `fix/mobile-reliability`).
+- **Gone means gone three times.** A mailbox the relay no longer knows ends a connection only
+  after three answers 5 s apart; a website ending it is shown as a notice.
+- **Networks.** On a connection approved for the other network, `chainId` and `connect` are
+  answered with the wallet's current network; everything else is refused with
+  `{"reason":"wrong_network","walletChainId":…,"sessionChainId":…}`, and the websites screen
+  marks the connection.
+- **Not yet.** Android has no equivalent of the background drain when the process is gone;
+  messages read while a prompt waits are held in memory and lost if the app is killed then.
+
 ## One decision per request; Klimper broadcasts
 
 Decided 2026-10-05 (xchonnect-wiki `04-wallet-side-execution.md`): spec 11.1 item 4 is one

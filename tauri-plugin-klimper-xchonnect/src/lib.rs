@@ -141,7 +141,9 @@ impl Live {
 }
 
 /// Longest wait for the loops after a background wake-up, inside the time iOS allows.
-const BACKGROUND_DRAIN: std::time::Duration = std::time::Duration::from_secs(20);
+const BACKGROUND_DRAIN: std::time::Duration = std::time::Duration::from_secs(16);
+/// How long a wake-up that launched the app waits for the first loops to start.
+const LOOPS_START_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
 /// A pairing attempt, locked on its own: a poll for `session.confirm` on one attempt never
 /// holds up cancelling it, confirming it, or starting another.
@@ -447,12 +449,21 @@ impl<R: Runtime> Xchonnect<R> {
     /// and then iOS is told it may suspend the app again. Bounded, since iOS allows about
     /// 30 seconds.
     async fn drain_in_background(&self) {
-        let passes: Vec<_> = {
-            let live = self.live.lock().await;
-            live.values()
-                .filter(|live| live.running())
-                .map(|live| live.passed.clone())
-                .collect()
+        // Launched by the push itself: the loops start once the app's screen has loaded
+        // (`list_sessions`). Give them a moment rather than telling iOS "done" at once.
+        let started = std::time::Instant::now();
+        let passes: Vec<_> = loop {
+            let passes: Vec<_> = {
+                let live = self.live.lock().await;
+                live.values()
+                    .filter(|live| live.running())
+                    .map(|live| live.passed.clone())
+                    .collect()
+            };
+            if !passes.is_empty() || started.elapsed() >= LOOPS_START_WAIT {
+                break passes;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         };
         // Waiting is set up before the wake, so a pass that ends at once is not missed (a
         // `Notified` hears `notify_waiters` from the moment it exists).
