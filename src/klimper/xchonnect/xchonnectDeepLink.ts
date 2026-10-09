@@ -7,10 +7,14 @@
 // `offerXchonnectLink`. Two forms arrive: the pairing URI itself (`xchonnect:v1?…`, a URL
 // scheme in Info.ios.plist) and clapandpay.com universal links (`/pair`, `/req`, from the
 // entitlements). Parsing, redaction and routing all belong to the handoff; this module only
-// delivers, and never looks at a URL (docs/xchonnect-links.md).
+// delivers, and never looks at a URL beyond its path (docs/xchonnect-links.md). One path is not
+// Xchonnect's: clapandpay.com/klimper/return carries the answer of "Use my Clap and Pay money"
+// (TASK-129) and goes to clapandpayReturn.ts.
 
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
-import { xchonnectEnabled } from '@/lib/features';
+import { isReturnLink } from '@/lib/clapandpayHandoff';
+import { clapAndPayConnectEnabled, xchonnectEnabled } from '@/lib/features';
+import { offerClapAndPayReturn } from '../clapandpayReturn';
 import { offerXchonnectLink } from './xchonnectLinkHandoff';
 
 /** The unsubscribe of a listener that never started. */
@@ -33,7 +37,7 @@ export interface DeepLinkApi {
 export async function listenForXchonnectLinks(
   api: DeepLinkApi = { onOpenUrl, getCurrent },
 ): Promise<() => void> {
-  if (!xchonnectEnabled) return nothingToStop;
+  if (!xchonnectEnabled && !clapAndPayConnectEnabled) return nothingToStop;
 
   // Listen first, then read the launch URL, so nothing arriving in between is lost. A link
   // that arrives in that window would come through both paths once; `seen` keeps it to
@@ -44,7 +48,11 @@ export async function listenForXchonnectLinks(
     for (const url of urls) {
       if (seen?.has(url)) continue;
       seen?.add(url);
-      offerXchonnectLink(url);
+      if (isReturnLink(url)) {
+        if (clapAndPayConnectEnabled) offerClapAndPayReturn(url);
+      } else if (xchonnectEnabled) {
+        offerXchonnectLink(url);
+      }
     }
   };
 

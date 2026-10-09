@@ -1,68 +1,48 @@
 # Bringing a Green Envelope wallet into Klimper
 
-"Use my Clap and Pay money" on Klimper's start screen (`src/pages/ClapAndPayConnect.tsx`) brings
-the wallet from the Green Envelope page into Klimper. A passkey belongs to a website, so the
-check happens on that page; it answers with one line of text that only this Klimper can read,
-and Klimper imports the key with Sage's ordinary key import. The protocol and its limits: the
-wiki's `architecture/passkey-handoff.md`.
+"Use my Clap and Pay money" on Klimper's start screen (`src/klimper/ClapAndPayConnect.tsx`)
+brings the wallet from the Green Envelope page into Klimper. A passkey belongs to a website, so
+the face or finger check happens on that page. This is handoff **version 2** (clapandpay
+TASK-129); the protocol is `src/lib/clapandpayHandoff.ts`, a byte-for-byte copy of
+`green-envelope/packages/handoff/src/receiver.ts`, and its background is the wiki's
+`architecture/passkey-handoff.md`.
 
-## Against the live page
+## How it goes
 
-Nothing to set up. Klimper opens `https://envelope.clapandpay.com/connect#...`. The wallet's passkey
-still belongs to `clapandpay.com`: the web wallet names that domain as its relying party on every
-subdomain of it, which is why the same key comes back in Klimper.
+1. Klimper makes a one-time P-256 key pair (non-extractable, in memory) and a 16-byte nonce and
+   opens `https://envelope.clapandpay.com/connect#v=2&k=<key>&n=<nonce>` in the browser.
+2. The page says that Klimper will be able to spend everything, and asks for Face ID or the
+   fingerprint on its button, never on load.
+3. The page seals the wallet's **24 words** to Klimper's key (ECDH, HKDF bound to both keys and
+   the nonce, AES-256-GCM) and offers one link: `https://clapandpay.com/klimper/return#cp2.…`.
+   No copy button, no codes to compare.
+4. The person taps it. `/klimper/return` is in the `applinks` of `clapandpay.com`
+   (`green-envelope/apps/site/.well-known/apple-app-site-association`) and in Klimper's
+   entitlements, so iOS gives the link to the signed Klimper app and to nothing else. Without
+   Klimper the browser shows `apps/site/klimper-return.html`, which can read nothing.
+5. The deep-link listener (`src/klimper/xchonnect/xchonnectDeepLink.ts`) routes the return path
+   to `src/klimper/clapandpayReturn.ts`, where the waiting screen opens it: only with its own key
+   and nonce, once, and within two minutes of the request. Then it is Sage's ordinary mnemonic
+   import (`importKey` with the words) as an account named "Clap and Pay", and the offer to turn
+   on Face ID (Sage's "Biometric Authentication").
 
-## Against a local Green Envelope dev server
+A request made by anybody else (a phishing page, a chat bot) can still be approved by a person,
+but the answer goes to Klimper, which never made that key and drops it. A wallet from before
+recovery words has none to hand over; the page says so.
 
-A wallet made on `pnpm dev` belongs to that address: the passkey's relying party is `localhost`
-and a device wallet lives in that browser's storage for `http://localhost:5173`. The page Klimper
-opens has to be exactly that origin, in the same browser.
+## The live page
 
-1. In `green-envelope/`: `pnpm dev` (port 5173, testnet11).
-2. In `klimper/.env.local` (git ignores it):
+Nothing to set up. Release builds hide the entry while `VITE_DISABLE_CLAPANDPAY_CONNECT=true` is
+in `.env.production` (TASK-130 turns it on). The page's passkey belongs to `clapandpay.com`, on
+every subdomain, so the same wallet comes back.
 
-   ```sh
-   VITE_CLAPANDPAY_ORIGIN=http://localhost:5173
-   ```
+## Where it can be tried
 
-   `localhost`, not `127.0.0.1`: a different host is a different origin and finds no wallet.
-
-3. `pnpm tauri:dev` (restart it after changing `.env.local`; Vite reads it at start).
-4. Klimper's start screen, **Use my Clap and Pay money**. The first button now says
-   **Open localhost:5173**. It opens your **default browser**: that has to be the browser the
-   wallet was made in (a passkey in iCloud Keychain is found from Safari and Chrome alike; a
-   device wallet only in the browser that made it).
-5. On the page: check that the six digits match, **Yes, it is me**, Touch ID, **Copy**. Keep
-   the page open: it now shows a second number next to the answer.
-6. Back in Klimper: **Paste what the page gave you**. Klimper shows the answer's number; tap
-   **Same number** only if the page shows the same (an answer that did not come from the page,
-   such as a swapped clipboard, cannot match it). The dev server is on testnet11; if Klimper is
-   on mainnet it offers **Switch to testnet11 and bring it in**, which is the same switch as the
-   network setting.
-
-The app's one-time key travels in the link's fragment (`/connect#v=1&k=…`), which a browser
-never sends to the server, and the page takes it out of the address bar and the history as soon
-as it has read it. The first number is made from that public key: it catches the wrong page or a
-mixed-up request, not an attacker who controls the device or the browser. The second number is
-drawn from the secret the app and the page share, so an answer sealed by anyone else cannot show
-it, and nobody can search for one that does.
-
-The wallet appears as "Clap and Pay" 🟢, with the address the page shows. Remove the line from
-`.env.local` to talk to clapandpay.com again.
-
-## Proof
-
-`pnpm e2e:handoff` in `green-envelope/` runs the whole round trip in headless Chrome: a virtual
-platform authenticator with PRF makes a passkey wallet on a dev server, Klimper's own
-`src/lib/clapandpayHandoff.ts` makes the request, the page approves it, and the answer must
-decrypt to the key of the page's address and be refused by any other request. The Sage import
-itself is Sage's `import_key` with the hex master key, unchanged.
-
-## After the import
-
-Klimper keeps the imported key exactly as Sage keeps every key: in `keys.bin` under Sage's own
-password handling, guarded by the "Biometric Authentication" setting. The passkey is only the
-way in; Klimper never uses it to lock or sign (TASK-126). The one difference from Sage is that
-the wallet data stays out of phone backups (`tauri-plugin-klimper-storage`, `docs/UPSTREAM.md`),
-so a new phone imports the money again from the page, or restores the recovery words once the
-wallet has them (TASK-127, TASK-130).
+- **On an iPhone**, with a Klimper build that has the `applinks:clapandpay.com` entitlement and
+  the production `apple-app-site-association` (with `/klimper/return`) deployed. The return path
+  is always on `clapandpay.com`, whatever page origin the build uses (`VITE_CLAPANDPAY_ORIGIN`).
+- **Not on the Mac app**: a desktop build receives no universal links, so the answer never
+  arrives. The whole round trip is covered on the Mac by `pnpm e2e:handoff` in `green-envelope/`
+  instead: headless Chrome with a virtual passkey authenticator makes a wallet on a dev server,
+  Klimper's own receiver makes the request, the page approves it, and the return link must open
+  to the 24 words of the page's address, once, and for that request only.
