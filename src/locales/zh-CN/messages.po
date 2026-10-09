@@ -189,7 +189,7 @@ msgstr ""
 msgid "{length} characters"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:177
+#: src/klimper/xchonnect/XchonnectDapps.tsx:206
 msgid "{limits} set"
 msgstr ""
 
@@ -278,7 +278,7 @@ msgstr ""
 #~ msgid "{waiting} more waiting"
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:331
+#: src/klimper/xchonnect/XchonnectDapps.tsx:360
 msgid "{waiting} requests are waiting for you"
 msgstr ""
 
@@ -322,7 +322,7 @@ msgstr ""
 #~ msgid "A coin rings when coins arrive. Shake the phone and the coins on the open page rattle in your hand for as long as you shake: the more they are worth, the heavier it sounds and feels. Silent mode mutes the sound. Off means no sound and no vibration."
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:359
+#: src/klimper/xchonnect/XchonnectDapps.tsx:388
 msgid "A connected website can ask you to sign — and you decide every time. Open the website, press its connect button, and scan or paste the code it shows."
 msgstr ""
 
@@ -791,7 +791,7 @@ msgid "Back to groups"
 msgstr ""
 
 #: src/klimper/KlimperErrorBoundary.tsx:63
-#: src/klimper/xchonnect/XchonnectDapps.tsx:321
+#: src/klimper/xchonnect/XchonnectDapps.tsx:350
 msgid "Back to my wallet"
 msgstr ""
 
@@ -816,7 +816,7 @@ msgstr ""
 msgid "Banner for {collectionName}"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:192
+#: src/klimper/xchonnect/XchonnectDapps.tsx:221
 msgid "being renewed"
 msgstr ""
 
@@ -1414,8 +1414,8 @@ msgid "Connect a wallet to manage its settings"
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectConnect.tsx:297
-#: src/klimper/xchonnect/XchonnectDapps.tsx:279
-#: src/klimper/xchonnect/XchonnectDapps.tsx:368
+#: src/klimper/xchonnect/XchonnectDapps.tsx:308
+#: src/klimper/xchonnect/XchonnectDapps.tsx:397
 #: src/klimper/xchonnect/XchonnectSettings.tsx:65
 msgid "Connect a website"
 msgstr ""
@@ -1424,11 +1424,11 @@ msgstr ""
 msgid "Connect Wallet"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:171
+#: src/klimper/xchonnect/XchonnectDapps.tsx:200
 msgid "Connected"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:308
+#: src/klimper/xchonnect/XchonnectDapps.tsx:337
 msgid "Connected to {freshDomain}"
 msgstr ""
 
@@ -1441,7 +1441,7 @@ msgid "Connected to {totalPeersCount} peers"
 msgstr "已连接到 {totalPeersCount} 个节点"
 
 #: src/klimper/xchonnect/XchonnectApproval.tsx:190
-#: src/klimper/xchonnect/XchonnectDapps.tsx:276
+#: src/klimper/xchonnect/XchonnectDapps.tsx:305
 #: src/klimper/xchonnect/XchonnectDappSettings.tsx:245
 #: src/klimper/xchonnect/XchonnectSettings.tsx:33
 msgid "Connected websites"
@@ -1456,11 +1456,11 @@ msgstr "连接中..."
 msgid "Connecting..."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:190
+#: src/klimper/xchonnect/XchonnectDapps.tsx:219
 msgid "Connection keys"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:386
+#: src/klimper/xchonnect/XchonnectDapps.tsx:416
 msgid "Connection keys live in the system keychain under {keyringService}, separate from the keys that sign your money."
 msgstr ""
 
@@ -1897,7 +1897,7 @@ msgstr "详情"
 msgid "Developer mode: this code uses a local relay without encryption in transit. Never for real money."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:393
+#: src/klimper/xchonnect/XchonnectDapps.tsx:423
 msgid "Development build: local relays without encryption in transit are accepted."
 msgstr ""
 
@@ -2042,7 +2042,7 @@ msgstr ""
 #~ msgid "Enable Delta Sync"
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:231
+#: src/klimper/xchonnect/XchonnectDapps.tsx:260
 msgid "End connection"
 msgstr ""
 
@@ -2469,7 +2469,7 @@ msgstr ""
 msgid "Go back"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:311
+#: src/klimper/xchonnect/XchonnectDapps.tsx:340
 msgid "Go back to the website and carry on there. When it asks for something, Klimper shows you the request. Your wallet works as usual in the meantime."
 msgstr ""
 
@@ -2823,7 +2823,7 @@ msgstr ""
 msgid "Items per page"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:127
+#: src/klimper/xchonnect/XchonnectDapps.tsx:156
 msgid "Its stored state was lost or restored from a backup. Klimper will not reuse it. Connect to the website again."
 msgstr ""
 
@@ -2876,7 +2876,7 @@ msgstr ""
 msgid "Klimper does not recognise this contract. Nobody can tell you what it does with your coins."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:100
+#: src/klimper/xchonnect/XchonnectDapps.tsx:104
 msgid "Klimper ended this connection"
 msgstr ""
 
@@ -2889,6 +2889,10 @@ msgstr ""
 msgid "Klimper is locked"
 msgstr ""
 
+#: src/klimper/xchonnect/XchonnectDapps.tsx:133
+msgid "Klimper is on {walletChainId} now. The website sees which network Klimper is on, and can ask nothing else until you switch back. To use it on {walletChainId}, connect again."
+msgstr ""
+
 #: src/klimper/QrCamera.tsx:37
 msgid "Klimper may not use the camera. Allow it in the system settings, or paste the code instead."
 msgstr ""
@@ -2897,7 +2901,7 @@ msgstr ""
 msgid "Klimper may not use the camera. Allow it in the system settings, then try again."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:294
+#: src/klimper/xchonnect/XchonnectDapps.tsx:323
 msgid "Klimper only sees a request from a website while it is open. To be told when one arrives, turn notifications on for Klimper in your phone's settings. Notifications never show amounts or addresses."
 msgstr ""
 
@@ -2976,7 +2980,7 @@ msgstr "许可证网址"
 msgid "License URLs"
 msgstr "许可证网址"
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:173
+#: src/klimper/xchonnect/XchonnectDapps.tsx:202
 msgid "Limits"
 msgstr ""
 
@@ -3107,6 +3111,10 @@ msgstr ""
 msgid "Lost your passkey?"
 msgstr ""
 
+#: src/klimper/xchonnect/XchonnectDapps.tsx:130
+msgid "Made on {sessionChain}"
+msgstr ""
+
 #: src/components/Nav.tsx:52
 msgid "Main navigation"
 msgstr ""
@@ -3145,7 +3153,7 @@ msgstr ""
 msgid "Maximum Number of Coins"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:181
+#: src/klimper/xchonnect/XchonnectDapps.tsx:210
 msgid "May call"
 msgstr ""
 
@@ -3308,7 +3316,7 @@ msgstr ""
 
 #: src/components/WalletCard.tsx:466
 #: src/klimper/xchonnect/XchonnectConnect.tsx:453
-#: src/klimper/xchonnect/XchonnectDapps.tsx:172
+#: src/klimper/xchonnect/XchonnectDapps.tsx:201
 #: src/pages/Settings.tsx:160
 #: src/pages/Settings.tsx:594
 msgid "Network"
@@ -3576,7 +3584,7 @@ msgstr ""
 msgid "No Wallet Connected"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:356
+#: src/klimper/xchonnect/XchonnectDapps.tsx:385
 #: src/klimper/xchonnect/XchonnectSettings.tsx:40
 msgid "No websites are connected"
 msgstr ""
@@ -3597,7 +3605,7 @@ msgstr ""
 msgid "None"
 msgstr "无"
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:175
+#: src/klimper/xchonnect/XchonnectDapps.tsx:204
 msgid "none set"
 msgstr ""
 
@@ -3687,7 +3695,7 @@ msgstr ""
 msgid "Nothing requested."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:291
+#: src/klimper/xchonnect/XchonnectDapps.tsx:320
 msgid "Notifications are off"
 msgstr ""
 
@@ -4423,7 +4431,7 @@ msgstr ""
 msgid "Reload"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:229
+#: src/klimper/xchonnect/XchonnectDapps.tsx:258
 msgid "Remove"
 msgstr ""
 
@@ -4451,11 +4459,11 @@ msgstr "重命名个人资料"
 msgid "Rename Wallet"
 msgstr "重命名钱包"
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:220
+#: src/klimper/xchonnect/XchonnectDapps.tsx:249
 msgid "Renew keys"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:194
+#: src/klimper/xchonnect/XchonnectDapps.tsx:223
 msgid "renewed {epoch} times"
 msgstr ""
 
@@ -4753,7 +4761,7 @@ msgstr "私钥"
 msgid "See all {total} requests"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:336
+#: src/klimper/xchonnect/XchonnectDapps.tsx:365
 msgid "See what is asked"
 msgstr ""
 
@@ -5616,7 +5624,7 @@ msgstr ""
 #~ msgid "The selection holds coins locked in an open offer. Using them cancels that offer: once this transaction confirms, nobody can take it any more. Your coins stay yours."
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:137
+#: src/klimper/xchonnect/XchonnectDapps.tsx:166
 msgid "The six digits were never confirmed, so this connection cannot be used."
 msgstr ""
 
@@ -5672,7 +5680,7 @@ msgstr ""
 #~ msgid "The website shows the same six digits. If they are different, somebody is in the middle."
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:103
+#: src/klimper/xchonnect/XchonnectDapps.tsx:107
 msgid "The website withdrew the key this connection was made with, which is what a website does when that key may have been stolen. Nothing can be asked through it any more. Connect again if you still use the website."
 msgstr ""
 
@@ -5781,7 +5789,7 @@ msgstr ""
 msgid "This collection ID does not exist."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:124
+#: src/klimper/xchonnect/XchonnectDapps.tsx:153
 msgid "This connection cannot be used"
 msgstr ""
 
@@ -6864,7 +6872,7 @@ msgstr ""
 msgid "What it may ask for"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:209
+#: src/klimper/xchonnect/XchonnectDapps.tsx:238
 msgid "What it may do"
 msgstr ""
 
@@ -6935,15 +6943,15 @@ msgstr ""
 msgid "You"
 msgstr "我"
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:162
+#: src/klimper/xchonnect/XchonnectDapps.tsx:191
 msgid "You allowed this website contracts Klimper cannot read."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:155
+#: src/klimper/xchonnect/XchonnectDapps.tsx:184
 msgid "You allowed this website unsafe signatures and contracts Klimper cannot read."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectDapps.tsx:160
+#: src/klimper/xchonnect/XchonnectDapps.tsx:189
 msgid "You allowed this website unsafe signatures."
 msgstr ""
 

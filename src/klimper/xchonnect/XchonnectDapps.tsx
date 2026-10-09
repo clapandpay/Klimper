@@ -53,11 +53,14 @@ function limitCount(session: SessionSummary): number {
 
 function Dapp({
   session,
+  walletChainId,
   fresh,
   onEnd,
   onRotate,
 }: {
   readonly session: SessionSummary;
+  /** The network the wallet is on now; `null` while unknown. */
+  readonly walletChainId: string | null;
   readonly fresh: boolean;
   readonly onEnd: (id: string) => void;
   readonly onRotate: (id: string) => void;
@@ -65,6 +68,7 @@ function Dapp({
   const navigate = useNavigate();
   const limits = limitCount(session);
   const connected = new Date(session.createdAt * 1000).toLocaleDateString();
+  const sessionChain = session.chainId;
   const epoch = session.epoch;
   // Renewing needs the message loop to carry the offer and the dApp to answer it.
   const usable =
@@ -109,6 +113,31 @@ function Dapp({
             </p>
           </div>
         )}
+
+        {walletChainId !== null &&
+          session.chainId !== walletChainId &&
+          !session.revoked && (
+            <div
+              className='rounded-lg border p-3'
+              role='status'
+              data-testid='other-network'
+            >
+              <div className='flex items-start gap-2 font-semibold'>
+                <AlertTriangle
+                  className='h-4 w-4 mt-0.5 shrink-0'
+                  aria-hidden='true'
+                />
+                <Trans>Made on {sessionChain}</Trans>
+              </div>
+              <p className='pl-6 mt-1'>
+                <Trans>
+                  Klimper is on {walletChainId} now. The website sees which
+                  network Klimper is on, and can ask nothing else until you
+                  switch back. To use it on {walletChainId}, connect again.
+                </Trans>
+              </p>
+            </div>
+          )}
 
         {session.needsRepair && !session.revoked && (
           <div
@@ -375,6 +404,7 @@ export default function XchonnectDapps() {
           <Dapp
             key={session.sessionId}
             session={session}
+            walletChainId={status?.chainId ?? null}
             fresh={session.sessionId === justConnected}
             onEnd={(id) => void end(id)}
             onRotate={(id) => void rotate(id)}

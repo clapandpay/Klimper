@@ -51,6 +51,11 @@ export function useXchonnectSessions(): SessionList {
 
   useEffect(() => {
     void refresh();
+    // The network may have changed meanwhile (TASK-125.05): read the status again on return.
+    const onFront = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    document.addEventListener('visibilitychange', onFront);
     const subscriptions = [
       onXchonnectEvent<unknown>(XCHONNECT_EVENTS.sessions, () => {
         void refresh();
@@ -60,6 +65,7 @@ export function useXchonnectSessions(): SessionList {
       }),
     ];
     return () => {
+      document.removeEventListener('visibilitychange', onFront);
       for (const subscription of subscriptions) {
         void subscription.then((stop) => stop());
       }

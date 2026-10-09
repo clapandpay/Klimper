@@ -47,6 +47,23 @@ fn rpc_error(code: i64, message: &str) -> RpcError {
 ///
 /// Returned before the wallet is even looked at, so an unconfirmed session cannot be
 /// probed for the wallet's keys either.
+/// A request on a connection approved for another network than the wallet is on now. `data`
+/// names both, so the website can tell the user which one Klimper is on.
+pub fn wrong_network(wallet: &str, session: &str) -> RpcError {
+    RpcError {
+        code: codes::UNAUTHORIZED,
+        message: "this connection was approved for another network".to_owned(),
+        data: Some(
+            serde_json::json!({
+                "reason": "wrong_network",
+                "walletChainId": wallet,
+                "sessionChainId": session,
+            })
+            .to_string(),
+        ),
+    }
+}
+
 pub fn check_usable(record: &SessionRecord) -> std::result::Result<(), RpcError> {
     if record.revoked {
         return Err(rpc_error(
@@ -234,11 +251,16 @@ pub async fn answer(inputs: AnswerInputs) -> std::result::Result<String, RpcErro
         ));
     }
     if snapshot.network.chain_id() != record.chain_id {
-        return Err(RpcError {
-            code: codes::UNAUTHORIZED,
-            message: "this connection was approved for another network".to_owned(),
-            data: Some(r#"{"reason":"wrong_network"}"#.to_owned()),
-        });
+        // The user switched networks (TASK-125.05). The website may still learn which one
+        // the wallet is on now, so it can follow or say so; everything else stays refused
+        // (spec 11.1 item 6), naming both networks.
+        if matches!(canonical_method(&meta.method), "chainId" | "connect") {
+            return Ok(match canonical_method(&meta.method) {
+                "chainId" => serde_json::json!(snapshot.network.chain_id()).to_string(),
+                _ => "true".to_owned(),
+            });
+        }
+        return Err(wrong_network(snapshot.network.chain_id(), &record.chain_id));
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -465,6 +487,16 @@ mod tests {
             push: None,
             own_key: None,
         }
+    }
+
+    #[test]
+    fn a_wrong_network_refusal_names_both_networks() {
+        let error = wrong_network("testnet11", "mainnet");
+        assert_eq!(error.code, codes::UNAUTHORIZED);
+        let data: serde_json::Value = serde_json::from_str(error.data.as_deref().unwrap()).unwrap();
+        assert_eq!(data["reason"], "wrong_network");
+        assert_eq!(data["walletChainId"], "testnet11");
+        assert_eq!(data["sessionChainId"], "mainnet");
     }
 
     /// A session that reached `session.ready` but whose SAS was never confirmed must not
