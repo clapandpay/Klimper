@@ -32,9 +32,25 @@ recovery words has none to hand over; the page says so.
 
 ## The live page
 
-Nothing to set up. Release builds hide the entry while `VITE_DISABLE_CLAPANDPAY_CONNECT=true` is
-in `.env.production` (TASK-130 turns it on). The page's passkey belongs to `clapandpay.com`, on
-every subdomain, so the same wallet comes back.
+On in every build, release included (TASK-130). Before a build goes to TestFlight or review,
+`envelope.clapandpay.com/connect` and `clapandpay.com/.well-known/apple-app-site-association`
+(with `/klimper/return`) must be live: otherwise the button leads nowhere.
+`VITE_DISABLE_CLAPANDPAY_CONNECT=true` in `.env.production` turns it off again. The page's passkey
+belongs to `clapandpay.com`, on every subdomain, so the same wallet comes back.
+
+## The account in Klimper
+
+- A separate account named "Clap and Pay" next to any other wallet, made by Sage's mnemonic
+  import (`importKey` with the words, which Sage keeps with `add_mnemonic`). Its keys are what
+  Sage derives from the words (`crates/sage/src/endpoints/keys.rs`), the same path
+  `green-envelope/tools/vectors` uses for the web wallet's reference vectors, so the first
+  address is the page's.
+- The words are shown and exported on Sage's own wallet card, behind Require biometrics when it
+  is on. Renaming, deleting and everything else is Sage's.
+- Bringing the same wallet in again opens that account: Sage refuses the key twice
+  ("Key already exists"), and Klimper then finds the account whose words these are (each
+  account with secrets is compared in memory) and logs in to it.
+- After the import Klimper offers Face ID; "Not now" keeps the account.
 
 ## Where it can be tried
 

@@ -57,6 +57,29 @@ function problemText(error: unknown): string | null {
   return t`That is not an answer from ${pageHost}. Start again.`;
 }
 
+/** Sage's answer to a key it already holds (`KeychainError::KeyExists`, kind `internal`). */
+function isKeyExists(error: unknown): boolean {
+  const reason = (error as { reason?: unknown } | null)?.reason;
+  return typeof reason === 'string' && /key already exists/i.test(reason);
+}
+
+/**
+ * The account whose recovery words these are, or null. Sage has no lookup by words, so each
+ * account with secrets is asked for its words and compared here, in memory; only on a second
+ * import of the same wallet, and nothing of it is shown or kept.
+ */
+async function accountWithWords(words: string): Promise<number | null> {
+  const { keys } = await commands.getKeys({});
+  for (const key of keys) {
+    if (!key.has_secrets) continue;
+    const { secrets } = await commands.getSecretKey({
+      fingerprint: key.fingerprint,
+    });
+    if (secrets?.mnemonic?.trim() === words) return key.fingerprint;
+  }
+  return null;
+}
+
 export default function ClapAndPayConnect() {
   const navigate = useNavigate();
   const { addError } = useErrors();
@@ -96,16 +119,27 @@ export default function ClapAndPayConnect() {
   };
 
   const bringIn = async (payload: HandoffPayload) => {
-    await commands.importKey({
-      name: 'Clap and Pay',
-      key: payload.words,
-      derivation_index: 5000,
-      hardened: false,
-      unhardened: true,
-      emoji: '🟢',
-    });
+    let fingerprint: number;
+    try {
+      ({ fingerprint } = await commands.importKey({
+        name: 'Clap and Pay',
+        key: payload.words,
+        derivation_index: 5000,
+        hardened: false,
+        unhardened: true,
+        emoji: '🟢',
+      }));
+    } catch (error) {
+      // Brought in before: Sage refuses the same key twice. Open that account instead of
+      // adding a second one, whatever it was renamed to since.
+      if (!isKeyExists(error)) throw error;
+      const existing = await accountWithWords(payload.words);
+      if (existing === null) throw error;
+      fingerprint = existing;
+      await commands.login({ fingerprint });
+    }
     await fetchState();
-    const data = await commands.getKey({});
+    const data = await commands.getKey({ fingerprint });
     setWallet(data.key);
     if (biometric.available && !biometric.enabled) {
       setOfferBiometric(true);

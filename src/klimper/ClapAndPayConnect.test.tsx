@@ -18,7 +18,7 @@ const WORDS =
   'history indoor salmon ripple side tent tourist decline venture turn diary sad awkward minute barrel much dumb asset milk mandate coach ritual reflect any';
 const RETURN = 'https://clapandpay.com/klimper/return#cp2.answer';
 
-const importKey = vi.fn().mockResolvedValue(undefined);
+const importKey = vi.fn().mockResolvedValue({ fingerprint: 4242 });
 const payload = {
   v: 2,
   network: 'testnet11',
@@ -70,12 +70,36 @@ const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('react-toastify', () => ({ toast: { info: vi.fn() } }));
 vi.mock('@/state', () => ({ clearState: vi.fn(), fetchState: vi.fn() }));
+const sage = vi.hoisted(() => ({
+  login: vi.fn().mockResolvedValue(null),
+  getKey: vi.fn().mockResolvedValue({ key: null }),
+  keys: [] as {
+    fingerprint: number;
+    has_secrets: boolean;
+    mnemonic: string | null;
+  }[],
+}));
 vi.mock('@/bindings', () => ({
   commands: {
     importKey: (...args: unknown[]) => importKey(...args),
     getNetwork: () => Promise.resolve({ network: { name: 'testnet11' } }),
-    getKey: () => Promise.resolve({ key: null }),
+    getKey: (req: unknown) => sage.getKey(req),
+    login: (req: unknown) => sage.login(req),
+    getKeys: () => Promise.resolve({ keys: sage.keys }),
+    getSecretKey: ({ fingerprint }: { fingerprint: number }) => {
+      const key = sage.keys.find((k) => k.fingerprint === fingerprint);
+      return Promise.resolve({
+        secrets: key?.mnemonic
+          ? { mnemonic: key.mnemonic, secret_key: 'sk' }
+          : null,
+      });
+    },
   },
+}));
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock('react-router-dom', async (original) => ({
+  ...(await original<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
 }));
 
 const { renderScreen } = await import('./testHarness');
@@ -84,7 +108,13 @@ const { offerClapAndPayReturn } = await import('./clapandpayReturn');
 
 afterEach(() => {
   cleanup();
-  importKey.mockClear();
+  importKey.mockReset();
+  importKey.mockResolvedValue({ fingerprint: 4242 });
+  sage.login.mockClear();
+  sage.getKey.mockClear();
+  sage.keys = [];
+  navigate.mockClear();
+  biometric.enableIfAvailable.mockClear();
   handoff.open.mockReset();
   openUrl.mockClear();
 });
@@ -141,6 +171,39 @@ describe('Clap and Pay connect, version 2', () => {
     await waitFor(() =>
       expect(biometric.enableIfAvailable).toHaveBeenCalledTimes(1),
     );
+  });
+});
+
+describe('the same wallet a second time (TASK-130)', () => {
+  it('opens the account it already is instead of adding a duplicate', async () => {
+    importKey.mockRejectedValue({
+      kind: 'internal',
+      reason: 'Keychain error: Key already exists',
+    });
+    sage.keys = [
+      { fingerprint: 111, has_secrets: true, mnemonic: 'other words' },
+      { fingerprint: 222, has_secrets: false, mnemonic: null },
+      { fingerprint: 333, has_secrets: true, mnemonic: WORDS },
+    ];
+    handoff.open.mockResolvedValue(payload);
+    await openThePage();
+    act(() => offerClapAndPayReturn(RETURN));
+
+    await waitFor(() =>
+      expect(sage.login).toHaveBeenCalledWith({ fingerprint: 333 }),
+    );
+    expect(importKey).toHaveBeenCalledTimes(1);
+    expect(sage.getKey).toHaveBeenCalledWith({ fingerprint: 333 });
+  });
+
+  it('keeps the import when Face ID is declined', async () => {
+    handoff.open.mockResolvedValue(payload);
+    await openThePage();
+    act(() => offerClapAndPayReturn(RETURN));
+    fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    expect(navigate).toHaveBeenCalledWith('/wallet');
+    expect(importKey).toHaveBeenCalledTimes(1);
+    expect(biometric.enableIfAvailable).not.toHaveBeenCalled();
   });
 });
 

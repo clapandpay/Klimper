@@ -689,7 +689,7 @@ msgstr "¿Está seguro de que desea sincronizar de nuevo los datos de esta bille
 msgid "Ascending"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:192
+#: src/klimper/ClapAndPayConnect.tsx:226
 msgid "Ask for Face ID before paying"
 msgstr ""
 
@@ -862,8 +862,8 @@ msgstr ""
 #~ msgid "Both are off for every new website. Turn one on only if you know exactly why this one needs it."
 #~ msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:261
-#: src/klimper/ClapAndPayConnect.tsx:296
+#: src/klimper/ClapAndPayConnect.tsx:295
+#: src/klimper/ClapAndPayConnect.tsx:330
 msgid "Bringing it in…"
 msgstr ""
 
@@ -1139,8 +1139,8 @@ msgstr ""
 msgid "Choose Your Theme"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:187
-#: src/klimper/ClapAndPayConnect.tsx:234
+#: src/klimper/ClapAndPayConnect.tsx:221
+#: src/klimper/ClapAndPayConnect.tsx:268
 msgid "Clap and Pay"
 msgstr ""
 
@@ -2838,7 +2838,7 @@ msgstr ""
 #~ msgid "It owns the key that signed the code. Only the domain is verified — the name is what it claims."
 #~ msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:312
+#: src/klimper/ClapAndPayConnect.tsx:346
 msgid "It then lives in Klimper on this device, as its own account with 24 recovery words you can show and write down. If you lose the device, open {pageHost} again: your passkey brings the money back."
 msgstr ""
 
@@ -3695,7 +3695,7 @@ msgstr ""
 msgid "not listening"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:218
+#: src/klimper/ClapAndPayConnect.tsx:252
 msgid "Not now"
 msgstr ""
 
@@ -3868,7 +3868,7 @@ msgstr ""
 msgid "Only to your own addresses"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:256
+#: src/klimper/ClapAndPayConnect.tsx:290
 msgid "Open {pageHost}"
 msgstr ""
 
@@ -3894,7 +3894,7 @@ msgstr ""
 msgid "Open menu"
 msgstr "Abrir menú"
 
-#: src/klimper/ClapAndPayConnect.tsx:242
+#: src/klimper/ClapAndPayConnect.tsx:276
 msgid "Opened a Green Envelope? Bring that money into Klimper with your face or fingerprint. Nothing to type."
 msgstr ""
 
@@ -4683,7 +4683,7 @@ msgstr ""
 msgid "Saving..."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:263
+#: src/klimper/ClapAndPayConnect.tsx:297
 msgid "Say yes on the page with your face or fingerprint. It brings you back here."
 msgstr ""
 
@@ -5339,7 +5339,7 @@ msgstr "Detalles de división"
 msgid "Start"
 msgstr "Comenzar"
 
-#: src/klimper/ClapAndPayConnect.tsx:279
+#: src/klimper/ClapAndPayConnect.tsx:313
 msgid "Start again"
 msgstr ""
 
@@ -5426,7 +5426,7 @@ msgstr "Barrido"
 #~ msgid "Switch between light and dark theme"
 #~ msgstr "Alternar entre tema claro y oscuro"
 
-#: src/klimper/ClapAndPayConnect.tsx:299
+#: src/klimper/ClapAndPayConnect.tsx:333
 msgid "Switch to {theirNetwork} and bring it in"
 msgstr ""
 
@@ -5585,7 +5585,7 @@ msgstr ""
 msgid "That link does not belong to Klimper."
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:288
+#: src/klimper/ClapAndPayConnect.tsx:322
 msgid "That money is on {theirNetwork}. Klimper switches over to bring it in; you can switch back in the settings."
 msgstr ""
 
@@ -5665,7 +5665,7 @@ msgstr ""
 #~ msgid "The money is in Klimper now. Right now anyone who can open Klimper on this phone can spend it. With a passkey, Klimper only opens with your face."
 #~ msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:195
+#: src/klimper/ClapAndPayConnect.tsx:229
 msgid "The money is in Klimper now. Right now anyone who has this phone unlocked can spend it. With Face ID on, Klimper asks for your face before every payment and before showing your recovery words."
 msgstr ""
 
@@ -6447,7 +6447,7 @@ msgstr "Perfil de Transferencia"
 msgid "Try again"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:210
+#: src/klimper/ClapAndPayConnect.tsx:244
 msgid "Turn on Face ID"
 msgstr ""
 
@@ -6725,7 +6725,7 @@ msgstr ""
 msgid "Use maximum spendable balance"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:239
+#: src/klimper/ClapAndPayConnect.tsx:273
 #: src/pages/Login.tsx:226
 msgid "Use my Clap and Pay money"
 msgstr ""
@@ -6873,7 +6873,7 @@ msgstr "Ver opciones"
 msgid "Wait until the address is shown, then try again"
 msgstr ""
 
-#: src/klimper/ClapAndPayConnect.tsx:207
+#: src/klimper/ClapAndPayConnect.tsx:241
 msgid "Waiting for Face ID…"
 msgstr ""
 
