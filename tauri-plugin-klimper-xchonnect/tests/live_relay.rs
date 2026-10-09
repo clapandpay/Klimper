@@ -1171,6 +1171,64 @@ async fn a_dapp_cancel_withdraws_the_prompt_and_is_answered_4102() {
     stop(running, paired).await;
 }
 
+/// TASK-125.03: a website's read is answered at once while a signing request still waits for
+/// the user, so its wallet info never waits behind a prompt.
+#[tokio::test]
+#[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]
+async fn a_read_is_answered_while_a_prompt_waits() {
+    let mut paired = pair_over_relay().await;
+    let bridge = bridge_answerer();
+    let answer: Answerer = Arc::new(move |inputs: AnswerInputs| {
+        if inputs.meta.method == "chainId" {
+            Box::pin(async { Ok(r#""testnet11""#.to_owned()) })
+        } else {
+            bridge(inputs)
+        }
+    });
+    let running = start_loop_with(
+        &paired.wallet_session,
+        &paired.domain,
+        Some("k1"),
+        false,
+        answer,
+    );
+    let send_id = post_send(&mut paired).await;
+    read_dapp_until(&mut paired, is_shown).await;
+
+    let read = paired
+        .dapp_session
+        .seal(
+            &mut OsEntropy,
+            now(),
+            rpc::request("chainId", "{}").unwrap(),
+            600,
+        )
+        .unwrap();
+    paired.relay.post(&read).await.unwrap();
+    let seen = read_dapp_until(&mut paired, is_response).await;
+    assert!(
+        matches!(
+            seen.last().unwrap(),
+            Message::RpcResponse { request_id, outcome: RpcOutcome::Result(result) }
+                if *request_id == read.id && result == r#""testnet11""#
+        ),
+        "the read is answered first"
+    );
+    assert_eq!(
+        running.approvals.outstanding().len(),
+        1,
+        "the send still waits for the user"
+    );
+
+    running.approvals.cancel("a1").unwrap();
+    read_dapp_until(
+        &mut paired,
+        |m| matches!(m, Message::RpcResponse { request_id, .. } if *request_id == send_id),
+    )
+    .await;
+    stop(running, paired).await;
+}
+
 /// The user cancels from the requests page: the dApp is told with `rpc.cancel`, then 4102.
 #[tokio::test]
 #[ignore = "needs a reference relay on XCHONNECT_TEST_RELAY"]

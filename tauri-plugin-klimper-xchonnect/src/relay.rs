@@ -26,6 +26,16 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Total timeout for a non-polling call.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Phones (TASK-125.02): a socket iOS or Android cut while the app was in the background
+/// must fail fast rather than hold a request until its total timeout.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// A pooled connection idle this long is not reused: after a stay in the background it is
+/// most likely dead, and reusing it costs a full timeout.
+const POOL_IDLE: Duration = Duration::from_secs(10);
+const KEEPALIVE: Duration = Duration::from_secs(15);
+/// What a long poll may take beyond the wait it asked for before it counts as lost.
+const POLL_GRACE: Duration = Duration::from_secs(10);
+
 /// Attempts [`RelayClient::post_retrying`] makes, and the pause before the first retry
 /// (doubled each time).
 const POST_ATTEMPTS: u32 = 3;
@@ -78,7 +88,10 @@ impl DirectTransport {
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("Klimper")
-            .referer(false);
+            .referer(false)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .pool_idle_timeout(POOL_IDLE)
+            .tcp_keepalive(KEEPALIVE);
         if !developer_mode {
             builder = builder.https_only(true);
         }
@@ -331,7 +344,7 @@ impl RelayClient {
         info: &RelayInfo,
     ) -> Result<Vec<(String, Vec<u8>)>> {
         let wait = wait.min(info.max_wait_s);
-        let timeout = CALL_TIMEOUT + Duration::from_secs(wait);
+        let timeout = POLL_GRACE + Duration::from_secs(wait);
         let value = self
             .ok(
                 "GET",

@@ -277,19 +277,34 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
     }
 }
 
-/// What a website sees: its own key, and every receive key when the user allowed that. The own
-/// key stays in the list either way, so coins paid to the website's address never vanish
-/// from it.
+/// What a website sees: every receive key when the user allowed that, the wallet's first
+/// receive address first, and its own key last; or only its own key. Websites take the first
+/// key as "the wallet" (its address, its fingerprint), so that must be the address the user
+/// knows, not an empty key made for the website (clapandpay TASK-125.01). The own key stays
+/// in the list either way, so coins paid to the website's address never vanish from it.
 fn exposed_keys(
     own: Option<chia_bls::PublicKey>,
     all: bool,
     receive_keys: &[chia_bls::PublicKey],
 ) -> Vec<chia_bls::PublicKey> {
-    let mut keys: Vec<chia_bls::PublicKey> = own.into_iter().collect();
+    let mut keys: Vec<chia_bls::PublicKey> = Vec::new();
     if all {
         keys.extend(receive_keys.iter().filter(|key| Some(**key) != own));
     }
+    keys.extend(own);
     keys
+}
+
+/// A connection stored between 2026-10-08 and TASK-125.01 lists the website's own key first:
+/// move it last. `true` when the order changed.
+fn own_key_last(exposed: &mut [String], own: Option<&str>) -> bool {
+    match (exposed.first(), own) {
+        (Some(first), Some(own)) if exposed.len() > 1 && first == own => {
+            exposed.rotate_left(1);
+            true
+        }
+        _ => false,
+    }
 }
 
 fn key_hex(key: &chia_bls::PublicKey) -> String {
@@ -586,8 +601,8 @@ async fn confirm_sas<R: Runtime>(
     let own = state
         .store
         .claim_website_key(snapshot.fingerprint, &dapp, &snapshot.website_keys)?;
-    // Its own key first (that is what the record keeps as `own_key`), then, if the user chose
-    // it on the pairing screen, every receive key.
+    // Every receive key if the user chose that on the pairing screen, then its own key (the
+    // record keeps it as `own_key`).
     attempt.own_key = own;
     attempt.permissions.exposed_keys =
         exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
@@ -652,14 +667,27 @@ async fn list_sessions<R: Runtime>(
     state.live.lock().await.retain(|_, live| live.running());
     let ending = state.ending().await;
     let mut out = Vec::with_capacity(sessions.len());
-    for stored in sessions {
+    for mut stored in sessions {
         // Disconnected a moment ago: gone as far as the user is concerned, while the loop
         // finishes telling the dApp.
         if ending.contains(&stored.record.id) {
             continue;
         }
+        let mut exposed = stored.record.permissions.exposed_keys.clone();
+        let reordered = own_key_last(&mut exposed, stored.record.own_key.as_deref());
+        if reordered {
+            stored =
+                state
+                    .store
+                    .update_policy(snapshot.fingerprint, &stored.record.id, |record| {
+                        record.permissions.exposed_keys = exposed;
+                    })?;
+        }
         let keys = KeyState::stored(&stored);
         let connected = state.ensure_loop(stored.clone()).await.unwrap_or(false);
+        if reordered && let Some(live) = state.live.lock().await.get(&stored.record.id) {
+            live.announce_permissions();
+        }
         out.push(summary(&stored, keys, connected));
     }
     Ok(out)
@@ -967,6 +995,16 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             app.state::<Xchonnect<R>>().start_push();
             Ok(())
         })
+        // Back in front (TASK-125.02): a long poll opened before the phone suspended the app
+        // may sit on a dead socket, so every loop drops it and reads its mailbox now.
+        .on_event(|app, event| {
+            if matches!(event, tauri::RunEvent::Resumed) {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    app.state::<Xchonnect<R>>().wake_all().await;
+                });
+            }
+        })
         .build()
 }
 
@@ -986,11 +1024,24 @@ mod lib_tests {
         let key = |i: u8| chia_bls::SecretKey::from_seed(&[i; 64]).public_key();
         let receive = [key(1), key(2)];
         assert_eq!(exposed_keys(Some(key(9)), false, &receive), vec![key(9)]);
+        // The wallet's first address first: websites read the first key as the wallet.
         assert_eq!(
             exposed_keys(Some(key(9)), true, &receive),
-            vec![key(9), key(1), key(2)]
+            vec![key(1), key(2), key(9)]
         );
         assert_eq!(exposed_keys(None, true, &receive), receive.to_vec());
+    }
+
+    #[test]
+    fn a_connection_stored_with_its_own_key_first_gets_it_last() {
+        let mut exposed = vec!["own".to_owned(), "r0".to_owned(), "r1".to_owned()];
+        assert!(own_key_last(&mut exposed, Some("own")));
+        assert_eq!(exposed, ["r0", "r1", "own"]);
+        assert!(!own_key_last(&mut exposed, Some("own")));
+        let mut alone = vec!["own".to_owned()];
+        assert!(!own_key_last(&mut alone, Some("own")));
+        let mut old = vec!["r0".to_owned(), "r1".to_owned()];
+        assert!(!own_key_last(&mut old, None));
     }
 
     #[test]
