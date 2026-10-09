@@ -104,7 +104,6 @@ export default function XchonnectConnect() {
   const [stage, setStage] = useState<Stage>('enter');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<PairingPreview | null>(null);
-  const keyCount = preview?.grantedKeyCount ?? 0;
   const [sas, setSas] = useState<PairingSas | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -270,7 +269,7 @@ export default function XchonnectConnect() {
       const session = await xchonnect.confirmSas(
         preview.pairingId,
         matches,
-        allAddresses && keyCount > 0, // never a choice the user was not shown
+        allAddresses, // on unless the user turned the switch off
       );
       // The list opens on the new connection, so the user sees what they just made.
       navigate(XCHONNECT_ROUTES.dapps, {
@@ -483,9 +482,7 @@ export default function XchonnectConnect() {
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4 text-sm'>
-              {keyCount > 0 && (
-                <AddressSwitch all={allAddresses} onChange={setAllAddresses} />
-              )}
+              <AddressSwitch all={allAddresses} onChange={setAllAddresses} />
               {preview.developerMode && (
                 <p
                   className='flex items-start gap-2 text-destructive'

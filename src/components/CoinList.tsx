@@ -1,5 +1,5 @@
+import { mempoolCoinUrl } from '@/klimper/explorer';
 import { offersEnabled } from '@/lib/features';
-import { spacescanCoinUrl } from '@/lib/urls';
 import { formatTimestamp, fromMojos } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -91,18 +91,18 @@ const CoinIdCell = ({
   isTestnet: boolean;
 }) => {
   const coinId = row.original.coin_id;
-  const url = spacescanCoinUrl(coinId, isTestnet);
+  const url = mempoolCoinUrl(coinId, isTestnet);
   return (
     <div
       className='cursor-pointer truncate hover:underline'
       onClick={(e) => {
         e.stopPropagation();
-        openUrl(url);
+        if (url) openUrl(url);
       }}
-      aria-label={t`View coin ${coinId} on Spacescan.io`}
+      aria-label={t`View coin ${coinId} on mempoolxch.space`}
       role='button'
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if ((e.key === 'Enter' || e.key === ' ') && url) {
           e.stopPropagation();
           openUrl(url);
         }

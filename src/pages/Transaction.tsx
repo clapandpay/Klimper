@@ -6,6 +6,7 @@ import { LabeledItem } from '@/components/LabeledItem';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNetwork } from '@/hooks/useNetwork';
+import { CoinAddress } from '@/klimper/CoinAddress';
 import { mempoolBlockUrl } from '@/klimper/explorer';
 import { formatTimestamp } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
@@ -82,7 +83,7 @@ export default function Transaction() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='flex items-center gap-4 mb-4'>
+            <div className='flex flex-wrap items-center gap-x-4 gap-y-2 mb-4'>
               <div className='px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'>
                 <div className='flex items-center gap-1'>
                   <CheckCircle className='h-4 w-4' aria-hidden='true' />
@@ -143,7 +144,9 @@ export default function Transaction() {
                     asset={coin.asset}
                     amount={coin.amount}
                     coinId={coin.coin_id}
-                  />
+                  >
+                    <CoinAddress coin={coin} />
+                  </AssetCoin>
                 ))}
               </CardContent>
             </Card>
@@ -163,7 +166,9 @@ export default function Transaction() {
                     asset={coin.asset}
                     amount={coin.amount}
                     coinId={coin.coin_id}
-                  />
+                  >
+                    <CoinAddress coin={coin} />
+                  </AssetCoin>
                 ))}
               </CardContent>
             </Card>

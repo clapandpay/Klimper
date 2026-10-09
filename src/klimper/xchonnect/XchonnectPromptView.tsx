@@ -8,6 +8,7 @@
 // The order is the order the decision is made in: what happens to the money, then what it
 // costs, then what could go wrong, and only then the detail.
 
+import { AddressText } from '@/klimper/AddressText';
 import { toAddress } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -147,7 +148,7 @@ function Asset({
             )}
           </span>
           <span
-            className={`text-2xl font-semibold text-right break-all ${
+            className={`text-2xl font-semibold text-right [overflow-wrap:anywhere] ${
               asset.net.isNegative()
                 ? 'text-destructive'
                 : asset.net.isZero()
@@ -289,7 +290,7 @@ function Binding({
   );
 }
 
-/** A puzzle hash as the network's address, shortened, the whole on hover. */
+/** A puzzle hash as the network's address: shortened, the whole on a tap, with a copy button. */
 function Address({
   puzzleHash,
   prefix,
@@ -312,15 +313,7 @@ function Address({
   } catch {
     address = `0x${puzzleHash}`;
   }
-  const short =
-    address.length > 22
-      ? `${address.slice(0, 12)}…${address.slice(-6)}`
-      : address;
-  return (
-    <span className='font-mono text-xs' title={address} data-testid={testId}>
-      {short}
-    </span>
-  );
+  return <AddressText address={address} testId={testId} />;
 }
 
 /** Totals per asset label, in the order the assets first appear. */

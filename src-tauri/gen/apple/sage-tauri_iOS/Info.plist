@@ -65,5 +65,18 @@
 			</array>
 		</dict>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.clapandpay.klimper.xchonnect</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>xchonnect</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -1,9 +1,5 @@
 // ── Private base helpers ──────────────────────────────────────────────────────
 
-function spacescanBase(isTestnet: boolean): string {
-  return `https://${isTestnet ? 'testnet11.' : ''}spacescan.io`;
-}
-
 function dexieBrowseBase(isTestnet: boolean): string {
   return `https://${isTestnet ? 'testnet.' : ''}dexie.space`;
 }
@@ -18,26 +14,6 @@ function mintGardenBrowseBase(isTestnet: boolean): string {
 
 function mintGardenApiBase(isTestnet: boolean): string {
   return `https://api${isTestnet ? '.testnet' : ''}.mintgarden.io`;
-}
-
-// ── Spacescan ─────────────────────────────────────────────────────────────────
-
-export function spacescanCoinUrl(coinId: string, isTestnet: boolean): string {
-  return `${spacescanBase(isTestnet)}/coin/0x${coinId}`;
-}
-
-export function spacescanNftUrl(
-  launcherId: string,
-  isTestnet: boolean,
-): string {
-  return `${spacescanBase(isTestnet)}/nft/${launcherId}`;
-}
-
-export function spacescanCollectionUrl(
-  collectionId: string,
-  isTestnet: boolean,
-): string {
-  return `${spacescanBase(isTestnet)}/collection/${collectionId}`;
 }
 
 // ── Dexie — browser ──────────────────────────────────────────────────────────

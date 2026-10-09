@@ -644,7 +644,9 @@ describe('where the money goes', () => {
     const sent = await waitFor(() => screen.getByTestId('prompt-output'));
     expect(sent.textContent).toContain('0.1 XCH');
     const address = screen.getByTestId('output-address');
-    expect(address.getAttribute('title')).toMatch(/^xch1[02-9ac-hj-np-z]{58}$/);
+    expect(address.getAttribute('aria-label')).toMatch(
+      /^xch1[02-9ac-hj-np-z]{58}$/,
+    );
     expect(screen.getByTestId('prompt-change').textContent).toContain(
       '1.399999 XCH',
     );
@@ -674,9 +676,9 @@ describe('where the money goes', () => {
 
     const sent = await waitFor(() => screen.getByTestId('prompt-output'));
     expect(sent.textContent).toContain('0.1 TXCH');
-    expect(screen.getByTestId('output-address').getAttribute('title')).toMatch(
-      /^txch1/,
-    );
+    expect(
+      screen.getByTestId('output-address').getAttribute('aria-label'),
+    ).toMatch(/^txch1/);
     expect(screen.getByTestId('prompt-implied-fee').textContent).toContain(
       '0.000001 TXCH',
     );
