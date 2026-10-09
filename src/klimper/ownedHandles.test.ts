@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { handleFromNftName, judge } from './myHandles';
+import { handleFromNftName, judge } from './ownedHandles';
 
 const OURS = 'ab'.repeat(32);
 const OTHER = 'cd'.repeat(32);

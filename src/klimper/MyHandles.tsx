@@ -10,7 +10,7 @@ import { Trans } from '@lingui/react/macro';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { AtSign, Check, Copy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { loadOwnedHandles, OwnedHandle } from './myHandles';
+import { loadOwnedHandles, OwnedHandle } from './ownedHandles';
 
 export function MyHandles() {
   const { network } = useNetwork();
