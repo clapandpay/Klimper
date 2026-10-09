@@ -17,6 +17,13 @@ class KlimperStoragePlugin: Plugin {
     var values = URLResourceValues()
     values.isExcludedFromBackup = true
     try url.setResourceValues(values)
+    // Read back: a flag that did not stick must fail loudly, not look done.
+    url.removeAllCachedResourceValues()
+    let check = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    guard check.isExcludedFromBackup == true else {
+      invoke.reject("the backup exclusion did not stick")
+      return
+    }
     invoke.resolve()
   }
 }

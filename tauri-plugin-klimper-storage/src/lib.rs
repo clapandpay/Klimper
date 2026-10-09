@@ -34,6 +34,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
+/// Long enough for Sage's logging to be up (`Sage::initialize`, called by the webview at start).
+#[cfg(target_os = "ios")]
+const LOG_AFTER_SECS: u64 = 15;
+
 #[cfg(target_os = "ios")]
 fn keep_out_of_backups<R: Runtime>(
     handle: tauri::plugin::PluginHandle<R>,
@@ -43,7 +47,9 @@ fn keep_out_of_backups<R: Runtime>(
     struct Request {
         path: String,
     }
-    // Off the main thread, where setup runs and the Swift side answers.
+    // Off the main thread, where setup runs and the Swift side answers. The result is logged a
+    // little later: Sage installs its log subscriber when the webview initializes it, after
+    // plugin setup, and an event sent before that goes nowhere. It is retried every launch.
     tauri::async_runtime::spawn_blocking(move || {
         let result = std::fs::create_dir_all(&dir)
             .map_err(|error| error.to_string())
@@ -58,8 +64,12 @@ fn keep_out_of_backups<R: Runtime>(
                     .map(|_| ())
                     .map_err(|error| error.to_string())
             });
-        if let Err(error) = result {
-            tracing::error!("could not keep {} out of backups: {error}", dir.display());
+        std::thread::sleep(std::time::Duration::from_secs(LOG_AFTER_SECS));
+        match result {
+            Ok(()) => tracing::info!("{} is kept out of backups", dir.display()),
+            Err(error) => {
+                tracing::error!("could not keep {} out of backups: {error}", dir.display());
+            }
         }
     });
 }

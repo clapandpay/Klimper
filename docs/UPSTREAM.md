@@ -244,7 +244,10 @@ deliberate difference from Sage: the wallet data never goes into a phone backup,
 Android turns backup and device transfer off in the manifest. Check on a phone after a
 release build with a wallet in it: Settings → [name] → iCloud → Manage Account Storage →
 Backups → this iPhone lists Klimper at a few KB, not the size of its wallet databases; a
-failure is logged as `could not keep … out of backups`.
+failure is logged as `could not keep … out of backups` (success as `… is kept out of
+backups`), about 15 seconds after start, once Sage's logging is up. Sage writes `keys.bin` in
+place (`fs::write`), as upstream; with no backup, a write torn by a crash leaves only the
+recovery words, which is accepted for engine parity.
 
 | File                                                                                                                                             | Ours                             | Note                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

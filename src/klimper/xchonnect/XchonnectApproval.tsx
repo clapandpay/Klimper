@@ -106,9 +106,11 @@ export default function XchonnectApproval() {
 
   const resolve = (approval: Approval, approved: boolean) => {
     const dapp = approval.dapp;
-    void answer(approval.id, approved).then((taken) => {
-      // Not taken: the error banner says so, and there is no answer to go back with.
-      if (!taken) return;
+    const answered = answer(approval.id, approved);
+    void answered.then((outcome) => {
+      // Gone: the error banner says so. Unconfirmed: Face ID was not given, and the request
+      // is still here. Either way there is no answer to go back with.
+      if (outcome !== 'answered') return;
       // Integration guide 5.4: with no usable return URL the user is left here with a
       // clear "you can go back now" state rather than a guessed navigation. The guard
       // that would open one lives in `xchonnectReturn.ts`.
@@ -119,6 +121,7 @@ export default function XchonnectApproval() {
     if (picked !== null) {
       navigate(XCHONNECT_ROUTES.request, { replace: true });
     }
+    return answered;
   };
 
   const withdraw = (approval: Approval) => {

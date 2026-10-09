@@ -22,6 +22,7 @@
 //     silence, a closed webview and a session that ended as "do not sign", and the
 //     countdown says when that happens.
 
+import type { Answered } from './useXchonnectApprovals';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -100,8 +101,11 @@ interface ApprovalDetailProps {
   readonly approval: Approval;
   /** How many other approvals are waiting; shown, never answerable from here. */
   readonly waiting: number;
-  /** Answer this approval. Resolves once the wallet has the answer. */
-  readonly onAnswer: (approved: boolean) => void;
+  /**
+   * Answer this approval. Resolves once the wallet has the answer; `'unconfirmed'` when Face
+   * ID was not given, which leaves the request waiting and the buttons usable again.
+   */
+  readonly onAnswer: (approved: boolean) => Promise<Answered>;
   /** Withdraw the request instead of answering it; the website is told it was cancelled. */
   readonly onCancel?: () => void;
   /** Extra controls for the header's right edge (the overlay's "Later"). */
@@ -126,6 +130,8 @@ export function XchonnectApprovalDetail({
   const [slides, setSlides] = useState(0);
   // One answer per request: after a press, every button waits for the next request.
   const [busy, setBusy] = useState(false);
+  /** Bumped when Face ID was not given, so the slider goes back to the start. */
+  const [attempt, setAttempt] = useState(0);
   // A request that takes the place of the one on screen (the website withdrew the first,
   // or it timed out) keeps the buttons off for a moment, so a tap meant for the first
   // cannot land on the second.
@@ -161,7 +167,14 @@ export function XchonnectApprovalDetail({
     setBusy(true);
     act();
   };
-  const answer = (approved: boolean) => once(() => onAnswer(approved));
+  const answer = (approved: boolean) =>
+    once(() => {
+      void onAnswer(approved).then((outcome) => {
+        if (outcome !== 'unconfirmed') return;
+        setBusy(false);
+        setAttempt((n) => n + 1);
+      });
+    });
 
   const onApprove = () => {
     if (needsSecondConfirmation(view)) {
@@ -253,7 +266,7 @@ export function XchonnectApprovalDetail({
           }
           onConfirm={onApprove}
           disabled={disabled || view.kind === 'unreadable'}
-          resetKey={`${approval.id}:${slides}`}
+          resetKey={`${approval.id}:${attempt}:${slides}`}
           testId='approval-slide'
         />
         <div className='flex gap-2'>

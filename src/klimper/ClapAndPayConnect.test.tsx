@@ -37,6 +37,12 @@ vi.mock('@/contexts/WalletContext', () => ({ useWallet: () => wallet }));
 // that makes the request, forever.
 const errors = vi.hoisted(() => ({ addError: () => undefined }));
 vi.mock('@/hooks/useErrors', () => ({ useErrors: () => errors }));
+const biometric = vi.hoisted(() => ({
+  available: true,
+  enabled: false,
+  enableIfAvailable: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('@/hooks/useBiometric', () => ({ useBiometric: () => biometric }));
 vi.mock('@/lib/features', () => ({
   clapAndPayOrigin: 'https://envelope.test',
 }));
@@ -88,5 +94,17 @@ describe('Clap and Pay connect', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Different' }));
     expect(await screen.findByText(/did not come from/)).toBeTruthy();
     expect(importKey).not.toHaveBeenCalled();
+  });
+
+  it('offers Face ID after the import when it is off (TASK-126 audit)', async () => {
+    await paste();
+    fireEvent.click(screen.getByRole('button', { name: 'Same number' }));
+    const turnOn = await screen.findByRole('button', {
+      name: 'Turn on Face ID',
+    });
+    fireEvent.click(turnOn);
+    await waitFor(() =>
+      expect(biometric.enableIfAvailable).toHaveBeenCalledTimes(1),
+    );
   });
 });

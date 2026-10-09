@@ -6,7 +6,8 @@
 // face or finger check happens on that page; the page answers with one line of text that only
 // this app instance can read (src/lib/clapandpayHandoff.ts). From there it is Sage's ordinary
 // key import: nothing in the engine or the app bridge is touched. Sage keeps that key as it keeps
-// every other one; its "Biometric Authentication" setting guards spending it.
+// every other one; its "Biometric Authentication" setting guards spending it, and it is off until
+// turned on, so the import ends by offering it (TASK-126 audit).
 // Before anything is imported, the answer code is shown: the page shows the same six digits next
 // to its answer, and an answer that did not come from the page (a swapped clipboard) cannot
 // match them.
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/card';
 import { LoadingButton } from '@/components/ui/loading-button';
 import { useWallet } from '@/contexts/WalletContext';
+import { useBiometric } from '@/hooks/useBiometric';
 import { useErrors } from '@/hooks/useErrors';
 import {
   createHandoffRequest,
@@ -70,6 +72,10 @@ export default function ClapAndPayConnect() {
   } | null>(null);
   // An answer for another network than Klimper's: kept, so one tap can switch and finish.
   const [elsewhere, setElsewhere] = useState<HandoffPayload | null>(null);
+  const biometric = useBiometric();
+  /** After the import: Sage's Face ID check is off, and the phone has Face ID. */
+  const [offerBiometric, setOfferBiometric] = useState(false);
+  const [enabling, setEnabling] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -100,7 +106,24 @@ export default function ClapAndPayConnect() {
     await fetchState();
     const data = await commands.getKey({});
     setWallet(data.key);
+    if (biometric.available && !biometric.enabled) {
+      setOfferBiometric(true);
+      return;
+    }
     navigate('/wallet');
+  };
+
+  const turnOnBiometric = async () => {
+    setEnabling(true);
+    setProblem(null);
+    try {
+      await biometric.enableIfAvailable();
+      navigate('/wallet');
+    } catch (error) {
+      setProblem(String(error));
+    } finally {
+      setEnabling(false);
+    }
   };
 
   const fail = (error: unknown) => {
@@ -165,6 +188,54 @@ export default function ClapAndPayConnect() {
   };
 
   const theirNetwork = elsewhere?.network ?? '';
+
+  if (offerBiometric) {
+    return (
+      <SafeAreaView>
+        <Header title={t`Clap and Pay`} />
+        <Container>
+          <Card className='max-w-xl mx-auto'>
+            <CardHeader className='text-center'>
+              <CardTitle>
+                <Trans>Ask for Face ID before paying</Trans>
+              </CardTitle>
+              <CardDescription>
+                <Trans>
+                  The money is in Klimper now. Right now anyone who has this
+                  phone unlocked can spend it. With Face ID on, Klimper asks for
+                  your face before every payment and before showing your
+                  recovery words.
+                </Trans>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3 text-center'>
+              <LoadingButton
+                className='w-full'
+                loading={enabling}
+                loadingText={t`Waiting for Face ID…`}
+                onClick={turnOnBiometric}
+              >
+                <Trans>Turn on Face ID</Trans>
+              </LoadingButton>
+              <Button
+                className='w-full'
+                variant='ghost'
+                disabled={enabling}
+                onClick={() => navigate('/wallet')}
+              >
+                <Trans>Not now</Trans>
+              </Button>
+              {problem && (
+                <Alert variant='destructive'>
+                  <AlertDescription>{problem}</AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </Container>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView>

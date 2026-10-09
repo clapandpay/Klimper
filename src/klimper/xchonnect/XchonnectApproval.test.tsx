@@ -21,6 +21,9 @@ vi.mock('@/components/Layout', () => ({
 vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
+vi.mock('@/hooks/useBiometric', () => ({
+  useBiometric: () => ({ promptIfEnabled: () => Promise.resolve(true) }),
+}));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 const ticker = vi.hoisted(() => ({ value: 'XCH' }));
 vi.mock('../useTicker', () => ({ useTicker: () => ticker.value }));
