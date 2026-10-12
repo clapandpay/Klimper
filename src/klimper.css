@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  * Copyright 2026 the Klimper authors
  *
- * Klimper Coin (docs/design-guide.md). Colours, radii, buttons and the sun backdrop live in
+ * Klimper Coins (docs/design-guide.md). Colours, radii, buttons and the coins backdrop live in
  * src/themes/klimper-{light,dark}/theme.json; this file holds what a theme.json cannot say.
  * The Klimper themes are named "light" and "dark", so they replace Sage's core themes of the same
  * name; every rule is scoped to them, so any other Sage theme (Colorful, XCH, …) stays unchanged,
@@ -11,25 +11,32 @@
  */
 
 :root:is(.theme-light, .theme-dark) {
-  --sun-red: #ff3b1f;
-  --sun-orange: #ff7a1f;
-  --sun-yellow: #ffc21a;
-  --teal: #0f7c87;
-  --ink: #111217;
-  --cream: #fff4e6;
-  --sun: linear-gradient(135deg, #ff3b1f 0%, #ff7a1f 60%, #ff9a1f 100%);
-  --nav-active-background: rgb(255 122 31 / 0.16);
+  /* Klimper coins (docs/design-guide.md): the three coins of the logo, flat, no gradient. The old
+     names stay so the rules below read the same: "sun" is now the blue coin, "teal" the yellow one. */
+  --coin-blue: #006bfe;
+  --coin-red: #fb322a;
+  --coin-yellow: #fdcc02;
+  --sun-red: var(--coin-red);
+  --sun-orange: var(--coin-blue);
+  --sun-yellow: var(--coin-yellow);
+  --teal: var(--coin-yellow);
+  --on-teal: #1c1b19;
+  --ink: #1c1b19;
+  --cream: #f4f0e8;
+  --sun: var(--coin-blue);
+  --on-sun: #ffffff;
+  --nav-active-background: rgb(0 107 254 / 0.16);
 
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
 :root.theme-light {
-  --canvas: #fff7ec;
+  --canvas: #f4f0e8;
 }
 
 :root.theme-dark {
-  --canvas: #0f1014;
+  --canvas: #0e130c;
 }
 
 :root:is(.theme-light, .theme-dark),
@@ -53,17 +60,17 @@
 }
 
 :root:is(.theme-light, .theme-dark) ::selection {
-  background: rgb(255 122 31 / 0.3);
+  background: rgb(253 204 2 / 0.4);
 }
 
 /* Sidebar: ink in both themes, so the wallet frame reads as Klimper at a glance. The element is
    found by the variable Sage's layout sets on it, which does not change with the language. */
 :root:is(.theme-light, .theme-dark) [style*='--sidebar-background'] {
-  --foreground: #fff4e6;
-  --muted-foreground: #9a9ea8;
+  --foreground: #efeae1;
+  --muted-foreground: #a9a397;
   --primary: #ffffff;
-  --border: #25272e;
-  --accent: #1e2027;
+  --border: #262b23;
+  --accent: #1b2219;
   --accent-foreground: #ffffff;
   color: var(--foreground);
 }
@@ -91,7 +98,7 @@
   transform: translateY(-2px);
   box-shadow:
     0 1px 0 rgb(17 18 23 / 0.04),
-    0 18px 40px -14px rgb(255 91 31 / 0.45);
+    0 18px 40px -14px rgb(0 107 254 / 0.32);
 }
 
 /* Coins: an asset without its own icon is a sun coin; one with an icon gets a brass rim. */
@@ -104,11 +111,11 @@
   padding: 0.5rem;
   border-radius: 9999px;
   background: var(--sun);
-  color: var(--ink);
+  color: var(--on-sun);
   stroke-width: 1.75;
   box-shadow:
     inset 0 0 0 2px rgb(255 255 255 / 0.35),
-    0 4px 10px -4px rgb(255 59 31 / 0.6);
+    0 4px 10px -4px rgb(0 107 254 / 0.5);
 }
 
 :root:is(.theme-light, .theme-dark) .bg-card img[alt='Asset icon'] {
@@ -134,19 +141,19 @@
 :root:is(.theme-light, .theme-dark) .btn-variant-default {
   border: 0;
   background: var(--sun);
-  color: var(--ink);
-  box-shadow: 0 6px 16px -6px rgb(255 59 31 / 0.55);
+  color: var(--on-sun);
+  box-shadow: 0 6px 16px -6px rgb(0 107 254 / 0.45);
 }
 
 :root:is(.theme-light, .theme-dark) .btn-variant-default:hover {
   background: var(--sun);
   filter: saturate(1.15) brightness(1.03);
-  box-shadow: 0 10px 22px -8px rgb(255 59 31 / 0.6);
+  box-shadow: 0 10px 22px -8px rgb(0 107 254 / 0.5);
 }
 
 :root:is(.theme-light, .theme-dark) .btn-variant-secondary {
   background: var(--teal);
-  color: #ffffff;
+  color: var(--on-teal);
 }
 
 :root:is(.theme-light, .theme-dark) .btn-variant-secondary:hover {
@@ -183,8 +190,8 @@
   .flex.gap-2.mt-2.flex-wrap
   > .btn-variant-outline:nth-child(1) {
   background: var(--sun);
-  color: var(--ink);
-  box-shadow: 0 6px 16px -6px rgb(255 59 31 / 0.55);
+  color: var(--on-sun);
+  box-shadow: 0 6px 16px -6px rgb(0 107 254 / 0.45);
 }
 
 :root:is(.theme-light, .theme-dark)
@@ -192,7 +199,7 @@
   .flex.gap-2.mt-2.flex-wrap
   > .btn-variant-outline:nth-child(2) {
   background: var(--teal);
-  color: #ffffff;
+  color: var(--on-teal);
 }
 
 :root:is(.theme-light, .theme-dark) thead :is(th, th button) {
@@ -206,13 +213,13 @@
   border: 0;
   border-radius: 1.5rem;
   background: var(--sun);
-  color: var(--ink);
+  color: var(--on-sun);
   font-family: var(--font-heading);
-  box-shadow: 0 16px 36px -16px rgb(255 59 31 / 0.6);
+  box-shadow: 0 16px 36px -16px rgb(0 107 254 / 0.5);
 }
 
 :root:is(.theme-light, .theme-dark) .mt-6.pt-4.border-t .text-muted-foreground {
-  color: var(--ink);
+  color: var(--on-sun);
 }
 
 /* On a phone the backdrop shrinks into the corner, clear of the content. theme-o-rama sets the
@@ -277,7 +284,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  color: var(--ink, var(--primary-foreground));
+  color: var(--on-sun, var(--primary-foreground));
   background: var(--sun, var(--primary));
 }
 
@@ -288,9 +295,9 @@
   margin-bottom: 1rem;
   border-radius: 24px;
   padding: 1.25rem 1.5rem 1.375rem;
-  color: var(--ink, var(--primary-foreground));
+  color: var(--on-sun, var(--primary-foreground));
   background: var(--sun, var(--primary));
-  box-shadow: 0 18px 40px -22px rgb(255 59 31 / 0.6);
+  box-shadow: 0 18px 40px -22px rgb(0 107 254 / 0.5);
 }
 
 .klimper-total::after {

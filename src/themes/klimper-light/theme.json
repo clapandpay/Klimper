@@ -4,32 +4,32 @@
   "schemaVersion": 1,
   "inherits": "light",
   "mostLike": "light",
-  "backgroundImage": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201600%201000%22%20preserveAspectRatio%3D%22xMaxYMax%20slice%22%3E%20%3Cdefs%3E%3ClinearGradient%20id%3D%22s%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF3B1F%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23FF9A1F%22/%3E%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22t%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF3B1F%22%20stop-opacity%3D%220%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23FF5A1F%22/%3E%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22u%22%20x1%3D%220%22%20x2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%230F7C87%22%20stop-opacity%3D%220%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230F7C87%22/%3E%3C/linearGradient%3E%3C/defs%3E%20%3Crect%20width%3D%221600%22%20height%3D%221000%22%20fill%3D%22%23FFF7EC%22/%3E%20%3Cg%20opacity%3D%221%22%3E%20%3Ccircle%20cx%3D%221540%22%20cy%3D%221010%22%20r%3D%22250%22%20fill%3D%22url%28%23s%29%22/%3E%20%3Crect%20x%3D%221060%22%20y%3D%22846%22%20width%3D%22300%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22url%28%23t%29%22/%3E%20%3Crect%20x%3D%221140%22%20y%3D%22884%22%20width%3D%22220%22%20height%3D%2210%22%20rx%3D%225%22%20fill%3D%22url%28%23t%29%22/%3E%20%3Crect%20x%3D%221100%22%20y%3D%22930%22%20width%3D%22220%22%20height%3D%2214%22%20rx%3D%227%22%20fill%3D%22url%28%23u%29%22/%3E%20%3Ccircle%20cx%3D%221030%22%20cy%3D%22854%22%20r%3D%2214%22%20fill%3D%22%23FF3B1F%22/%3E%20%3Ccircle%20cx%3D%221070%22%20cy%3D%22937%22%20r%3D%2218%22%20fill%3D%22%230F7C87%22/%3E%20%3C/g%3E%3C/svg%3E",
+  "backgroundImage": "data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201600%201000%22%20preserveAspectRatio=%22xMaxYMax%20slice%22%3E%3Crect%20width=%221600%22%20height=%221000%22%20fill=%22%23F4F0E8%22/%3E%3Cg%20opacity=%221%22%3E%3Ccircle%20cx=%221530%22%20cy=%22905%22%20r=%22150%22%20fill=%22%23FB322A%22/%3E%3Ccircle%20cx=%221395%22%20cy=%22985%22%20r=%22156%22%20fill=%22%23006BFE%22/%3E%3Ccircle%20cx=%221555%22%20cy=%221085%22%20r=%22150%22%20fill=%22%23FDCC02%22/%3E%3Cpath%20d=%22M1488%20920Q1500%20985%201563%20997Q1500%201009%201488%201074Q1476%201009%201413%20997Q1476%20985%201488%20920Z%22%20fill=%22%23FDFCF8%22/%3E%3C/g%3E%3C/svg%3E",
   "backgroundSize": "cover",
   "backgroundPosition": "right bottom",
   "backgroundRepeat": "no-repeat",
   "colors": {
-    "themeColor": "#FFF7EC",
+    "themeColor": "#F4F0E8",
     "background": "transparent",
-    "foreground": "#111217",
-    "card": "#FFFFFF",
-    "cardForeground": "#111217",
-    "popover": "#FFFFFF",
-    "popoverForeground": "#111217",
-    "primary": "#C73515",
+    "foreground": "#1C1B19",
+    "card": "#FFFDF8",
+    "cardForeground": "#1C1B19",
+    "popover": "#FFFDF8",
+    "popoverForeground": "#1C1B19",
+    "primary": "#0057D9",
     "primaryForeground": "#FFFFFF",
-    "secondary": "#FFFFFF",
-    "secondaryForeground": "#111217",
-    "muted": "#FBEEDD",
-    "mutedForeground": "#5C606B",
-    "accent": "#FFEBD6",
-    "accentForeground": "#111217",
+    "secondary": "#FFFDF8",
+    "secondaryForeground": "#1C1B19",
+    "muted": "#ECE6DA",
+    "mutedForeground": "#5E5A52",
+    "accent": "#FFF3C2",
+    "accentForeground": "#1C1B19",
     "destructive": "#B42318",
     "destructiveForeground": "#FFFFFF",
-    "border": "#EFDCC4",
-    "input": "#E8D3B8",
-    "inputBackground": "#FFFFFF",
-    "ring": "#0F7C87"
+    "border": "#E3DACB",
+    "input": "#D9CFBE",
+    "inputBackground": "#FFFDF8",
+    "ring": "#006BFE"
   },
   "fonts": {
     "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
@@ -47,26 +47,26 @@
   },
   "shadows": {
     "sm": "0 1px 2px rgb(17 18 23 / 0.06)",
-    "card": "0 1px 0 rgb(17 18 23 / 0.04), 0 12px 32px -12px rgb(255 91 31 / 0.28)",
+    "card": "0 1px 0 rgb(28 27 25 / 0.04), 0 12px 32px -14px rgb(0 107 254 / 0.22)",
     "button": "none",
     "dropdown": "0 18px 40px -12px rgb(17 18 23 / 0.28)"
   },
   "sidebar": {
-    "background": "#111217",
+    "background": "#1C1B19",
     "border": "none"
   },
   "tables": {
     "background": "#FFFFFF",
-    "border": "1px solid #EFDCC4",
+    "border": "1px solid #E3DACB",
     "header": {
       "background": "transparent",
       "color": "#5C606B",
-      "border": "1px solid #EFDCC4"
+      "border": "1px solid #E3DACB"
     },
     "row": {
       "background": "transparent",
       "color": "#111217",
-      "border": "1px solid #EFDCC4",
+      "border": "1px solid #E3DACB",
       "hover": {
         "background": "#FFEBD6"
       },
@@ -82,7 +82,7 @@
       "thumbColor": "#FFFFFF"
     },
     "unchecked": {
-      "background": "#EFDCC4",
+      "background": "#E3DACB",
       "thumbColor": "#FFFFFF"
     }
   }
