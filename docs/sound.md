@@ -2,7 +2,7 @@
 
 Klimper is what coins do. The app is the one place that jingle is heard (clapandpay
 **decision-009**, **TASK-111**); the website stays silent
-(`green-envelope/docs/clapandpay-brand.md`). Two moments:
+(`clapandpay-web/docs/brand.md`). Two moments:
 
 - **Coins arrive**: one bright coin rings, the "money arrived" sound of the first mobile
   wallets, made ours. Richer the more arrived. Heard, not felt.

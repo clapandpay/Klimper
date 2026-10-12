@@ -24,9 +24,12 @@
 #
 # The wallet lives in klimper/ of the monorepo while upstream has it at the root, so the merge
 # uses git's subtree option: upstream's paths are shifted into klimper/ and nothing outside
-# that folder can be touched.
-SUBTREE="klimper"
+# that folder can be touched. The folder is worked out from where this script sits, so once
+# Klimper is a repository of its own (SPLITTING.md) SUBTREE is empty and the merge is a plain one.
 set -euo pipefail
+SUBTREE="$(cd "$(dirname "$0")/.." && git rev-parse --show-prefix)"
+SUBTREE="${SUBTREE%/}"
+IN="${SUBTREE:+$SUBTREE/}"
 
 UPSTREAM_URL="https://github.com/xch-dev/sage.git"
 # Paths where an upstream change may be a security fix (reported by --check).
@@ -70,7 +73,7 @@ if [[ "${1:-}" == "--diff" ]]; then
   echo "shared with Sage (every one of these is work at the next merge):"
   git diff --name-status "$merged_tag" "HEAD:$SUBTREE" | awk '$1 ~ /^[MR]/ {print "  " $1 "\t" $2}'
   echo
-  echo "Keep this list and the table in $SUBTREE/docs/UPSTREAM.md saying the same thing."
+  echo "Keep this list and the table in ${IN}docs/UPSTREAM.md saying the same thing."
   exit 0
 fi
 
@@ -126,16 +129,18 @@ if git merge-base --is-ancestor "$target" HEAD; then
 fi
 
 echo "merging $target (currently on $merged_tag)"
-if ! git merge --no-ff -X "subtree=$SUBTREE" -m "Merge Sage $target into $SUBTREE/" "$target"; then
+merge_opts=()
+[[ -n "$SUBTREE" ]] && merge_opts=(-X "subtree=$SUBTREE")
+if ! git merge --no-ff ${merge_opts[@]+"${merge_opts[@]}"} -m "Merge Sage $target into ${IN:-the root}" "$target"; then
   cat >&2 <<MSG
 
-Conflicts. All paths are under $SUBTREE/. Ours to keep: README.md, LICENSE,
+Conflicts. All paths are under ${IN:-the root}. Ours to keep: README.md, LICENSE,
 src-tauri/tauri.ios.conf.json and tauri.android.conf.json (identifier lines), the bundle ids
 under src-tauri/gen/.
 Everything else: take upstream and move our change behind a flag or into our own file.
 Keychain password (crates/sage-keychain, crates/sage): take upstream, then pass
 self.keychain.password()? wherever Sage passes b"" (docs/UPSTREAM.md, "Staying current").
-Playbook: $SUBTREE/docs/UPSTREAM.md. Finish with: git commit
+Playbook: ${IN}docs/UPSTREAM.md. Finish with: git commit
 MSG
   exit 1
 fi
