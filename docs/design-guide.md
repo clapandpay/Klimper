@@ -5,7 +5,7 @@ How it is wired into the code is at the end ([In this repository](#in-this-repos
 
 - **Domain:** shared expenses, group money.
 - **Character:** bright, modern and warm; money that moves. The colours and shapes come from the
-  logo: three coins, blue, red and yellow, clinking together with one cream spark (the Beidwerk
+  logo: three coins in Beidwerk's night blue, red light and saffron, clinking together with one cream spark (the Beidwerk
   family brand mark p059).
 - **It must not look like Sage.** The wallet engine is Sage's; the face is ours.
 
@@ -22,6 +22,10 @@ purposeful motion. The Beidwerk text is in the git history of this file.
 colour on Beidwerk's canvases (paper in light, the green-black stage in dark). Still bright, still
 no gradient anywhere.
 
+Later the same day the coins took Beidwerk's own colours (night blue `#3B5BA9`, red light
+`#E75839`, saffron `#E9B23A`), so Klimper matches the family; the app icons were rendered again from
+the recoloured vector (beidwerk-studio `brand/logos/svg/klimper-beidwerk.svg`).
+
 ## 1. Colour
 
 | Role        | Light     | Dark      | Use                                                        |
@@ -31,11 +35,11 @@ no gradient anywhere.
 | Ink         | `#1C1B19` | `#EFEAE1` | text; the sidebar is ink in both themes                    |
 | Muted       | `#5E5A52` | `#A9A397` | secondary text                                             |
 | Hairline    | `#E3DACB` | `#2A3127` | borders                                                    |
-| Coin blue   | `#006BFE` | same      | the primary action, coins, the total balance; white text   |
-| Coin yellow | `#FDCC02` | same      | the second action (Receive), rims and highlights; ink text |
-| Coin red    | `#FB322A` | same      | small marks only (dots, badges)                            |
-| Primary     | `#0057D9` | `#5A9BFF` | text links and `text-primary`, readable on the canvas      |
-| Ring        | `#006BFE` | `#5A9BFF` | focus                                                      |
+| Coin blue   | `#3B5BA9` | same      | the primary action, coins, the total balance; white text   |
+| Coin yellow | `#E9B23A` | same      | the second action (Receive), rims and highlights; ink text |
+| Coin red    | `#E75839` | same      | small marks only (dots, badges)                            |
+| Primary     | `#3B5BA9` | `#7D9BE8` | text links and `text-primary`, readable on the canvas      |
+| Ring        | `#3B5BA9` | `#7D9BE8` | focus                                                      |
 | Destructive | `#B42318` | `#F04438` | functional only, never branding                            |
 
 Rules:

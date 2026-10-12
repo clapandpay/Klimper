@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "inherits": "light",
   "mostLike": "light",
-  "backgroundImage": "data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201600%201000%22%20preserveAspectRatio=%22xMaxYMax%20slice%22%3E%3Crect%20width=%221600%22%20height=%221000%22%20fill=%22%23F4F0E8%22/%3E%3Cg%20opacity=%221%22%3E%3Ccircle%20cx=%221530%22%20cy=%22905%22%20r=%22150%22%20fill=%22%23FB322A%22/%3E%3Ccircle%20cx=%221395%22%20cy=%22985%22%20r=%22156%22%20fill=%22%23006BFE%22/%3E%3Ccircle%20cx=%221555%22%20cy=%221085%22%20r=%22150%22%20fill=%22%23FDCC02%22/%3E%3Cpath%20d=%22M1488%20920Q1500%20985%201563%20997Q1500%201009%201488%201074Q1476%201009%201413%20997Q1476%20985%201488%20920Z%22%20fill=%22%23FDFCF8%22/%3E%3C/g%3E%3C/svg%3E",
+  "backgroundImage": "data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201600%201000%22%20preserveAspectRatio=%22xMaxYMax%20slice%22%3E%3Crect%20width=%221600%22%20height=%221000%22%20fill=%22%23F4F0E8%22/%3E%3Cg%20opacity=%221%22%3E%3Ccircle%20cx=%221530%22%20cy=%22905%22%20r=%22150%22%20fill=%22%23E75839%22/%3E%3Ccircle%20cx=%221395%22%20cy=%22985%22%20r=%22156%22%20fill=%22%233B5BA9%22/%3E%3Ccircle%20cx=%221555%22%20cy=%221085%22%20r=%22150%22%20fill=%22%23E9B23A%22/%3E%3Cpath%20d=%22M1488%20920Q1500%20985%201563%20997Q1500%201009%201488%201074Q1476%201009%201413%20997Q1476%20985%201488%20920Z%22%20fill=%22%23FDFCF8%22/%3E%3C/g%3E%3C/svg%3E",
   "backgroundSize": "cover",
   "backgroundPosition": "right bottom",
   "backgroundRepeat": "no-repeat",
@@ -16,7 +16,7 @@
     "cardForeground": "#1C1B19",
     "popover": "#FFFDF8",
     "popoverForeground": "#1C1B19",
-    "primary": "#0057D9",
+    "primary": "#3B5BA9",
     "primaryForeground": "#FFFFFF",
     "secondary": "#FFFDF8",
     "secondaryForeground": "#1C1B19",
@@ -29,7 +29,7 @@
     "border": "#E3DACB",
     "input": "#D9CFBE",
     "inputBackground": "#FFFDF8",
-    "ring": "#006BFE"
+    "ring": "#3B5BA9"
   },
   "fonts": {
     "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
@@ -47,7 +47,7 @@
   },
   "shadows": {
     "sm": "0 1px 2px rgb(17 18 23 / 0.06)",
-    "card": "0 1px 0 rgb(28 27 25 / 0.04), 0 12px 32px -14px rgb(0 107 254 / 0.22)",
+    "card": "0 1px 0 rgb(28 27 25 / 0.04), 0 12px 32px -14px rgb(59 91 169 / 0.22)",
     "button": "none",
     "dropdown": "0 18px 40px -12px rgb(17 18 23 / 0.28)"
   },
