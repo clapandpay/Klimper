@@ -498,8 +498,45 @@ mod tests {
             revoked: false,
             push: None,
             origin_checked_at: None,
+            methods_revision: 0,
             own_key: None,
         }
+    }
+
+    /// A connection paired before `chia_takeOffer` existed gets it once, next to its
+    /// `chia_send`; one whose `chia_send` was turned off gets nothing; a take the user turns
+    /// off afterwards stays off (TASK-137).
+    #[test]
+    fn an_older_connection_may_take_offers_once_if_it_may_send() {
+        use crate::execute::{CHIA_SEND, CHIA_TAKE_OFFER, METHODS_REVISION, upgrade_methods};
+        let mut old = record();
+        old.permissions.methods = vec!["signCoinSpends".to_owned(), CHIA_SEND.to_owned()];
+        assert!(upgrade_methods(&mut old));
+        assert_eq!(old.methods_revision, METHODS_REVISION);
+        assert_eq!(
+            old.permissions.methods,
+            ["signCoinSpends", CHIA_SEND, CHIA_TAKE_OFFER]
+        );
+        assert!(!upgrade_methods(&mut old), "only once");
+
+        old.permissions.methods.retain(|m| m != CHIA_TAKE_OFFER);
+        assert!(!upgrade_methods(&mut old));
+        assert!(!old.permissions.methods.iter().any(|m| m == CHIA_TAKE_OFFER));
+
+        let mut no_send = record();
+        no_send.permissions.methods = vec!["signCoinSpends".to_owned()];
+        assert!(!upgrade_methods(&mut no_send));
+        assert_eq!(no_send.permissions.methods, ["signCoinSpends"]);
+        assert_eq!(no_send.methods_revision, METHODS_REVISION);
+    }
+
+    /// A record stored before the revision was kept reads as revision 0.
+    #[test]
+    fn a_record_without_a_methods_revision_reads_as_zero() {
+        let mut json = serde_json::to_value(record()).unwrap();
+        json.as_object_mut().unwrap().remove("methods_revision");
+        let back: SessionRecord = serde_json::from_value(json).unwrap();
+        assert_eq!(back.methods_revision, 0);
     }
 
     #[test]

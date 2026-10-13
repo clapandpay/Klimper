@@ -748,9 +748,21 @@ async fn list_sessions<R: Runtime>(
                             own_key_last(&mut record.permissions.exposed_keys, own.as_deref());
                     })?;
         }
+        // Under the store's lock for the same reason as the reordering above.
+        let mut upgraded = false;
+        if stored.record.methods_revision < execute::METHODS_REVISION {
+            stored =
+                state
+                    .store
+                    .update_policy(snapshot.fingerprint, &stored.record.id, |record| {
+                        upgraded = execute::upgrade_methods(record);
+                    })?;
+        }
         let keys = KeyState::stored(&stored);
         let connected = state.ensure_loop(stored.clone()).await.unwrap_or(false);
-        if reordered && let Some(live) = state.live.lock().await.get(&stored.record.id) {
+        if (reordered || upgraded)
+            && let Some(live) = state.live.lock().await.get(&stored.record.id)
+        {
             live.announce_permissions();
         }
         out.push(summary(&stored, keys, connected));

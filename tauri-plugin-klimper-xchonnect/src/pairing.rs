@@ -368,6 +368,7 @@ pub async fn confirm(
             push: None,
             // The origin document was fetched and verified for this pairing just now.
             origin_checked_at: Some(now),
+            methods_revision: crate::execute::METHODS_REVISION,
             own_key: attempt
                 .own_key
                 .as_ref()

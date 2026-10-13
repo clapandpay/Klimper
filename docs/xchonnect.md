@@ -154,6 +154,10 @@ and is gone.
    own fee. What the user pays, their fee included, is the net change the approval shows; the
    whole trade's fee is shown as such. `src/execute/take_tests.rs` takes real offers between
    two Sage wallets on a simulated chain and checks that each settles.
+   A connection paired before `chia_takeOffer` existed is given it once, when Klimper next
+   loads it, if it may use `chia_send` (`methods_revision`, `execute::upgrade_methods`), and
+   the website is told by `session.permissions`; it does not have to pair again. A take the
+   user turns off afterwards stays off.
 4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
