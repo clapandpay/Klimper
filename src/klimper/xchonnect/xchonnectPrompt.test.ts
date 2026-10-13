@@ -415,3 +415,75 @@ describe('claimedText', () => {
     expect(claimedText({ toString: () => 'nice try' })).toBe('');
   });
 });
+
+describe('the trade overview (TASK-139)', () => {
+  const trade = {
+    offers: 3,
+    pays: [{ asset: { type: 'xch' }, amount: '1000000000000' }],
+    receives: [{ asset: { type: 'cat', asset_id: TAIL }, amount: '250000' }],
+    fee: '100',
+    price: {
+      base: { type: 'cat', asset_id: TAIL },
+      quote: { type: 'xch' },
+      quote_per_base: '0.004',
+      base_per_quote: '250',
+    },
+  };
+
+  it('reads the wallet’s trade by explicit key', () => {
+    const view = readPrompt({ ...swap, trade });
+    if (view.kind !== 'spend') throw new Error('expected a spend');
+    expect(view.trade?.offers).toBe(3);
+    expect(view.trade?.pays[0].label).toBe('XCH');
+    expect(view.trade?.pays[0].amount.toString()).toBe('1000000000000');
+    expect(view.trade?.receives[0].assetId).toBe(TAIL);
+    expect(view.trade?.receives[0].precision).toBe(3);
+    expect(view.trade?.fee.toString()).toBe('100');
+    expect(view.trade?.price?.quotePerBase).toBe('0.004');
+    expect(view.trade?.price?.base.label).toBe(
+      `CAT ${TAIL.slice(0, 8)}…${TAIL.slice(-6)}`,
+    );
+  });
+
+  it('is absent when the wallet sent none', () => {
+    const view = readPrompt(swap);
+    if (view.kind !== 'spend') throw new Error('expected a spend');
+    expect(view.trade).toBeNull();
+  });
+
+  it('drops a name or a label the trade grew, and a price that is not a number', () => {
+    const view = readPrompt({
+      ...swap,
+      trade: {
+        ...trade,
+        label: 'Best deal ever',
+        receives: [{ ...trade.receives[0], name: 'Totally XCH' }],
+        price: { ...trade.price, quote_per_base: 'cheap!' },
+      },
+    });
+    if (view.kind !== 'spend') throw new Error('expected a spend');
+    expect(view.trade?.price).toBeNull();
+    expect(JSON.stringify(view)).not.toContain('Best deal ever');
+    expect(JSON.stringify(view)).not.toContain('Totally XCH');
+  });
+
+  it('makes the prompt unreadable when a figure of the trade cannot be shown', () => {
+    for (const broken of [
+      { ...trade, pays: [{ asset: { type: 'xch' }, amount: 1.5 }] },
+      { ...trade, pays: [{ asset: { type: 'nft' }, amount: '1' }] },
+      { ...trade, receives: [] },
+      { ...trade, pays: [{ asset: { type: 'xch' }, amount: '0' }] },
+      'a trade',
+    ]) {
+      expect(readPrompt({ ...swap, trade: broken }).kind).toBe('unreadable');
+    }
+  });
+
+  it('ignores an offer count that is not a count', () => {
+    for (const offers of [0, -2, 1.5, '3', 1e9]) {
+      const view = readPrompt({ ...swap, trade: { ...trade, offers } });
+      if (view.kind !== 'spend') throw new Error('expected a spend');
+      expect(view.trade?.offers).toBeNull();
+    }
+  });
+});
