@@ -376,7 +376,7 @@ fn run(
         kit::SUBMIT_COIN_SPENDS => {
             // A dApp-built bundle: the wallet database's reading and the simulation must
             // agree before the user is asked anything.
-            sign_guard::check_request(&meta.method, params, context.keys)
+            sign_guard::check_request(&meta.method, params, context.keys, &context.network)
                 .and_then(|()| pre_check_submit(state, &context, params))
                 .and_then(|()| {
                     approver.mark_cross_checked();
@@ -434,7 +434,7 @@ pub fn handle_dapp_built(
     context: &RequestContext<'_>,
     host: &Host<'_>,
 ) -> std::result::Result<String, RpcError> {
-    sign_guard::check_request(method, params, context.keys)?;
+    sign_guard::check_request(method, params, context.keys, &context.network)?;
     kit::handle_with_host(method, params, context, host)
 }
 
