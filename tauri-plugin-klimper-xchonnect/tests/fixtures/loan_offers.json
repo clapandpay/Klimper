@@ -1,0 +1,57 @@
+{
+  "about": "Real loan requests signed by Klimper (TASK-140) with chia_mintOption (creatorAddress = the lender, loan = the principal) by Sage wallets on a simulated testnet11 chain; each offer was also taken by its lender through Klimper's chia_takeOffer path and accepted by that chain. Amounts in mojos (CAT units for CATs); assetId null is XCH; expiresAt and chain_time are the simulator's Unix seconds. The offer locks the collateral at an option whose creator is the lender and whose strike is the repayment, hands the option to the borrower through a quoted eve, offers the lender 1 mojo at the settlement puzzle (the tie), and requests the principal to the borrower. Regenerate with `cargo test -p tauri-plugin-klimper-xchonnect export_loan_fixtures -- --ignored`.",
+  "cases": [
+    {
+      "borrower_address": "txch1q2wa02fxzv5ne8ql5kelsygwesl8yfsxtur4e2pvfxuhgtwu527q49g55n",
+      "borrower_puzzle_hash": "0x029dd7a92613293c9c1fa5b3f8110ecc3e7226065f075ca82c49b9742ddca2bc",
+      "chain_time": "1",
+      "launcher_id": "0x4b9f309c2a0b429d0637b1a3c0a31e3bc762a5c575b5d0e85d13acd6ff621f59",
+      "lender_address": "txch14nnjsddt8wrlx0vr98vlu7ahvp92ympr098pe8jkwgmnqk4uj3rsccrqcn",
+      "lender_puzzle_hash": "0xace72835ab3b87f33d8329d9fe7bb7604aa26c23794e1c9e567237305abc9447",
+      "name": "XCH collateral, CAT principal and repayment",
+      "network": "testnet11",
+      "offer": "offer1qqr83wcuu2rykcmqvps9mfefltpn8wnfkhz0wr6edhrnm76v9e82ay8zvna3a09q6aaavhlmzdx88ta02sfaddyeywlhfuc0gxlrxaj9dfk0rmp39d6rcaukar09ndy8qyxtsa7qmw5uxlvwrdk0pp5f7w8e70890ne2nv4dcmfwlu5dr0pth4sm9txncmknrglwj3wa3822eka8l4vgl6fxlp97c0ys9zvwhacw4s2kecrlu0lshhnl9p2lyrzg8zg0vtwldrx6ret42emv24d8httjmwdce3hunkvrkc45rjsk43u6ucd6m2a0mvmdk0nv6l74mvfmc9h99ptl4jwvpv4nydugmgeu280yzm3l7z7wa7llwdkxvlgn6klw4u9rknmmduhmzv5a0h5ans5w3deeahll5du0jwfcxzx07tcg49cus9u47e76av8hm655tsgv6ul5v4fydjdvhtmn0390mnj4y5fgalumnpqsx6kxlut3pzhjlax7eec6lmlm0lalurr2935k0mplfgmd2vfuav3aa944rena0p35ln5etjlw5c9nmshqh0vxlll58leh4y9ndl8ldlahlqw4uulmdr8tvhwyeeneh750x4w52phxxhf8xe5hwmwdckw5h3dzdstr0l8lalc8lsfm2w8uhhc29mkx64zhfuu33alhtmcurplx083r7elnxcav365feluq3rhdhr0v2jf63wn3mxamu28re4l9qnduq3mnuehfaku6v0uxr7vvpw7zkec37gkzf4fjhuvxr2dklllvlku676lslak4rxn3j9v5ee6wrln7lw6cv6k2g0t3wt6tjcwxzaz2ewtej0tml2p4hx67du7t3mwv9029g2ahae7na3eejeuj9fedv6nf6jvtt3sjh8nxh8nh2eykv8ugu8cfr546z2wgu8lsysk3gd2pcyk2yjgrseyqgc045uprw5c4sg8973l6dlmuez2shusgqu3rdyrtylr0l3hld4cy2pglj65wqge29gt9eu8s9llwecuuwkh8kn763wuvhzm5emlrfnula9mllllxvrccm7cleszs2aunhgsy3uczjwcfm558xw48vnz4hnlmg4tastrzx067g7u58hv80m7um065wh7um4hlfkxdvrgdph00xr0xdpcnhnt9x00m37xqvgu7hc6ffw8evm4a7q39v7xdkhl5nu53sjkygrwt68ua950e6tgln53p8a0s52wrzm227vs2mell0c5r0wnnnkfkm4yh9hmau37yyluyfxkt340dust4k6hxla05p285yrw9aq2cs4w83j8prf9gdn7hyt86nsy6uhlcm82sqmmt3lch5ymfrs2a4rl5elm9wq6tmlenyeq60jll9lc0u24ydl3p5uk5l20dam57f0d37h6vuzaxv79cwh5l2vu0dn99kht89kv8klh6c2tv76k2z7jc4ptutm84ck3sn0p4eu29chpdez406v9th9m0l2leq6dpgmsm73czhldjgd096ckecy3pkdtatuxfymeusja2mudr99dlry5j6ez6w86kauh0ykz67n7tm06a0jzf23hp04w29wdtz5hx58jryyuxkh8cllh8lc0cgev5plzslm9g0msqdrfqs2yzg692z0uullwlpym94fu0kte2z8e6fyqf7umq8283s8rpl8hl786ltnjy8s5az8wd0ku0x6xcxd8v3y7z7rgmejp6gnpypcmnype52gzej3y9r0vug7q7h4hc9nfe7yvgusva2eqlyw0jzs6hsfqd835ukz9jn0eh7yltl8lacrwc6ez6ppvk8rc5zpv72335gzf9usrf70aehephw43u0qvq6l0qpj02w96yw8ug4dlau9lkycasyllgpvkdc8j38n7lkdfgmcy6kwjv8ghzcwhxf2pj7djj7w85wf9f4f4vm9a00rdknr8cepp7jllnxv3yut8hl2q5ek2rjr24ymh0p7hdma5hwltdz5u96mkxnea08jwumnj0m2nrw0dkfrat0ga5ehc8ekwge3r4peq9696z32stapj3luymwxxplcrslq3szqqglmwkfjwuguuk7yd7htamsuxzlwy7ks6ruyuc04e7wd8w9y55r84n5lpdfgv5263u84drc0268s7450patg7r6k3u84grxfwqmtds7a75u7xhmf5tcmtwvn2gfhprkxxwkq7vu7hqmrxmr8vttw6x2c9ncl04n7glpgqqffehcaqgnstu76qvhqvl9lllsgy2xslw7am7veskl0r2w4huudjrprnshzul8j7am0la8hy08j088nye3ptvmlexgcw7yx3lp5akd0lel43funu89mecll5dwvhkmlr4wn8cfau49a4u580a3l62lj7mya4hdtr0amppw76ynr92xsacwduy22565cnhmrla0qcvcnr36856jlrhtlk6kmqj6t5dq4t7yff4v03n9wsklthe6ej60fe0kxgfdlt7scms7qzag2uxz2vqsh8",
+      "terms": {
+        "collateral": {
+          "amount": "1000",
+          "assetId": null
+        },
+        "expiresAt": "10001",
+        "principal": {
+          "amount": "300",
+          "assetId": "3456b91bc3687ab89521dfe585279028e24e0d411ec28bc2fafd6fd27ad7ecb5"
+        },
+        "repayment": {
+          "amount": "315",
+          "assetId": "3456b91bc3687ab89521dfe585279028e24e0d411ec28bc2fafd6fd27ad7ecb5"
+        }
+      }
+    },
+    {
+      "borrower_address": "txch1q2wa02fxzv5ne8ql5kelsygwesl8yfsxtur4e2pvfxuhgtwu527q49g55n",
+      "borrower_puzzle_hash": "0x029dd7a92613293c9c1fa5b3f8110ecc3e7226065f075ca82c49b9742ddca2bc",
+      "chain_time": "1",
+      "launcher_id": "0x9e6ae73c8d83d1b62b6446639a66bc5af4eda9a40a10f84d33867e6293ae629b",
+      "lender_address": "txch14nnjsddt8wrlx0vr98vlu7ahvp92ympr098pe8jkwgmnqk4uj3rsccrqcn",
+      "lender_puzzle_hash": "0xace72835ab3b87f33d8329d9fe7bb7604aa26c23794e1c9e567237305abc9447",
+      "name": "CAT collateral, XCH principal and repayment",
+      "network": "testnet11",
+      "offer": "offer1qqr83wcuu2rykcmqvpsgm66anjjtx7x6kxujhmkgwdw5avqd0s6x0mhxhxknnpsljm8m3s9mwgtd8h8t902cgdtdumyzlh0ugwgwlrzajyd9k0rmes9pmnuayka8w9hdvyqq8ast7pmw5uyluvrph0rput7wxf608x0he2nv4wclfwmuuwr0pth4se9r8r7mkjry77j3wu3rt6lkdylavca6p8lpywc0ys9wd74aqd4s2xlcmlu0lqhhra9f20qrzg82glwtxad8x6renk246uw448h82jew9me4kuhk5rk54y9jq44eu6uc46mxalmvmwk8nu6l7hmqft69889f2l3j70pg4nqd5tmycug8h8zl3luz70a7l0vd79vhfnuklw4u9nknmmd5htzvva0h4d4su03feelhlu59ulswpcxw8lctppz7flex7eesmlllm0l4lup2vprwa6cdvcf80te7mg0kst0uwx2uyxl7hlcc79mfegv85dck6k2rtl8lrlat7j2akrsl7l7mlu9n3k987m2zk40ktfwr29junxcj2784nxnez5a7qlyr87rufn7hynh90rplllcwlut4ffvmx5wahj83w684qx2m4pw5h4g4gwm37yu4eeypclsk7l856l26pcuqu0mxr7tpgy5w8n0lrvts7c6dzqkeat92cpef499dyyjxxxx0j77hha0wc6a36k3wm0xrmhacjek4v7hlkmduexedwwdqkgedjfmxw7754mqkfpdxgl5pjgtywkaz5vkar5vkap5yka95y5ad5ysajztz3wxpkrq8ehl8s3m6mrwxm0nyv3jdeq739jac8mq8emk6czufmq2ahd4kfdwq8hfllrqtu29r0l3letyemh9e7tdk8qdy4kls4vhc7u040ydtwhvdklws69ms8wx43l2vuxnddnskcmp3gfd8pupkj725n7934y06vz0ul9eu967zl3j4094maptcvlesajg3yrjll2h0m3lulaxuegqfgkrl7zajghkwv674jhw039gktp2v0ylav0mw9df89uk8dhx5k5axds7tlkm3jgpdlnlskzp4nkykjuupasjdsw86lalsrgdx68lstpq6gag07ytpzfc6ups9q2seqgk5e6znfkqc5py3ntva3u6y4jqza9406el6e7rec2u3yu53phgqu3kvm7xllzlsmt37qq0ev0sqraghmqq9p87jhme4fe5a2nj58cmtjjr8h6vghrxp3veerhkj5hzewp95vuwv6pa9hyn82s2s7f4k9drwdp5f39l4mjnt070zxmk3fdlyt95hhg47h3wmnpztuzr67u2mthfwga2fkvy3nzq6223shxjxzu6g6tngrteqhx3qyh2g97j4gmqlhm6703cw7dp8mwnrkj0whw8ecnlg3ucgj9dhh2wlccjteh707zcgj50ggpc5xzds6u4cueawzza2jqtnmsxxehlpkwapej78rle0ggwuxq50w8lx0730sd3kemplvvf8g0wmluzauhu973x4csuwtt0a8k7awd5lhcutp9wdwrq0kuht6lhxj9xhn2lt4szh8n60tlv0yk2dlx39fvvsel4ejjctveees2a74pvfskl3w4dxraljfhl3wv3d6s50ea6gupmehf9xmjag25ezvnm25x37m9jpu72f74d58fhjxu36tp2v9whdun07hkj0patf0xalux3e389wmgj609znx4k28j29cekzkrm0n50lmnlc8vzvcwsl3qga658aegpf8cgfzpzdw530lw0l80q6d5l52xtzdajrvlc7rzcznr8zxe30trl0hl78zutlnyrsvuzql3hwgadk0qf597ymcuqvxmdsvjvefqwxueqwdq4qnvk2p9hxgylr086vzsmve6yuwuqva2aqwfylywhjzq60wkq4w4f3stkwdlxlc3a0u0mhqwmgtzmg5yj5ulzss9tmmqzm06vx82zynwqv2alge69q0nmn588kcg26ldg3e0hzd4ll387crrkgj0aqd3ehp7wy70m6c4prhrnze6ds4rutq2ce4fk0maa08um23k3lew50l9e0luafp5av6me8jerfesu6t0puh75vlrawgz2kjhn7akaavvtjn6wuwfhnt602t707glfhsef5pntxgaju02hlweuf9s68xsk6hyz9kmaqk9z59z4qh6r9rlcfx79vrls8eafrqyqqssrzcc02g6rlplcnxvwt6gr3x2lc02hfuj9ewd708aaznh0ac2vu34teytmledh7jlvezwdhw5c63a6qhpzul2zrtj4x36pu7e8m8ud70x8wzp9ahj0jy57jf0m3v6ku0c5hmttq65v4drh4t5euhxaxmm7hjwp6vp8pdelwwjq6cjuu20mlh0g0f8dt7uahp79e432luxlj0l5amlcnzsfquzz7s2dxf7wl0t3fxql5mwhtamp9w6w7tkv4xegqqqvauzaykpcp7e",
+      "terms": {
+        "collateral": {
+          "amount": "1000",
+          "assetId": "5e73b1ffc5090b6389a9f6e31062b5fa706a0fbfc7241e7d40bd8bc1414db05a"
+        },
+        "expiresAt": "10001",
+        "principal": {
+          "amount": "300",
+          "assetId": null
+        },
+        "repayment": {
+          "amount": "315",
+          "assetId": null
+        }
+      }
+    }
+  ]
+}

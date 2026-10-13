@@ -1101,3 +1101,287 @@ async fn an_offered_option_is_bought_with_xch() {
         .and_then(|state| state.spent_height);
     assert!(spent.is_some(), "the take did not settle");
 }
+
+// ---------------------------------------------------------------------------------------
+// Fixtures for websites that verify a loan request themselves.
+// ---------------------------------------------------------------------------------------
+
+const LOAN_FIXTURES: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/loan_offers.json"
+);
+
+/// A loan's terms as a website writes them: `assetId` null for XCH, amounts in mojos.
+fn part_json(part: Part) -> Value {
+    let asset_id = match part.asset {
+        AssetId::Cat(asset_id) => Value::String(hex::encode(asset_id)),
+        _ => Value::Null,
+    };
+    serde_json::json!({ "assetId": asset_id, "amount": part.amount.to_string() })
+}
+
+fn address(puzzle_hash: Bytes32) -> String {
+    chia_wallet_sdk::prelude::Address::new(puzzle_hash, "txch".to_owned())
+        .encode()
+        .unwrap()
+}
+
+/// One loan request, made by Alice through `chia_mintOption`'s params and path with Bob as
+/// `creatorAddress`, then taken by Bob through `chia_takeOffer`'s path and settled on the
+/// chain, so the committed offer is one a lender can actually take.
+async fn exported_loan(name: &str, collateral_is_cat: bool) -> Value {
+    let mut alice = SimWallet::new(3_000).await;
+    let mut bob = alice.next(3_000).await;
+    let (collateral, principal, repayment, cats) = if collateral_is_cat {
+        let asset_id = issue_amount(&mut alice, 1_000).await;
+        (cat(asset_id, 1_000), xch(300), xch(315), vec![asset_id])
+    } else {
+        let asset_id = issue_amount(&mut bob, 1_000).await;
+        know_cats(&alice, &[asset_id]).await;
+        (
+            xch(1_000),
+            cat(asset_id, 300),
+            cat(asset_id, 315),
+            vec![asset_id],
+        )
+    };
+    let lender = bob.wallet.change_p2_puzzle_hash().await.unwrap();
+    let borrower = alice.wallet.change_p2_puzzle_hash().await.unwrap();
+    let now = chain_time(&alice).await;
+    let expires_at = now + TERM;
+    let params_json = serde_json::json!({
+        "underlying": part_json(collateral),
+        "strike": part_json(repayment),
+        "loan": part_json(principal),
+        "expiresAt": expires_at,
+        "creatorAddress": address(lender),
+    });
+    let params = super::options::mint_params(&params_json.to_string(), now).unwrap();
+    assert_eq!(params.loan, Some(principal), "{name}");
+    let parsed =
+        chia_wallet_sdk::prelude::Address::decode(params.creator_address.as_deref().unwrap())
+            .unwrap();
+    assert_eq!(parsed.puzzle_hash, lender, "{name}");
+    let built = build_mint(&alice.wallet, Some(lender), &params, Some(principal))
+        .await
+        .unwrap()
+        .expect("no loan request built");
+    let launcher_id = built.launcher_id;
+    let summary = sage_summary(&alice, &cats, &built.spends).await;
+    let w = who(&alice).await;
+    let request = run(
+        &w,
+        &Setup::new(CHIA_MINT_OPTION, now),
+        |ctx, signer, approver, _, on_loan| {
+            submit_loan_request(
+                ctx, signer, approver, &summary, built, lender, principal, 0, on_loan,
+            )
+        },
+    );
+    let answer: Value = serde_json::from_str(request.ok()).unwrap();
+    let offer = answer["offer"].as_str().expect("no offer").to_owned();
+    assert_eq!(answer["launcherId"], hex0x(launcher_id), "{name}");
+
+    // The lender takes it and the chain accepts it.
+    let bundle = chia_wallet_sdk::driver::decode_offer(&offer).unwrap();
+    know_cats(&bob, &cats).await;
+    let outcome = take(
+        &bob,
+        &cats,
+        &bundle,
+        0,
+        &super::take_tests::take_permissions(),
+        true,
+    )
+    .await;
+    if let Err(error) = &outcome.result {
+        panic!("{name}: the lender's take was refused: {error:?}");
+    }
+    let view = outcome.loan.expect("no loan on the lender's screen");
+    assert_eq!(view.principal.asset, principal.asset, "{name}");
+    assert_eq!(
+        view.principal.amount,
+        u128::from(principal.amount),
+        "{name}"
+    );
+    assert_eq!(view.counterparty, borrower, "{name}");
+    bob.push_bundle(outcome.sent.expect("nothing sent"))
+        .await
+        .expect("the chain refused the loan");
+
+    serde_json::json!({
+        "name": name,
+        "network": "testnet11",
+        "lender_puzzle_hash": hex0x(lender),
+        "lender_address": address(lender),
+        "borrower_puzzle_hash": hex0x(borrower),
+        "borrower_address": address(borrower),
+        "terms": {
+            "collateral": part_json(collateral),
+            "repayment": part_json(repayment),
+            "principal": part_json(principal),
+            "expiresAt": expires_at.to_string(),
+        },
+        "chain_time": now.to_string(),
+        "offer": offer,
+        "launcher_id": hex0x(launcher_id),
+    })
+}
+
+/// Writes `tests/fixtures/loan_offers.json`: real loan requests made with
+/// `chia_mintOption` (`creatorAddress` = the lender, `loan` = the principal) on a simulator
+/// chain, each also taken by its lender on that chain. Run by hand:
+/// `cargo test -p tauri-plugin-klimper-xchonnect export_loan_fixtures -- --ignored`.
+#[tokio::test]
+#[ignore = "writes the committed fixture file; run by hand"]
+async fn export_loan_fixtures() {
+    let mut cases = Vec::new();
+    cases.push(
+        Box::pin(exported_loan(
+            "XCH collateral, CAT principal and repayment",
+            false,
+        ))
+        .await,
+    );
+    cases.push(
+        Box::pin(exported_loan(
+            "CAT collateral, XCH principal and repayment",
+            true,
+        ))
+        .await,
+    );
+    let document = serde_json::json!({
+        "about": "Real loan requests signed by Klimper (TASK-140) with chia_mintOption \
+                  (creatorAddress = the lender, loan = the principal) by Sage wallets on a \
+                  simulated testnet11 chain; each offer was also taken by its lender through \
+                  Klimper's chia_takeOffer path and accepted by that chain. Amounts in mojos \
+                  (CAT units for CATs); assetId null is XCH; expiresAt and chain_time are the \
+                  simulator's Unix seconds. The offer locks the collateral at an option whose \
+                  creator is the lender and whose strike is the repayment, hands the option to \
+                  the borrower through a quoted eve, offers the lender 1 mojo at the settlement \
+                  puzzle (the tie), and requests the principal to the borrower. Regenerate with \
+                  `cargo test -p tauri-plugin-klimper-xchonnect export_loan_fixtures -- \
+                  --ignored`.",
+        "cases": cases,
+    });
+    std::fs::create_dir_all(std::path::Path::new(LOAN_FIXTURES).parent().unwrap()).unwrap();
+    std::fs::write(
+        LOAN_FIXTURES,
+        format!("{}\n", serde_json::to_string_pretty(&document).unwrap()),
+    )
+    .unwrap();
+}
+
+/// The committed loan offers still decode, carry the borrower's signature, and write the
+/// option their terms name: creator the lender, strike the repayment, the expiry, the
+/// collateral; and request exactly the principal, paid to the borrower.
+#[test]
+fn the_committed_loan_offers_still_hold() {
+    use chia_wallet_sdk::driver::{Offer, decode_offer};
+    use chia_wallet_sdk::prelude::{Address, Allocator};
+    use xchonnect_wallet_kit::option::OptionEffect;
+
+    let text = std::fs::read_to_string(LOAN_FIXTURES).expect("the fixture file is committed");
+    let document: Value = serde_json::from_str(&text).unwrap();
+    let cases = document["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 2);
+    let part = |value: &Value| Part {
+        asset: match value["assetId"].as_str() {
+            None => AssetId::Xch,
+            Some(id) => {
+                AssetId::Cat(Bytes32::try_from(hex::decode(id).unwrap().as_slice()).unwrap())
+            }
+        },
+        amount: value["amount"].as_str().unwrap().parse().unwrap(),
+    };
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let terms = &case["terms"];
+        let lender = Address::decode(case["lender_address"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            hex0x(lender.puzzle_hash),
+            case["lender_puzzle_hash"],
+            "{name}"
+        );
+        let borrower = Address::decode(case["borrower_address"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            hex0x(borrower.puzzle_hash),
+            case["borrower_puzzle_hash"],
+            "{name}"
+        );
+        let bundle = decode_offer(case["offer"].as_str().unwrap()).unwrap();
+        check_maker_signature(&bundle, &kit::Network::Testnet11).unwrap();
+
+        // The option it writes, as wallet-kit reads the borrower's spends.
+        let mut allocator = Allocator::new();
+        let offer = Offer::from_spend_bundle(&mut allocator, &bundle).unwrap();
+        let borrower_spends: Vec<CoinSpend> = bundle
+            .coin_spends
+            .iter()
+            .filter(|spend| spend.coin.parent_coin_info != Bytes32::default())
+            .cloned()
+            .collect();
+        let summary = kit::simulate(
+            &borrower_spends,
+            &kit::Ownership::default(),
+            kit::simulate::DEFAULT_MAX_COST,
+        )
+        .unwrap();
+        let mints: Vec<_> = summary
+            .options
+            .iter()
+            .filter_map(|effect| match effect {
+                OptionEffect::Mint {
+                    launcher_id,
+                    owner,
+                    terms,
+                    ..
+                } => Some((*launcher_id, *owner, *terms)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(mints.len(), 1, "{name}");
+        // (Whether the launch is guaranteed is relative to whose spends they are: the
+        // request's own test checks it with the borrower's wallet.)
+        let (launcher_id, owner, option) = mints[0];
+        assert_eq!(hex0x(launcher_id), case["launcher_id"], "{name}");
+        assert_eq!(owner, borrower.puzzle_hash, "{name}");
+        assert_eq!(option.creator_puzzle_hash, lender.puzzle_hash, "{name}");
+        let collateral = part(&terms["collateral"]);
+        assert_eq!(option.collateral.asset, collateral.asset, "{name}");
+        assert_eq!(option.collateral.amount, collateral.amount, "{name}");
+        let repayment = part(&terms["repayment"]);
+        assert_eq!(option.strike.asset, repayment.asset, "{name}");
+        assert_eq!(option.strike.amount, repayment.amount, "{name}");
+        assert_eq!(
+            option.expiration_seconds.to_string(),
+            terms["expiresAt"].as_str().unwrap(),
+            "{name}"
+        );
+
+        // Exactly the principal is requested, to the borrower.
+        let principal = part(&terms["principal"]);
+        let requested = offer.requested_payments();
+        let payments: Vec<(AssetId, Bytes32, u64)> = requested
+            .xch
+            .iter()
+            .flat_map(|np| {
+                np.payments
+                    .iter()
+                    .map(|p| (AssetId::Xch, p.puzzle_hash, p.amount))
+            })
+            .chain(requested.cats.iter().flat_map(|(asset_id, nps)| {
+                nps.iter().flat_map(move |np| {
+                    np.payments
+                        .iter()
+                        .map(move |p| (AssetId::Cat(*asset_id), p.puzzle_hash, p.amount))
+                })
+            }))
+            .collect();
+        assert_eq!(
+            payments,
+            vec![(principal.asset, borrower.puzzle_hash, principal.amount)],
+            "{name}"
+        );
+    }
+}
