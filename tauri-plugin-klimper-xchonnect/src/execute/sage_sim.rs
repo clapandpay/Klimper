@@ -186,6 +186,16 @@ impl SimWallet {
         Ok(())
     }
 
+    /// Have this wallet watch coins someone else created for it. The simulated chain tells
+    /// a wallet about new coins only when it asks for them by id, as `push_bundle` does
+    /// for the sender's own outputs.
+    pub async fn watch_coins(&self, coin_ids: Vec<Bytes32>) {
+        self.sender
+            .send(SyncCommand::SubscribeCoins { coin_ids })
+            .await
+            .unwrap();
+    }
+
     async fn consume_until(&mut self, done: impl Fn(SyncEvent) -> bool) {
         loop {
             let next = timeout(Duration::from_secs(10), self.events.recv())
@@ -196,6 +206,11 @@ impl SimWallet {
                 return;
             }
         }
+    }
+
+    /// Wait for the wallet's next sync event, whatever it is.
+    pub async fn next_event(&mut self) {
+        self.consume_until(|_| true).await;
     }
 
     pub async fn wait_for_coins(&mut self) {

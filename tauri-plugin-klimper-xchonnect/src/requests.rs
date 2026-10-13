@@ -23,7 +23,7 @@
 //!   is shown, for every method and not only for `signCoinSpends` (TASK-079 AC #2).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use serde_json::Value;
 use xchonnect_core::rpc::{canonical_method, codes};
@@ -130,6 +130,9 @@ pub struct UiApprover {
     /// Sage's summary and wallet-kit's simulation were compared and agree; the screen says
     /// so.
     cross_checked: AtomicBool,
+    /// For a take: how many offers its bundle takes together (0: not a take). Counted by
+    /// the wallet from the decoded offer (TASK-139).
+    offers: AtomicUsize,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -146,7 +149,13 @@ impl UiApprover {
             bridge,
             meta,
             cross_checked: AtomicBool::new(false),
+            offers: AtomicUsize::new(0),
         }
+    }
+
+    /// Record how many offers the take on screen takes together.
+    pub fn mark_offers(&self, count: usize) {
+        self.offers.store(count, Ordering::SeqCst);
     }
 
     /// Record that the two engines agreed on this request.
@@ -167,6 +176,16 @@ impl Approver for UiApprover {
             && let Some(fields) = payload.as_object_mut()
         {
             fields.insert("cross_checked".to_owned(), Value::Bool(true));
+        }
+        // The trade overview, computed here from the same simulation (TASK-139): what is
+        // paid, what is received, the user's fee, the price, how many offers. Klimper's
+        // own key next to `cross_checked`; nothing in it comes from the website.
+        let offers = Some(self.offers.load(Ordering::SeqCst)).filter(|n| *n > 0);
+        if let Some(trade) = crate::trade::of_prompt(prompt, offers)
+            && let Ok(trade) = serde_json::to_value(trade)
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("trade".to_owned(), trade);
         }
         let approved = self.bridge.ask_with(
             Approval {
@@ -361,12 +380,19 @@ fn run(
                 Err(rejected())
             } else {
                 approver.mark_cross_checked();
-                let build = if method == execute::CHIA_SEND {
-                    execute::send
+                if method == execute::CHIA_SEND {
+                    execute::send(state, &context, &signer, &approver, &broadcaster, params)
                 } else {
-                    execute::take_offer
-                };
-                build(state, &context, &signer, &approver, &broadcaster, params)
+                    execute::take_offer(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                        &|count| approver.mark_offers(count),
+                    )
+                }
             }
         }
         kit::SUBMIT_COIN_SPENDS => {

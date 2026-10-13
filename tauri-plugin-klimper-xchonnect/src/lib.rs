@@ -66,6 +66,7 @@ pub mod requests;
 pub mod session_loop;
 pub mod store;
 mod testing;
+pub mod trade;
 pub mod wallet;
 
 use approval::{Approval, ApprovalBridge, Emitter};

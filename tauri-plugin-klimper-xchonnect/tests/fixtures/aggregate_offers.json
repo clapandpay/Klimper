@@ -1,0 +1,159 @@
+{
+  "about": "Real offers made and signed by Sage wallets on a simulated testnet11 chain (Klimper TASK-139), and Sage's aggregate_offers of them. `concatenated` is the plain concatenation of the makers' spends with their signatures summed. `expected.trade` is what Klimper's approval shows when the user takes `sage_aggregate` with no fee of their own: amounts in mojos, CATs at three decimals. Regenerate with `cargo test -p tauri-plugin-klimper-xchonnect export_aggregate_fixtures -- --ignored`.",
+  "cases": [
+    {
+      "concatenated": "offer1qqr83wcuu2rykcmqvps0088cytrxpwkeccg0lz5srnr902edkdnx3hyt7gkee55j8ddmgj5xj957aav4dtpf5dnnujtkal3pepmudtjg35keu0txsk8w0nsjm5acha3sszqhgp9un5adeeaccyrxlxpclluvj57wy70j4km29n7jahacyx7xh0dp6txwxd4duxf4a4yafrxm5lw63l6esm5zhlzvuqufs2uham7qttqsdl3hl6lcq59qlehe9zntlrlallhlsgmhxyannc2uve5u05j0pm7cch8mcl0p3sk8ytchyhzjl5al7jxxkctyc0ll7fhlnvv8ud0ullhlqlup6e8wuv780emlca0cde779el0wle478e6zrqt40flt6az53aw4g6kc8fc5nhdlwjhth5a924xjx59wwjelt8c2jgw5a7kt4ucrq0ks0d77zzff96w38htj6ttheuws7c60d9mgtmnkwhnz0fugy6jumse7u4w76uugamlmpxy8resh9qcrak7lrdk7ardk7arak7arak7dpak7sx600sx57vplxlv7z00tgdcmd7d3kxf4yrmyjt8zlvql8wttqt38vpmkakhep4gr7mlluv3wt9jnhqhjk4xvw94m6k2aheql7vd2npcym58dl7a5clyx0nk8sz0tc0k36mpk3y58vzfcvyxjf7ptvmw0a7l0vd78vlgncklw4u9nknmmduhtzvua0h5d3su03feelhl75duln787yendrdvac0ls2d2666kkmv7lkasfgafd90rwpwjxsa4l06c5r3max6v3hc7sf6jveeqah507za2n777q26cxey7p6j4sa0425e2yu6wf8d3p20e7t989fgt400an3ypwvdd98hp6rvyrdrllle0yr2rf74lspgwxz828u3ycghvd2gyngzqvqsqqzy989xd66yl3z50dlgzguvnhpehtwtann72vt743km6h2pfnwe89pa8z62u8zp4ayk4stalmluf3y7vvz2y9qpnnqjsfgu4a826xshawl8mh7eaamwmrpn87wpkxwjk9ulpu3wuw43ln5amktslmgq3kmvw3u8tlrswh78qa0uwp6lcur4lp6rwr473ucu22guvd0z9clp437u8vt0hkd7xasezvfmw7kup507ceq8dvm9kgr38mq29ahms0makergy5lh7u27d4en26cyg5zjrjmhl07qeqjrhkrld0a2d38xnwmwvxl6cj7kh8l784ehdn20t60mjdmzta8xgf867dw89d0d606vahnfld4tuhktn30afk34zaqugex4wxn0mykdfwvr70nqy54prnfgw8z8cumu8weamdaf5kxwhk5axlvlt8d69dmr2mm3vqrjhzls7mqw8l54p78zu8ldpc8us9x90llchcsa0xzjcm6a7zx07mapl83xhh5nxwd9wd4w489rhjnxlw6z7u783wwhl3xyne330gs5z8f3etct77a0jutkts806rlffwaaxrulef7atkgnt53f4cpz5dshkg25644tgwd78gdwyap4g35w4zz36kg2x2apse8k4zz3u6u22n03a8lc8f378lz7028s9jkv4tzda0kfy6ve5k5mt8qvml2x77mlz7tkhlt4cnv5r9z85eylncvxu2w7947d9rkquh7lukelnrjhhaewaac6sax7tl7w80r22hryp4gtyl4m8vnxg86mmcp25d78f7vyk8wg8lk4nuresk36knck56dexfcfhnmw5yxsapu400m3wtvqec9zrtgsfxk8gsmuwk08l65jlhhkwdd08ahhpxtzcn7wjanmll9050l25cx7mk3uur94k942xn03s84gul76vtav868wkk7l0k6nfuwryygn7aa6u6k49wlkt424fpfxv8990dgx3w8pfr375gkzr9yprxmd9v88qk2hx32n56z03z47hmya5z7y45kvu8zd2lq64203pmcegz26k0ahw26f6ha70rgu98a3302whwwt7hnt2p8846x9pj07k2sllu2t4xh5auxue4a0fgrnqaw607mgn50whwgzqenheldu8ym4ecsl5kh3cruqzka6tz5nmqrde",
+      "expected": {
+        "aggregated_signature": "0xb13d78c00a3b788279402f985e7e898d9013aa393640c87a5fac7a4c544b1c51a8abf3850c82cfa7a3e2a1f95da2277f0b772e9a84576da1582c6bf4b08fa3e994eacc0cd56af2c069b83ef23f5b2c8cd66c1030ce4f4c4909b4d20f9a1f136f",
+        "coin_spends": 7,
+        "concatenated_id": "0xeac0cb6413c9c6522ee79338ebcdf96e04e96a619283707072570465f72b8c33",
+        "offers": 3,
+        "sage_aggregate_id": "0xa23f406ef678fe7b20afc33708399f1b0c72389a4f849f33d777e7bbf527fd3d",
+        "trade": {
+          "fee": "0",
+          "offers": 3,
+          "pays": [
+            {
+              "amount": "1550",
+              "asset": {
+                "type": "xch"
+              }
+            }
+          ],
+          "price": {
+            "base": {
+              "asset_id": "a23d9809cb1c88b43e65a9b71fe10f32255652db57b5f58c324c9cf150f90d4c",
+              "type": "cat"
+            },
+            "base_per_quote": "1935483870",
+            "quote": {
+              "type": "xch"
+            },
+            "quote_per_base": "0.000000000516666"
+          },
+          "receives": [
+            {
+              "amount": "3000",
+              "asset": {
+                "asset_id": "a23d9809cb1c88b43e65a9b71fe10f32255652db57b5f58c324c9cf150f90d4c",
+                "type": "cat"
+              }
+            }
+          ]
+        }
+      },
+      "maker_offers": [
+        "offer1qqr83wcuu2rykcmqvps0d88cytrxpwkeccg0lz5srnr902edkdnx3hyt7gkee55j8ddmgj5xj957aav4dtpf5dnnujtkal3pepmudtjg35keu0txsk8w0nsjm5acha3sszqhgp9un5adeeaccyrxlxpclluvj57wy70j4km29n7jahacyx7xh0dp6txwxd4duxf4a4yafrxm5lw63l6esm5zhlzvuqufs2uham7qttqsdl3hl6lcq59qlehe9zntlrlallhlsgmhxyannc2uve5u05j0pm7cch8mcl0p3sk8ytchyhzjl5al7jxxkctyc0ll7fhlnvv8ud0ullhlqlup6e8wuv780emlca0cde779el0wle478e6zrqt40flt6az53aw4g6kc8fc5nhdlwjhth5a924xjx59wwjelt8c2jgw5a7kt4ucrq0ks0d77zzff96w38htj6ttheuws7c60d9mgtmnkwhnz0fugy6jumse7u4w76uugamlmpxy8resh9qcrak7lrdk7ardk7arak7arak7dpak7sx600sx57vplxlv7z00tgdcmd7d3kxf4yrmyjt8zlvql8wttqt38vpmkakhep4gr7mlluv3wt9jnhqhjk4xvw94m6k2aheql7vd2npcym58dl7a5clyx0nk8sz0tc0k36mpk3y58vzfcvyxjf7ptvmw0a7l0vd78vlgncklw4u9nknmmduhtzvua0h5d3su03feelhl75duln787yendrdvac0ls2d2666kkmv7lkasfgafd90rwpwjxsa4l06c5r3max6v3hc7sf6jveeqah507za2n777q26cxey7p6j4sa0425e2yu6wf8d3p20e7t989fgt400an3ypwvdd98hp6rvyrdrllle0yr2rf74lspgwxz828u3ycghvd2gyngzqvqsqqzy989xd66ylaqlnrm0mqk8ryaswd7mzavuljhzl4vdk746q2vmhfag0fckjhpcqd0fy4vzl07llzvfhnrqn3pgqvujyf0qqrlwrw04hwtvdl8t8m7qzjvyk0u8m6a0smrnn970pkx6ucsfl8jn32hxcu7ewlw0jejyvfmltn34yj3f4fzepcwsyqmrezk3aaxdmecnah2nlng9eek4eutq666yk4a935ne603j8mh44vxg6wn6r0lxcyz0pzuqwdlhzccxsnthk",
+        "offer1qqr83wcuu2rykcmqvpst5lltte662jatnfr2yhhfvn5n79ex8xw0d92avd38eg84lrppx5j78tr6k5utumje5mllwlttklgmc0kql3mx5e2xc05uhn4a3648wdna0e00vyqq8esh7pmw568d8ad0hr7kl63mtlmga5l447c0trkslth9z7vwl7uu7zhtt5tcm0wv32qfh9rkyxwhq7vv7hgmrzmn8vrtw7x6c94cxlcf7uwpytd3n898v5atdk994mwzalusmayr2t8gwmuddteagcl8x0sxlnj0tqdkrxgzhw8phjyqkm8ssc6kyt47nfr4ewukldvnadmpzycmhaadcrghu3kqw6ek2v58zdkq4tm08zlhmdjxstfh0au4vetmx43sgnqqvqzpq6qvmlt0l3lur70a7l0vd7pvhfnuhl24v8nknmldy4t2dve084dasut3emelklc59ulllh7ypjdvfv0lhaqy3fpmtrl7h74xcnnfkdhxn0ayf00tralrmumkfh8au8eexa397nhysj624l304pl0dq40vrvjfqdt2uwhu42d4xwdpyrhcc48cl4jnj4yp60k7eejyh0lzucvm0d72fx435mx3m7d9nflqnuuakq44xcutv784ng0rhze5fak05v7laxacwc6lchmqlrdlv6tmymhm2lf4tlhztnn092ke4j3qv2ewk7xn06y7vfvdrc0trll7h6q4p5lglcp58rpr4rlgjv0fhweamdag5kxwkkuaklvlg8f69dmn2mn3vxr64zhs7lqwxlu5pc86ap5cqs9qgpszspge3s753jmerlcnjgvpd3f67g99nhamuqvllh6z70zad0fxvc667m2u2w2809wv7e54leuwzuallzyg8hrzu3ffqguk9p5lcnddxtaexf94wp7yfwl907p9xsjhtq7jzqn7df90z7t6atkhevu4a4zja2utlpdck3a0ltkl4wzvnced5klfudnap57x2y4n8ncajs4e2lwnl23l4nvmfckjak06jxa79t2k70a27anclcup50u8wxzwlj4rh7suqqechkk5npptt8",
+        "offer1qqr83wcuu2rykcmqvpst5lltte662jatnfr2yhhfvn5n79ex8xw0d92avd38eg84lrppx5j78f6lzh389l8gakaplush67t8ltc58wdl9f46yk65qdwxgfrv97225k33sqqlxzmc8d6mfasl4h75w6ll68d8ld8kr7kl6pav7cra0ustenmh6nnc6ldx30rddejdfpxuywcce6crenn6urvvmvva3ddmgetqhhqmlr8mscy3a5xva5ejr4d7c5jhd6thljr05sdpvapm0n4aw83rnuu37qm77taypkcveq2acuz7csznv7xr7nlszy7lml38x9rc2etzt4hxw5mvnaxv6t2p5nkx974t000l309mtln65tkzpj3r60j0cuzr7980r2mxkqq5pyqpvpel7xlltac8alaakucnazlwm9e874wc08d8k7ufjh57cj70zem9e88nlnlpl3wtellnwvvryec7ele0hzlukelnrjhhaewaac6sax7tl7w80r22hryp4gtyl4m8vnxg86mmcpvs2m2l7pw4ea00q9fvnvj8pad2cwh652v4zvd09njcsh85l9jnz55dmhn7f6jwhlcz56uaw4a2p94a4ny3t7a0npeqmuvmkg34keu0dxq4820rkjm5aukd4ual39a50sllq5nceegwuj0lvt8clnpfr9t8f0fcmzwng30rka2g9z60e2ul0qukc3hslllskzp43hlz7gx58zp04rcgj0vwwl4f4a08du767dm0wzgk4n85a9l8hl72lgm74tsdahfre6xrtvt2zzf5pqwqgqqpqznnnzadz9hj0a3r9suzfad4clccmk7mdamwd04gjsexwt38an6444awtdav4g9ynj5u5djdllulnryx863zggvusygt72zls8778wl8dl2prusj8jdr37nd0mh6w0rnpjhz6tr4g708lfmc73zllz9wn0fg0yczl75tdnmt0tflmq3wmh6vta077lreh6gaxwu0l0qlvl3xd08mcu8mle3mhlv04h2m7fa56jaz20f6jm84cl0qe92sle7x8cqg2j8xeg8wj66y"
+      ],
+      "name": "three makers sell the same CAT for XCH at three prices",
+      "network": "testnet11",
+      "sage_aggregate": "offer1qqr83wcuu2rykcmqvpsxwgqqemhmlaekcenaz02ma6hs5w600dhjlvfjn477nkwz369h88kll73h37fefnwk3qqn6va0407q28rvacwd6ejldvajtqladd574eswdmsf3f09cxshe6sfwe94upl0llllpwvwvhjl4yn2c6fngalwneslsf7x0my26nvw9ktr2m583m3v6x7mx6x0lunvvz2y9qpnjc35wm5e3807la03p67v9ds8nmuxvlu87r7dzd0l0x5u6xutva2d2809zdkl5due6067ar70l0lqhweamdaf5kxwkk5aklvl28f69dmr2mm3vzr6hzls7mqwxl54pu82al7lcnug2zr95wc5he7z7tll7pvlk6u0uv960dk7lhwk6sfcwn8ycn7ea2667h9x7k24zkffgw28ey0fga7eual2nt67wmea4umk7uy3dtx0f6t700lu473ha2hqmmwj8n5vxkck4lumnzags5qxw2zw03qhxyrd8nfksmu90p8yxzl95mvex4p7xh55dlsef9kumx392v5vsner7f80fdruq3cssma75gascydjdn3l0meffu7f5l9tvxjthl9nwmsgaadxl2p57wuy66lc5sth2f6jkdhflanr8knfhcp0k8e5pgnq4m0nhvzkkzqllrvf99a6tcs6lmlm0lalurxae39vv7zmzxt8ruylcwmk7yek7hecyw9aej69f8cuhap08h345xxe7rlmlj0ly6r97r0llualchaqkkflhn93muwh78d7tw0l370mmh7d0pcwqjcxamu0j7hv4ydtdgx4kpcw48am0mj427atf2nfyn4f2n5kleekrykrd90ajdfxccr44re08ss7tf2n5fakak569u0048kxmcfwmj7ua345cr602zxckk7xhh90kxh869wn7gf3em7qyfwxgaa79gea78gea7rgfa7tgfe7mgf3lyy78zu95hnqhmhh8s4m6erwxmtnyw3jdeq739j4c8mq8emk6cxuemq2ahf4kfdwpydel7xqk9keemsrctwnk8zjua09wmuc0lzx4fs5rd7rkalw6v0jn8enrcp84u8mfafsm2jzrk9yvxztfylq95d5y80elaxuegq9z5807975d3wm8vkd0m0cv4wjkxkpepltrgv64hd02a6dsjd8ghl0vy9vxvusxx0plzl6p7kepwlgyevnqjh9ua0c25662ujzg00pn2lsl8yh92sz5hdahnufwsga8xhzmmg5pwr37nll7qjzfk3l7zcgxk82pl3rcgjv9tsxn9zyeqld0p6k45dutne7ml7w02mk7cuclhsa3ny53txc0ymhr4dl6a8waja8c6qn0k6vzd36w5er5afj8f6nywn4xga82vsc5e8yvxmvjj8yrtg3w0ca208zm26aenljhyxchzxeh4hstrhkxvptdxedjvuecczn0p7u870dkv639897hwhnfwu6kkpzrq5jq6dlmlc9gg3dms06tltnwffkm76rrh75yl49mllsawvmw6m67mlv3wg3ldezyf74rdkfdtmdn7n80ujwmdtl8a27ut72d542hyxzyf4t3cm7m9mgtmp03ugp9dgu6tzz3537yxmvsjrafztdkr2u27uahsurkm58l6rlfevaa8rsle0742kgjmj3p4cfrydsh4g25634mfspkh0tx2advet54h97sk5h6x6jaqm84h9k3qud6grdha8lqyfalhlzwv28s4jkyhtwvafke86ve5k5rf8vvta2k77llz7tkhl84ghvyr9z85lyl3cy8u2w7x4kv9pkmrhwluke8nr6khmekaacmslx7gl7whdrzghty33gtxle68gnkt8j6mcp65dkcfuvu58wf8lk9nu0es53j4n5h5ud38f5gh3mw4yz3d8u4w0hswtvgcc9rnfvg2xj8csmdjzx0jtppkmgmds4q7u2c2u69gwlge7y646lvnsstejknens5g48unv4f7ytwn8q3t2e7kment8z7hludrsulkz9at6aeet6kddvyuchgm5xgl7e6zll3ev52anh3tnx05afpwwra6fhmdzwe763cqvrw0lra85utvh0rnujzl8qwq8ala932cl070l"
+    },
+    {
+      "concatenated": "offer1qqr83wcuu2rykcmqvps9nfefltpn8wnfkhz0wr6edhrnm76v9e82ay8zvna3a09q6aaavhlmzdx88ta02sfaddyeywlhfuc0gxlrxaj9dfk0rmp39d6rcaukar09ndy8qyxvpmf33prc07cuxlvwqrgnuu0n77w2l8j9xe2m3kjalegmx7z80tfh2jd8nh9xx47d9za6zw54nd60lwc3a56d7ztas7fq2ycd0mcatq4a3s8lcml308xl0lhkmrx05famdhzlz4mfaak7te3x2whm62ec28ghuu7tll6878e08l6d3sf34sp2pyzlllex2kgfhm8l97uvrdra6fdcvakk2k9llpnj7zkf6vvf8d4lmlrdx70wuu87rrcgumll9eczsvgsqrvsd4tm7wug5h52t8yr9e20l7n664nuwr5htfhjau6s7tj7duaj3vqa5c8ztdj8mda2xmda6xmdu6zmd7626d766cdepds7hp99uc97aaeu9w7kgm3k6uer5vnwg85fv4wp7cp7wakkphxwczhd6ddjttstahmlcczhr7lks7htal690xga3p002wnm7lt6y98z5ltk62aywt5fn0zndklv9zptv8zxmw85fdy9rqsnyzc24gkter6e86dwyeyj86qlm47xu59w074xx9z4tt5wht83fe07t0ndulmzrgevctug2qrtyu8dw8wc65hd9vtalyva0g72jt79hws2y7mwjtqv2a57t07yc8f47v6tuw7m0kd44j4c4m2hnx6am7smxcjh7vtqwa4chgyx7reuaetlnc8q0fyp8pnmcuyxhv4wz9elr4fuutdtthx072usmzugmx7k7pvw7ces9d5m9kfnn8rq2du8msleaken2y5uh6a67d9mn26cygvzusnwk96gjw24pu8ldl3rcqnfkt0fn79k56hzf5wlg7cfrj0ngefurn894736gnn8m74nvt5kljglm2rmknyn5w3u8yarcwf68sun50pe8g7rnnyxyarehtqrm3j06gn9jwdpwh382z58hdl9n8usch597ruuwxmmak0zexeqv95vejphl5lnzrgewzfetypjjzzjh9d7ase0hvl327lqvsl74xvf0lk7adesuvyld54m9ymflyc8hdwurfl6lk2pr44etdmmhmwvhkprr6uyvt8qaaksap6f3vd5h2lu8md4htwsdr0k4u2f9fpc4ladwrrlrwfk27mnnmkh25hfhkfcddteujhx678pvq8qqksuz0j7jm2",
+      "expected": {
+        "aggregated_signature": "0xa922f4ba36fcb1fa6f28006fca5ce94f4baf6cc003cd86723e1c84f09bab1eac4f4a9b5288ad23b749e9bd018c1751ac1650fddb084092a381757a4ef33f3aa82887b538f21a681a0fed1388c79d3cd5b641bf2d237699819aba6e2469f58884",
+        "coin_spends": 4,
+        "concatenated_id": "0x5e665c72e04faa5ffb88a0ca0ac56f46520414cb3996800958ccd3d455defe9c",
+        "offers": 2,
+        "sage_aggregate_id": "0xbcd58ce23676234cce5ce50e3cd353981def1205a54da794fcf11d66e6570ef2",
+        "trade": {
+          "fee": "0",
+          "offers": 2,
+          "pays": [
+            {
+              "amount": "2000",
+              "asset": {
+                "asset_id": "5ebebf55abdff423a216d0f79597ede5d05e1a679b62aee24461b316b33cb872",
+                "type": "cat"
+              }
+            }
+          ],
+          "price": {
+            "base": {
+              "asset_id": "5ebebf55abdff423a216d0f79597ede5d05e1a679b62aee24461b316b33cb872",
+              "type": "cat"
+            },
+            "base_per_quote": "2222222222",
+            "quote": {
+              "type": "xch"
+            },
+            "quote_per_base": "0.00000000045"
+          },
+          "receives": [
+            {
+              "amount": "900",
+              "asset": {
+                "type": "xch"
+              }
+            }
+          ]
+        }
+      },
+      "maker_offers": [
+        "offer1qqr83wcuu2rykcmqvps94fefltpn8wnfkhz0wr6edhrnm76v9e82ay8zvna3a09q6aaavhlmzdx88ta02sfaddyeywlhfuc0gxlrxaj9dfk0rmp39d6rcaukar09ndy8qyxvpmf33prc07cuxlvwqrgnuu0n77w2l8j9xe2m3kjalegmx7z80tfh2jd8nh9xx47d9za6zw54nd60lwc3a56d7ztas7fq2ycd0mcatq4a3s8lcml308xl0lhkmrx05famdhzlz4mfaak7te3x2whm62ec28ghuu7tll6878e08l6d3sf34sp2pyzlllex2kgfhm8l97uvrdra6fdcvakk2k9llpnj7zkf6vvf8d4lmlrdx70wuu87rrcgumll9eczsvgsqrvsd4tm7wug5h52t8yr9e20l7n664nuwr5htfhjau6s7tj7duaj3vqa5c8ztdj8mda2xmda6xmdu6zmd7626d766cdepds7hp99uc97aaeu9w7kgm3k6uer5vnwg85fv4wp7cp7wakkphxwczhd6ddjttstahmlcczhr7lks7htal690xga3p002wnm7lt6y98z5ltk62aywt5fn0zndklv9zptv8zxmw8jepxmg2xppxg9q423dhk89s056ufjfx0uplntudeg2uma6wv2y2jhglwk0znjlukh8melxyx3neshgs5qxkfca5r40222h8qcjh3wkh74c0kac72u2hh2mexhk7tpwwqnmv7ecsf702ujvekc4nl5el8m66nnvc3m76qle00fug7tfml9nneahl46lglnc6kg54703eet7nfeel7v4mxqne9alatnmek0uthau8h9za44nvnj9mxzygqa89t8vy3cucny",
+        "offer1qqr83wcuu2rykcmqvps9576uw734f772c4mkffc7fl4yhufw4r5faxeywzcemeck8af50nfu3hhuuakl56tr9tntwh0xd4mhazkd34duckq3mt3wctds8rlm25lr3wy7qyxtsa7qmw5uxlvwrdk0pp34vghtaxj8tjaed76e86mkzyf3h0m6msx30ervqa4nv5egwymvp2hk7w9l0kmydqknwlme2ejhkdtrq3yqkkpqmlr0l3lur70a7l0vd7pvhfnuhl24v8nknmldy4t2dve084dasut3emelklc59ulllh7ylzjsrtyj2rc07mlz8nf0plallhls2aexh6k6j26f7nm3zmry727dz4psw0u7k29f60vl025d3vjh7eplagrgwysrqxgx659ax786h699nzzjc5l773la56k9q7t4uee2la008c8z7kmgxqkmv849qcnmkjkn0kkkrdk7hrdk74rdk74rdk7sz60tsx47gp0xlvlz00rtd56dud3hxf4y9m53trr02q0xw0tsd3hdpnkd5hfr4vz7a7lavawppdm00l5w476ljstcjh0c8e6l4ka8zl32f5n8y7khheyjhpvkev7d3c3x3jmpkn7uss4c9hzq3y2e7pzu5f34977yagzs7ahvkvlnrx7q4c0n3umldk3atymyrsksnzgkl7nlvgdr9np03pgqdvnsjx67acmev4khxc4h7fhzh97c9d38tcdpdl9sl0frs7wnwmh40hxjf293x6ctrnk49akgmu28wxpadkvzpndxh7ud2malf0ns0l9mxe67a3h0w4va2vvc2q4ntrfs49nktpny0k86fhyde6s3y5w0g00vwtg06zz0qqjwv6ym4uvnw6"
+      ],
+      "name": "two makers buy the same CAT with XCH",
+      "network": "testnet11",
+      "sage_aggregate": "offer1qqr83wcuu2rykcmqvpsxzgqqkgx64alxwy2m699njpju48l7fad6m78q6t45eewldv09e0x7wegxqw6vrk7f6wj6lw8adl4rkhlk3mflttacl4h7qdt0hqmtlyz7d7e7y77xkmf5mcmrwvn2gthfzkxx75q7vu7hqmrw6r8vmfwj82c9acxlce6uzzmk7llgata4l9qh39wls0n4ltd6w9lz5nfxwfad00jf9wzedjeumr3zdzdkrdz9g9z008c3y2e6pgx2ctae3edr998zd6gnmplk6h9wwzhx7xjn2nj7428mf3g7a0m9am7ll0uqd8h0t9t2c2drvulyjah0ugwgwlr2ujyd9k0r6e593mnuuyka8w9ldlr0vflyrppjjzz68rvc6ysce5fp3ngjrrx3yxxdzgvvuyecgvw63qv7q3kvzu5eh49u7qagzskahvkulnr87q4gfnelmmvxhamymyzqjsmrg6lwnlll9luwum8hd44znca62mnk6anasl8g5hwdtvwd3c02y27rmu9ctljc8qlt5xx3ssk2gqt2a5c5lhs3nhd5tt30hpavkm3eulfxzun4wjr3kf7s7hksav77htlap9pq6g2gyvyrcvuxdzksae7aqesgxd6vn3lleepfu7f5l9tdxkt8a9m0msgdadw72p57vuvm6mcyjtl2f6jxdhf7ahrh5nphc90k9eupgnq4e0mhvzkkqqllr0l47ur7l77mwvf730hdjunl2hv8nknm0wyet60vf083vajunnelelslch9ullehx98xsq9tynw9c4g9h8ylaluzrdxdkfaav45xwhd4lphjsp70mgve8w9n6m8a7ahray8w0rcpalu0dmczslfd4ca6rwja54ewhc3nhatc2f0c5a6pghmacfyp30knedlcnyax4enfzp9rryxcum0rrsnz0wxe3za0ucga0th906tv7m2cgnxwulftwz6f7ydsm4kfnn8pqjdu96cmeeheltv3ur6d6ld9m826c9gvzyjv0ashfpkp8nkhn3rjpvtavl3dhx46jfz8787pgcnv7x6dq5ee00uwjgaf6ld0m2u93uj8763kuupg44204vktan8uvhlergx0nfmztma8ht7088q8ed4dep82dewran2hy6luh4nqwadv2h0wa7tj9a3c778qr2ccp0ah8ywzvttw9jkl97mvd7659gma40zj02gv98lt0ssaclna5hxau6u974aed3nw8tza0y4fjhemtgqqt09pcyxyu5rz"
+    },
+    {
+      "concatenated": "offer1qqr83wcuu2ryhmv60v6fg7gccans5m2zs3skhfqv5fy93smvacee9h90yw4kr9pw2wng39rxk0vjvu3guse8y7uhx52kydr2zrvez6zujdggs4qv54dfhx4v7nhzrahvl6en8ea5ua624hlm7lhnenl00hlljlk7elejqyqg3yf6zzj3e9fc7jm7unzrm8hj909vn2c5pa4hv8u0tyu52vycjp3qdp02k6npvntv66en8dzh3enxav4qr8w535pqjxvykzhvhvtdltyugnxruz68lmn9fy87yr75r75r7sr7jr7jl7f6tlmvefpud46llxl6q8ehhjdtt4f8yx5xuxajcnzn36uj9w5uyd0krfxktm0vmuqgeprje5vghx7sx9j7dqgh8x4gxjcdxj7dc75f2a0vwxfcvj8tknz280xrrselq0hykhhzngkucjkvd8srtcnegvvr8ttus848z933kez97tdacx2yunq689mzhyxjm0jzgh40a0h6ch83rdvjaj8fck7qp8pfxpd3wd5y5xmf4lh8hc8tnltxfd02l2ngktncgln0j3ck07yhnrmyelkqh0236lpcdtsucyx8q2rrp0wenrp2fqtnvv73v6a0mxdhkfn2e8aqk54xlu50pgrchw5jsjnl5q4p3vjtrncamyyx9h6hq0hvky8lndqsgask3a0m8qrz08cgefggcsprv95yz4hhg4xhjmwnfn2heajm8xvkducsf5ym73d7za6wc2jzwhah92e77jz2v80kd3clx9c55kf84yfavamtx64vde0wkmgdrmhkpwhrr22h32mprqfgv33sysxgaek7f7zy4gka0tnzxgyy83anw89d5e9gdr9zf32pdmz00wl5aueqx7lhksdcsrmtp00my3tevvmlpcqph5p4grtsqhgrwsxaqdvlrxcfrtkh0qtqunrqwfgmwpffd88cwm5njmhu5zpg0ezzpv63dnfl9yrlqvd4qs8lg4ah8jqx79uvtk24za4pe09a53ukgt6m9fzewn3rtdnav3u5zcl4dek6zpsdzxz9s33nxr04xv332wk74rkjmhdnhwsp0n47ylqa3hp7k4ntnk96x34z2ng92aa537380jgsh2dtgcf764rckpdrrkhsrv35ujuynv2kxsaprmz2vqhtq3nyuc8xq3nyuc8xq3nya8efc3wqjftq34c5fjekd0n5hn557nrfldcud7e4wtuwa5gmqda9f64tjl54665ss3ts6jht8zfaa7zw8xu299s0hhcukzexpwrskpx0grtl60sxu4smyapuhh66vpa3rk6fhxq0pljgadj93d5naqd3uy9q3knftkv2ya77w4kw34lak47fr7aa92564em9vuk78twjtenfupcgj078mpetr6m9ufelfc4hy5336mduewam9epars0cesusqphluf39p3v5e36lx5l4mkuza2jwdwwxmqgwgwdwp48yw8njf0n2c56vz7xm0u39wurak2u20q7u98p7a5dzw4lxjn6tuhhj95ahxuj8rsxy8skspzrgfsw3h363yhjfk3ds86cyj6zvpysstqfqyj6zvpy73j66zgpdd6gntvnejnfevnf2k4qhuveuuu3pnhxajqfjs0azud25zwla0jdfsjshmkmp6yvytprrxvx40mqwawjgessf78xfrkkp8tx0n7elaj6mwnrc2l54hf64z64klc5r7gf7kxtq6q6m28fy4gh58dge0rckxtr7f0g2md2kr6yz48cvr6cyasp6q84sftqnkp8vqwna5cg98ts7zhrtaymj4l3mngyev5wxu6rxrywmgezv2alt6rjwa4cdt45u4lfr4fwp96yj77my43jgwr695p8xu6gfxp4vuray94ryu685mtp552lf0ulvzkp2f2s68uyr4jp32j5amz8mgn5zvc7e22dtas3hkqk065tcmh84dcdfdz5vkc7c6mvskqvkk5mw77dtwn4l3a8qg648zg8n2t24mgyt6685yj9vn9vv83x3deztv4gsmy48cdsxs5wkgnj9reha9eltgmvz38u8q5lcleg4se6duwqlupm40qjxmxlxn3634a5umj0v0tzjfpgjxkrtxjkexu9qtz0ckxkhm35rr7rv6kjn3v3lp3pu95qgs6zvr5duw5f9ujd5tvp7kp9vzwcyasp6q84sftqnkp8xp4lf076ya6n824dkhfmana7ukufxs7d6mu9ergwyr039r0lgg0mqmnzh30unp29uv2pzrjdknxrc9f7jemxhef4ycxsntlvrpgs5cxm6vn0mks4afwnwvh62rr2ew6jhvwf64dm46a4lha0z95aafa4dj7w4erl25un4glzvn8znlsqvw7q57ugu96w42nkxqk5pzartye6g0avl5x44e94zjde68trtk0h3972v4hjmz6k3sg",
+      "expected": {
+        "aggregated_signature": "0x918999ec75a4babd2397a643abc7e8177ae7427cfd5ad114c2515998dc1c37b049b1499f2c2167b253d92e069c53dc0c12a71f7fdebcb8244d00869f89e7624d8d16c1e2004ef3fb8ae197aa56230adae53112992722f9bd0c52851c8858c691",
+        "coin_spends": 6,
+        "concatenated_id": "0x82bed1a4853c22fbcfd356c294f2a3be9c175746d2fe13643faf517e35b71781",
+        "offers": 3,
+        "sage_aggregate_id": "0x8b826007ffa6cd13618ad2444ae79ab6fcf3b2785d4379939c88a27714c4a181",
+        "trade": {
+          "fee": "0",
+          "offers": 3,
+          "pays": [
+            {
+              "amount": "3000",
+              "asset": {
+                "asset_id": "5ebebf55abdff423a216d0f79597ede5d05e1a679b62aee24461b316b33cb872",
+                "type": "cat"
+              }
+            }
+          ],
+          "price": null,
+          "receives": [
+            {
+              "amount": "1000",
+              "asset": {
+                "asset_id": "a23d9809cb1c88b43e65a9b71fe10f32255652db57b5f58c324c9cf150f90d4c",
+                "type": "cat"
+              }
+            },
+            {
+              "amount": "1000",
+              "asset": {
+                "asset_id": "b574443637395740cf424fad4f6a99ca834a81cf4b24ae8adaf7b34696f92251",
+                "type": "cat"
+              }
+            },
+            {
+              "amount": "1000",
+              "asset": {
+                "asset_id": "b8248275b3d295d8d3edf7ccb03777333d40876d0bec2d132e2c392278bc599f",
+                "type": "cat"
+              }
+            }
+          ]
+        }
+      },
+      "maker_offers": [
+        "offer1qqr83wcuu2rykcmqvpsx52g3dxd097l3ltdw60v00lr6lxdl0qtkh6veuz836u4ltkxtaupvevkaz0fhdhx3wrmafa3klz0kv4h0vddxsun633k99h34aeta3he73t5lp3svplqzme8pmt0aga4ll5w60760v8adl4rkhlcp407urd0uqtehm8cnm66nvxn0nvd3jdfp7ayzecl6qremj6crudmqvahd46ga2qhhqmlrxtjcvsac8ua5fnr3dw75jhd728ljrw5cvpwapm0l4dw8epnua3uqn77ra5pkqdeq2duuzacczrw7xpclauvn57wy70j4km2437jahec5x7xh0fp6txw8d4dvxfaa4qaerxn4lw6pl6e3m5z8lzvaqufq2ulammqsvqzpq6qvmlt0l3lur70a7l0vd7pvhfnuhl24v8nknmldy4t2dve084dasut3emelklc59ulllh7ypjdvfv0lhaq0na3uuh2e8mk00feukhntk7m4m6zypkqcfm6nlal959vjz5gjg272pd54tl2luqulz3vvc96t8rfplc2jzwvv4at9kekd6zup0e2m8zjj2aakdz2secllq4x88ta02sfaddyeywlhfuc0gxlrxaj9dfk0rmp39d6rcaukar09ndq8vtnc90e7n90yzzwl6axghw7d0z4n7c7r0mr68wm0nu4lc7retxcw2203jw90lle0yr2rf74lspgwxz828u3ycgkw6ksyqcpqqzeqm2hhuec3t0g5kwgxtj5lle84ht0curfwkn89ma43uh9umem9qcpmfnwk3qmdwjuxva9cve6tsen5hpn8fwrx3q6a3chka5846l0l30ez9vgtm7n5ullm73pfc486ajj8tr6uzgmckmdkm9gcfknqrvws9ck960dgxdkez6wrewtwm60pt7maytp8snexs6u7we0fkmtzgwkd89tt2uwavwyc8t3wl7ykhgcs5yxxgcf0mde3xe082udmnr8wl2jrq0n4lu7fhtmqt0pdmzhqxwtad8efpky6chaxhfkcm88p90wke868pd9aujdjflm8vrh7jm7lu4xzhefvl5ej7lufhza8mg7dznr6edkaqcpl9h9j0a2m78pauk2npnw6fe8hnawerlgeqza9wrgx4xatpj",
+        "offer1qqr83wcuu2rykcmqvpsr98zn9ae0nx6j7mrverz4kllulw7pxmp78cn0w553dm0f0xak5epdp72lzd3c4uyc3waktaxuvmm4790dzanrpmf76eatsgwxwx9v6e0mqwv0qyxfsh7qmw568d0ldrkn7khm3lt0aga4la5w60mqk5lm39jlvzlw7u7zh0tydcmdwv36xfhyr6yk2hqlvql8wmtqmn8vptkaxke94cx7cpluvp2mfdwvenpdcvwuuwle4l6ulxne4tv6hudukl9t4tjmmummkn0m4y2qsmfnypthpsmezyta3cqdd0z9clp437u8vt0hkd7xasezvfmw7kup507ceq8dvm9kgr38mq29ahms0makergy5lh7u27d4en26cygsqxspqsvqzdlhhlcl7p087l0hkxlzkt5e7t0h27zemfaak6t43xxwhm6k6cw8c5uulml72z70mltlzgexjyk8lmls8cedd8snre2gfzdnxdzmm4vjdxgyasuan7hze7h7vm4hn7fea2f4nq9d92l6hmsy47tr249uhzwvrhhsdn85l9a706hkca8xrat53hvhqm9wwxy7lhv0lcthcaaklvmtt9t3tk40xd4mhapkd390uckqamt3wsgdu8nemjhl8swq75gn59n4tk4nj28klesv4e4s5lchc4th44lsy7cykluym7nh3h4v0eee8ef8hll7teq6s6040uq2r3s363lyfxz9nk45pqxqgqqkgx64alxwy2m699njpju48l7fad6m78q6t45eewldv09e0x7wegxqw6vm45gxmt5hpn8fwrxwjuxva9cve6tse5gxhvw9ahdpawhmlut7g3tzz7l5a88l7l5g2w9f7hv536c7hqjx79kmdke2xzd5cqmr5pw93wnm2pndkgk7zuu6nuvlv7zms9uma0mp682n9u5jlq0p5plde6ec3le6vkdu455aunlutdzs3pgqdvm3vrm2w49ma496u6e783u92edxh6u0cs8hng0ulvl7axuulrl62t08m6xj4vyc4rtntm9hg9kak5xh4a9pss7hh7fnkhra50gkadtpm24uwlgrr8llllxfxc78pa7wn4rm8wyl45c54z54lg4ywgfew96kxtalyhnq2czqqpakyc5tufrzz",
+        "offer1qqr83wcuu2rykcmqvpsf9n3ghkd0tuhlsn0x2tcw8572908uve6tdd7rsslmkc5wdpkwjv453qfgkeaew4l5d2u65c8ahhjdpv8v6anx4hdlplrvacyjm3cssc74rv60x2qqruct0qahtd8kr7kl63mtllga5la57c06mlg84nmq04ljp0x0wl2w0rta569ud4hxf4yyms3mrr8tq0xw0tsd3nd3nk94hdr9vz7ur0uvlwrqsa99860xfdfk7hr7l07ucphnwf34hplktnhr0wkz0gafvjs40v3vrguu3zaxmkp0ugpph0rpltlcpz00dlcnjz3u9w43y6ln82dkg7nxd94q6flrzl2ahhhlchj45lea29mppev3d9e8aw9p0znls4fnmqqzpjqqkzullr0l9uutll77mvvf730hdjum72hv8nkmm0wyef60dft8pvajanne0mlclch9ullehxzpjvu0dlch0sl6xtlmmdc4uetxa2kxx667tjyn3lvv57ldm0w0asufh6um7vfp0seq4k407ze7hn7f923e9k7wcd9lhr6cyaa8gtp4jpxhhaurte0m220tj72x20lfdljlcql0wjma7kefh4u7k7a5lvrq04mt508lu4l3ma2nqhm7u8n3v6kgj4vrmzu7qk0geljvtjlk3px92un32g76mn0xj0jnf2lf5wdttlwr6u9xk7cjz0l07h6q4p5lglcp58rpr4rlgjvyf89tgxquqsqqvsd4fm7duv4852txy89eg0lan7m94uwp5htenj4l6u7ts79aaksvqa5chtgsdklgwrx7suxdapcvm6rseh58pngsdwcvtmwmr7a04lshu4zky9a7f7wlaahfs5u2naxef843awfydctdkm9n5vyttsfk8gzvfza8k5rkmv3d2zvjcllw6r0e34ujm0738jmd5k3mv92kyk0pq2rl7t7ta7d4r8la9uh7z0t5vg2zr8yv9d2hpnn6hl8gnjwvhj4wn0ah8vw3mezchsuu76aruwpsg74xc5wsz6d320hj00algems4kx7j0d5anphcqgkwhqe6e5u4f7vze09hxkdv46wnd6tuwfph0l29590cpgwj067hmerexdh9w3jxl9vd02wlavtq5zfcqgqshnpkfq8036wd"
+      ],
+      "name": "three makers each give a CAT of their own for one CAT",
+      "network": "testnet11",
+      "sage_aggregate": "offer1qqr83wcuu2ryhmwudv6dg6guqlcfjs5mzpsasx3fsv5p943sn0accf8ha0yx5x99ew2zjg49m9ygj8q2hxxdelktng9rzx343rkysd9wfy5yg2nxj34x664j6flc7ck0a64ejum66x5eu7fmeaulaneudalflll0lvacxspqysgyy0nmxuw2mf22s6x2znz5zmkvl79sfmejpfaswaqm3q8k4zelw9z8jc7mlmjl57pw5ra28750ag86s04ql2hlz74lu8at83j8eca4ll9e3cux6aetd73yq56kcsukhyvwwhrky42mn3jl5756el0cxcqzxgwj35avlc4pf9xra65wyqk783wgrhf0yh2eqxjc7ztyz69x2ksexfnsvgq2z900lyvlh6qm3hxjmjdgkagwme0dyh9jjuketgsmgv34keehg62fw0j3umvpqcqct2gdx76f2d0dkdzmkkg02njw5m2nc3zncfherm69rka655xas87p5wr6y90cgednpuzgsqfdpngvyqpdpngvyqpd33h60pgpzrec2yfrkv5c7nr6nhhxylxktyh2fwe4xaqxvkxl5k8x4chhyc6e6v9jduascsczhnuahdpsv35sel56lxvl5dj5x76uqdwwscsv7andwga09zznx6r3scwtqp3yqrsrwgvfpsuqrsrwgvxl2c8qxy8ns5g6xljwkk7ha3hhlx8kcemjhrvs48mtcyg7fkaju98hjs7x8h6q7wafxqxzmj5e3s7v57xscw9m2nfjzy0k6zwl8urwhtrf8cc03vqp37jxm5uugwxtqednpu7pn2ssn5a0mf8v2amv9ymfh7fteqn27xc9daufhz2axpyrfy55v59gdeah4j0yvc7nksmmu4vvvfstntgu6fqdz2ymrfxghenlrt02498em8y90sgz0qtpzgcycq5xf8qrqzgcymuu5yyndar9lhyz364nqrauc3tp6hn25rs7t4j0hnazdswqy9auye22mtsl7uwjxlle7qqlxanzdee4wxdlrhq33jv4dg2q75ufxxzl56hedktyrfp5ecglhvw536t0wyfxl484wat2a75r9st7fa8jh7z0nwp0dsyyx8t4svhhc80jqlxed0ze2h2k9ncwlhvj36lwaphhr8wehjsl02am0ze5azvzvy933sh5ua3g55uxe68lwkdvh4hxlm5e4sj7kt6gn0u6hjyrutk6dg3gl5yayvryjlx00hvssyklwup7ajcsl7dvrpr6z6cdlguqdfu7pn999rzqydz5h2dzvp5vvcw0zcmh7s2f8253lkthwcmm8nh26m6laahq3yhgvwawtxymkx5xy9snfq3pvyuf47maytkzfk4fvuh5z0em22s7htw6mmermwutltsae7cj7nxem5mtj696mjaq2mf4gu84s7j28up996jfuwjdk3flrs26c4vvx8uvmpk3zmjk7sxu27ss3v9vqp4x0lqlgtuclcza80mqltmjhmf6t5xj2cydw9zvkrntul9ua9xvucf4hrnhmz4e03hhp9vfh54863wt7jasjksq3rk6p5m0z9uuwq79xvg9ansdkq6kze6pwd5ksxlwjmc6mn97ccr8d8u4kzmv9asmk2ghz80f7zfkcw9f63xl7zqqqmf54hp9v089y7m55nhzhwqk4hhc64md2n94wwf0xc9mgukdps8pjf8ufktjkr4k2yhn7sft0ffzr4kmc2mmwtjr68qlf6yfdjz9c9g9crudh0ep2ec8ev4e57prcg7xd334gxhvy209gw37gw6k7m2gupqcs6zdzzyxsnsks8nvcfm39mw5kwtmqcnhtqmk2rzwffj0p6u8rvcpw8hukttauvhf0k6klq6kgk7tazg0ef86cmugr636nmfq29ast2k0c2937cljm2pxata47fqdf7rywyqasqxcqrvqpkqqmqqd30jjkp2653u8k8h2dh000gskseg6sude5kwxqck3n4u4t7hcx5emtjentmamq3dsdmyjlj4yl3j2wm69qp826jttvq9r6mpypknzujjyd0ea4j6r9eh05uvyk3ffws68axrekp92jxlmn9sp8d8249x9heg7myfh3043s3lulwm92s4r94hkpjmynsnxh3pmn5mtrek8lrjdqe42wyc0k5k9tksgh4k0vfy2ex2lr8a9pg922u4gq65nxcdz5k84zvp5agumt0vq2x3epfjxkrtxskf8u9qtz0sl8ksmn5tzlru64jcfv3l33p5y6yygdp8pdq0xesnhztkafvuhjp7r5ueuanm75kjvqcp4lhxy279wqkwnve7r5902tkmayp7scextku4m8jwatwawhql4stu3a5lzpd0vsf4wgczd5kaz8cj5me54aqrry290xx8p73ar5l3c50yqkg7ex73t7trn3hd9ftv5tvxr4n4mx8u37dkmmedsv0q69t"
+    }
+  ]
+}

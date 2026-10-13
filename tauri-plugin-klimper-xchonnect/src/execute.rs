@@ -475,6 +475,9 @@ const MAX_OFFER_SPENDS: usize = 64;
 /// What is checked about an offer before the wallet builds anything from it:
 ///
 /// * its size ([`MAX_OFFER_SPENDS`]);
+/// * that no coin of the maker's side is spent twice: an aggregate holding one offer twice
+///   (TASK-139) is a bundle the chain refuses, and the user would approve a take that
+///   cannot happen. (The asked-for placeholders share one coin id by design.);
 /// * that it asks for something: an offer with no requested payment (a gift) gives the user
 ///   no settlement payment to tie their spends to, so the take could never be signed safely;
 /// * the maker's spends run within wallet-kit's cost budget and are all puzzles wallet-kit
@@ -490,6 +493,13 @@ fn check_offer(offer: &SpendBundle, ctx: &RequestContext<'_>) -> Result<(), RpcE
         .iter()
         .cloned()
         .partition(|spend| spend.coin.parent_coin_info == Bytes32::default());
+    let mut coins = std::collections::HashSet::with_capacity(makers.len());
+    if !makers
+        .iter()
+        .all(|spend| coins.insert(spend.coin.coin_id()))
+    {
+        return Err(invalid("offer_duplicate_coin"));
+    }
     if placeholders.is_empty() {
         return Err(error(
             codes::UNSUPPORTED_CONTENT,
@@ -753,6 +763,11 @@ async fn build_take(
 /// the same code as `WalletConnect` (`auto_submit: false`, so nothing leaves the wallet
 /// here), Klimper checks, asks once, signs once and broadcasts. The website never builds
 /// the user's side and never sees which coins pay for it.
+///
+/// The offer may be several makers' offers aggregated into one (TASK-139): their spends
+/// together and their signatures summed, as Sage's `aggregate_offers` makes it. It is
+/// checked, built and taken the same way, all or nothing; `offers_taken` is told how many
+/// offers it holds, for the approval screen, once the offer passed its checks.
 pub fn take_offer(
     state: &AppState,
     ctx: &RequestContext<'_>,
@@ -760,6 +775,7 @@ pub fn take_offer(
     approver: &dyn kit::Approver,
     broadcaster: &dyn Broadcaster,
     params_json: &str,
+    offers_taken: &dyn Fn(usize),
 ) -> Result<String, RpcError> {
     // As for a send: a take that cannot be built tells the website the wallet cannot pay
     // for it, so a run of them is a search for the balance. Checked first, so a website
@@ -784,6 +800,7 @@ pub fn take_offer(
     let offer = decode_offer_bundle(offer)
         .and_then(|offer| check_offer(&offer, ctx).map(|()| offer))
         .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
+    offers_taken(crate::trade::offers_in(&offer));
 
     let (spends, maker_signature) = on_sage(state, async move |sage| {
         Ok(build_take(&*sage.wallet()?, offer, fee).await?)
@@ -887,6 +904,14 @@ fn submit_take(
     Ok(submitted.to_json())
 }
 
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod aggregate_tests;
 #[cfg(test)]
 mod sage_sim;
 #[cfg(test)]
