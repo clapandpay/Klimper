@@ -213,6 +213,17 @@ impl SimWallet {
         self.consume_until(|_| true).await;
     }
 
+    /// The wallet's peer: the simulated chain (for reads Sage makes through a peer).
+    pub async fn peer(&self) -> sage_wallet::WalletPeer {
+        self.state.lock().await.acquire_peer().expect("no peer")
+    }
+
+    /// Wait until the wallet has synced a batch of puzzles (an option, a CAT it received).
+    pub async fn wait_for_puzzles(&mut self) {
+        self.consume_until(|event| matches!(event, SyncEvent::PuzzleBatchSynced))
+            .await;
+    }
+
     pub async fn wait_for_coins(&mut self) {
         self.consume_until(|event| matches!(event, SyncEvent::CoinsUpdated))
             .await;

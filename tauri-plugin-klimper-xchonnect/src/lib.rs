@@ -637,6 +637,7 @@ async fn confirm_sas<R: Runtime>(
     pairing_id: String,
     matches: bool,
     all_receive_keys: Option<bool>,
+    option_contracts: Option<bool>,
 ) -> Result<Option<SessionSummary>> {
     let shared = state.attempt(&pairing_id).await?;
     let mut attempt = shared.lock().await;
@@ -666,6 +667,10 @@ async fn confirm_sas<R: Runtime>(
     attempt.own_key = own;
     attempt.permissions.exposed_keys =
         exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
+    // Option contracts only when the user turned them on for this website (TASK-140).
+    if option_contracts == Some(true) {
+        pairing::grant_option_methods(&mut attempt.permissions.methods);
+    }
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
         Ok(stored) => stored,
         Err(error) => {

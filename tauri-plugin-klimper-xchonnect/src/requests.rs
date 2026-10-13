@@ -133,6 +133,9 @@ pub struct UiApprover {
     /// For a take: how many offers its bundle takes together (0: not a take). Counted by
     /// the wallet from the decoded offer (TASK-139).
     offers: AtomicUsize,
+    /// For a loan: who lends what to whom, and whether the request only signs an offer
+    /// (a borrower's loan request) instead of sending (TASK-140). Computed by the wallet.
+    loan: std::sync::Mutex<Option<(Value, bool)>>,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -150,6 +153,14 @@ impl UiApprover {
             meta,
             cross_checked: AtomicBool::new(false),
             offers: AtomicUsize::new(0),
+            loan: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// Record the loan on screen; `makes_offer`: nothing is sent, an offer is signed.
+    pub fn mark_loan(&self, loan: &execute::options::LoanView, makes_offer: bool) {
+        if let (Ok(value), Ok(mut slot)) = (serde_json::to_value(loan), self.loan.lock()) {
+            *slot = Some((value, makes_offer));
         }
     }
 
@@ -186,6 +197,17 @@ impl Approver for UiApprover {
             && let Some(fields) = payload.as_object_mut()
         {
             fields.insert("trade".to_owned(), trade);
+        }
+        // A loan (TASK-140), Klimper's own key like `trade`: the principal and the other
+        // side, from the wallet's own build or the simulation, never from the website.
+        if let Ok(slot) = self.loan.lock()
+            && let Some((loan, makes_offer)) = slot.as_ref()
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("loan".to_owned(), loan.clone());
+            if *makes_offer {
+                fields.insert("makes_offer".to_owned(), Value::Bool(true));
+            }
         }
         let approved = self.bridge.ask_with(
             Approval {
@@ -365,10 +387,11 @@ fn run(
     };
     let outcome = match canonical_method(&meta.method) {
         // The requests Klimper builds from its own coins: one gate for all of them.
-        method @ (execute::CHIA_SEND | execute::CHIA_TAKE_OFFER) => {
+        method if execute::is_wallet_built(method) => {
             if !permissions.allows_method(method) {
-                // Most often a connection paired before the method existed: the reason lets
-                // the website say "pair again" instead of a bare refusal.
+                // Most often a connection paired before the method existed, or one the user
+                // never turned option contracts on for: the reason lets the website say "pair
+                // again" or "allow it in Klimper" instead of a bare refusal.
                 Err(RpcError {
                     code: codes::UNAUTHORIZED,
                     message: "this connection may not use this request; pair again".to_owned(),
@@ -380,10 +403,14 @@ fn run(
                 Err(rejected())
             } else {
                 approver.mark_cross_checked();
-                if method == execute::CHIA_SEND {
-                    execute::send(state, &context, &signer, &approver, &broadcaster, params)
-                } else {
-                    execute::take_offer(
+                let on_loan = |loan: &execute::options::LoanView, makes_offer: bool| {
+                    approver.mark_loan(loan, makes_offer);
+                };
+                match method {
+                    execute::CHIA_SEND => {
+                        execute::send(state, &context, &signer, &approver, &broadcaster, params)
+                    }
+                    execute::CHIA_TAKE_OFFER => execute::take_offer(
                         state,
                         &context,
                         &signer,
@@ -391,7 +418,41 @@ fn run(
                         &broadcaster,
                         params,
                         &|count| approver.mark_offers(count),
-                    )
+                        &on_loan,
+                    ),
+                    execute::options::CHIA_MINT_OPTION => execute::options::mint_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                        &on_loan,
+                    ),
+                    execute::options::CHIA_EXERCISE_OPTION => execute::options::exercise_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
+                    execute::options::CHIA_CLAIM_OPTION => execute::options::claim_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
+                    _ => execute::options::transfer_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
                 }
             }
         }
@@ -527,6 +588,27 @@ mod tests {
             methods_revision: 0,
             own_key: None,
         }
+    }
+
+    /// No connection is upgraded to the option methods, whatever it may do: they lock funds
+    /// until a date, so the user turns them on for a website (TASK-140).
+    #[test]
+    fn an_older_connection_never_gets_the_option_methods_by_itself() {
+        use crate::execute::options::OPTION_METHODS;
+        use crate::execute::{CHIA_SEND, CHIA_TAKE_OFFER, upgrade_methods};
+        let mut old = record();
+        old.permissions.methods = vec![CHIA_SEND.to_owned(), CHIA_TAKE_OFFER.to_owned()];
+        upgrade_methods(&mut old);
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| !old.permissions.methods.iter().any(|g| g == m))
+        );
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| crate::execute::is_wallet_built(m))
+        );
     }
 
     /// A connection paired before `chia_takeOffer` existed gets it once, next to its

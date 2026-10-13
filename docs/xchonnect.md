@@ -180,6 +180,71 @@ and is gone.
    loads it, if it may use `chia_send` (`methods_revision`, `execute::upgrade_methods`), and
    the website is told by `session.permissions`; it does not have to pair again. A take the
    user turns off afterwards stays off.
+   **Option contracts** (TASK-140, `src/execute/options.rs`), built by the wallet like a send
+   and shown from wallet-kit's own option facts (xchonnect spec 11.1.1):
+
+   | Method | Params | Intent kind (verified) |
+   | --- | --- | --- |
+   | `chia_mintOption` | `underlying: {assetId?, amount}`, `strike: {assetId?, amount}` (`assetId` absent or `"xch"`: XCH; else a CAT; not the same asset), `expiresAt` (unix seconds, 60 s to 10 years ahead), `creatorAddress?`, `loan?: {assetId?, amount}`, `fee?` | `option.mint`, or `loan.request` |
+   | `chia_exerciseOption` | `launcherId`, `fee?` | `option.exercise` |
+   | `chia_claimOption` | `launcherId`, `fee?` | `option.clawback` |
+   | `chia_transferOption` | `launcherId`, `address`, `fee?` | `option.transfer` |
+
+   - **Write** (`chia_mintOption`, no `creatorAddress` or one of the wallet's own): the wallet
+     locks the collateral, is the creator and holds the option. Built from the wallet's coins
+     with Sage's coin selection and spend code and the SDK's option launcher, key-free: the fee
+     and the launcher's coin, then the collateral locked at the option's collateral puzzle (XCH
+     set aside first at another of the wallet's addresses, so a one-coin wallet works), then
+     the launch, whose eve option has a quoted inner puzzle: its outputs are fixed and
+     wallet-kit shows the option as guaranteed. Sage's own `mint_option` spends the eve with
+     the wallet's standard puzzle, which wallet-kit counts as conditional, so `option.mint`
+     would not verify. The two coin sets assert each other's spend; the launcher's parent
+     asserts the launcher's announcement. Intent: nothing paid to anyone (collateral and
+     launcher are option outputs), this fee. Answer `{ transactionId, status, launcherId }`.
+   - **Loan request** (`creatorAddress` someone else's, and `loan`, the principal): the
+     creator is the lender, the option (the right to repay) stays with the borrower. Nothing is
+     sent: the same build plus an assertion that the principal is paid to the wallet and a
+     1-mojo payment offered to whoever takes it, signed after one approval and returned as an
+     offer, `{ offer, launcherId }`, valid until `expiresAt`. The mojo is what lets wallet-kit
+     bind the lender's take (spec 11.2 binds a taker only to a settlement payment it
+     receives). A lender's address without `loan`, or `loan` without a lender, is refused.
+   - **Lend**: the lender takes the request with `chia_takeOffer`. When the bundle mints an
+     option whose creator is the wallet and whose collateral and option are someone else's,
+     the intent is `loan.take` (verified: the creator is the wallet). A take that mints an
+     option neither the wallet's to hold nor to claim is refused (`option_not_yours`).
+   - **Use** (`chia_exerciseOption`): Sage's `exercise_options`, only before the expiry
+     (`option_expired`), for an option the wallet holds (`unknown_option`). Every user spend,
+     the melted option included, is tied to the settlement payment that releases the
+     collateral to the wallet (wallet-kit refuses an unbound exercise, `unbound_exercise`).
+   - **Claim back** (`chia_claimOption`): Sage has none, so it is built from the SDK's
+     clawback spend, only from the expiry on (`option_not_expired`) and only by the creator
+     (`not_creator`). The terms come from the wallet database, or for an option the wallet never
+     held (a loan it lent) from the chain through a peer, as Sage reads an option it is offered.
+     The fee comes out of XCH collateral (`fee` if larger), or from the wallet's XCH for a CAT.
+   - **Send** (`chia_transferOption`): Sage's `transfer_options`; the intent claims exactly this
+     option to exactly this address.
+   - **Permissions**: the four methods are **not** in a new connection's default grant and no
+     existing connection is upgraded to them (unlike `chia_takeOffer`): they lock funds until a
+     date. The pairing screen and the website's settings have an "Option contracts" switch
+     (`confirm_sas`'s `optionContracts`, `set_dapp_policy`'s `methods`). A refusal names
+     `not_granted`. A paused website, the wrong network and the build-failure counter apply as
+     for a send.
+   - **Limits**: wallet-kit counts the collateral a mint locks and the strike an exercise pays
+     in their own assets against the per-request and per-day limits; an option itself has none.
+   - **Cross-check**: options are left out of the comparison with Sage's summary (Sage does not
+     see an eve the request mints as the wallet's coin); where an option goes is wallet-kit's
+     own option facts and the verified intent.
+   - **Approval**: Klimper's prompt keys `loan` (`role`, `principal`, `counterparty`, `tie`) and
+     `makes_offer` (a loan request signs, does not send), next to `trade`; the option card is in
+     `docs/xchonnect-screens.md`.
+   - **Tests**: `src/execute/option_tests.rs` writes XCH- and CAT-backed options with XCH and CAT
+     strikes, sends one, uses it before the expiry and not after, claims back after the expiry
+     (and not before, and not someone else's), buys an offered option with `chia_takeOffer`,
+     and requests, lends, repays and defaults on a loan, two Sage wallets on a simulated chain,
+     every bundle accepted by the chain; refusals without the permission, over the limit, on
+     the wrong network, and a website's mint with a fake collateral (an unknown contract).
+   - **Dependency**: wallet-kit's option support is in xchonnect 0.1.0-rc.5, not yet on
+     crates.io; `../Cargo.toml` patches both crates to the git revision until it is published.
 4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent

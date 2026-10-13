@@ -317,6 +317,7 @@ async fn aggregated_take_settles(
         asked,
         sent,
         trade,
+        ..
     } = take(&taker, &cats, &offer, taker_fee, &take_permissions(), true).await;
     let answer = result.unwrap_or_else(|error| panic!("{label}: refused: {error:?}"));
     assert!(asked, "{label}: the user was never asked");
