@@ -81,14 +81,16 @@ impl Part {
                 asset_id,
                 amount: self.amount,
             }),
-            AssetId::Option(_) => None,
+            _ => None,
         }
     }
 
-    fn id(self) -> Id {
+    /// The Wallet SDK's id of the asset; `None` for an asset this version does not know.
+    fn id(self) -> Option<Id> {
         match self.asset {
-            AssetId::Cat(asset_id) | AssetId::Option(asset_id) => Id::Existing(asset_id),
-            AssetId::Xch => Id::Xch,
+            AssetId::Cat(asset_id) | AssetId::Option(asset_id) => Some(Id::Existing(asset_id)),
+            AssetId::Xch => Some(Id::Xch),
+            _ => None,
         }
     }
 
@@ -459,7 +461,9 @@ fn tie_concurrent(mut spends: Vec<CoinSpend>, a: Bytes32, b: Bytes32) -> Vec<Coi
 /// 3. the launch: the eve option's inner puzzle is a quoted program that hands the option to
 ///    the wallet, so its outputs are fixed and wallet-kit can show the new option as
 ///    guaranteed (spec 11.1.1). (Sage's own `mint_option` spends the eve with the wallet's
-///    standard puzzle instead, which wallet-kit counts as conditional.)
+///    standard puzzle instead; wallet-kit 0.1.0-rc.5 counts that as guaranteed too and
+///    verifies `option.mint` for it, but it cannot write a loan request, whose creator is
+///    the lender, so one builder serves both here.)
 ///
 /// The two sets of coins assert each other's spend, and the launcher's parent asserts the
 /// launcher's announcement ([`guarantee_launch`]).
@@ -555,8 +559,11 @@ pub async fn build_mint(
 
     // 2. The collateral, locked at the option's collateral puzzle, from other coins.
     let locked_at = launcher.p2_puzzle_hash();
+    let Some(collateral_id) = params.collateral.id() else {
+        return Ok(None);
+    };
     let actions = [Action::send(
-        params.collateral.id(),
+        collateral_id,
         locked_at,
         params.collateral.amount,
         Memos::None,
@@ -710,7 +717,7 @@ fn loan_requested(
             asset_info.insert_cat(asset_id, CatAssetInfo::new(None))?;
             requested.cats.entry(asset_id).or_default().push(payment);
         }
-        AssetId::Option(_) => return Err(chia_wallet_sdk::driver::DriverError::InvalidAssetId),
+        _ => return Err(chia_wallet_sdk::driver::DriverError::InvalidAssetId),
     }
     Ok((requested, asset_info))
 }
@@ -967,8 +974,10 @@ pub fn exercise_option(
     submit_exercise(ctx, signer, approver, broadcaster, &summary, spends, fee)
 }
 
-/// After the build: wallet-kit requires the user's spends to be bound to the collateral the
-/// exercise releases (spec 11.1.1, `unbound_exercise`), and verifies the kind.
+/// After the build: wallet-kit requires the user's spends to require one another and the
+/// user's guaranteed outcome to cover the collateral less the strike and the fee (spec
+/// 11.1.1, `BindingReport::exercises_covered`), and verifies the kind. Sage's
+/// `exercise_options` meets both as built (its spends are linked by `ASSERT_CONCURRENT_SPEND`).
 pub fn submit_exercise(
     ctx: &RequestContext<'_>,
     signer: &dyn kit::Signer,

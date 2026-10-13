@@ -743,7 +743,7 @@ fn a_faulty_signer_produces_nothing() {
 fn stored_permissions_limit_the_methods() {
     let who = BlsPair::new(1);
     let mut harness = Harness::new(who.clone(), true);
-    let mut stored = StoredPermissions::from_kit(&harness.permissions);
+    let mut stored = StoredPermissions::from_kit(&harness.permissions).unwrap();
     stored.methods = vec!["chainId".to_owned()];
     stored.limits = BTreeMap::new();
     harness.permissions = stored.to_kit();

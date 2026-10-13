@@ -372,7 +372,7 @@ pub async fn confirm(
             developer_mode: attempt.developer_mode,
             sas_confirmed: true,
             needs_repair: false,
-            permissions: StoredPermissions::from_kit(&attempt.permissions),
+            permissions: StoredPermissions::from_kit(&attempt.permissions)?,
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
             origin_kid: Some(uri.kid.clone()),

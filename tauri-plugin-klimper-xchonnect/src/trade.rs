@@ -28,12 +28,14 @@ pub const CAT_PRECISION: u32 = 3;
 /// Significant digits of a price.
 const PRICE_DIGITS: usize = 6;
 
-fn precision(asset: AssetId) -> u32 {
+/// Decimals of an asset; `None` for an asset this version does not know (no price then).
+fn precision(asset: AssetId) -> Option<u32> {
     match asset {
-        AssetId::Xch => XCH_PRECISION,
-        AssetId::Cat(_) => CAT_PRECISION,
+        AssetId::Xch => Some(XCH_PRECISION),
+        AssetId::Cat(_) => Some(CAT_PRECISION),
         // One option is one singleton coin (normally 1 mojo): counted in whole options.
-        AssetId::Option(_) => 0,
+        AssetId::Option(_) => Some(0),
+        _ => None,
     }
 }
 
@@ -178,8 +180,8 @@ fn price(paid: Leg, received: Leg) -> Option<Price> {
 /// `top / bottom` in whole units of each asset, as a decimal string.
 fn ratio(top: Leg, bottom: Leg) -> Option<String> {
     let ten = |power: u32| 10_u128.checked_pow(power);
-    let numerator = top.amount.checked_mul(ten(precision(bottom.asset))?)?;
-    let denominator = bottom.amount.checked_mul(ten(precision(top.asset))?)?;
+    let numerator = top.amount.checked_mul(ten(precision(bottom.asset)?)?)?;
+    let denominator = bottom.amount.checked_mul(ten(precision(top.asset)?)?)?;
     decimal(numerator, denominator, PRICE_DIGITS)
 }
 
@@ -324,8 +326,8 @@ pub fn offers_in(offer: &SpendBundle) -> usize {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use xchonnect_wallet_kit::AssetDelta;
     use xchonnect_wallet_kit::binding::AssetAmount;
-    use xchonnect_wallet_kit::{AssetDelta, TimeLocks};
 
     fn cat(byte: u8) -> AssetId {
         AssetId::Cat(Bytes32::new([byte; 32]))
@@ -342,30 +344,22 @@ mod tests {
     }
 
     fn summary(assets: Vec<AssetDelta>, fee: u64) -> Summary {
-        Summary {
-            assets,
-            implied_fee: Some(fee),
-            reserve_fee: fee,
-            owned_reserve_fee: fee,
-            time_locks: TimeLocks::default(),
-            unknown_puzzles: vec![],
-            cost: 0,
-            spends: vec![],
-            outputs: vec![],
-            options: vec![],
-        }
+        let mut summary = Summary::default();
+        summary.assets = assets;
+        summary.implied_fee = Some(fee);
+        summary.reserve_fee = fee;
+        summary.owned_reserve_fee = fee;
+        summary
     }
 
     fn bound(received: Vec<(AssetId, u128)>, all_bound: bool) -> BindingReport {
-        BindingReport {
-            all_bound,
-            unbound_user_spends: vec![],
-            bound_payments: vec![],
-            bound_received: received
-                .into_iter()
-                .map(|(asset, amount)| AssetAmount { asset, amount })
-                .collect(),
-        }
+        let mut report = BindingReport::default();
+        report.all_bound = all_bound;
+        report.bound_received = received
+            .into_iter()
+            .map(|(asset, amount)| AssetAmount { asset, amount })
+            .collect();
+        report
     }
 
     #[test]

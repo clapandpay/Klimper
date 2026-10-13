@@ -233,25 +233,44 @@ fn sage_asset(asset: Option<&sage_api::Asset>) -> Option<AssetId> {
 /// value. An option singleton is left out (TASK-140): Sage does not see the eve of an option a
 /// request mints as the wallet's coin, and where an option goes is checked by wallet-kit's own
 /// option effects and the request's verified intent instead.
+///
+/// Collateral its creator takes back was locked, not part of the balance: wallet-kit counts
+/// only what does not return to the user as sent (xchonnect rc.5, TASK-78), so the same is
+/// taken from Sage's summary for that input. What is paid to others is compared in full.
 pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(), RpcError> {
-    let owned: std::collections::HashSet<String> = kit_summary
+    let owned: std::collections::HashMap<&str, &kit::simulate::SpendKind> = kit_summary
         .spends
         .iter()
         .filter(|s| s.owned)
-        .map(|s| s.coin_id.clone())
+        .map(|s| (s.coin_id.as_str(), &s.kind))
         .collect();
 
     let mut from_sage = Outflow::default();
     for input in &sage.inputs {
         let id = input.coin_id.strip_prefix("0x").unwrap_or(&input.coin_id);
-        if !owned.contains(id) {
+        let Some(kind) = owned.get(id) else {
             continue;
-        }
+        };
         let Some(asset) = sage_asset(input.asset.as_ref()) else {
             continue;
         };
         let amount = u128::from(input.amount.to_u64().unwrap_or(u64::MAX));
-        *from_sage.spent.entry(asset).or_default() += amount;
+        let spent = match kind {
+            kit::simulate::SpendKind::OptionUnderlying {
+                path: kit::option::UnderlyingPath::Clawback,
+                ..
+            } => {
+                let returned: u128 = input
+                    .outputs
+                    .iter()
+                    .filter(|o| o.receiving)
+                    .map(|o| u128::from(o.amount.to_u64().unwrap_or(u64::MAX)))
+                    .sum();
+                amount.saturating_sub(returned)
+            }
+            _ => amount,
+        };
+        *from_sage.spent.entry(asset).or_default() += spent;
         for output in input.outputs.iter().filter(|o| !o.receiving) {
             let amount = u128::from(output.amount.to_u64().unwrap_or(u64::MAX));
             *from_sage.paid.entry(asset).or_default() += amount;
@@ -382,7 +401,8 @@ pub fn send(
     let to_address = address.clone();
     let cat = match asset {
         AssetId::Cat(id) => Some(id),
-        AssetId::Xch | AssetId::Option(_) => None,
+        AssetId::Xch => None,
+        _ => return Err(invalid("assetId")),
     };
     let built = on_sage(state, async move |sage| match cat {
         None => {
@@ -972,54 +992,46 @@ mod tests {
     use super::*;
     use sage_api::{TransactionInput, TransactionOutput};
     use xchonnect_wallet_kit::simulate::{OutputInfo, SpendInfo};
-    use xchonnect_wallet_kit::{AssetDelta, SpendKind, TimeLocks};
+    use xchonnect_wallet_kit::{AssetDelta, SpendKind};
 
     const COIN: &str = "11";
 
+    fn output(amount: u64, puzzle_hash: &str, to_user: bool) -> OutputInfo {
+        let mut output = OutputInfo::default();
+        output.asset = AssetId::Xch;
+        output.amount = amount;
+        output.puzzle_hash = puzzle_hash.to_owned();
+        output.recipient = Some(puzzle_hash.to_owned());
+        output.to_user = to_user;
+        output
+    }
+
     fn kit_summary(sent: u128, paid: u64, change: u64, fee: u64) -> Summary {
-        Summary {
-            assets: vec![AssetDelta {
-                asset: AssetId::Xch,
-                sent,
-                received: u128::from(change),
-                conditional_received: 0,
-                net: i128::from(change) - i128::try_from(sent).unwrap(),
-            }],
-            implied_fee: Some(fee),
-            reserve_fee: fee,
-            owned_reserve_fee: fee,
-            time_locks: TimeLocks::default(),
-            unknown_puzzles: vec![],
+        let mut summary = Summary::default();
+        summary.assets = vec![AssetDelta {
+            asset: AssetId::Xch,
+            sent,
+            received: u128::from(change),
+            conditional_received: 0,
+            net: i128::from(change) - i128::try_from(sent).unwrap(),
+        }];
+        summary.implied_fee = Some(fee);
+        summary.reserve_fee = fee;
+        summary.owned_reserve_fee = fee;
+        summary.spends = vec![SpendInfo {
+            coin_id: COIN.repeat(32),
+            puzzle_hash: "22".repeat(32),
+            amount: u64::try_from(sent).unwrap(),
+            kind: SpendKind::Standard,
+            owned: true,
+            agg_sigs: vec![],
             cost: 0,
-            spends: vec![SpendInfo {
-                coin_id: COIN.repeat(32),
-                puzzle_hash: "22".repeat(32),
-                amount: u64::try_from(sent).unwrap(),
-                kind: SpendKind::Standard,
-                owned: true,
-                agg_sigs: vec![],
-                cost: 0,
-            }],
-            outputs: vec![
-                OutputInfo {
-                    asset: AssetId::Xch,
-                    amount: paid,
-                    puzzle_hash: "33".repeat(32),
-                    recipient: Some("33".repeat(32)),
-                    to_user: false,
-                    option: None,
-                },
-                OutputInfo {
-                    asset: AssetId::Xch,
-                    amount: change,
-                    puzzle_hash: "22".repeat(32),
-                    recipient: Some("22".repeat(32)),
-                    to_user: true,
-                    option: None,
-                },
-            ],
-            options: vec![],
-        }
+        }];
+        summary.outputs = vec![
+            output(paid, &"33".repeat(32), false),
+            output(change, &"22".repeat(32), true),
+        ];
+        summary
     }
 
     fn xch() -> sage_api::Asset {
@@ -1109,14 +1121,10 @@ mod tests {
         let cat = Bytes32::new([0x75; 32]);
         let mut kit = kit_summary(1_000, 0, 0, 0);
         kit.assets[0].asset = AssetId::Cat(cat);
-        kit.outputs = vec![OutputInfo {
-            asset: AssetId::Cat(cat),
-            amount: 0,
-            puzzle_hash: "21".repeat(32),
-            recipient: None,
-            to_user: false,
-            option: None,
-        }];
+        let mut zero = output(0, &"21".repeat(32), false);
+        zero.asset = AssetId::Cat(cat);
+        zero.recipient = None;
+        kit.outputs = vec![zero];
         let mut sage = sage_summary(1_000, 0, 0, 0);
         sage.inputs[0].asset = Some(sage_api::Asset {
             asset_id: Some(hex::encode(cat)),

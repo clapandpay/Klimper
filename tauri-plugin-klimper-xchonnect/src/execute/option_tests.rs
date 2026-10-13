@@ -828,7 +828,13 @@ async fn loan() -> Loan {
     }
 }
 
-/// Bob lends: he takes Alice's request with `chia_takeOffer`'s path, and the chain accepts it.
+/// Bob lends. Through `chia_takeOffer`'s path the take is refused before he is asked:
+/// wallet-kit 0.1.0-rc.5 never verifies `loan.take` (xchonnect TASK-78, audit SA-H2), since
+/// a borrower's funding spend can be swapped for one that keeps the money, and nothing in
+/// the request ties the collateral to the lender's signature. Follow-up: the loan request
+/// must carry an announcement the lender can bind to; then this take is Klimper's again.
+/// Until then Bob's own wallet takes the offer (Sage's take, Klimper's `bind_user_spends`,
+/// signed by Sage) so the borrower's repayment and the lender's claim stay covered.
 async fn lend(loan: &mut Loan) {
     let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
     know_cats(&loan.bob, &[loan.collateral]).await;
@@ -841,17 +847,39 @@ async fn lend(loan: &mut Loan) {
         true,
     )
     .await;
-    if let Err(error) = &outcome.result {
-        panic!("the lender's take was refused: {error:?}");
-    }
-    let view = outcome.loan.expect("no loan on the lender's screen");
-    assert_eq!(view.role, "lender");
-    assert_eq!(view.principal.amount, 300);
-    assert_eq!(view.principal.asset, AssetId::Xch);
-    let alice_ph = loan.alice.wallet.change_p2_puzzle_hash().await.unwrap();
-    assert_eq!(view.counterparty, alice_ph);
+    let error = outcome
+        .result
+        .expect_err("the lender's take was approved: loan.take must not verify (TASK-78)");
+    assert!(
+        error
+            .data
+            .as_deref()
+            .unwrap_or("")
+            .contains("intent_mismatch"),
+        "{error:?}"
+    );
+    assert!(
+        !outcome.asked,
+        "the lender was asked about an unverified loan"
+    );
+    assert!(outcome.sent.is_none());
+
+    let (_, _, ownership) = wallet_keys(&loan.bob).await;
+    let (spends, maker_signature) = build_take(&loan.bob.wallet, offer, 0).await.unwrap();
+    let spends = bind_user_spends(spends, &ownership).unwrap();
+    let bundle = loan
+        .bob
+        .wallet
+        .sign_transaction(
+            SpendBundle::new(spends, maker_signature),
+            &loan.bob.agg_sig,
+            loan.bob.master_sk.clone(),
+            true,
+        )
+        .await
+        .unwrap();
     loan.bob
-        .push_bundle(outcome.sent.expect("nothing sent"))
+        .push_bundle(bundle)
         .await
         .expect("the chain refused the loan");
     loan.bob.wait_for_coins().await;
@@ -968,51 +996,41 @@ async fn a_loan_not_repaid_is_claimed_by_the_lender_after_the_expiry() {
 }
 
 /// A take whose maker writes an option that is neither the user's to hold nor to claim back
-/// buys the user nothing: refused before the user is asked.
-#[test]
-fn a_take_that_writes_someone_elses_option_is_refused() {
-    use xchonnect_wallet_kit::option::{OptionEffect, OptionLeg, OptionTerms};
-    let stranger = Bytes32::new([0x77; 32]);
-    let summary = Summary {
-        assets: vec![],
-        implied_fee: Some(0),
-        reserve_fee: 0,
-        owned_reserve_fee: 0,
-        time_locks: kit::TimeLocks::default(),
-        unknown_puzzles: vec![],
-        cost: 0,
-        spends: vec![],
-        outputs: vec![],
-        options: vec![OptionEffect::Mint {
-            launcher_id: Bytes32::new([1; 32]),
-            owner: stranger,
-            owner_is_user: false,
-            creator_is_user: false,
-            funded_by_user: false,
-            guaranteed: true,
-            collateral_coin_id: Bytes32::new([2; 32]),
-            terms: OptionTerms {
-                creator_puzzle_hash: stranger,
-                expiration_seconds: 1,
-                collateral: OptionLeg {
-                    asset: AssetId::Xch,
-                    amount: 1,
-                },
-                strike: OptionLeg {
-                    asset: AssetId::Xch,
-                    amount: 1,
-                },
-            },
-        }],
-    };
-    let error = take_loan(&summary, &[], &kit::Ownership::default()).unwrap_err();
+/// buys the user nothing: refused before the user is asked. The summary is wallet-kit's own
+/// for a stranger's mint (its option effects cannot be built by hand: `#[non_exhaustive]`).
+#[tokio::test]
+async fn a_take_that_writes_someone_elses_option_is_refused() {
+    let alice = SimWallet::new(1_000).await;
+    let stranger = alice.next(5_000).await;
+    let now = chain_time(&stranger).await;
+    let params = mint_params(xch(1_000), xch(500), now + TERM, 0);
+    let minted = build_mint(&stranger.wallet, None, &params, None)
+        .await
+        .unwrap()
+        .expect("no option built");
+    let w = who(&alice).await;
+    let summary = kit::simulate(
+        &minted.spends,
+        &w.ownership,
+        kit::simulate::DEFAULT_MAX_COST,
+    )
+    .unwrap();
+    assert!(
+        summary
+            .options
+            .iter()
+            .any(|e| matches!(e, kit::option::OptionEffect::Mint { .. })),
+        "no mint in {:?}",
+        summary.options
+    );
+    let error = take_loan(&summary, &minted.spends, &w.ownership).unwrap_err();
     assert!(error.data.unwrap().contains("option_not_yours"));
 }
 
 /// Using an XCH-backed option with the writer's own strike CAT. Sage's `exercise_options`
-/// leaves the option's melt unbound to the collateral's settlement payment; Klimper ties
-/// every user spend to it (`bind_user_spends`, which also edits the option spend) before
-/// wallet-kit's `unbound_exercise` check, which is not relaxed.
+/// links its spends with `ASSERT_CONCURRENT_SPEND`, which wallet-kit 0.1.0-rc.5 follows: the
+/// user's spends require one another and the collateral covers the strike, so the bundle
+/// is bound as Sage builds it and `bind_user_spends` leaves it unchanged.
 #[tokio::test]
 async fn an_xch_option_is_used_before_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;

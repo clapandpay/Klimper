@@ -306,13 +306,19 @@ pub struct StoredLimit {
 
 /// `AssetId` as a storage key: `xch`, `cat:<64 hex>`, or `option:<launcher id>`. An option
 /// never reaches a limit (wallet-kit counts the collateral and the strike in their own
-/// assets, TASK-140), so the last only exists to keep the match whole.
-pub fn asset_key(asset: AssetId) -> String {
+/// assets, TASK-140), so the last only exists to keep the match whole. `None` for an asset
+/// this version does not know: the caller refuses rather than forget a limit or a total.
+pub fn asset_key(asset: AssetId) -> Option<String> {
     match asset {
-        AssetId::Xch => "xch".to_owned(),
-        AssetId::Cat(tail) => format!("cat:{}", hex::encode(tail)),
-        AssetId::Option(launcher_id) => format!("option:{}", hex::encode(launcher_id)),
+        AssetId::Xch => Some("xch".to_owned()),
+        AssetId::Cat(tail) => Some(format!("cat:{}", hex::encode(tail))),
+        AssetId::Option(launcher_id) => Some(format!("option:{}", hex::encode(launcher_id))),
+        _ => None,
     }
+}
+
+fn known_asset_key(asset: AssetId) -> Result<String> {
+    asset_key(asset).ok_or_else(|| Error::internal(format!("no storage key for {asset:?}")))
 }
 
 /// Inverse of [`asset_key`] for the assets a limit can be set on (XCH and CATs); unknown
@@ -348,8 +354,8 @@ pub struct StoredPermissions {
 }
 
 impl StoredPermissions {
-    pub fn from_kit(perms: &DappPermissions) -> Self {
-        StoredPermissions {
+    pub fn from_kit(perms: &DappPermissions) -> Result<Self> {
+        Ok(StoredPermissions {
             methods: perms.methods.clone(),
             exposed_keys: perms
                 .exposed_keys
@@ -360,16 +366,16 @@ impl StoredPermissions {
                 .limits
                 .iter()
                 .map(|(asset, limit)| {
-                    (
-                        asset_key(*asset),
+                    Ok((
+                        known_asset_key(*asset)?,
                         StoredLimit {
                             per_request: limit.per_request,
                             per_day: limit.per_day,
                         },
-                    )
+                    ))
                 })
-                .collect(),
-        }
+                .collect::<Result<_>>()?,
+        })
     }
 
     /// Rebuild the wallet-kit permissions. A stored key that no longer parses is dropped:
@@ -820,8 +826,8 @@ impl SessionStore {
             spent: record
                 .spent
                 .iter()
-                .map(|(asset, amount)| (asset_key(*asset), *amount))
-                .collect(),
+                .map(|(asset, amount)| Ok((known_asset_key(*asset)?, *amount)))
+                .collect::<Result<_>>()?,
         };
         let blob = serde_json::to_vec(&stored).map_err(Error::internal)?;
         self.secrets
@@ -1121,7 +1127,7 @@ mod tests {
                 per_day: Some(5_000),
             },
         );
-        let back = StoredPermissions::from_kit(&perms).to_kit();
+        let back = StoredPermissions::from_kit(&perms).unwrap().to_kit();
         assert_eq!(back, perms);
     }
 }
