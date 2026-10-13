@@ -136,15 +136,19 @@ and is gone.
    keychain is Sage's own, opened with Sage's empty password like every Sage endpoint. A
    fresh Touch ID prompt per request on macOS is a follow-up:
    it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out here.
-3. **Klimper broadcasts** (`execute.rs`): `chia_send` is built by Sage from the wallet's
-   own coins, `xchonnect_submitCoinSpends` carries a bundle the website built; both are
-   signed once and sent through Klimper's own peers (`send_transaction_immediately`). The
-   website receives `{ transactionId, status }`.
+3. **Klimper broadcasts** (`execute.rs`): `chia_send` and `chia_takeOffer` are built by
+   Sage from the wallet's own coins, `xchonnect_submitCoinSpends` carries a bundle the
+   website built; each is signed once and sent through Klimper's own peers
+   (`send_transaction_immediately`). The website receives `{ transactionId, status }`.
+   `chia_takeOffer { offer, fee? }` (TASK-137) works as in `WalletConnect`: the website sends
+   only the offer, Sage takes it with its own offer code, and the maker's signature from the
+   offer completes the bundle after the user signs their side. Its intent is `offer.take`
+   with the fee; what the user pays and receives is shown from the simulation.
 4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
-   is verified claim by claim against the simulation; `chia_send` carries one Klimper
-   derives from the request itself.
+   is verified claim by claim against the simulation; `chia_send` and `chia_takeOffer` carry
+   one Klimper derives from the request itself.
 
 Key material lives only inside one `sign_all` call. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies

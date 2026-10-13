@@ -12,6 +12,10 @@
 //!   any other spend — wallet-kit's simulation, policy, limits, one approval, one batch
 //!   signature — with an intent Klimper derives from the request itself, so the bundle is
 //!   proven to pay exactly what was asked to exactly whom.
+//! * [`take_offer`]: `chia_takeOffer`, Sage's `WalletConnect` method too (TASK-137). The
+//!   website sends only the offer; Sage takes it from the wallet's own coins with the same
+//!   offer code as `WalletConnect`, and the bundle runs through the same path as a send,
+//!   completed by the maker's signature from the offer.
 //! * [`cross_check`]: Sage's own summary of a spend (from the wallet database) against
 //!   wallet-kit's independent simulation. If they disagree about what leaves the wallet —
 //!   the user's coins spent, what goes to others, the fee — the request is refused and the
@@ -19,10 +23,11 @@
 
 use std::collections::BTreeMap;
 
+use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use sage_api::wallet_connect::SendTransactionImmediately;
 use sage_api::{
-    Amount, AssetKind, CoinJson, CoinSpendJson, SendCat, SendXch, TransactionSummary,
+    Amount, AssetKind, CoinJson, CoinSpendJson, SendCat, SendXch, TakeOffer, TransactionSummary,
     ViewCoinSpends,
 };
 use serde_json::Value;
@@ -37,9 +42,18 @@ use crate::wallet::AppState;
 /// The method name, as Sage's `WalletConnect` handler knows it.
 pub const CHIA_SEND: &str = "chia_send";
 
+/// The method name, as Sage's `WalletConnect` handler knows it.
+pub const CHIA_TAKE_OFFER: &str = "chia_takeOffer";
+
 /// Methods Klimper builds itself, granted at pairing next to wallet-kit's defaults. Each
 /// still asks the user before anything is signed.
-pub const WALLET_BUILT_METHODS: [&str; 1] = [CHIA_SEND];
+pub const WALLET_BUILT_METHODS: [&str; 2] = [CHIA_SEND, CHIA_TAKE_OFFER];
+
+/// Whether Klimper builds this request from the wallet's own coins (and so signs it with
+/// every key of the wallet, not only the ones the website was shown).
+pub fn is_wallet_built(method: &str) -> bool {
+    WALLET_BUILT_METHODS.contains(&method)
+}
 
 fn error(code: i64, message: &str, reason: Option<&str>) -> RpcError {
     RpcError {
@@ -417,6 +431,109 @@ pub fn send(
     Ok(submitted.to_json())
 }
 
+// ---------------------------------------------------------------------------------------
+// chia_takeOffer
+// ---------------------------------------------------------------------------------------
+
+/// The maker's half of an offer: the signature over the maker's own spends. It completes
+/// the bundle once the user has signed their side, and wallet-kit checks the whole bundle
+/// verifies before anything is broadcast.
+fn maker_signature(offer: &str) -> Result<Signature, RpcError> {
+    chia_wallet_sdk::driver::decode_offer(offer)
+        .map(|bundle| bundle.aggregated_signature)
+        .map_err(|_| invalid("offer"))
+}
+
+/// `chia_takeOffer { offer, fee? }`: Sage takes the offer from the wallet's own coins with
+/// the same code as `WalletConnect` (`auto_submit: false`, so nothing leaves the wallet
+/// here), Klimper checks, asks once, signs once and broadcasts. The website never builds
+/// the user's side and never sees which coins pay for it.
+pub fn take_offer(
+    state: &AppState,
+    ctx: &RequestContext<'_>,
+    signer: &dyn kit::Signer,
+    approver: &dyn kit::Approver,
+    broadcaster: &dyn Broadcaster,
+    params_json: &str,
+) -> Result<String, RpcError> {
+    let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
+    let offer = params
+        .get("offer")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|offer| !offer.is_empty())
+        .ok_or_else(|| invalid("offer"))?
+        .to_owned();
+    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let other_signature = maker_signature(&offer)?;
+    // As for a send: a take that cannot be built tells the website the wallet cannot pay
+    // for it, so a run of them is a search for the balance.
+    if failed_builds::too_many(ctx.dapp, ctx.now) {
+        return Err(error(
+            codes::SPENDABLE_BALANCE_EXCEEDED,
+            "the wallet could not take this offer",
+            Some("build_failed"),
+        ));
+    }
+
+    let built = on_sage(state, async move |sage| {
+        sage.take_offer(TakeOffer {
+            offer,
+            fee: Amount::u64(fee),
+            auto_submit: false,
+        })
+        .await
+    })
+    .map_err(|e| {
+        // Sage's own words stay here, as for a send: they name balances and coins.
+        tracing::info!("xchonnect: chia_takeOffer could not be built: {e}");
+        failed_builds::record(ctx.dapp, ctx.now);
+        error(
+            codes::SPENDABLE_BALANCE_EXCEEDED,
+            "the wallet could not take this offer",
+            Some("build_failed"),
+        )
+    })?;
+
+    // Sage's bundle carries both signatures; only the spends are kept, and wallet-kit signs
+    // the user's side again after the approval.
+    let spends: Vec<CoinSpend> = built
+        .spend_bundle
+        .coin_spends
+        .iter()
+        .map(from_json)
+        .collect::<Option<_>>()
+        .ok_or_else(|| invalid("coin_spends"))?;
+
+    // What the user pays and receives is shown from the simulation; the claim made here is
+    // the fee, which the website chose and the bundle must not exceed.
+    let intent = Intent {
+        kind: Some("offer.take".to_owned()),
+        recipients: None,
+        fee: Some(fee),
+        net: None,
+    };
+
+    let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
+        .map_err(RpcError::from)?;
+    cross_check(&built.summary, &kit_summary)?;
+
+    let submitted = kit::submit(
+        SubmitRequest {
+            method: CHIA_TAKE_OFFER,
+            spends,
+            other_signature: Some(other_signature),
+            intent: Some(&intent),
+            wallet_built: true,
+        },
+        ctx,
+        signer,
+        approver,
+        broadcaster,
+    )?;
+    Ok(submitted.to_json())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
@@ -502,6 +619,34 @@ mod tests {
                 asset: Some(xch()),
                 outputs: vec![output(paid, false), output(change, true)],
             }],
+        }
+    }
+
+    #[test]
+    fn take_offer_is_built_by_the_wallet_like_a_send() {
+        assert!(is_wallet_built(CHIA_SEND));
+        assert!(is_wallet_built(CHIA_TAKE_OFFER));
+        assert!(!is_wallet_built("chip0002_signCoinSpends"));
+        assert!(!is_wallet_built(kit::SUBMIT_COIN_SPENDS));
+    }
+
+    /// The maker's signature is the offer's own aggregated signature, untouched: it is what
+    /// completes the bundle after the user signs their side.
+    #[test]
+    fn the_maker_signature_comes_from_the_offer() {
+        let maker = chia_bls::SecretKey::from_seed(&[7; 32]);
+        let signature = chia_bls::sign(&maker, b"maker");
+        let offer =
+            chia_wallet_sdk::driver::encode_offer(&SpendBundle::new(vec![], signature.clone()))
+                .unwrap();
+        assert_eq!(maker_signature(&offer).unwrap(), signature);
+    }
+
+    #[test]
+    fn a_take_without_a_readable_offer_is_refused_before_the_wallet_is_asked() {
+        for offer in ["", "offer1notanoffer", "hello"] {
+            let error = maker_signature(offer).unwrap_err();
+            assert_eq!(error.code, codes::INVALID_PARAMS, "{offer:?}");
         }
     }
 

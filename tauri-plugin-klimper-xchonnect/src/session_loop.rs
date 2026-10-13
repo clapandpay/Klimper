@@ -1299,6 +1299,7 @@ mod tests {
             "signMessage",
             "sendTransaction",
             "chia_send",
+            "chia_takeOffer",
             "xchonnect_submitCoinSpends",
         ] {
             assert!(!answers_without_prompt(method), "{method}");

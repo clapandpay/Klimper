@@ -192,7 +192,8 @@ impl Attempt {
 
 /// The methods a new connection is granted: wallet-kit's defaults (`signCoinSpends`,
 /// `xchonnect_submitCoinSpends`, …), the optional coin and balance reads, `sendTransaction`
-/// and `walletSwitchChain` (TASK-082), and the methods Klimper builds itself (`chia_send`).
+/// and `walletSwitchChain` (TASK-082), and the methods Klimper builds itself (`chia_send`,
+/// `chia_takeOffer`).
 /// The reads are scoped by wallet-kit to the exposed receive keys, whose coins the dApp
 /// can read from the chain anyway; `sendTransaction` only broadcasts a bundle that is
 /// already signed, and anything Klimper signs asks first. The pairing screen lists them,

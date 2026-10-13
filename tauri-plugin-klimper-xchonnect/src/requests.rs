@@ -314,14 +314,14 @@ fn run(
     // What the dApp builds itself may only be signed with the keys it was given: a key of
     // the wallet's it does not know then looks exactly like a stranger's, so a guessed key
     // cannot be confirmed by whether a prompt appears. The send Klimper builds from its own
-    // coins (chia_send) is the one request that signs with every key of the wallet.
+    // coins (chia_send, chia_takeOffer) are the requests that sign with every key of the wallet.
     let exposed: std::collections::HashSet<chia_bls::PublicKey> = permissions
         .exposed_keys
         .iter()
         .filter(|key| snapshot.keys.contains(key))
         .copied()
         .collect();
-    let wallet_built = canonical_method(&meta.method) == execute::CHIA_SEND;
+    let wallet_built = execute::is_wallet_built(canonical_method(&meta.method));
     let context = RequestContext {
         dapp: &record.dapp,
         network: snapshot.network.clone(),
@@ -357,6 +357,18 @@ fn run(
                 execute::send(state, &context, &signer, &approver, &broadcaster, params)
             }
         }
+        execute::CHIA_TAKE_OFFER => {
+            if !permissions.allows_method(execute::CHIA_TAKE_OFFER) {
+                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
+            } else if approvals.paused(&record.id) {
+                // As for a send: whether a paused website's take could be built would tell
+                // it the wallet's balance without a prompt.
+                Err(rejected())
+            } else {
+                approver.mark_cross_checked();
+                execute::take_offer(state, &context, &signer, &approver, &broadcaster, params)
+            }
+        }
         kit::SUBMIT_COIN_SPENDS => {
             // A dApp-built bundle: the wallet database's reading and the simulation must
             // agree before the user is asked anything.
@@ -371,7 +383,7 @@ fn run(
     if let Ok(result) = &outcome
         && matches!(
             canonical_method(&meta.method),
-            execute::CHIA_SEND | kit::SUBMIT_COIN_SPENDS
+            execute::CHIA_SEND | execute::CHIA_TAKE_OFFER | kit::SUBMIT_COIN_SPENDS
         )
         && let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(result)
         && let Some(Value::String(transaction_id)) = fields.get("transactionId")

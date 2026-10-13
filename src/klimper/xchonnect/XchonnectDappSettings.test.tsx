@@ -94,7 +94,7 @@ describe('the defaults of a new connection', () => {
       expect(screen.getByLabelText('signCoinSpends')).toBeDefined(),
     );
 
-    // Spec 9.1's required set, plus the two methods where Klimper signs and sends
+    // Spec 9.1's required set, plus the methods Klimper builds, signs and sends
     // (xchonnect-wiki 04). Each still asks.
     expect([...DEFAULT_METHODS]).toEqual([
       'chainId',
@@ -104,6 +104,7 @@ describe('the defaults of a new connection', () => {
       'signMessage',
       'xchonnect_submitCoinSpends',
       'chia_send',
+      'chia_takeOffer',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(

@@ -70,6 +70,7 @@ export const DEFAULT_METHODS = [
   'signMessage',
   'xchonnect_submitCoinSpends',
   'chia_send',
+  'chia_takeOffer',
 ] as const;
 
 /** Methods that cannot be taken away: without them a session cannot even say hello. */
