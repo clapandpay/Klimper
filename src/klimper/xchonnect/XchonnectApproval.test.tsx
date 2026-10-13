@@ -448,6 +448,43 @@ describe('one decision per request, and the wallet sends', () => {
     expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
   });
 
+  it('names an offer Klimper takes itself as a trade, not a send', async () => {
+    pendingApprovals.mockResolvedValue([
+      request(
+        submitted({
+          wallet_built: true,
+          method: 'chia_takeOffer',
+          binding: {
+            all_bound: true,
+            unbound_user_spends: [],
+            bound_payments: [
+              {
+                user_spend: 0,
+                settlement_spend: 1,
+                asset: { type: 'cat', asset_id: TAIL },
+                amount: 1_000,
+              },
+            ],
+            bound_received: [],
+          },
+          intent: { kind: 'offer.take', verified: [] },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    await waitFor(() => screen.getByTestId('prompt-handling'));
+    expect(screen.getAllByText('Take an offer').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Send')).toBeNull();
+    expect(screen.getByTestId('prompt-handling').textContent).toMatch(
+      /Built by Klimper/,
+    );
+    // The fee shown is the whole trade's, and says so: the maker may pay one too.
+    expect(screen.getByTestId('prompt-implied-fee').textContent).toMatch(
+      /Network fee of the whole trade/,
+    );
+  });
+
   it('shows the website’s claims only as facts the wallet verified', async () => {
     pendingApprovals.mockResolvedValue([
       request(

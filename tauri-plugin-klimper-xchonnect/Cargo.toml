@@ -68,6 +68,9 @@ keyring = { version = "3", features = [
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The take tests (src/execute/take_tests.rs, TASK-137): Sage wallets on a simulated chain.
+anyhow = { workspace = true }
+indexmap = { workspace = true }
 # A real Sage wallet database (schema and migrations) for the chain reads (TASK-082).
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 chia-puzzles = "0.20"

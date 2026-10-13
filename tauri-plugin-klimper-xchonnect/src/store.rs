@@ -462,6 +462,12 @@ pub struct SessionRecord {
     /// so a website's revocation holds across restarts (spec 6.1, TASK-125 review).
     #[serde(default)]
     pub origin_checked_at: Option<u64>,
+    /// Which revision of the wallet-built methods this connection was offered
+    /// ([`crate::execute::METHODS_REVISION`]). 0: paired before `chia_takeOffer` existed.
+    /// Raised once when the connection is loaded, so a method the user turns off afterwards
+    /// stays off.
+    #[serde(default)]
+    pub methods_revision: u32,
 }
 
 /// A session record plus the opaque `Session::to_bytes()` blob.
@@ -903,6 +909,7 @@ mod tests {
             revoked: false,
             push: None,
             origin_checked_at: None,
+            methods_revision: 0,
             own_key: None,
         }
     }

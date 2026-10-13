@@ -1,6 +1,6 @@
 {
   "productName": "Klimper",
-  "version": "0.2.0",
+  "version": "0.2.4",
   "identifier": "com.clapandpay.klimper",
   "build": {
     "beforeBuildCommand": "pnpm run build:frontend"

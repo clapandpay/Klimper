@@ -222,8 +222,8 @@ include another website's key. With the switch **off**, that own address is all 
 sees: it cannot link the user's addresses through Klimper, and a message it asks to have
 signed is signed by a key no other website knows. Requests a website builds itself
 (`signCoinSpends`, `submitCoinSpends`, `signMessage`) are signed with the keys it was given
-only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send`,
-which Klimper builds from its own coins, uses the whole wallet. A payment the wallet makes on
+only, so a guessed key of the wallet's answers like a stranger's (TASK-122); `chia_send` and
+`chia_takeOffer`, which Klimper builds from its own coins, use the whole wallet. A payment the wallet makes on
 chain still shows its input coins and change address to anyone who looks, and a page that
 sees the addresses asks some chain service about them; Klimper cannot hide either.
 

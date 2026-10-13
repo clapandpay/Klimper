@@ -476,6 +476,7 @@ fn start_loop_push(
             revoked: false,
             push: None,
             origin_checked_at: None,
+            methods_revision: 0,
             own_key: None,
         },
         session_hex: hex::encode(wallet_session.to_bytes().unwrap()),

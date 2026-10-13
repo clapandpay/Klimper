@@ -136,15 +136,33 @@ and is gone.
    keychain is Sage's own, opened with Sage's empty password like every Sage endpoint. A
    fresh Touch ID prompt per request on macOS is a follow-up:
    it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out here.
-3. **Klimper broadcasts** (`execute.rs`): `chia_send` is built by Sage from the wallet's
-   own coins, `xchonnect_submitCoinSpends` carries a bundle the website built; both are
-   signed once and sent through Klimper's own peers (`send_transaction_immediately`). The
-   website receives `{ transactionId, status }`.
+3. **Klimper broadcasts** (`execute.rs`): `chia_send` and `chia_takeOffer` are built by
+   Sage from the wallet's own coins, `xchonnect_submitCoinSpends` carries a bundle the
+   website built; each is signed once and sent through Klimper's own peers
+   (`send_transaction_immediately`). The website receives `{ transactionId, status }`.
+   `chia_takeOffer { offer, fee? }` (TASK-137) works as in `WalletConnect`: the website sends
+   only the offer. Before anything is built, the offer is refused if it carries more than 64
+   spends, asks for nothing, has a maker spend that is not a recognised puzzle (an NFT, a DID,
+   an option: whatever the website's "unknown contracts" setting) or a maker signature that
+   does not cover the maker's spends; each refusal counts like a failed build. The take is
+   then built from the wallet's own coins with Sage's offer code and **no key** (the wallet's
+   `take_offer`, unsigned), and each of the user's spends is tied to the maker's payment
+   (spec 11.2): with a fee, Sage leaves one of the user's coins asserting nothing, and that
+   coin then asserts a coin announcement of a bound user spend. The key is used once, by
+   wallet-kit, after the approval. The intent is `offer.take` and claims **no fee**:
+   wallet-kit checks a fee claim against the whole bundle's fee, which also holds the maker's
+   own fee. What the user pays, their fee included, is the net change the approval shows; the
+   whole trade's fee is shown as such. `src/execute/take_tests.rs` takes real offers between
+   two Sage wallets on a simulated chain and checks that each settles.
+   A connection paired before `chia_takeOffer` existed is given it once, when Klimper next
+   loads it, if it may use `chia_send` (`methods_revision`, `execute::upgrade_methods`), and
+   the website is told by `session.permissions`; it does not have to pair again. A take the
+   user turns off afterwards stays off.
 4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
-   is verified claim by claim against the simulation; `chia_send` carries one Klimper
-   derives from the request itself.
+   is verified claim by claim against the simulation; `chia_send` and `chia_takeOffer` carry
+   one Klimper derives from the request itself.
 
 Key material lives only inside one `sign_all` call. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies
