@@ -396,7 +396,13 @@ async fn takes_and_settles(trade: Trade, maker_fee: u64, taker_fee: u64) {
     // own fee apart, and a price (TASK-139).
     let overview = outcome.trade.expect("no trade overview");
     assert_eq!(overview.offers, Some(1), "{trade:?}");
-    assert_eq!(overview.fee, taker_fee, "{trade:?}");
+    // Sold for XCH, Sage pays the user's fee out of the XCH the offer pays the user: no
+    // XCH of the user's moves, so the screen shows the XCH that arrives, already less the
+    // fee, and no fee of the user's (TASK-139 audit, H1: a fee another party's coin funds
+    // is never the user's, and never shown as received).
+    let from_proceeds = matches!(trade, Trade::XchForCat);
+    let shown_fee = if from_proceeds { 0 } else { taker_fee };
+    assert_eq!(overview.fee, shown_fee, "{trade:?}");
     let (pays, gets) = match trade {
         Trade::CatForXch => (AssetId::Xch, AssetId::Cat(gets_cat.unwrap())),
         Trade::XchForCat => (AssetId::Cat(pays_cat.unwrap()), AssetId::Xch),
@@ -408,7 +414,7 @@ async fn takes_and_settles(trade: Trade, maker_fee: u64, taker_fee: u64) {
     let leg = |asset, amount| crate::trade::Leg { asset, amount };
     let (paid, got) = match trade {
         Trade::CatForXch => (500, 1_000),
-        Trade::XchForCat => (1_000, 500),
+        Trade::XchForCat => (1_000, 500 - u128::from(taker_fee)),
         Trade::CatForCat => (1_000, 1_000),
     };
     assert_eq!(overview.pays, [leg(pays, paid)], "{trade:?}");

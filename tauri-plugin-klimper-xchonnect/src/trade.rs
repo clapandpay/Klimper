@@ -15,9 +15,9 @@
 //! the user's own spends failing, so it is as certain as the user's own outputs. Anything
 //! merely conditional and not bound is not counted.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use chia_protocol::{Bytes32, SpendBundle};
+use chia_protocol::{Bytes32, CoinSpend, SpendBundle};
 use serde::{Serialize, Serializer};
 use xchonnect_wallet_kit::{AssetId, BindingReport, Prompt, Summary};
 
@@ -73,7 +73,9 @@ pub struct TradeOverview {
     pub pays: Vec<Leg>,
     /// What the user receives. XCH first.
     pub receives: Vec<Leg>,
-    /// The fee the user's own spends reserve. A maker's fee is the maker's.
+    /// The fee the user pays: what the user's own spends reserve, as far as the user's
+    /// own XCH funds it. A maker's fee is the maker's, and a fee the user's spends
+    /// declare but another party's coin pays for is not the user's either.
     #[serde(serialize_with = "as_string")]
     pub fee: u64,
     /// For one asset paid for one asset received.
@@ -100,11 +102,18 @@ pub fn overview(
     binding: Option<&BindingReport>,
     offers: Option<usize>,
 ) -> Option<TradeOverview> {
-    let fee = summary.owned_reserve_fee;
     let mut change: BTreeMap<AssetId, i128> = BTreeMap::new();
     for delta in &summary.assets {
         *change.entry(delta.asset).or_default() += delta.net;
     }
+    // The user's fee is the part of the fee the user's spends reserve that the user's own
+    // XCH paid for: never more than the XCH that left the user's coins. A spend of the
+    // user's may declare a `RESERVE_FEE` that someone else's coin funds (a settlement coin
+    // in the same bundle needs no signature); counting all of it as the user's would turn
+    // the fee into XCH "received" below.
+    let own_xch = change.get(&AssetId::Xch).copied().unwrap_or(0);
+    let funded = i128::from(summary.owned_reserve_fee).min(own_xch.min(0).saturating_neg());
+    let fee = u64::try_from(funded).unwrap_or(0);
     // Only a binding that holds for every user spend makes the other side's payments
     // certain; a partial one is refused before the prompt anyway.
     if let Some(binding) = binding.filter(|b| b.all_bound) {
@@ -113,9 +122,10 @@ pub fn overview(
             *change.entry(received.asset).or_default() += amount;
         }
     }
-    // The fee is its own line: XCH paid for the trade is what leaves without it.
-    if fee > 0 {
-        *change.entry(AssetId::Xch).or_default() += i128::from(fee);
+    // The fee is its own line: XCH paid for the trade is what leaves without it. Only
+    // the part the user funded comes back here, so the fee can never show as received.
+    if funded > 0 {
+        *change.entry(AssetId::Xch).or_default() += funded;
     }
 
     let mut pays = Vec::new();
@@ -200,11 +210,44 @@ fn decimal(numerator: u128, denominator: u128, digits: usize) -> Option<String> 
     Some(text)
 }
 
-/// How many offers a decoded offer bundle takes together: the distinct nonces of its
-/// requested payments. Every offer notarizes what it asks with a nonce of its own (derived
-/// from the maker's coins), so an aggregate of three offers carries three. An offer that
-/// cannot be read counts as one; it is refused on its own grounds.
+/// The root of `node` in a union-find forest, halving the path on the way.
+fn root(parent: &mut [usize], mut node: usize) -> usize {
+    while parent[node] != node {
+        parent[node] = parent[parent[node]];
+        node = parent[node];
+    }
+    node
+}
+
+/// What ties two of a maker's spends together in [`offers_in`].
+const COIN_ANNOUNCEMENT: u8 = 0;
+const PUZZLE_ANNOUNCEMENT: u8 = 1;
+const COIN: u8 = 2;
+const PUZZLE: u8 = 3;
+
+/// How many offers a decoded offer bundle takes together, counted so that one maker cannot
+/// make one offer look like many (TASK-139 audit, L1).
+///
+/// Two counts, and the smaller is shown:
+///
+/// * the distinct nonces of the requested payments: every offer notarizes what it asks
+///   with a nonce of its own, but a maker chooses nonces freely, so one offer can carry
+///   five;
+/// * the separate groups of the maker's coins: spends joined by an announcement one makes
+///   and another asserts (the ring every wallet ties an offer's coins with, a CAT's own
+///   ring), by asserting the same announcement (two coins of one offer asserting the same
+///   payment), by a concurrent-spend assertion, or by sitting at one puzzle hash (one
+///   owner). Coins of one offer are tied together,
+///   or one could be taken out of the bundle; coins of different makers are not.
+///
+/// A maker who splits an offer into untied groups, one nonce each, has in effect made that
+/// many offers: each group could be taken on its own. An offer that cannot be read or run
+/// counts as one; it is refused on its own grounds.
 pub fn offers_in(offer: &SpendBundle) -> usize {
+    use chia_wallet_sdk::prelude::Condition;
+    use chia_wallet_sdk::types::announcement_id;
+    use xchonnect_wallet_kit::simulate::{DEFAULT_MAX_COST, execute};
+
     let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
     let Ok(parsed) = chia_wallet_sdk::driver::Offer::from_spend_bundle(&mut allocator, offer)
     else {
@@ -219,7 +262,60 @@ pub fn offers_in(offer: &SpendBundle) -> usize {
         .chain(requested.options.values().flatten())
         .map(|payment| payment.nonce)
         .collect();
-    nonces.len().max(1)
+
+    // The maker's spends, run on their own; the asked-for placeholders (parent all zeroes)
+    // are nobody's, and a requested CAT's placeholder does not run as a CAT spend.
+    let makers: Vec<CoinSpend> = offer
+        .coin_spends
+        .iter()
+        .filter(|spend| spend.coin.parent_coin_info != Bytes32::default())
+        .cloned()
+        .collect();
+    let Ok((makers, _)) = execute(
+        &mut allocator,
+        &makers,
+        &xchonnect_wallet_kit::Ownership::default(),
+        DEFAULT_MAX_COST,
+    ) else {
+        return 1;
+    };
+
+    // Union-find over the maker's spends (0..n) and the things that tie them (n..).
+    let mut parent: Vec<usize> = (0..makers.len()).collect();
+    let mut ties: HashMap<(u8, Bytes32), usize> = HashMap::new();
+    let mut tie = |parent: &mut Vec<usize>, spend: usize, key: (u8, Bytes32)| {
+        let node = *ties.entry(key).or_insert_with(|| {
+            parent.push(parent.len());
+            parent.len() - 1
+        });
+        let (a, b) = (root(parent, spend), root(parent, node));
+        parent[a] = b;
+    };
+    for (index, spend) in makers.iter().enumerate() {
+        let coin_id = spend.coin.coin_id();
+        tie(&mut parent, index, (COIN, coin_id));
+        tie(&mut parent, index, (PUZZLE, spend.coin.puzzle_hash));
+        for condition in &spend.conditions {
+            let key = match condition {
+                Condition::CreateCoinAnnouncement(c) => {
+                    (COIN_ANNOUNCEMENT, announcement_id(coin_id, &c.message))
+                }
+                Condition::AssertCoinAnnouncement(c) => (COIN_ANNOUNCEMENT, c.announcement_id),
+                Condition::CreatePuzzleAnnouncement(c) => (
+                    PUZZLE_ANNOUNCEMENT,
+                    announcement_id(spend.coin.puzzle_hash, &c.message),
+                ),
+                Condition::AssertPuzzleAnnouncement(c) => (PUZZLE_ANNOUNCEMENT, c.announcement_id),
+                Condition::AssertConcurrentSpend(c) => (COIN, c.coin_id),
+                Condition::AssertConcurrentPuzzle(c) => (PUZZLE, c.puzzle_hash),
+                _ => continue,
+            };
+            tie(&mut parent, index, key);
+        }
+    }
+    let groups: BTreeSet<usize> = (0..makers.len()).map(|i| root(&mut parent, i)).collect();
+
+    nonces.len().min(groups.len()).max(1)
 }
 
 #[cfg(test)]
@@ -302,6 +398,85 @@ mod tests {
         assert_eq!(price.quote, AssetId::Xch);
         assert_eq!(price.quote_per_base, "0.0005");
         assert_eq!(price.base_per_quote, "2000");
+    }
+
+    /// The exploit of the TASK-139 audit: the user's CAT spend pays 1000 of the CAT away
+    /// and declares a `RESERVE_FEE` of F, while a settlement coin of the website's (no
+    /// signature needed) pays it. The user's XCH does not move, so nothing of F is the
+    /// user's: no XCH received, and no fee of the user's.
+    #[test]
+    fn a_reserve_fee_funded_by_others_is_neither_received_nor_the_users() {
+        let f = 50_000_000;
+        let s = summary(vec![delta(cat(1), -1_000_000, 0)], f);
+        assert_eq!(overview(&s, None, None), None);
+        // Even with something bound to come back, F is not received and not the user's.
+        let b = bound(vec![(cat(2), 10)], true);
+        let trade = overview(&s, Some(&b), None).unwrap();
+        assert!(trade.receives.iter().all(|l| l.asset != AssetId::Xch));
+        assert_eq!(
+            trade.receives,
+            [Leg {
+                asset: cat(2),
+                amount: 10
+            }]
+        );
+        assert_eq!(trade.fee, 0);
+    }
+
+    /// Part of a declared fee paid by the user's XCH, the rest by someone else's coin: the
+    /// user's fee is the part the user paid, and XCH paid for the trade stays zero.
+    #[test]
+    fn a_reserve_fee_partly_funded_by_others_counts_only_the_users_part() {
+        let s = summary(
+            vec![delta(AssetId::Xch, -30, 0), delta(cat(1), 0, 1_000)],
+            100,
+        );
+        let trade = overview(&s, Some(&bound(vec![(cat(1), 1_000)], true)), None);
+        // The user pays 30 of fee and nothing else: no trade (nothing is paid).
+        assert_eq!(trade, None);
+        let s = summary(vec![delta(AssetId::Xch, -30, 0), delta(cat(2), -5, 0)], 100);
+        let trade = overview(&s, Some(&bound(vec![(cat(1), 1_000)], true)), None).unwrap();
+        assert_eq!(trade.fee, 30);
+        assert_eq!(
+            trade.pays,
+            [Leg {
+                asset: cat(2),
+                amount: 5
+            }]
+        );
+        assert_eq!(
+            trade.receives,
+            [Leg {
+                asset: cat(1),
+                amount: 1_000
+            }]
+        );
+    }
+
+    /// Selling a CAT for XCH with a fee: the user's XCH pays the fee and receives the
+    /// price; the fee is the user's in full and the price is not reduced by it.
+    #[test]
+    fn a_sale_with_a_fee_paid_from_the_users_xch() {
+        let s = summary(
+            vec![delta(AssetId::Xch, -100, 0), delta(cat(1), -1_000, 0)],
+            100,
+        );
+        let trade = overview(&s, Some(&bound(vec![(AssetId::Xch, 400)], true)), None).unwrap();
+        assert_eq!(trade.fee, 100);
+        assert_eq!(
+            trade.receives,
+            [Leg {
+                asset: AssetId::Xch,
+                amount: 400
+            }]
+        );
+        assert_eq!(
+            trade.pays,
+            [Leg {
+                asset: cat(1),
+                amount: 1_000
+            }]
+        );
     }
 
     #[test]

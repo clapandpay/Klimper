@@ -5,9 +5,10 @@
 //! summary, the cross-check and wallet-kit's submit). The bundle goes to the simulated
 //! chain and must settle, all of it, with every balance as the offers said.
 //!
-//! The offers are joined two ways: with Sage's `aggregate_offers` (spends together, the
-//! asked-for placeholders first, signatures summed), and by plain concatenation with the
-//! signatures summed, which is what a website joining offers in the browser makes.
+//! The offers are joined three ways: with Sage's `aggregate_offers` (spends together, the
+//! asked-for placeholders first, signatures summed), by plain concatenation with the
+//! signatures summed, and merged (one placeholder per asset carrying every maker's
+//! notarized payments, as chia's `Offer.aggregate` writes it and Pengui sends by default).
 //!
 //! `export_aggregate_fixtures` (ignored; run by hand) writes
 //! `tests/fixtures/aggregate_offers.json` for websites that aggregate offers themselves to
@@ -32,6 +33,55 @@ enum Join {
     Sage,
     /// Every offer's spends one after another, the signatures summed.
     Concat,
+    /// One placeholder per requested asset carrying every maker's notarized payments, in
+    /// order, then the makers' own spends, the signatures summed: as chia's
+    /// `Offer.aggregate` writes it, and as Pengui's browser code sends by default
+    /// (`aggregateOffers.ts`, `mergePlaceholders: true`).
+    Merged,
+}
+
+/// Pengui's merged form: placeholders keyed by their coin's puzzle hash (one per asset, the
+/// first one's coin and puzzle kept), their solutions' notarized payments concatenated as
+/// CLVM, never re-encoded, so each maker's announcement still matches byte for byte.
+fn merged(offers: &[SpendBundle]) -> SpendBundle {
+    use chia_wallet_sdk::prelude::{Allocator, FromClvm, NodePtr, ToClvm};
+
+    let mut allocator = Allocator::new();
+    let mut placeholders: Vec<(CoinSpend, Vec<NodePtr>)> = Vec::new();
+    let mut spends = Vec::new();
+    let mut signature = Signature::default();
+    for offer in offers {
+        signature += &offer.aggregated_signature;
+        for spend in &offer.coin_spends {
+            if spend.coin.parent_coin_info != Bytes32::default() {
+                spends.push(spend.clone());
+                continue;
+            }
+            let solution = spend.solution.to_clvm(&mut allocator).unwrap();
+            let items = Vec::<NodePtr>::from_clvm(&allocator, solution).unwrap();
+            match placeholders
+                .iter_mut()
+                .find(|(first, _)| first.coin.puzzle_hash == spend.coin.puzzle_hash)
+            {
+                Some((_, payments)) => payments.extend(items),
+                None => placeholders.push((spend.clone(), items)),
+            }
+        }
+    }
+    let mut coin_spends: Vec<CoinSpend> = placeholders
+        .into_iter()
+        .map(|(first, payments)| {
+            let list = payments.to_clvm(&mut allocator).unwrap();
+            CoinSpend::new(
+                first.coin,
+                first.puzzle_reveal,
+                Program::from_clvm(&allocator, list).unwrap(),
+            )
+        })
+        .collect();
+    // Placeholders first, as `Offer.to_spend_bundle` orders them.
+    coin_spends.extend(spends);
+    SpendBundle::new(coin_spends, signature)
 }
 
 fn join(offers: &[SpendBundle], how: Join) -> SpendBundle {
@@ -45,6 +95,7 @@ fn join(offers: &[SpendBundle], how: Join) -> SpendBundle {
             }
             joined
         }
+        Join::Merged => merged(offers),
     }
 }
 
@@ -275,8 +326,23 @@ async fn aggregated_take_settles(
     let trade: TradeOverview = trade.expect("no trade overview");
     assert_eq!(trade.offers, Some(makers), "{label}");
     assert_eq!(trade.pays, pays, "{label}");
-    assert_eq!(trade.receives, receives, "{label}");
-    assert_eq!(trade.fee, taker_fee, "{label}");
+    // Selling for XCH, Sage pays the user's fee out of the XCH the offers pay: the screen
+    // shows what arrives, already less the fee, and no fee of the user's own XCH (H1).
+    let from_proceeds = matches!(market, Market::Sell);
+    let mut shown = receives.clone();
+    if from_proceeds {
+        for leg in &mut shown {
+            if leg.asset == AssetId::Xch {
+                leg.amount -= u128::from(taker_fee);
+            }
+        }
+    }
+    assert_eq!(trade.receives, shown, "{label}");
+    assert_eq!(
+        trade.fee,
+        if from_proceeds { 0 } else { taker_fee },
+        "{label}"
+    );
     assert_eq!(
         trade.price.is_some(),
         pays.len() == 1 && receives.len() == 1,
@@ -385,6 +451,42 @@ async fn two_cats_for_one_cat_joined_in_the_browser_settle() {
     Box::pin(aggregated_take_settles(Market::Swap, 2, Join::Concat, 0, 0)).await;
 }
 
+#[tokio::test]
+async fn three_offers_for_one_cat_merged_as_chia_writes_them_settle() {
+    Box::pin(aggregated_take_settles(
+        Market::Buy,
+        3,
+        Join::Merged,
+        250,
+        100,
+    ))
+    .await;
+}
+
+#[tokio::test]
+async fn selling_a_cat_to_three_offers_merged_settles() {
+    Box::pin(aggregated_take_settles(
+        Market::Sell,
+        3,
+        Join::Merged,
+        0,
+        100,
+    ))
+    .await;
+}
+
+#[tokio::test]
+async fn three_cats_for_one_cat_merged_settle() {
+    Box::pin(aggregated_take_settles(
+        Market::Swap,
+        3,
+        Join::Merged,
+        250,
+        0,
+    ))
+    .await;
+}
+
 /// One maker's signature replaced inside the aggregate: the sum no longer verifies over the
 /// makers' spends, and the take is refused before the user is asked.
 #[tokio::test]
@@ -397,7 +499,7 @@ async fn an_aggregate_with_one_forged_signature_is_refused_before_asking() {
     } = Box::pin(book(Market::Buy, 3, 0)).await;
     offers[1].aggregated_signature =
         chia_bls::sign(&chia_bls::SecretKey::from_seed(&[9; 32]), b"forged");
-    for how in [Join::Sage, Join::Concat] {
+    for how in [Join::Sage, Join::Concat, Join::Merged] {
         let outcome = take(
             &taker,
             &cats,
@@ -449,7 +551,7 @@ async fn an_aggregate_holding_one_offer_twice_is_refused_before_asking() {
         ..
     } = Box::pin(book(Market::Buy, 2, 0)).await;
     let twice = [offers[0].clone(), offers[1].clone(), offers[0].clone()];
-    for how in [Join::Sage, Join::Concat] {
+    for how in [Join::Sage, Join::Concat, Join::Merged] {
         let outcome = take(
             &taker,
             &cats,
@@ -489,11 +591,49 @@ async fn an_aggregate_over_the_spend_limit_is_refused_before_anything_runs() {
 }
 
 #[tokio::test]
-async fn the_offers_of_an_aggregate_are_counted_by_their_nonces() {
+async fn the_offers_of_an_aggregate_are_counted() {
     let Book { offers, .. } = Box::pin(book(Market::Sell, 3, 0)).await;
     assert_eq!(crate::trade::offers_in(&offers[0]), 1);
     assert_eq!(crate::trade::offers_in(&join(&offers[..2], Join::Sage)), 2);
     assert_eq!(crate::trade::offers_in(&join(&offers, Join::Concat)), 3);
+    assert_eq!(crate::trade::offers_in(&join(&offers, Join::Merged)), 3);
+}
+
+/// One offer whose asked-for payment is notarized five times with five nonces (a maker
+/// chooses nonces freely) is still one offer: its coins are tied together. TASK-139 audit,
+/// L1: counted by nonces alone it showed "5 offers".
+#[tokio::test]
+async fn one_offer_with_five_nonces_counts_as_one() {
+    use chia_puzzle_types::offer::NotarizedPayment;
+    use chia_wallet_sdk::prelude::{Allocator, FromClvm, NodePtr, ToClvm};
+
+    let Book { offers, .. } = Box::pin(book(Market::Sell, 2, 0)).await;
+    let inflate = |offer: &SpendBundle| {
+        let mut offer = offer.clone();
+        let mut allocator = Allocator::new();
+        for spend in &mut offer.coin_spends {
+            if spend.coin.parent_coin_info != Bytes32::default() {
+                continue;
+            }
+            let solution = spend.solution.to_clvm(&mut allocator).unwrap();
+            let mut payments: Vec<NotarizedPayment<NodePtr>> =
+                Vec::from_clvm(&allocator, solution).unwrap();
+            let first = payments[0].clone();
+            for n in 1..5_u8 {
+                let mut copy = first.clone();
+                copy.nonce = Bytes32::new([n; 32]);
+                payments.push(copy);
+            }
+            let list = payments.to_clvm(&mut allocator).unwrap();
+            spend.solution = Program::from_clvm(&allocator, list).unwrap();
+        }
+        offer
+    };
+    let one = inflate(&offers[0]);
+    assert_eq!(crate::trade::offers_in(&one), 1);
+    // Two such offers joined: two, not ten.
+    let two = join(&[one, inflate(&offers[1])], Join::Concat);
+    assert_eq!(crate::trade::offers_in(&two), 2);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -536,6 +676,7 @@ async fn export_aggregate_fixtures() {
         } = Box::pin(book(market, makers, maker_fee)).await;
         let sage = join(&offers, Join::Sage);
         let concat = join(&offers, Join::Concat);
+        let merged = join(&offers, Join::Merged);
         // Taken and declined, so the overview is the screen's and nothing is sent.
         let outcome = take(&taker, &cats, &sage, 0, &take_permissions(), false).await;
         assert!(outcome.asked, "{name}");
@@ -548,12 +689,14 @@ async fn export_aggregate_fixtures() {
                 .collect::<Vec<_>>(),
             "sage_aggregate": encode_offer(&sage).unwrap(),
             "concatenated": encode_offer(&concat).unwrap(),
+            "merged": encode_offer(&merged).unwrap(),
             "expected": {
                 "offers": makers,
                 "coin_spends": sage.coin_spends.len(),
                 "aggregated_signature": hex0x(sage.aggregated_signature.to_bytes()),
                 "sage_aggregate_id": hex0x(sage.name()),
                 "concatenated_id": hex0x(concat.name()),
+                "merged_id": hex0x(merged.name()),
                 "trade": outcome.trade.expect("no trade overview"),
             },
         }));
@@ -562,6 +705,9 @@ async fn export_aggregate_fixtures() {
         "about": "Real offers made and signed by Sage wallets on a simulated testnet11 chain \
                   (Klimper TASK-139), and Sage's aggregate_offers of them. `concatenated` is \
                   the plain concatenation of the makers' spends with their signatures summed. \
+                  `merged` has one requested-payment placeholder per asset carrying every \
+                  maker's notarized payments, then the makers' spends, signatures summed: \
+                  chia's Offer.aggregate form, and Pengui's default. \
                   `expected.trade` is what Klimper's approval shows when the user takes \
                   `sage_aggregate` with no fee of their own: amounts in mojos, CATs at three \
                   decimals. Regenerate with `cargo test -p tauri-plugin-klimper-xchonnect \
@@ -603,7 +749,10 @@ fn the_committed_fixtures_still_hold() {
         assert_eq!(hex0x(sage.name()), expected["sage_aggregate_id"], "{name}");
         let concat = decode_offer(case["concatenated"].as_str().unwrap()).unwrap();
         assert_eq!(concat, join(&makers, Join::Concat), "{name}");
-        for bundle in [&sage, &concat] {
+        let merged = decode_offer(case["merged"].as_str().unwrap()).unwrap();
+        assert_eq!(merged, join(&makers, Join::Merged), "{name}");
+        assert_eq!(hex0x(merged.name()), expected["merged_id"], "{name}");
+        for bundle in [&sage, &concat, &merged] {
             check_maker_signature(bundle, &kit::Network::Testnet11).unwrap();
             assert_eq!(
                 serde_json::json!(crate::trade::offers_in(bundle)),
