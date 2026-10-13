@@ -1,11 +1,12 @@
-# Klimper design guide: Klimper Coin
+# Klimper design guide: Klimper Coins
 
 The visual source of truth for the wallet. Where a screen and this file disagree, this file wins.
 How it is wired into the code is at the end ([In this repository](#in-this-repository)).
 
 - **Domain:** shared expenses, group money.
 - **Character:** bright, modern and warm; money that moves. The colours and shapes come from the
-  logo: a bird flying out of a red-orange sun, with teal and red coins in its trail.
+  logo: three coins in Beidwerk's night blue, red light and saffron, clinking together with one cream spark (the Beidwerk
+  family brand mark p059).
 - **It must not look like Sage.** The wallet engine is Sage's; the face is ours.
 
 ## History
@@ -16,43 +17,50 @@ brighter, more colourful direction built on the coin and the logo (2026-09-27). 
 structure stays: neutral work surfaces, one strong anchor per screen, a restrained type system,
 purposeful motion. The Beidwerk text is in the git history of this file.
 
+2026-10-12 (TASK-135, TASK-062): the logo became the three-coin brand mark of the Beidwerk family
+(p059), and the colours followed it. The orange sun and teal are gone; the three coins carry the
+colour on Beidwerk's canvases (paper in light, the green-black stage in dark). Still bright, still
+no gradient anywhere.
+
+Later the same day the coins took Beidwerk's own colours (night blue `#3B5BA9`, red light
+`#E75839`, saffron `#E9B23A`), so Klimper matches the family; the app icons were rendered again from
+the recoloured vector (beidwerk-studio `brand/logos/svg/klimper-beidwerk.svg`).
+
 ## 1. Colour
 
-| Role        | Light                 | Dark      | Use                                                    |
-| ----------- | --------------------- | --------- | ------------------------------------------------------ |
-| Canvas      | `#FFF7EC`             | `#0F1014` | page background, cream paper                           |
-| Surface     | `#FFFFFF`             | `#1A1C22` | cards, dialogs, inputs                                 |
-| Ink         | `#111217`             | `#FFF4E6` | text; the sidebar is ink in both themes                |
-| Muted       | `#5C606B`             | `#A8ACB5` | secondary text                                         |
-| Hairline    | `#EFDCC4`             | `#2C2F37` | borders                                                |
-| Sun         | `#FF3B1F` → `#FF9A1F` | same      | the gradient: primary action, coins, the total balance |
-| Sun red     | `#FF3B1F`             | same      | small marks only (dots, badges)                        |
-| Sun orange  | `#FF7A1F`             | same      | active navigation, hover edges                         |
-| Sun yellow  | `#FFC21A`             | same      | rims and highlights                                    |
-| Teal        | `#0F7C87`             | `#3FC1CC` | second action (Receive), secondary buttons, focus ring |
-| Primary     | `#C73515`             | `#FF6A3D` | text links and `text-primary`, readable on the canvas  |
-| Destructive | `#B42318`             | `#F04438` | functional only, never branding                        |
+| Role        | Light     | Dark      | Use                                                        |
+| ----------- | --------- | --------- | ---------------------------------------------------------- |
+| Canvas      | `#F4F0E8` | `#0E130C` | page background: Beidwerk paper, the Beidwerk stage        |
+| Surface     | `#FFFDF8` | `#161C15` | cards, dialogs, inputs                                     |
+| Ink         | `#1C1B19` | `#EFEAE1` | text; the sidebar is ink in both themes                    |
+| Muted       | `#5E5A52` | `#A9A397` | secondary text                                             |
+| Hairline    | `#E3DACB` | `#2A3127` | borders                                                    |
+| Coin blue   | `#3B5BA9` | same      | the primary action, coins, the total balance; white text   |
+| Coin yellow | `#E9B23A` | same      | the second action (Receive), rims and highlights; ink text |
+| Coin red    | `#E75839` | same      | small marks only (dots, badges)                            |
+| Primary     | `#3B5BA9` | `#7D9BE8` | text links and `text-primary`, readable on the canvas      |
+| Ring        | `#3B5BA9` | `#7D9BE8` | focus                                                      |
+| Destructive | `#B42318` | `#F04438` | functional only, never branding                            |
 
 Rules:
 
-- **The sun is the one loud thing.** Use it for the primary action, coins and one anchor per
-  screen (on the assets screen, the total balance band). Never as a page or card background.
-- **Text on the sun is ink, not white.** White on orange fails contrast; ink holds it across the
-  whole gradient.
-- **Teal is the counterweight:** the second action next to a sun button, secondary buttons, focus.
-- Work surfaces stay white or graphite. Colour lives in actions, coins and the backdrop.
-- No neon, no purple, no startup blue, no rainbow charts. Charts: sun first, teal second, then
+- **Blue is the one loud thing.** Use it for the primary action, coins and one anchor per screen
+  (on the assets screen, the total balance band). Never as a page or card background.
+- **Text on blue is white; text on yellow is ink.** Both hold contrast.
+- **Yellow is the counterweight:** the second action next to a blue button, rims, highlights.
+- **Red is a mark, not a surface:** dots and badges only, so it never reads as an error.
+- Work surfaces stay paper or graphite. Colour lives in actions, coins and the backdrop.
+- No gradient, no neon, no purple, no rainbow charts. Charts: blue first, yellow second, then
   muted greys.
 
 ## 2. The coin
 
 The coin is Klimper's shape.
 
-- An asset without its own icon is a **sun coin**: a circle filled with the sun gradient, an ink
-  glyph, a light inner rim. An asset with an icon is round with a sun-yellow rim.
+- An asset without its own icon is a **blue coin**: a circle filled with coin blue, a white glyph, a
+  light inner rim. An asset with an icon is round with a coin-yellow rim.
 - Icon buttons are circles; buttons are pills; cards are rounded tiles (20px).
-- The backdrop is the logo's motion: a sun rising from the bottom-right corner and a trail of two
-  coins and three streaks. It sits in the corner of the canvas, behind the content, never behind a
+- The backdrop is the logo: the three coins rising from the bottom-right corner with their spark. It sits in the corner of the canvas, behind the content, never behind a
   form or a table. On a phone it shrinks into the corner.
 
 ## 3. Components
@@ -60,11 +68,11 @@ The coin is Klimper's shape.
 - **Sidebar:** ink, in both themes. The active item is a tinted field with an orange icon.
 - **Cards:** white (graphite in dark), 1px hairline, 20px radius, a warm glow; linked cards lift by
   2px on hover.
-- **Primary button:** a pill filled with the sun, ink text, 700 weight, a soft sun shadow. No other
+- **Primary button:** a pill filled with coin blue, white text, 700 weight, a soft blue shadow. No
   gradient anywhere.
-- **Secondary button:** a teal pill with white text.
-- **Outline button:** a white pill with a hairline that turns orange on hover.
-- **Inputs:** at least 44px high, white, hairline border, teal focus ring.
+- **Secondary button:** a coin-yellow pill with ink text.
+- **Outline button:** a paper pill with a hairline that turns blue on hover.
+- **Inputs:** at least 44px high, paper, hairline border, blue focus ring.
 - **Tables:** mono uppercase column labels in muted grey, thin row rules.
 - **Money:** balances in the display face, heavy, tabular figures.
 
