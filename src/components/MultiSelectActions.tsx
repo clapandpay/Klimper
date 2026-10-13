@@ -3,7 +3,7 @@ import { CustomError } from '@/contexts/ErrorContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { useErrors } from '@/hooks/useErrors';
 import useOfferStateWithDefault from '@/hooks/useOfferStateWithDefault';
-import { offersEnabled } from '@/lib/features';
+import { offersEnabled, profilesEnabled } from '@/lib/features';
 import { toMojos } from '@/lib/utils';
 import { useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
@@ -197,20 +197,22 @@ export function MultiSelectActions({
           </span>
         </DropdownMenuItem>
 
-        <DropdownMenuItem
-          className='cursor-pointer'
-          disabled={isTransactionDisabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            setAssignOpen(true);
-          }}
-          aria-label={t`Edit profile for ${selectedCount} selected NFTs`}
-        >
-          <UserRoundPlus className='mr-2 h-4 w-4' aria-hidden='true' />
-          <span>
-            <Trans>Edit Profile</Trans>
-          </span>
-        </DropdownMenuItem>
+        {profilesEnabled && (
+          <DropdownMenuItem
+            className='cursor-pointer'
+            disabled={isTransactionDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAssignOpen(true);
+            }}
+            aria-label={t`Edit profile for ${selectedCount} selected NFTs`}
+          >
+            <UserRoundPlus className='mr-2 h-4 w-4' aria-hidden='true' />
+            <span>
+              <Trans>Edit Profile</Trans>
+            </span>
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           className='cursor-pointer'
