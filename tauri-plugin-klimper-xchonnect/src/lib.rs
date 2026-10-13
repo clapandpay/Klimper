@@ -64,6 +64,7 @@ pub mod push;
 pub mod relay;
 pub mod requests;
 pub mod session_loop;
+pub mod sign_guard;
 pub mod store;
 mod testing;
 pub mod wallet;

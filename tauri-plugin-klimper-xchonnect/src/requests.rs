@@ -21,6 +21,9 @@
 //!   stored state was rolled back, answers nothing at all (spec 6.3 step 8, 5.3).
 //! * **The network.** A session approved for another chain is refused before any prompt
 //!   is shown, for every method and not only for `signCoinSpends` (TASK-079 AC #2).
+//!
+//! And for spends a website built, one more before wallet-kit sees them: a spend whose
+//! conditions the signature would not fix is refused ([`crate::sign_guard`], TASK-141).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,6 +35,7 @@ use xchonnect_wallet_kit::{self as kit, Approver, Host, Prompt, RequestContext, 
 use crate::approval::{Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
 use crate::error::Error;
 use crate::execute::{self, SageBroadcaster};
+use crate::sign_guard;
 use crate::store::{PersistentLimits, SessionRecord, SessionStore};
 use crate::wallet::{AppState, KlimperSigner, WalletSnapshot};
 
@@ -372,12 +376,14 @@ fn run(
         kit::SUBMIT_COIN_SPENDS => {
             // A dApp-built bundle: the wallet database's reading and the simulation must
             // agree before the user is asked anything.
-            pre_check_submit(state, &context, params).and_then(|()| {
-                approver.mark_cross_checked();
-                kit::handle_with_host(&meta.method, params, &context, &host)
-            })
+            sign_guard::check_request(&meta.method, params, context.keys)
+                .and_then(|()| pre_check_submit(state, &context, params))
+                .and_then(|()| {
+                    approver.mark_cross_checked();
+                    kit::handle_with_host(&meta.method, params, &context, &host)
+                })
         }
-        _ => kit::handle_with_host(&meta.method, params, &context, &host),
+        _ => handle_dapp_built(&meta.method, params, &context, &host),
     };
     // A transaction Klimper broadcast: the webview shows where to look it up.
     if let Ok(result) = &outcome
@@ -417,6 +423,19 @@ fn run(
         ),
     }
     outcome
+}
+
+/// A request whose spends, if any, the website built: refused before the user is asked if
+/// the signature would not fix a spend's conditions ([`sign_guard`], TASK-141), then
+/// answered by wallet-kit.
+pub fn handle_dapp_built(
+    method: &str,
+    params: &str,
+    context: &RequestContext<'_>,
+    host: &Host<'_>,
+) -> std::result::Result<String, RpcError> {
+    sign_guard::check_request(method, params, context.keys)?;
+    kit::handle_with_host(method, params, context, host)
 }
 
 /// For `xchonnect_submitCoinSpends`: parse the spends and compare Sage's summary with

@@ -256,6 +256,30 @@ fn take_permissions() -> DappPermissions {
     }
 }
 
+/// Every synthetic key of `wallet`, with its secret key.
+async fn wallet_keys(wallet: &SimWallet) -> HashMap<PublicKey, SecretKey> {
+    let mut keys = HashMap::new();
+    for hardened in [false, true] {
+        let max = wallet
+            .wallet
+            .db
+            .max_derivation_index(hardened)
+            .await
+            .unwrap()
+            .unwrap_or(0);
+        for index in 0..=max {
+            let secret = if hardened {
+                master_to_wallet_hardened(&wallet.master_sk, index)
+            } else {
+                master_to_wallet_unhardened(&wallet.master_sk, index)
+            }
+            .derive_synthetic();
+            keys.insert(secret.public_key(), secret);
+        }
+    }
+    keys
+}
+
 /// Take `offer` with the taker's wallet the way `take_offer` does after reading its
 /// params: the maker's signature, the key-free build, Sage's summary, then `submit_take`.
 async fn take(
@@ -279,24 +303,7 @@ async fn take(
         .expect("Sage could not build the take");
 
     let db = &taker.wallet.db;
-    let mut keys = HashMap::new();
-    for hardened in [false, true] {
-        let max = db
-            .max_derivation_index(hardened)
-            .await
-            .unwrap()
-            .unwrap_or(0);
-        for index in 0..=max {
-            let secret = if hardened {
-                master_to_wallet_hardened(&taker.master_sk, index)
-            } else {
-                master_to_wallet_unhardened(&taker.master_sk, index)
-            }
-            .derive_synthetic();
-            keys.insert(secret.public_key(), secret);
-        }
-    }
-    let signer = TakerKeys(keys);
+    let signer = TakerKeys(wallet_keys(taker).await);
     let public_keys: HashSet<PublicKey> = signer.0.keys().copied().collect();
     let ownership = kit::Ownership {
         p2_puzzle_hashes: db
@@ -623,4 +630,48 @@ async fn the_maker_signature_is_checked_for_the_requests_network() {
     check_maker_signature(&offer, &kit::Network::Testnet11).unwrap();
     let error = check_maker_signature(&offer, &kit::Network::Mainnet).unwrap_err();
     assert!(reason(&error).contains("offer_signature"));
+}
+
+/// What Sage builds for `chia_send` — XCH and a CAT, each with a fee — is signed with the
+/// wallet's keys, and every one of those signatures fixes its spend's conditions, so the
+/// guard of TASK-141 lets it through. (The takes above run through it in `submit_take`.)
+#[tokio::test]
+async fn sages_sends_fix_their_conditions() {
+    let mut wallet = SimWallet::new(3_000).await;
+    let asset_id = issue(&mut wallet).await;
+    let keys: HashSet<PublicKey> = wallet_keys(&wallet).await.into_keys().collect();
+    let to = Bytes32::new([9; 32]);
+    let xch = wallet
+        .wallet
+        .send_xch(vec![(to, 500)], 100, vec![], None)
+        .await
+        .unwrap();
+    let cat = wallet
+        .wallet
+        .send_cat(asset_id, vec![(to, 400)], 100, true, vec![], None)
+        .await
+        .unwrap();
+    for spends in [xch, cat] {
+        // The spends are signed with the wallet's keys: the check is not vacuous.
+        let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
+        let (executed, _) = kit::simulate::execute(
+            &mut allocator,
+            &spends,
+            &kit::Ownership::default(),
+            kit::simulate::DEFAULT_MAX_COST,
+        )
+        .unwrap();
+        assert!(
+            executed
+                .iter()
+                .flat_map(|spend| &spend.conditions)
+                .any(|condition| {
+                    condition
+                        .clone()
+                        .into_agg_sig()
+                        .is_some_and(|agg| keys.contains(&agg.public_key))
+                })
+        );
+        crate::sign_guard::check_spends(&spends, &keys).unwrap();
+    }
 }

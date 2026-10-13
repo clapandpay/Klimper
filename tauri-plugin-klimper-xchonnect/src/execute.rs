@@ -437,6 +437,8 @@ pub fn send(
         net: None,
     };
 
+    // Sage spends the wallet's coins with quoted conditions; held to it all the same.
+    crate::sign_guard::check_spends(&spends, ctx.keys)?;
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
     cross_check(&built.summary, &kit_summary)?;
@@ -857,6 +859,8 @@ fn submit_take(
     maker_signature: Signature,
 ) -> Result<String, RpcError> {
     let intent = take_intent();
+    // Sage spends the wallet's coins with quoted conditions; held to it all the same.
+    crate::sign_guard::check_spends(&spends, ctx.keys)?;
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
