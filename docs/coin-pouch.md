@@ -67,9 +67,9 @@ not the coins.
 
 On a phone the app is portrait only (iPhone: `UISupportedInterfaceOrientations` in
 `gen/apple/project.yml` and `Info.plist`; Android: `screenOrientation` in the manifest), so a
-tilt moves the coins and never turns the screen. An iPad keeps every orientation, Android 16
-ignores the lock on large screens by design, and the manifest marks portrait as not required so
-a TV can still install the app.
+tilt moves the coins and never turns the screen. Klimper is an iPhone app (an iPad runs it as
+one, upright), Android 16 ignores the lock on large screens by design, and the manifest marks
+portrait as not required so a TV can still install the app.
 
 ## Pieces
 

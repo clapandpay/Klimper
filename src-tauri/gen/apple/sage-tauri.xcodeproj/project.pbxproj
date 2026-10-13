@@ -195,7 +195,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					24D652EC5BE9A86367B2B089 = {
-						DevelopmentTeam = NQJQRYZZG3;
+						DevelopmentTeam = HTP35W93ZF;
 					};
 				};
 			};
@@ -353,7 +353,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.clapandpay.klimper;
 				PRODUCT_NAME = "Klimper";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VALID_ARCHS = arm64;
 			};
 			name = release;
@@ -449,7 +449,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.clapandpay.klimper;
 				PRODUCT_NAME = "Klimper";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VALID_ARCHS = arm64;
 			};
 			name = debug;
