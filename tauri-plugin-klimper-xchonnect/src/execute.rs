@@ -241,8 +241,13 @@ pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(
     for output in kit_summary.outputs.iter().filter(|o| !o.to_user) {
         *from_kit.paid.entry(output.asset).or_default() += u128::from(output.amount);
     }
-    from_sage.spent.retain(|_, v| *v > 0);
-    from_sage.paid.retain(|_, v| *v > 0);
+    // Zero on either side is no amount at all: an offer take creates zero-amount coins (a
+    // CAT ring moves the value on to the settlement payment), and an entry of 0 on one side
+    // only must not read as a disagreement (TASK-137).
+    for outflow in [&mut from_sage, &mut from_kit] {
+        outflow.spent.retain(|_, v| *v > 0);
+        outflow.paid.retain(|_, v| *v > 0);
+    }
 
     let fee_agrees = kit_summary.implied_fee.map(u128::from) == sage.fee.to_u64().map(u128::from);
     if from_sage != from_kit || !fee_agrees {
@@ -505,6 +510,32 @@ pub fn take_offer(
         .collect::<Option<_>>()
         .ok_or_else(|| invalid("coin_spends"))?;
 
+    submit_take(
+        ctx,
+        signer,
+        approver,
+        broadcaster,
+        &built.summary,
+        spends,
+        other_signature,
+        fee,
+    )
+}
+
+/// Everything after Sage built the take: the cross-check, then wallet-kit's submit with the
+/// maker's signature (binding, intent, limits, one approval, sign, broadcast). Separate so a
+/// real take can be run through it in tests without a running wallet.
+#[allow(clippy::too_many_arguments)]
+fn submit_take(
+    ctx: &RequestContext<'_>,
+    signer: &dyn kit::Signer,
+    approver: &dyn kit::Approver,
+    broadcaster: &dyn Broadcaster,
+    sage_summary: &TransactionSummary,
+    spends: Vec<CoinSpend>,
+    maker_signature: Signature,
+    fee: u64,
+) -> Result<String, RpcError> {
     // What the user pays and receives is shown from the simulation; the claim made here is
     // the fee, which the website chose and the bundle must not exceed.
     let intent = Intent {
@@ -516,13 +547,13 @@ pub fn take_offer(
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
-    cross_check(&built.summary, &kit_summary)?;
+    cross_check(sage_summary, &kit_summary)?;
 
     let submitted = kit::submit(
         SubmitRequest {
             method: CHIA_TAKE_OFFER,
             spends,
-            other_signature: Some(other_signature),
+            other_signature: Some(maker_signature),
             intent: Some(&intent),
             wallet_built: true,
         },
@@ -648,6 +679,46 @@ mod tests {
             let error = maker_signature(offer).unwrap_err();
             assert_eq!(error.code, codes::INVALID_PARAMS, "{offer:?}");
         }
+    }
+
+    /// The shape of a real offer take (found by taking an offer Sage built between two
+    /// simulator wallets, TASK-137): the user's 1000-CAT coin creates a 0-amount coin and
+    /// the CAT ring moves the value on to the maker's settlement payment. Sage leaves the
+    /// zero out of what is paid, the simulation lists it; both mean nothing was paid
+    /// directly, so the two engines agree.
+    #[test]
+    fn a_zero_amount_coin_of_an_offer_take_is_no_disagreement() {
+        let cat = Bytes32::new([0x75; 32]);
+        let mut kit = kit_summary(1_000, 0, 0, 0);
+        kit.assets[0].asset = AssetId::Cat(cat);
+        kit.outputs = vec![OutputInfo {
+            asset: AssetId::Cat(cat),
+            amount: 0,
+            puzzle_hash: "21".repeat(32),
+            recipient: None,
+            to_user: false,
+        }];
+        let mut sage = sage_summary(1_000, 0, 0, 0);
+        sage.inputs[0].asset = Some(sage_api::Asset {
+            asset_id: Some(hex::encode(cat)),
+            ..xch()
+        });
+        sage.inputs[0].outputs = vec![TransactionOutput {
+            coin_id: "84".repeat(32),
+            amount: Amount::u64(0),
+            address: String::new(),
+            receiving: false,
+            burning: false,
+        }];
+        assert!(cross_check(&sage, &kit).is_ok());
+    }
+
+    /// Ignoring zeros must not hide a real payment: an amount on one side only still refuses.
+    #[test]
+    fn a_payment_only_one_engine_sees_still_refuses() {
+        let kit = kit_summary(1_000, 300, 700, 0);
+        let sage = sage_summary(1_000, 0, 1_000, 0);
+        assert!(cross_check(&sage, &kit).is_err());
     }
 
     #[test]
