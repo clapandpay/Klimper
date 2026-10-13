@@ -13,7 +13,7 @@
              website, with no hosting on our side; a dApp's SDK uses it before a wallet has
              announced a link base. Universal links (applinks:clapandpay.com) are in the
              entitlements. Hand-maintained on purpose: tauri-plugin-deep-link's own config would
-             rewrite the entitlements and drop webcredentials (docs/xchonnect-links.md). -->
+             rewrite the hand-maintained entitlements (docs/xchonnect-links.md). -->
         <key>CFBundleURLTypes</key>
         <array>
             <dict>

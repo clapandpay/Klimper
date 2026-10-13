@@ -18,6 +18,7 @@
 // whenever the app comes to the front, and once more a moment later, for a request the
 // message loop fetches right as the app resumes.
 
+import { useBiometric } from '@/hooks/useBiometric';
 import { xchonnectEnabled } from '@/lib/features';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -36,7 +37,7 @@ export interface ApprovalQueue {
    * Answer one approval. The queue drops it either way; `false` means the wallet no longer
    * had it (timed out, withdrawn, session ended), so nothing was signed.
    */
-  readonly answer: (id: string, approved: boolean) => Promise<boolean>;
+  readonly answer: (id: string, approved: boolean) => Promise<Answered>;
   /** Withdraw one approval; the website is told it was cancelled. `false` as for `answer`. */
   readonly cancel: (id: string) => Promise<boolean>;
   readonly reload: () => Promise<void>;
@@ -44,6 +45,9 @@ export interface ApprovalQueue {
 
 /** The second look after coming to the front. */
 const RELOAD_AGAIN_MS = 1500;
+
+/** How an answer ended: sent, no longer waiting, or not confirmed by Face ID. */
+export type Answered = 'answered' | 'gone' | 'unconfirmed';
 
 export function useXchonnectApprovals(): ApprovalQueue {
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -95,19 +99,31 @@ export function useXchonnectApprovals(): ApprovalQueue {
     };
   }, [reload]);
 
-  const answer = useCallback(async (id: string, approved: boolean) => {
-    let taken = true;
-    try {
-      await xchonnect.resolveApproval(id, approved);
-    } catch (problem) {
-      // The approval timed out, was withdrawn or the session ended while the screen was
-      // open. It is no longer waiting, and nothing was signed.
-      setError(String(problem));
-      taken = false;
-    }
-    setApprovals((current) => current.filter((item) => item.id !== id));
-    return taken;
-  }, []);
+  const { promptIfEnabled } = useBiometric();
+
+  /**
+   * `'unconfirmed'`: an approval that Sage's "Require biometrics" did not confirm. Nothing was
+   * sent, and the request is still waiting, so the person can try again. Every signing path
+   * of Sage asks the same way (`ConfirmationDialog`, WalletConnect, offers); without it the
+   * slider alone would sign (TASK-126 audit).
+   */
+  const answer = useCallback(
+    async (id: string, approved: boolean): Promise<Answered> => {
+      if (approved && !(await promptIfEnabled())) return 'unconfirmed';
+      let taken = true;
+      try {
+        await xchonnect.resolveApproval(id, approved);
+      } catch (problem) {
+        // The approval timed out, was withdrawn or the session ended while the screen was
+        // open. It is no longer waiting, and nothing was signed.
+        setError(String(problem));
+        taken = false;
+      }
+      setApprovals((current) => current.filter((item) => item.id !== id));
+      return taken ? 'answered' : 'gone';
+    },
+    [promptIfEnabled],
+  );
 
   const cancel = useCallback(async (id: string) => {
     let taken = true;

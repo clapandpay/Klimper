@@ -1,3 +1,0 @@
-[default]
-description = "Status, enrolment, unlock, lock and removal of the Klimper passkey, and erasing the keys when the passkey is lost."
-permissions = ["allow-status", "allow-enroll", "allow-unlock", "allow-lock", "allow-remove", "allow-erase"]

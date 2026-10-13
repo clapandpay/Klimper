@@ -34,7 +34,7 @@ use xchonnect_wallet_kit::{AssetId, AssetLimit, DailySpend, DappPermissions, Per
 use crate::error::{Error, Result};
 
 /// Keyring service name. Deliberately distinct from anything Sage uses: Klimper's signing
-/// keys are a file (`keys.bin`) opened by the passkey, and no Xchonnect secret may ever be
+/// keys are Sage's own file (`keys.bin`), and no Xchonnect secret may ever be
 /// written there (clapandpay TASK-073, decision-008 point 4).
 pub const KEYRING_SERVICE: &str = "com.clapandpay.klimper.xchonnect";
 
@@ -84,7 +84,7 @@ fn keychain_error(status: i32) -> Error {
 /// a backup, never on another device, and readable while the phone is locked once it has been
 /// unlocked after starting (TASK-125.04). A website's request must reach Klimper with the
 /// phone in a pocket: the message loop opens, persists and answers it in the background, and
-/// that needs the session state. Signing needs the user anyway (the passkey, the slider). An
+/// that needs the session state. Signing needs the user anyway (the slider). An
 /// item written by an earlier version (`WhenUnlocked`, `WhenUnlockedThisDeviceOnly`) is
 /// re-marked the first time it is read.
 // The only unsafe code in the plugin: calls into Apple's Security framework. Every pointer

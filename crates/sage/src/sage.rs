@@ -145,13 +145,6 @@ impl Sage {
             fs::write(&key_path, self.keychain.to_bytes()?)?;
         }
 
-        // Klimper: with a passkey envelope next to keys.bin (tauri-plugin-klimper-passkey), the
-        // keychain stays locked until the passkey opens it, even with no secret in it yet, so
-        // nothing can be added under the empty password before the lock screen asks.
-        if self.path.join("passkey.json").try_exists()? {
-            self.keychain.lock();
-        }
-
         Ok(())
     }
 
@@ -542,10 +535,7 @@ impl Sage {
     }
 
     pub fn save_keychain(&self) -> Result<()> {
-        // Write then rename, so a crash never leaves a half-written keychain behind.
-        let temp_path = self.path.join("keys.bin.tmp");
-        fs::write(&temp_path, self.keychain.to_bytes()?)?;
-        fs::rename(temp_path, self.path.join("keys.bin"))?;
+        fs::write(self.path.join("keys.bin"), self.keychain.to_bytes()?)?;
         Ok(())
     }
 }

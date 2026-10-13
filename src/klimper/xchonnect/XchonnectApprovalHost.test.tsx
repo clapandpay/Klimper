@@ -26,6 +26,11 @@ vi.mock('@/components/Layout', () => ({
 vi.mock('@/components/Header', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
+// Sage's "Require biometrics": confirmed unless a test says otherwise.
+const promptIfEnabled = vi.fn().mockResolvedValue(true);
+vi.mock('@/hooks/useBiometric', () => ({
+  useBiometric: () => ({ promptIfEnabled: () => promptIfEnabled() }),
+}));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 vi.mock('../useTicker', () => ({ useTicker: () => 'XCH' }));
 const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -181,6 +186,42 @@ describe('the overlay', () => {
     await waitFor(() =>
       expect(screen.getByTestId('asset-net').textContent).toBe('−2 XCH'),
     );
+  });
+
+  it('asks for Face ID before approving, and signs nothing without it (TASK-126 audit)', async () => {
+    pendingApprovals.mockResolvedValue([request('a1', -1_000_000_000_000)]);
+    promptIfEnabled.mockResolvedValueOnce(false);
+    renderScreen(<XchonnectApprovalHost />);
+
+    await waitFor(() => screen.getByTestId('approval-overlay'));
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(promptIfEnabled).toHaveBeenCalledTimes(1));
+    expect(resolveApproval).not.toHaveBeenCalled();
+    // Still waiting: the person can approve again and confirm this time.
+    expect(screen.getByTestId('approval-overlay')).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() =>
+      expect(resolveApproval).toHaveBeenCalledWith('a1', true),
+    );
+  });
+
+  it('rejects without asking for Face ID', async () => {
+    pendingApprovals.mockResolvedValue([request('a1', -1_000_000_000_000)]);
+    renderScreen(<XchonnectApprovalHost />);
+
+    await waitFor(() => screen.getByTestId('approval-overlay'));
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    await waitFor(() =>
+      expect(resolveApproval).toHaveBeenCalledWith('a1', false),
+    );
+    expect(promptIfEnabled).not.toHaveBeenCalled();
   });
 
   it('puts a request off with Later, without answering it, and a new one reopens', async () => {

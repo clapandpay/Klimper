@@ -4,7 +4,7 @@ keywords = ["chia", "wallet", "blockchain", "crypto"]
 categories = ["cryptography::cryptocurrencies"]
 
 [workspace]
-members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-passkey", "tauri-plugin-klimper-xchonnect", "tauri-plugin-klimper-jingle"]
+members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-xchonnect", "tauri-plugin-klimper-jingle", "tauri-plugin-klimper-storage"]
 resolver = "2"
 
 [workspace.lints.rust]
@@ -80,9 +80,9 @@ tauri-plugin-safe-area-insets = "0.1.0"
 # anywhere: its build script would rewrite the hand-maintained iOS entitlements (TASK-072.01).
 tauri-plugin-deep-link = "~2.4"
 tauri-plugin-sage = { path = "./tauri-plugin-sage" }
-tauri-plugin-klimper-passkey = { path = "./tauri-plugin-klimper-passkey" }
 tauri-plugin-klimper-xchonnect = { path = "./tauri-plugin-klimper-xchonnect" }
 tauri-plugin-klimper-jingle = { path = "./tauri-plugin-klimper-jingle" }
+tauri-plugin-klimper-storage = { path = "./tauri-plugin-klimper-storage" }
 tauri-build = "2.5.5"
 tauri-plugin = "2.5.3"
 
@@ -105,7 +105,6 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
-zeroize = "1.8.2"
 
 # Async
 tokio = "1.39.2"

@@ -17,6 +17,9 @@ vi.mock('@/components/Header', () => ({
     </h1>
   ),
 }));
+vi.mock('@/hooks/useBiometric', () => ({
+  useBiometric: () => ({ promptIfEnabled: () => Promise.resolve(true) }),
+}));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 
 const listSessions = vi.fn();

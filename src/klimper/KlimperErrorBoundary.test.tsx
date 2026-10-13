@@ -43,7 +43,6 @@ vi.mock('react-router-dom', async (original) => ({
 vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({ scannerRoutes: null }));
 vi.mock('./xchonnect/XchonnectRoutes', () => ({ xchonnectRoutes: null }));
-vi.mock('./PasskeyGate', () => ({ PasskeyGate: () => null }));
 const overlayThrows = vi.hoisted(() => ({ value: false }));
 vi.mock('./xchonnect/XchonnectApprovalHost', () => ({
   XchonnectApprovalHost: () => {

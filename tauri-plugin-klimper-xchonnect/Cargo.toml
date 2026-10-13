@@ -35,7 +35,6 @@ tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
 reqwest = { workspace = true, features = ["rustls-tls", "charset", "http2"] }
 hex = { workspace = true }
 tracing = { workspace = true }
-zeroize = { workspace = true }
 rand = { workspace = true }
 
 # The same 0.36 line as Sage's chia-wallet-sdk and xchonnect-wallet-kit, so Cargo.lock

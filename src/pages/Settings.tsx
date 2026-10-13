@@ -38,7 +38,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useInsets } from '@/contexts/SafeAreaContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { useBiometric } from '@/hooks/useBiometric';
-import { PasskeySettings } from '@/klimper/PasskeySettings';
 import { XchonnectSettings } from '@/klimper/xchonnect/XchonnectSettings';
 import { KlimperSettings } from '@/klimper/KlimperSettings';
 import { useColdWalletUnsigned } from '@/hooks/useColdWalletUnsigned';
@@ -349,8 +348,6 @@ function GlobalSettings() {
           }
         />
       </SettingsSection>
-
-      <PasskeySettings />
 
       <XchonnectSettings />
 

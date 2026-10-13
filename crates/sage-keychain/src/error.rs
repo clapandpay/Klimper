@@ -22,7 +22,4 @@ pub enum KeychainError {
 
     #[error("Key already exists")]
     KeyExists,
-
-    #[error("Keychain is locked")]
-    Locked,
 }

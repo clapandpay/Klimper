@@ -1,28 +1,48 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Bringing in the Clap and Pay wallet: nothing is imported before the person has seen the
-// answer code and said the page shows the same. (The cryptography of the handoff is tested
-// with the page's side in green-envelope/packages/handoff.)
+// Bringing in the Clap and Pay wallet (handoff version 2, TASK-129): Klimper opens the page and
+// waits; the answer comes back as a clapandpay.com/klimper/return link that the phone hands to
+// this app, and its 24 words are imported with Sage's mnemonic import. (The cryptography of the
+// handoff is tested with the page's side in green-envelope/packages/handoff.)
 
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const importKey = vi.fn().mockResolvedValue(undefined);
+const WORDS =
+  'history indoor salmon ripple side tent tourist decline venture turn diary sad awkward minute barrel much dumb asset milk mandate coach ritual reflect any';
+const RETURN = 'https://clapandpay.com/klimper/return#cp2.answer';
+
+const importKey = vi.fn().mockResolvedValue({ fingerprint: 4242 });
 const payload = {
-  v: 1,
+  v: 2,
   network: 'testnet11',
-  address: 'txch1anxwneg6hlkmv2uff2mnqh0qhcp5g24hkkfh5j6m9w4t7vjejfts5au9zn',
-  masterSk: '3f2d5b3d12cda13881eefced740a88d33e0d7acd279c99d53bb6797a9066b2be',
+  address: 'txch1vwcxaqjcr0n6022h0yrw3wp6vghns6cdd0jnl7g9ehhn27r8kf3qzhsmh3',
+  words: WORDS,
 };
+const handoff = vi.hoisted(() => {
+  class HandoffError extends Error {
+    constructor(public readonly code: string) {
+      super(code);
+    }
+  }
+  return { HandoffError, open: vi.fn(), made: 0 };
+});
 
 vi.mock('@/lib/clapandpayHandoff', () => ({
-  HandoffError: class extends Error {},
-  createHandoffRequest: () =>
-    Promise.resolve({
-      url: 'https://envelope.test/connect#v=1&k=key',
-      checkCode: '111111',
-      open: () => Promise.resolve({ payload, answerCode: '481516' }),
-    }),
+  HandoffError: handoff.HandoffError,
+  createHandoffRequest: () => {
+    handoff.made += 1;
+    return Promise.resolve({
+      url: `https://envelope.test/connect#v=2&k=key${handoff.made}&n=nonce`,
+      open: (link: string) => handoff.open(link),
+    });
+  },
 }));
 vi.mock('@/components/SafeAreaView', () => ({
   default: ({ children }: { children: unknown }) => children,
@@ -37,61 +57,161 @@ vi.mock('@/contexts/WalletContext', () => ({ useWallet: () => wallet }));
 // that makes the request, forever.
 const errors = vi.hoisted(() => ({ addError: () => undefined }));
 vi.mock('@/hooks/useErrors', () => ({ useErrors: () => errors }));
-vi.mock('@/klimper/passkey', () => ({
-  passkey: { status: () => Promise.resolve(null), enroll: vi.fn() },
-  notifyPasskeyChanged: vi.fn(),
+const biometric = vi.hoisted(() => ({
+  available: true,
+  enabled: false,
+  enableIfAvailable: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('@/hooks/useBiometric', () => ({ useBiometric: () => biometric }));
 vi.mock('@/lib/features', () => ({
   clapAndPayOrigin: 'https://envelope.test',
 }));
-vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
-  readText: () => Promise.resolve('cp1.answer'),
-}));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
+const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
+vi.mock('react-toastify', () => ({ toast: { info: vi.fn() } }));
 vi.mock('@/state', () => ({ clearState: vi.fn(), fetchState: vi.fn() }));
+const sage = vi.hoisted(() => ({
+  login: vi.fn().mockResolvedValue(null),
+  getKey: vi.fn().mockResolvedValue({ key: null }),
+  keys: [] as {
+    fingerprint: number;
+    has_secrets: boolean;
+    mnemonic: string | null;
+  }[],
+}));
 vi.mock('@/bindings', () => ({
   commands: {
     importKey: (...args: unknown[]) => importKey(...args),
     getNetwork: () => Promise.resolve({ network: { name: 'testnet11' } }),
-    getKey: () => Promise.resolve({ key: null }),
-    getKeys: () => Promise.resolve({ keys: [] }),
+    getKey: (req: unknown) => sage.getKey(req),
+    login: (req: unknown) => sage.login(req),
+    getKeys: () => Promise.resolve({ keys: sage.keys }),
+    getSecretKey: ({ fingerprint }: { fingerprint: number }) => {
+      const key = sage.keys.find((k) => k.fingerprint === fingerprint);
+      return Promise.resolve({
+        secrets: key?.mnemonic
+          ? { mnemonic: key.mnemonic, secret_key: 'sk' }
+          : null,
+      });
+    },
   },
+}));
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock('react-router-dom', async (original) => ({
+  ...(await original<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
 }));
 
 const { renderScreen } = await import('./testHarness');
 const { default: ClapAndPayConnect } = await import('./ClapAndPayConnect');
+const { offerClapAndPayReturn } = await import('./clapandpayReturn');
 
 afterEach(() => {
   cleanup();
-  importKey.mockClear();
+  importKey.mockReset();
+  importKey.mockResolvedValue({ fingerprint: 4242 });
+  sage.login.mockClear();
+  sage.getKey.mockClear();
+  sage.keys = [];
+  navigate.mockClear();
+  biometric.enableIfAvailable.mockClear();
+  handoff.open.mockReset();
+  openUrl.mockClear();
 });
 
-async function paste() {
+async function openThePage() {
   renderScreen(<ClapAndPayConnect />);
   const button = await screen.findByRole('button', {
-    name: /Paste what the page gave you/,
+    name: /Open envelope\.test/,
   });
   await waitFor(() => expect(button).toHaveProperty('disabled', false));
   fireEvent.click(button);
-  return screen.findByTestId('answer-code');
+  await waitFor(() => expect(openUrl).toHaveBeenCalledTimes(1));
+  return openUrl.mock.calls[0]?.[0] as string;
 }
 
-describe('Clap and Pay connect', () => {
-  it('shows the answer code and imports only after the person confirms it', async () => {
-    expect((await paste()).textContent).toBe('481 516');
-    expect(importKey).not.toHaveBeenCalled();
+describe('Clap and Pay connect, version 2', () => {
+  it('opens the page with the request and imports the 24 words that come back', async () => {
+    handoff.open.mockResolvedValue(payload);
+    const url = await openThePage();
+    expect(url).toMatch(/^https:\/\/envelope\.test\/connect#v=2&k=/);
+    // Nothing to paste, no codes to compare.
+    expect(screen.queryByRole('button', { name: /paste/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Same number' }));
+    act(() => offerClapAndPayReturn(RETURN));
     await waitFor(() => expect(importKey).toHaveBeenCalledTimes(1));
+    expect(handoff.open).toHaveBeenCalledWith(RETURN);
     expect(importKey.mock.calls[0]?.[0]).toMatchObject({
-      key: payload.masterSk,
+      name: 'Clap and Pay',
+      key: WORDS,
     });
   });
 
-  it('imports nothing when the person says the number differs', async () => {
-    await paste();
-    fireEvent.click(screen.getByRole('button', { name: 'Different' }));
-    expect(await screen.findByText(/did not come from/)).toBeTruthy();
+  it('imports nothing from an answer it cannot open, and starts again with a new key', async () => {
+    handoff.open.mockRejectedValue(new handoff.HandoffError('expired'));
+    await openThePage();
+    const made = handoff.made;
+
+    act(() => offerClapAndPayReturn(RETURN));
+    expect(await screen.findByText(/longer than two minutes/)).toBeTruthy();
     expect(importKey).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    await waitFor(() => expect(handoff.made).toBe(made + 1));
+  });
+
+  it('offers Face ID after the import when it is off (TASK-126 audit)', async () => {
+    handoff.open.mockResolvedValue(payload);
+    await openThePage();
+    act(() => offerClapAndPayReturn(RETURN));
+    const turnOn = await screen.findByRole('button', {
+      name: 'Turn on Face ID',
+    });
+    fireEvent.click(turnOn);
+    await waitFor(() =>
+      expect(biometric.enableIfAvailable).toHaveBeenCalledTimes(1),
+    );
+  });
+});
+
+describe('the same wallet a second time (TASK-130)', () => {
+  it('opens the account it already is instead of adding a duplicate', async () => {
+    importKey.mockRejectedValue({
+      kind: 'internal',
+      reason: 'Keychain error: Key already exists',
+    });
+    sage.keys = [
+      { fingerprint: 111, has_secrets: true, mnemonic: 'other words' },
+      { fingerprint: 222, has_secrets: false, mnemonic: null },
+      { fingerprint: 333, has_secrets: true, mnemonic: WORDS },
+    ];
+    handoff.open.mockResolvedValue(payload);
+    await openThePage();
+    act(() => offerClapAndPayReturn(RETURN));
+
+    await waitFor(() =>
+      expect(sage.login).toHaveBeenCalledWith({ fingerprint: 333 }),
+    );
+    expect(importKey).toHaveBeenCalledTimes(1);
+    expect(sage.getKey).toHaveBeenCalledWith({ fingerprint: 333 });
+  });
+
+  it('keeps the import when Face ID is declined', async () => {
+    handoff.open.mockResolvedValue(payload);
+    await openThePage();
+    act(() => offerClapAndPayReturn(RETURN));
+    fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    expect(navigate).toHaveBeenCalledWith('/wallet');
+    expect(importKey).toHaveBeenCalledTimes(1);
+    expect(biometric.enableIfAvailable).not.toHaveBeenCalled();
+  });
+});
+
+describe('a return link with nobody waiting', () => {
+  it('is dropped with a word to the person, and opens nothing', async () => {
+    const { toast } = await import('react-toastify');
+    offerClapAndPayReturn(RETURN);
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(handoff.open).not.toHaveBeenCalled();
   });
 });

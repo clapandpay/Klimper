@@ -218,7 +218,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_klimper_passkey::init())
+        // Klimper: wallet data out of phone backups, the one change from upstream key storage.
+        .plugin(tauri_plugin_klimper_storage::init())
         // Klimper: dApp connections over Xchonnect (clapandpay decision-008). Every
         // entry point in the webview is behind VITE_ENABLE_XCHONNECT.
         .plugin(tauri_plugin_klimper_xchonnect::init())

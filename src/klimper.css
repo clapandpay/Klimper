@@ -223,12 +223,6 @@
   }
 }
 
-/* The passkey lock screen must stay opaque over the backdrop. */
-:root:is(.theme-light, .theme-dark)
-  .fixed.inset-0.bg-background[role='dialog'] {
-  background: var(--canvas);
-}
-
 /* Focus: a 2px teal ring, offset from the control. */
 :root:is(.theme-light, .theme-dark) :focus-visible {
   outline: 2px solid var(--ring);

@@ -14,13 +14,13 @@
 //! [`KlimperSigner::sign_all`] then opens the keychain **once** and produces every
 //! signature of the approved plan. There is no prompt per signature.
 //!
-//! With a passkey enrolled, `keychain.password()` fails with `Locked` until the passkey has
-//! unlocked it, and nothing is signed. A fresh platform authentication per request on the
-//! desktop (Touch ID) is a follow-up: it needs Objective-C calls the workspace's
-//! `unsafe_code = "forbid"` rules out here.
+//! The keychain is Sage's own, opened with Sage's empty password, as every Sage endpoint
+//! does. A fresh platform authentication per request on the desktop (Touch ID) is a
+//! follow-up: it needs Objective-C calls the workspace's `unsafe_code = "forbid"` rules out
+//! here.
 //!
 //! Secret key material lives only inside one `sign_all` call and is dropped at its end.
-//! The keychain password is a `Zeroizing<Vec<u8>>`; `chia_bls::SecretKey` has neither
+//! `chia_bls::SecretKey` has neither
 //! `Drop` nor `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed. That is a
 //! chia-bls limitation, recorded as a follow-up rather than papered over (the workspace
 //! denies `unsafe_code`, so it cannot be scrubbed from here).
@@ -37,7 +37,7 @@ use xchonnect_wallet_kit::{Network, Ownership, Signer, SignerError};
 
 use crate::error::{Error, Result};
 
-/// What `src-tauri` manages, and what `tauri-plugin-klimper-passkey` locks.
+/// What `src-tauri` manages.
 pub type AppState = Arc<Mutex<Sage>>;
 
 /// How many derivations are read per database page.
@@ -276,13 +276,8 @@ impl Signer for KlimperSigner {
         let fingerprint = self.fingerprint;
         let secrets = tauri::async_runtime::block_on(async move {
             let sage = state.lock().await;
-            // With a passkey enrolled this fails with `Locked` until the passkey has
-            // opened the keychain.
-            let password = sage.keychain.password()?;
-            let (_mnemonic, Some(master)) =
-                sage.keychain.extract_secrets(fingerprint, &password)?
-            else {
-                return Err(Error::WalletLocked);
+            let (_mnemonic, Some(master)) = sage.keychain.extract_secrets(fingerprint, b"")? else {
+                return Err(Error::NoSigningKey);
             };
             Ok(wanted
                 .into_iter()

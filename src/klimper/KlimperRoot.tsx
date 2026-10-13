@@ -10,7 +10,6 @@ import { t } from '@lingui/core/macro';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { klimperCoinsEnabled } from '@/lib/features';
 import { KlimperErrorBoundary } from './KlimperErrorBoundary';
-import { PasskeyGate } from './PasskeyGate';
 import { XchonnectApprovalHost } from './xchonnect/XchonnectApprovalHost';
 import { listenForXchonnectLinks } from './xchonnect/xchonnectDeepLink';
 import {
@@ -70,16 +69,14 @@ function useDeepLinks() {
 }
 
 /**
- * The passkey gate over the app, and the approval overlay over every screen. The overlay
- * has a boundary of its own (`KlimperErrorBoundary`), cleared on the next route; the gate
- * has none, so that a failed gate never leaves the wallet open.
+ * The approval overlay over every screen, with a boundary of its own
+ * (`KlimperErrorBoundary`), cleared on the next route.
  */
 export function KlimperRoot() {
   const hash = useHash();
   useDeepLinks();
   return (
     <>
-      <PasskeyGate />
       {KlimperSound && (
         <Suspense fallback={null}>
           <KlimperSound />

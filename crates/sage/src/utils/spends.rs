@@ -11,9 +11,8 @@ impl Sage {
     ) -> Result<SpendBundle> {
         let wallet = self.wallet()?;
 
-        let (_mnemonic, Some(master_sk)) = self
-            .keychain
-            .extract_secrets(wallet.fingerprint, &self.keychain.password()?)?
+        let (_mnemonic, Some(master_sk)) =
+            self.keychain.extract_secrets(wallet.fingerprint, b"")?
         else {
             return Err(Error::NoSigningKey);
         };

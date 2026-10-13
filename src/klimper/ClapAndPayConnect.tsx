@@ -3,13 +3,13 @@
 //
 // "Use my Clap and Pay money": brings the wallet that was made on clapandpay.com (with a passkey,
 // when somebody opened a Green Envelope) into Klimper. A passkey belongs to a website, so the
-// face or finger check happens on that page; the page answers with one line of text that only
-// this app instance can read (src/lib/clapandpayHandoff.ts). From there it is Sage's ordinary
-// key import: nothing in the engine or the app bridge is touched. Sage keeps that key under the
-// empty password, so where a passkey is available the next step offers to lock it (TASK-057).
-// Before anything is imported, the answer code is shown: the page shows the same six digits next
-// to its answer, and an answer that did not come from the page (a swapped clipboard) cannot
-// match them.
+// face or finger check happens on that page. Klimper makes a one-time key and a nonce, opens the
+// page, and the page answers with a clapandpay.com/klimper/return link that the phone hands to
+// this app alone (handoff version 2, TASK-129, src/lib/clapandpayHandoff.ts): the wallet's 24
+// words, sealed to that key, opened once and only within two minutes. From there it is Sage's
+// ordinary mnemonic import: nothing in the engine or the app bridge is touched, and Sage's own
+// screens show and export the words. Sage's "Biometric Authentication" setting guards spending,
+// and it is off until turned on, so the import ends by offering it (TASK-126 audit).
 import Container from '@/components/Container';
 import Header from '@/components/Header';
 import SafeAreaView from '@/components/SafeAreaView';
@@ -24,20 +24,20 @@ import {
 } from '@/components/ui/card';
 import { LoadingButton } from '@/components/ui/loading-button';
 import { useWallet } from '@/contexts/WalletContext';
+import { useBiometric } from '@/hooks/useBiometric';
 import { useErrors } from '@/hooks/useErrors';
-import { notifyPasskeyChanged, passkey } from '@/klimper/passkey';
 import {
   createHandoffRequest,
   HandoffError,
   HandoffPayload,
   HandoffRequest,
 } from '@/lib/clapandpayHandoff';
+import { awaitClapAndPayReturn } from './clapandpayReturn';
 import { clapAndPayOrigin } from '@/lib/features';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { commands } from '@/bindings';
 import { clearState, fetchState } from '@/state';
@@ -48,10 +48,36 @@ const pageHost = new URL(clapAndPayOrigin).host;
 
 function problemText(error: unknown): string | null {
   if (!(error instanceof HandoffError)) return null;
-  if (error.code === 'wrong_receiver') {
-    return t`That answer was made for another request. Open the page again from here.`;
+  if (error.code === 'expired' || error.code === 'used') {
+    return t`That took longer than two minutes. Start again.`;
   }
-  return t`That is not an answer from ${pageHost}. Copy it there and paste again.`;
+  if (error.code === 'wrong_receiver') {
+    return t`That answer was made for another request. Start again.`;
+  }
+  return t`That is not an answer from ${pageHost}. Start again.`;
+}
+
+/** Sage's answer to a key it already holds (`KeychainError::KeyExists`, kind `internal`). */
+function isKeyExists(error: unknown): boolean {
+  const reason = (error as { reason?: unknown } | null)?.reason;
+  return typeof reason === 'string' && /key already exists/i.test(reason);
+}
+
+/**
+ * The account whose recovery words these are, or null. Sage has no lookup by words, so each
+ * account with secrets is asked for its words and compared here, in memory; only on a second
+ * import of the same wallet, and nothing of it is shown or kept.
+ */
+async function accountWithWords(words: string): Promise<number | null> {
+  const { keys } = await commands.getKeys({});
+  for (const key of keys) {
+    if (!key.has_secrets) continue;
+    const { secrets } = await commands.getSecretKey({
+      fingerprint: key.fingerprint,
+    });
+    if (secrets?.mnemonic?.trim() === words) return key.fingerprint;
+  }
+  return null;
 }
 
 export default function ClapAndPayConnect() {
@@ -64,28 +90,26 @@ export default function ClapAndPayConnect() {
   const [opened, setOpened] = useState(false);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  // An opened answer waiting for the person to compare its code with the page's.
-  const [confirm, setConfirm] = useState<{
-    payload: HandoffPayload;
-    answerCode: string;
-  } | null>(null);
+  // Bumped by "Start again": a fresh key and nonce, the old request forgotten.
+  const [attempt, setAttempt] = useState(0);
   // An answer for another network than Klimper's: kept, so one tap can switch and finish.
   const [elsewhere, setElsewhere] = useState<HandoffPayload | null>(null);
-  // After the import: offer the passkey, and say so if it would lock other wallets too.
-  const [offerLock, setOfferLock] = useState<{ otherWallets: boolean } | null>(
-    null,
-  );
-  const [locking, setLocking] = useState(false);
+  const biometric = useBiometric();
+  /** After the import: Sage's Face ID check is off, and the phone has Face ID. */
+  const [offerBiometric, setOfferBiometric] = useState(false);
+  const [enabling, setEnabling] = useState(false);
 
   useEffect(() => {
     let current = true;
+    setRequest(null);
+    setOpened(false);
     createHandoffRequest(clapAndPayOrigin)
       .then((made) => current && setRequest(made))
       .catch(addError);
     return () => {
       current = false;
     };
-  }, [addError]);
+  }, [addError, attempt]);
 
   const openPage = () => {
     if (!request) return;
@@ -95,25 +119,46 @@ export default function ClapAndPayConnect() {
   };
 
   const bringIn = async (payload: HandoffPayload) => {
-    await commands.importKey({
-      name: 'Clap and Pay',
-      key: payload.masterSk,
-      derivation_index: 5000,
-      hardened: false,
-      unhardened: true,
-      emoji: '🟢',
-    });
+    let fingerprint: number;
+    try {
+      ({ fingerprint } = await commands.importKey({
+        name: 'Clap and Pay',
+        key: payload.words,
+        derivation_index: 5000,
+        hardened: false,
+        unhardened: true,
+        emoji: '🟢',
+      }));
+    } catch (error) {
+      // Brought in before: Sage refuses the same key twice. Open that account instead of
+      // adding a second one, whatever it was renamed to since.
+      if (!isKeyExists(error)) throw error;
+      const existing = await accountWithWords(payload.words);
+      if (existing === null) throw error;
+      fingerprint = existing;
+      await commands.login({ fingerprint });
+    }
     await fetchState();
-    const data = await commands.getKey({});
+    const data = await commands.getKey({ fingerprint });
     setWallet(data.key);
-
-    const status = await passkey.status().catch(() => null);
-    if (status?.supported && !status.enrolled) {
-      const { keys } = await commands.getKeys({});
-      setOfferLock({ otherWallets: keys.length > 1 });
+    if (biometric.available && !biometric.enabled) {
+      setOfferBiometric(true);
       return;
     }
     navigate('/wallet');
+  };
+
+  const turnOnBiometric = async () => {
+    setEnabling(true);
+    setProblem(null);
+    try {
+      await biometric.enableIfAvailable();
+      navigate('/wallet');
+    } catch (error) {
+      setProblem(String(error));
+    } finally {
+      setEnabling(false);
+    }
   };
 
   const fail = (error: unknown) => {
@@ -122,41 +167,32 @@ export default function ClapAndPayConnect() {
     else setProblem(text);
   };
 
-  const paste = async () => {
-    if (!request) return;
-    setPending(true);
-    setProblem(null);
-    setElsewhere(null);
-    try {
-      setConfirm(await request.open((await readText()) ?? ''));
-    } catch (error) {
-      fail(error);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  // The codes match: the answer is the page's. Now the network, then the import.
-  const accept = async () => {
-    if (!confirm || pending) return; // one import, however fast the taps
-    const { payload } = confirm;
-    setConfirm(null);
-    setPending(true);
-    setProblem(null);
-    try {
-      // Names, not kinds: the page says "testnet11", and so does Sage's network list.
-      const current = (await commands.getNetwork({})).network.name;
-      if (payload.network !== current) {
-        setElsewhere(payload);
-        return;
+  // The page answered through the return link: open it, then the network, then the import.
+  // The listener stays the same; what it does is this render's, through the ref.
+  const onAnswer = useRef<(link: string) => void>(() => undefined);
+  onAnswer.current = (link) => {
+    if (!request || pending) return;
+    void (async () => {
+      setPending(true);
+      setProblem(null);
+      setElsewhere(null);
+      try {
+        const payload = await request.open(link);
+        // Names, not kinds: the page says "testnet11", and so does Sage's network list.
+        const current = (await commands.getNetwork({})).network.name;
+        if (payload.network !== current) {
+          setElsewhere(payload);
+          return;
+        }
+        await bringIn(payload);
+      } catch (error) {
+        fail(error);
+      } finally {
+        setPending(false);
       }
-      await bringIn(payload);
-    } catch (error) {
-      fail(error);
-    } finally {
-      setPending(false);
-    }
+    })();
   };
+  useEffect(() => awaitClapAndPayReturn((link) => onAnswer.current(link)), []);
 
   // The same switch as the network setting, then the import it was waiting for.
   const switchAndBringIn = async () => {
@@ -171,7 +207,7 @@ export default function ClapAndPayConnect() {
     } catch (error) {
       fail(error);
     } finally {
-      // The key leaves memory either way; paste again to retry.
+      // The words leave memory either way; start again to retry.
       setElsewhere(null);
       setPending(false);
     }
@@ -179,21 +215,7 @@ export default function ClapAndPayConnect() {
 
   const theirNetwork = elsewhere?.network ?? '';
 
-  const lock = async () => {
-    setLocking(true);
-    setProblem(null);
-    try {
-      await passkey.enroll();
-      notifyPasskeyChanged();
-      navigate('/wallet');
-    } catch (error) {
-      setProblem(String(error));
-    } finally {
-      setLocking(false);
-    }
-  };
-
-  if (offerLock) {
+  if (offerBiometric) {
     return (
       <SafeAreaView>
         <Header title={t`Clap and Pay`} />
@@ -201,37 +223,30 @@ export default function ClapAndPayConnect() {
           <Card className='max-w-xl mx-auto'>
             <CardHeader className='text-center'>
               <CardTitle>
-                <Trans>Lock it with Face ID</Trans>
+                <Trans>Ask for Face ID before paying</Trans>
               </CardTitle>
               <CardDescription>
                 <Trans>
-                  The money is in Klimper now. Right now anyone who can open
-                  Klimper on this phone can spend it. With a passkey, Klimper
-                  only opens with your face.
+                  The money is in Klimper now. Right now anyone who has this
+                  phone unlocked can spend it. With Face ID on, Klimper asks for
+                  your face before every payment and before showing your
+                  recovery words.
                 </Trans>
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-3 text-center'>
-              {offerLock.otherWallets && (
-                <p className='text-sm text-muted-foreground'>
-                  <Trans>
-                    The passkey locks your other wallets in Klimper too. Have
-                    their recovery words written down first.
-                  </Trans>
-                </p>
-              )}
               <LoadingButton
                 className='w-full'
-                loading={locking}
+                loading={enabling}
                 loadingText={t`Waiting for Face ID…`}
-                onClick={lock}
+                onClick={turnOnBiometric}
               >
-                <Trans>Lock with Face ID</Trans>
+                <Trans>Turn on Face ID</Trans>
               </LoadingButton>
               <Button
                 className='w-full'
                 variant='ghost'
-                disabled={locking}
+                disabled={enabling}
                 onClick={() => navigate('/wallet')}
               >
                 <Trans>Not now</Trans>
@@ -265,77 +280,40 @@ export default function ClapAndPayConnect() {
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-6 text-center'>
-            <div>
-              <div className='text-sm text-muted-foreground'>
-                <Trans>The page will show this number too</Trans>
-              </div>
-              <div
-                className='font-mono text-4xl font-bold tracking-widest mt-1'
-                aria-live='polite'
-              >
-                {request
-                  ? `${request.checkCode.slice(0, 3)} ${request.checkCode.slice(3)}`
-                  : '··· ···'}
-              </div>
-            </div>
-
             <div className='space-y-3'>
               <Button
                 className='w-full'
                 variant={opened ? 'outline' : 'default'}
-                disabled={!request}
+                disabled={!request || pending}
                 onClick={openPage}
               >
-                <Trans>1. Open {pageHost}</Trans>
+                <Trans>Open {pageHost}</Trans>
               </Button>
-              <LoadingButton
-                className='w-full'
-                variant={opened ? 'default' : 'outline'}
-                disabled={!request}
-                loading={pending}
-                loadingText={t`Bringing it in…`}
-                onClick={paste}
-              >
-                <Trans>2. Paste what the page gave you</Trans>
-              </LoadingButton>
+              {opened && !problem && (
+                <p className='text-sm text-muted-foreground' aria-live='polite'>
+                  {pending ? (
+                    <Trans>Bringing it in…</Trans>
+                  ) : (
+                    <Trans>
+                      Say yes on the page with your face or fingerprint. It
+                      brings you back here.
+                    </Trans>
+                  )}
+                </p>
+              )}
+              {problem && (
+                <Button
+                  className='w-full'
+                  variant='outline'
+                  onClick={() => {
+                    setProblem(null);
+                    setAttempt((n) => n + 1);
+                  }}
+                >
+                  <Trans>Start again</Trans>
+                </Button>
+              )}
             </div>
-
-            {confirm && (
-              <Alert data-testid='answer-confirm'>
-                <AlertDescription className='space-y-3'>
-                  <p>
-                    <Trans>Same number on the page, next to the answer?</Trans>
-                  </p>
-                  <p
-                    className='font-mono text-4xl font-bold tracking-widest'
-                    data-testid='answer-code'
-                  >
-                    {`${confirm.answerCode.slice(0, 3)} ${confirm.answerCode.slice(3)}`}
-                  </p>
-                  <div className='flex gap-2'>
-                    <Button
-                      className='flex-1'
-                      disabled={pending}
-                      onClick={accept}
-                    >
-                      <Trans>Same number</Trans>
-                    </Button>
-                    <Button
-                      className='flex-1'
-                      variant='destructive'
-                      onClick={() => {
-                        setConfirm(null);
-                        setProblem(
-                          t`That answer did not come from ${pageHost}. Nothing was imported.`,
-                        );
-                      }}
-                    >
-                      <Trans>Different</Trans>
-                    </Button>
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
 
             {elsewhere && (
               <Alert>
@@ -366,9 +344,10 @@ export default function ClapAndPayConnect() {
 
             <p className='text-sm text-muted-foreground'>
               <Trans>
-                The key then lives in Klimper on this device. On a phone it
-                never goes into a backup. If you lose the device, open{' '}
-                {pageHost} again: your passkey brings the money back.
+                It then lives in Klimper on this device, as its own account with
+                24 recovery words you can show and write down. If you lose the
+                device, open {pageHost} again: your passkey brings the money
+                back.
               </Trans>
             </p>
           </CardContent>

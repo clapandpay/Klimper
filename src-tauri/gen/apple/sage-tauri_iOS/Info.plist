@@ -47,7 +47,7 @@
 	<key>NFCReaderUsageDescription</key>
 	<string>Klimper reads NFC tags that carry a Chia offer.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Klimper uses Face ID to unlock your wallet and to confirm payments.</string>
+	<string>Klimper uses Face ID to confirm payments and to show your recovery words.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

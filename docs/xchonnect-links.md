@@ -117,9 +117,8 @@ Three rules of the wiring:
 - **The plugin's own config is not used.** `plugins.deep-link` in a Tauri conf file makes
   the plugin's build script rewrite `gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`
   and `Info.plist` on every iOS build; it would replace `com.apple.developer.associated-domains`
-  with `applinks` entries only and so drop `webcredentials:clapandpay.com`, which the passkey
-  uses. The scheme and the domains are therefore hand-maintained in `Info.ios.plist` and the
-  entitlements, and `docs/UPSTREAM.md` lists both.
+  with whatever the plugin config lists. The scheme and the domains are therefore
+  hand-maintained in `Info.ios.plist` and the entitlements, and `docs/UPSTREAM.md` lists both.
 - **`WalletMeta.link` is still not announced** (`WALLET_LINK` in `pairing.rs`). Once a
   dApp SDK has seen it, it opens `<link>/pair#…` and `<link>/req#…` for every later pairing
   and request; until the AASA is served those go to Safari and a dead site, so announcing it
@@ -147,8 +146,8 @@ which only an Android build can verify.
 ### 2. The association has to be served
 
 - **iOS.** `applinks:clapandpay.com` is in
-  `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`, next to the
-  `webcredentials` entry the passkey work added. `green-envelope/apps/site/.well-known/apple-app-site-association`
+  `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`.
+  `green-envelope/apps/site/.well-known/apple-app-site-association`
   is the file to serve from `https://clapandpay.com/.well-known/` (the clapandpay-web image does), as
   `application/json`, with no redirect. It covers `/pair` and `/req` and nothing else, so
   every other path on the marketing site keeps opening in Safari. The Apple team id is in

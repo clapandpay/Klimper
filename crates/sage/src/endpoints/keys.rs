@@ -138,10 +138,7 @@ impl Sage {
                 let master_pk = master_sk.public_key();
 
                 let fingerprint = if req.save_secrets {
-                    {
-                        let password = self.keychain.password()?;
-                        self.keychain.add_secret_key(&master_sk, &password)?
-                    }
+                    self.keychain.add_secret_key(&master_sk, b"")?
                 } else {
                     self.keychain.add_public_key(&master_pk)?
                 };
@@ -178,10 +175,7 @@ impl Sage {
             let master_sk = SecretKey::from_seed(&mnemonic.to_seed(""));
             let master_pk = master_sk.public_key();
             let fingerprint = if req.save_secrets {
-                {
-                    let password = self.keychain.password()?;
-                    self.keychain.add_mnemonic(&mnemonic, &password)?
-                }
+                self.keychain.add_mnemonic(&mnemonic, b"")?
             } else {
                 self.keychain.add_public_key(&master_pk)?
             };
@@ -356,9 +350,7 @@ impl Sage {
     }
 
     pub fn get_secret_key(&self, req: GetSecretKey) -> Result<GetSecretKeyResponse> {
-        let (mnemonic, Some(secret_key)) = self
-            .keychain
-            .extract_secrets(req.fingerprint, &self.keychain.password()?)?
+        let (mnemonic, Some(secret_key)) = self.keychain.extract_secrets(req.fingerprint, b"")?
         else {
             return Ok(GetSecretKeyResponse { secrets: None });
         };

@@ -237,8 +237,15 @@ export function XchonnectApprovalHost() {
 
   const onAnswer = (approved: boolean) => {
     const dapp = current.dapp;
-    void answer(current.id, approved).then((taken) => {
-      if (!taken) {
+    const answered = answer(current.id, approved);
+    void answered.then((outcome) => {
+      if (outcome === 'unconfirmed') {
+        toast.info(
+          t`Nothing was signed. Approve again to confirm with Face ID.`,
+        );
+        return;
+      }
+      if (outcome === 'gone') {
         toast.error(
           t`The request from ${dapp} was no longer waiting. Nothing was signed.`,
         );
@@ -251,6 +258,7 @@ export function XchonnectApprovalHost() {
         toast.info(t`You rejected the request from ${dapp}.`);
       }
     });
+    return answered;
   };
 
   const onCancel = () => {
