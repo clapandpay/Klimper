@@ -45,8 +45,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { Hint } from '../Hint';
-import { AddressSwitch } from './XchonnectUi';
+import { AddressSwitch, OptionSwitch } from './XchonnectUi';
 import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
+import { allowsOptions, withOptionMethods } from './optionMethods';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
   CAT_PRECISION,
@@ -390,6 +391,12 @@ export default function XchonnectDappSettings() {
             <AddressSwitch
               all={session.allReceiveKeys}
               onChange={(all) => void apply({ allReceiveKeys: all })}
+            />
+            <OptionSwitch
+              on={allowsOptions(session.methods)}
+              onChange={(on) =>
+                void apply({ methods: withOptionMethods(session.methods, on) })
+              }
             />
           </CardContent>
         </Card>

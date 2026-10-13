@@ -175,6 +175,52 @@ describe('the addresses the website sees', () => {
   });
 });
 
+describe('option contracts (TASK-140)', () => {
+  const OPTIONS = [
+    'chia_mintOption',
+    'chia_exerciseOption',
+    'chia_claimOption',
+    'chia_transferOption',
+  ];
+
+  it('is off for a connection without the four methods, and turning it on adds them', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: [...DEFAULT_METHODS, ...OPTIONS],
+      }),
+    );
+  });
+
+  it('is on when all four are granted, and turning it off removes only them', async () => {
+    openSettings({
+      ...fresh,
+      methods: ['chainId', 'connect', ...OPTIONS, 'chia_send'],
+    });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('checked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: ['chainId', 'connect', 'chia_send'],
+      }),
+    );
+  });
+
+  it('shows off when only some of the four are granted', async () => {
+    openSettings({ ...fresh, methods: [...DEFAULT_METHODS, OPTIONS[0] ?? ''] });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    expect(
+      screen.getByLabelText('Option contracts').getAttribute('data-state'),
+    ).toBe('unchecked');
+  });
+});
+
 describe('a dangerous permission needs its own confirmation', () => {
   it('does not turn on unsafe signatures until the dialog is accepted', async () => {
     openSettings();

@@ -32,8 +32,12 @@ vi.mock('./xchonnect', () => ({
     inspectPairingUri: (uri: string) => inspectPairingUri(uri),
     approvePairing: (id: string) => approvePairing(id),
     cancelPairing: (id: string) => cancelPairing(id),
-    confirmSas: (id: string, matches: boolean, all?: boolean) =>
-      confirmSas(id, matches, all),
+    confirmSas: (
+      id: string,
+      matches: boolean,
+      all?: boolean,
+      options?: boolean,
+    ) => confirmSas(id, matches, all, options),
   },
   XCHONNECT_EVENTS: { pairing: 'pairing' },
   onXchonnectEvent: (_event: string, handler: (payload: unknown) => void) => {
@@ -288,6 +292,34 @@ describe('after the six digits match', () => {
 
     await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeDefined());
     // The receive addresses are shared unless the switch was turned off.
-    expect(confirmSas).toHaveBeenCalledWith('p1', true, true);
+    // The receive addresses are shared unless the switch was turned off; option contracts
+    // are not, unless it was turned on (TASK-140).
+    expect(confirmSas).toHaveBeenCalledWith('p1', true, true, false);
+  });
+
+  it('grants option contracts only when the switch was turned on', async () => {
+    inspectPairingUri.mockResolvedValue(preview);
+    approvePairing.mockResolvedValue({
+      pairingId: 'p1',
+      sas: '123456',
+      dappConfirmed: true,
+      deadline: Math.floor(Date.now() / 1000) + 300,
+    });
+    confirmSas.mockResolvedValue({ sessionId: 'sess-new' });
+
+    enterCode();
+    await waitFor(() => screen.getByRole('button', { name: 'Connect' }));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+    expect(screen.getByTestId('option-switch').textContent).toContain(
+      'they lock funds until a date',
+    );
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => screen.getByRole('button', { name: 'They match' }));
+    fireEvent.click(screen.getByRole('button', { name: 'They match' }));
+
+    await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeDefined());
+    expect(confirmSas).toHaveBeenCalledWith('p1', true, true, true);
   });
 });

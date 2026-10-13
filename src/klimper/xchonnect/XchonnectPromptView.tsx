@@ -18,8 +18,10 @@ import {
   ArrowRight,
   BadgeCheck,
   Clock,
+  FileSignature,
   Home,
   KeyRound,
+  Lock,
   PenLine,
   Send,
   ShieldCheck,
@@ -32,15 +34,16 @@ import {
   useApprovalAssets,
 } from './useApprovalAssets';
 import { Hint } from '../Hint';
-import { TradeCard, tradeAssets } from './XchonnectTrade';
+import { TradeCard, tradeAssets, walletTicker } from './XchonnectTrade';
+import { OptionCards, optionAssets } from './XchonnectOption';
 import {
   AssetView,
   BindingView,
-  claimedText,
   IntentView,
   formatAmount,
   formatMagnitude,
   MessagePromptView,
+  optionLabel,
   OutputView,
   PromptView,
   SpendPromptView,
@@ -128,7 +131,8 @@ function Asset({
       : null;
   const left =
     after === null ? '' : `${formatAmount(after, asset.precision)} ${label}`;
-  const ticker = claimedText(facts?.ticker);
+  // The wallet's ticker only when it may be used: never one that reads as the network's coin.
+  const ticker = asset.isXch ? '' : (walletTicker(facts, label) ?? '');
   // Looked up, and the wallet holds none of it: a CAT the user has never had.
   const unheld = !asset.isXch && facts !== undefined && facts.balance === null;
   const sign = asset.net.isNegative() ? '−' : asset.net.isZero() ? '' : '+';
@@ -241,9 +245,12 @@ function Binding({
   binding,
   partial,
   folded = false,
+  exercise = false,
 }: {
   readonly binding: BindingView | null;
   readonly partial: boolean;
+  /** The user uses an option: the binding is to the collateral, not a counterparty. */
+  readonly exercise?: boolean;
   /** Under a trade card, which lists the same payments: a long list folds away. */
   readonly folded?: boolean;
 }) {
@@ -268,10 +275,19 @@ function Binding({
       data-testid='prompt-partial'
     >
       <div className='font-medium'>
-        <Trans>One half of a trade</Trans>
+        {exercise ? (
+          <Trans>Tied to what you receive</Trans>
+        ) : (
+          <Trans>One half of a trade</Trans>
+        )}
       </div>
       <p className='text-muted-foreground'>
-        {binding?.allBound ? (
+        {exercise && binding?.allBound ? (
+          <Trans>
+            Klimper checked that your payment only goes out if the collateral
+            comes to you.
+          </Trans>
+        ) : binding?.allBound ? (
           <Trans>
             Klimper checked that your signature only pays out if the other side
             pays you.
@@ -357,8 +373,26 @@ function totals(outputs: readonly OutputView[]) {
 function Destinations({ view }: { readonly view: SpendPromptView }) {
   if (view.outputs.length === 0) return null;
   const prefix = view.xchLabel.toLowerCase();
-  const toOthers = view.outputs.filter((output) => !output.toUser);
-  const toUser = view.outputs.filter((output) => output.toUser);
+  // An option's collateral and launcher are locked, not paid (TASK-140): listed on their own.
+  const locked = view.outputs.filter((output) => output.option !== null);
+  const toOthers = view.outputs.filter(
+    (output) => !output.toUser && output.option === null,
+  );
+  const toUser = view.outputs.filter(
+    (output) => output.toUser && output.option === null,
+  );
+
+  if (locked.length > 0) {
+    return (
+      <div className='space-y-2'>
+        <Locked outputs={locked} />
+        {toOthers.length > 0 && (
+          <OthersList outputs={toOthers} view={view} prefix={prefix} />
+        )}
+        {toUser.length > 0 && <Change outputs={toUser} />}
+      </div>
+    );
+  }
 
   if (toOthers.length === 0) {
     return (
@@ -390,9 +424,94 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
   }
 
   return (
+    <div className='space-y-1.5'>
+      <OthersList outputs={toOthers} view={view} prefix={prefix} />
+      {toUser.length > 0 && <Change outputs={toUser} />}
+    </div>
+  );
+}
+
+/** The change line: what comes back to the user's own addresses. */
+function Change({ outputs }: { readonly outputs: readonly OutputView[] }) {
+  return (
+    <div className='xc-sub' data-testid='prompt-change'>
+      <Trans>Change back to you:</Trans>{' '}
+      {totals(outputs)
+        .map(
+          ([label, { amount, precision }]) =>
+            `${formatAmount(amount, precision)} ${label}`,
+        )
+        .join(', ')}
+    </div>
+  );
+}
+
+/**
+ * What an option mint locks (TASK-140): the collateral under the option, and the coin the
+ * option is launched from. Neither is a payment to anyone, so neither has an address here.
+ */
+function Locked({ outputs }: { readonly outputs: readonly OutputView[] }) {
+  return (
+    <ul className='xc-locked space-y-1 text-sm' data-testid='prompt-locked'>
+      {outputs.map((output, index) => {
+        const amount = `${formatAmount(output.amount, output.precision)} ${output.label}`;
+        const option = optionLabel(output.option?.launcherId ?? '');
+        return (
+          <li
+            // eslint-disable-next-line react/no-array-index-key
+            key={index}
+            className='flex items-start gap-2'
+            data-testid='locked-output'
+            data-role={output.option?.role}
+          >
+            {output.option?.role === 'collateral' ? (
+              <>
+                <Lock
+                  className='h-4 w-4 mt-0.5 shrink-0 text-muted-foreground'
+                  aria-hidden='true'
+                />
+                <span className='[overflow-wrap:anywhere]'>
+                  <Trans>
+                    <span className='font-semibold tabular-nums'>{amount}</span>{' '}
+                    locked under {option}
+                  </Trans>
+                </span>
+              </>
+            ) : (
+              <>
+                <FileSignature
+                  className='h-4 w-4 mt-0.5 shrink-0 text-muted-foreground'
+                  aria-hidden='true'
+                />
+                <span className='[overflow-wrap:anywhere] text-muted-foreground'>
+                  <Trans>
+                    <span className='tabular-nums'>{amount}</span> becomes{' '}
+                    {option}
+                  </Trans>
+                </span>
+              </>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Payments to others, each with its address. */
+function OthersList({
+  outputs,
+  view,
+  prefix,
+}: {
+  readonly outputs: readonly OutputView[];
+  readonly view: SpendPromptView;
+  readonly prefix: string;
+}) {
+  return (
     <div className='space-y-1.5' data-testid='prompt-outputs'>
       <ul className='space-y-1.5'>
-        {toOthers.map((output, index) => (
+        {outputs.map((output, index) => (
           <li
             // eslint-disable-next-line react/no-array-index-key
             key={index}
@@ -410,25 +529,20 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
               className='h-4 w-4 text-muted-foreground'
               aria-hidden='true'
             />
-            <Address
-              puzzleHash={output.recipient}
-              prefix={prefix}
-              testId='output-address'
-            />
+            {view.makesOffer && output.toSettlement ? (
+              <span data-testid='output-taker'>
+                <Trans>whoever takes the request</Trans>
+              </span>
+            ) : (
+              <Address
+                puzzleHash={output.recipient}
+                prefix={prefix}
+                testId='output-address'
+              />
+            )}
           </li>
         ))}
       </ul>
-      {toUser.length > 0 && (
-        <div className='xc-sub' data-testid='prompt-change'>
-          <Trans>Change back to you:</Trans>{' '}
-          {totals(toUser)
-            .map(
-              ([label, { amount, precision }]) =>
-                `${formatAmount(amount, precision)} ${label}`,
-            )
-            .join(', ')}
-        </div>
-      )}
     </div>
   );
 }
@@ -451,7 +565,22 @@ function Handling({ view }: { readonly view: SpendPromptView }) {
       >
         <Trans>Simulated by Klimper</Trans>
       </Badge>
-      {view.broadcasts &&
+      {view.makesOffer ? (
+        <Badge
+          icon={<PenLine className='h-3.5 w-3.5' aria-hidden='true' />}
+          testId='prompt-makes-offer'
+          hint={
+            <Trans>
+              Klimper built this request from your own coins and signs it. It
+              does not send it: the website hands it to a lender, and nothing
+              moves until one takes it.
+            </Trans>
+          }
+        >
+          <Trans>Signed by Klimper, not sent</Trans>
+        </Badge>
+      ) : (
+        view.broadcasts &&
         (view.walletBuilt ? (
           <Badge
             icon={<Send className='h-3.5 w-3.5' aria-hidden='true' />}
@@ -484,7 +613,8 @@ function Handling({ view }: { readonly view: SpendPromptView }) {
           >
             <Trans>Built by the website</Trans>
           </Badge>
-        ))}
+        ))
+      )}
       {view.crossChecked && (
         <Badge
           tone='verified'
@@ -521,22 +651,46 @@ function Intent({
   const kind = intent.kind;
   return (
     <div className='xc-intent space-y-2' data-testid='prompt-intent'>
-      <div className='flex items-center gap-1 text-sm'>
-        <span className='text-muted-foreground'>
-          <Trans>The website says</Trans>
-        </span>
-        {kind !== null && (
+      {intent.kindVerified ? (
+        <div
+          className='flex items-center gap-1 text-sm'
+          data-testid='intent-kind-verified'
+        >
+          <BadgeCheck
+            className='h-4 w-4 shrink-0 xc-verified'
+            aria-hidden='true'
+          />
           <span className='font-mono' data-testid='intent-kind'>
             {kind}
           </span>
-        )}
-        <Hint>
-          <Trans>
-            The label is the website’s own. Each line with a tick is checked by
-            Klimper.
-          </Trans>
-        </Hint>
-      </div>
+          <span className='text-muted-foreground'>
+            <Trans>verified by your wallet</Trans>
+          </span>
+          <Hint>
+            <Trans>
+              The website named what this request does, and Klimper checked in
+              its own simulation that it does exactly that.
+            </Trans>
+          </Hint>
+        </div>
+      ) : (
+        <div className='flex items-center gap-1 text-sm'>
+          <span className='text-muted-foreground'>
+            <Trans>The website says</Trans>
+          </span>
+          {kind !== null && (
+            <span className='font-mono' data-testid='intent-kind'>
+              {kind}
+            </span>
+          )}
+          <Hint>
+            <Trans>
+              The label is the website’s own. Each line with a tick is checked
+              by Klimper.
+            </Trans>
+          </Hint>
+        </div>
+      )}
       {intent.verified.length > 0 && (
         <ul className='space-y-1 text-sm'>
           {intent.verified.map((fact, index) => (
@@ -624,9 +778,20 @@ function Verdict({
 }
 
 function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
-  const facts = useApprovalAssets([...view.assets, ...tradeAssets(view.trade)]);
-  const trade = view.trade;
-  const sendsToOthers = view.outputs.some((output) => !output.toUser);
+  const facts = useApprovalAssets([
+    ...view.assets,
+    ...tradeAssets(view.trade),
+    ...optionAssets(view),
+  ]);
+  // A loan's card says what the trade card would, in the loan's own words (TASK-140).
+  const trade = view.loan === null ? view.trade : null;
+  const hasOptions = view.options.length > 0 || view.loan !== null;
+  const sendsToOthers = view.outputs.some(
+    (output) => !output.toUser && output.option === null,
+  );
+  // With a trade or an option card on top, the per-asset figures are detail: an option's
+  // locked collateral is not "paid", whatever the gross balance says.
+  const cardOnTop = trade !== null || hasOptions;
   // The fee is one figure. Both readings are shown only when they disagree.
   const showReserve =
     view.reserveFee.isGreaterThan(0) &&
@@ -640,9 +805,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         so a warning under a long list of outputs could otherwise never be seen. A trade's
         binding panel says what makes its "you receive" certain, so it follows the trade card.
       */}
-      {trade === null && (
-        <Binding binding={view.binding} partial={view.partial} />
-      )}
+      {!cardOnTop && <Binding binding={view.binding} partial={view.partial} />}
 
       {view.unknownPuzzles.length > 0 && (
         <Danger
@@ -675,10 +838,20 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         </Danger>
       )}
 
-      {trade !== null && (
+      {cardOnTop && (
         <>
-          <TradeCard trade={trade} facts={facts} xchLabel={view.xchLabel} />
-          <Binding binding={view.binding} partial={view.partial} folded />
+          {trade !== null && (
+            <TradeCard trade={trade} facts={facts} xchLabel={view.xchLabel} />
+          )}
+          <OptionCards view={view} facts={facts} />
+          <Binding
+            binding={view.binding}
+            partial={view.partial}
+            folded
+            exercise={view.options.some(
+              (effect) => effect.action === 'exercise' && effect.byUser,
+            )}
+          />
           <details className='xc-per-asset' data-testid='prompt-per-asset'>
             <summary className='cursor-pointer text-sm text-muted-foreground'>
               <Trans>Each asset, as simulated</Trans>
@@ -688,7 +861,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         </>
       )}
 
-      {trade === null && (
+      {!cardOnTop && (
         <Verdict view={view} facts={facts} sendsToOthers={sendsToOthers} />
       )}
 
@@ -894,6 +1067,8 @@ export function XchonnectPromptView({ view }: { readonly view: PromptView }) {
 export function promptHeadline(view: PromptView): React.ReactNode {
   if (view.kind === 'message') return <Trans>Sign a message</Trans>;
   if (view.kind === 'unreadable') return <Trans>Unreadable request</Trans>;
+  const option = optionHeadline(view);
+  if (option !== null) return option;
   // A take is wallet-built too, but it is a trade, not a payment (TASK-137). Several
   // offers taken together say how many (TASK-139): a count, not an amount.
   const offers = view.trade?.offers ?? 1;
@@ -908,4 +1083,45 @@ export function promptHeadline(view: PromptView): React.ReactNode {
   ) : (
     <Trans>Sign a spend</Trans>
   );
+}
+
+/** The headline of a request about option contracts or a loan (TASK-140), or null. */
+function optionHeadline(view: SpendPromptView): React.ReactNode {
+  if (view.loan !== null) {
+    return view.loan.role === 'borrower' ? (
+      <Trans>Request a loan</Trans>
+    ) : (
+      <Trans>Lend</Trans>
+    );
+  }
+  const first = view.options[0];
+  if (first === undefined) return null;
+  const count = view.options.filter((o) => o.action === first.action).length;
+  switch (first.action) {
+    case 'mint':
+      if (!first.creatorIsUser || !first.fundedByUser) {
+        return <Trans>New option</Trans>;
+      }
+      return count > 1 ? (
+        <Trans>Write {count} options</Trans>
+      ) : (
+        <Trans>Write an option</Trans>
+      );
+    case 'exercise':
+      if (!first.byUser) return null;
+      return count > 1 ? (
+        <Trans>Use {count} options</Trans>
+      ) : (
+        <Trans>Use an option</Trans>
+      );
+    case 'clawback':
+      return <Trans>Claim back</Trans>;
+    case 'transfer':
+      if (!first.fromUser) return null;
+      return count > 1 ? (
+        <Trans>Send {count} options</Trans>
+      ) : (
+        <Trans>Send an option</Trans>
+      );
+  }
 }

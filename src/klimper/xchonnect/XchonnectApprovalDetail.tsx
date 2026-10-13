@@ -184,7 +184,9 @@ export function XchonnectApprovalDetail({
     answer(true);
   };
 
-  const broadcasts = view.kind === 'spend' && view.broadcasts;
+  // A loan request is signed and handed back, never sent by Klimper (TASK-140).
+  const broadcasts =
+    view.kind === 'spend' && view.broadcasts && !view.makesOffer;
   const approveLabel = broadcasts ? t`Approve and send` : t`Approve`;
 
   return (
