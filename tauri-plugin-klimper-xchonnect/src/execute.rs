@@ -518,8 +518,22 @@ pub fn take_offer(
         &built.summary,
         spends,
         other_signature,
-        fee,
     )
+}
+
+/// What a take claims: only that it is one. What the user pays and receives, the fee
+/// included, is shown from the simulation. No fee is claimed: wallet-kit checks a fee claim
+/// against the whole bundle's fee, and an offer's maker may pay a fee of their own in the
+/// same bundle, so the user's fee alone would never match ("unauthorized",
+/// `intent_mismatch`; TASK-137). The fee Sage built with is the one the website asked for,
+/// and the cross-check holds both engines to the same total.
+fn take_intent() -> Intent {
+    Intent {
+        kind: Some("offer.take".to_owned()),
+        recipients: None,
+        fee: None,
+        net: None,
+    }
 }
 
 /// Everything after Sage built the take: the cross-check, then wallet-kit's submit with the
@@ -534,16 +548,8 @@ fn submit_take(
     sage_summary: &TransactionSummary,
     spends: Vec<CoinSpend>,
     maker_signature: Signature,
-    fee: u64,
 ) -> Result<String, RpcError> {
-    // What the user pays and receives is shown from the simulation; the claim made here is
-    // the fee, which the website chose and the bundle must not exceed.
-    let intent = Intent {
-        kind: Some("offer.take".to_owned()),
-        recipients: None,
-        fee: Some(fee),
-        net: None,
-    };
+    let intent = take_intent();
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
@@ -686,6 +692,17 @@ mod tests {
     /// the CAT ring moves the value on to the maker's settlement payment. Sage leaves the
     /// zero out of what is paid, the simulation lists it; both mean nothing was paid
     /// directly, so the two engines agree.
+    /// A maker's own fee is part of the bundle's fee, so a take must not claim the user's fee
+    /// as the whole: wallet-kit would refuse it as "unauthorized" (`intent_mismatch`), which
+    /// is what every offer with a maker fee got.
+    #[test]
+    fn a_take_claims_no_fee_of_its_own() {
+        let intent = take_intent();
+        assert_eq!(intent.kind.as_deref(), Some("offer.take"));
+        assert_eq!(intent.fee, None);
+        assert!(intent.recipients.is_none() && intent.net.is_none());
+    }
+
     #[test]
     fn a_zero_amount_coin_of_an_offer_take_is_no_disagreement() {
         let cat = Bytes32::new([0x75; 32]);
