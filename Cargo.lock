@@ -10715,9 +10715,8 @@ dependencies = [
 
 [[package]]
 name = "xchonnect-core"
-version = "0.1.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40fa28e6d6a13eb87e0cc1cfe207fd6cc80823b7fbf2ce4bcbbb04a5c251c37c"
+version = "0.1.0-rc.4"
+source = "git+https://github.com/xchonnect/xchonnect.git?rev=19c982891063fa956e977a28857df2b5f961775f#19c982891063fa956e977a28857df2b5f961775f"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -10737,9 +10736,8 @@ dependencies = [
 
 [[package]]
 name = "xchonnect-wallet-kit"
-version = "0.1.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89eb510edcf60242328f86ada0d37c8383d5787c3ba5a6548ea2bb5b1cdf6b47"
+version = "0.1.0-rc.4"
+source = "git+https://github.com/xchonnect/xchonnect.git?rev=19c982891063fa956e977a28857df2b5f961775f#19c982891063fa956e977a28857df2b5f961775f"
 dependencies = [
  "chia-bls 0.36.1",
  "chia-protocol",

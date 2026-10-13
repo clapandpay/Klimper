@@ -371,8 +371,12 @@ pub fn send(
 
     // Build from the wallet's own coins; nothing is signed or submitted here.
     let to_address = address.clone();
-    let built = on_sage(state, async move |sage| match asset {
-        AssetId::Xch => {
+    let cat = match asset {
+        AssetId::Cat(id) => Some(id),
+        AssetId::Xch | AssetId::Option(_) => None,
+    };
+    let built = on_sage(state, async move |sage| match cat {
+        None => {
             sage.send_xch(SendXch {
                 address: to_address,
                 amount: Amount::u64(amount),
@@ -383,7 +387,7 @@ pub fn send(
             })
             .await
         }
-        AssetId::Cat(id) => {
+        Some(id) => {
             sage.send_cat(SendCat {
                 asset_id: hex::encode(id),
                 address: to_address,
@@ -959,6 +963,7 @@ mod tests {
                     puzzle_hash: "33".repeat(32),
                     recipient: Some("33".repeat(32)),
                     to_user: false,
+                    option: None,
                 },
                 OutputInfo {
                     asset: AssetId::Xch,
@@ -966,8 +971,10 @@ mod tests {
                     puzzle_hash: "22".repeat(32),
                     recipient: Some("22".repeat(32)),
                     to_user: true,
+                    option: None,
                 },
             ],
+            options: vec![],
         }
     }
 
@@ -1064,6 +1071,7 @@ mod tests {
             puzzle_hash: "21".repeat(32),
             recipient: None,
             to_user: false,
+            option: None,
         }];
         let mut sage = sage_summary(1_000, 0, 0, 0);
         sage.inputs[0].asset = Some(sage_api::Asset {

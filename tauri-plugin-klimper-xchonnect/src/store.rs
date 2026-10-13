@@ -304,15 +304,19 @@ pub struct StoredLimit {
     pub per_day: Option<u128>,
 }
 
-/// `AssetId` as a storage key: `xch`, or `cat:<64 hex>`.
+/// `AssetId` as a storage key: `xch`, `cat:<64 hex>`, or `option:<launcher id>`. An option
+/// never reaches a limit (wallet-kit counts the collateral and the strike in their own
+/// assets, TASK-140), so the last only exists to keep the match whole.
 pub fn asset_key(asset: AssetId) -> String {
     match asset {
         AssetId::Xch => "xch".to_owned(),
         AssetId::Cat(tail) => format!("cat:{}", hex::encode(tail)),
+        AssetId::Option(launcher_id) => format!("option:{}", hex::encode(launcher_id)),
     }
 }
 
-/// Inverse of [`asset_key`]; unknown keys are dropped rather than failing a load.
+/// Inverse of [`asset_key`] for the assets a limit can be set on (XCH and CATs); unknown
+/// keys, an option's among them, are dropped rather than failing a load.
 pub fn parse_asset_key(key: &str) -> Option<AssetId> {
     if key == "xch" {
         return Some(AssetId::Xch);
