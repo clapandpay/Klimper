@@ -147,12 +147,12 @@ which only an Android build can verify.
 
 - **iOS.** `applinks:clapandpay.com` is in
   `src-tauri/gen/apple/sage-tauri_iOS/sage-tauri_iOS.entitlements`.
-  `green-envelope/apps/site/.well-known/apple-app-site-association`
+  `clapandpay-web/public/.well-known/apple-app-site-association`
   is the file to serve from `https://clapandpay.com/.well-known/` (the clapandpay-web image does), as
   `application/json`, with no redirect. It covers `/pair` and `/req` and nothing else, so
   every other path on the marketing site keeps opening in Safari. The Apple team id is in
   the file (TASK-005); check that the `DEVELOPMENT_TEAM` in the Xcode project is ours too.
-- **Android.** `green-envelope/apps/site/.well-known/assetlinks.json` needs the release signing certificate's
+- **Android.** `clapandpay-web/public/.well-known/assetlinks.json` needs the release signing certificate's
   SHA-256 fingerprint, and the manifest needs an `android:autoVerify="true"` intent filter
   for `https://clapandpay.com` with `pathPrefix` `/pair` and `/req`. Neither is done: there
   is no Android SDK on the development machine.
