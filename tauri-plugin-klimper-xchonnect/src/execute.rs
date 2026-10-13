@@ -27,7 +27,7 @@ use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use sage_api::wallet_connect::SendTransactionImmediately;
 use sage_api::{
-    Amount, AssetKind, CoinJson, CoinSpendJson, SendCat, SendXch, TakeOffer, TransactionSummary,
+    Amount, AssetKind, CoinJson, CoinSpendJson, SendCat, SendXch, TransactionSummary,
     ViewCoinSpends,
 };
 use serde_json::Value;
@@ -440,13 +440,253 @@ pub fn send(
 // chia_takeOffer
 // ---------------------------------------------------------------------------------------
 
-/// The maker's half of an offer: the signature over the maker's own spends. It completes
-/// the bundle once the user has signed their side, and wallet-kit checks the whole bundle
-/// verifies before anything is broadcast.
-fn maker_signature(offer: &str) -> Result<Signature, RpcError> {
-    chia_wallet_sdk::driver::decode_offer(offer)
-        .map(|bundle| bundle.aggregated_signature)
-        .map_err(|_| invalid("offer"))
+/// The offer a website sent, decoded: the maker's spends and the maker's signature. An offer
+/// that does not decode is refused before the wallet is asked anything.
+fn decode_offer_bundle(offer: &str) -> Result<SpendBundle, RpcError> {
+    chia_wallet_sdk::driver::decode_offer(offer).map_err(|_| invalid("offer"))
+}
+
+/// `AGG_SIG` constants of the request's network, as wallet-kit's policy computes them.
+fn agg_sig_constants(network: &kit::Network) -> chia_wallet_sdk::signer::AggSigConstants {
+    use chia_wallet_sdk::types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
+    chia_wallet_sdk::signer::AggSigConstants::new(match network {
+        kit::Network::Mainnet => MAINNET_CONSTANTS.agg_sig_me_additional_data,
+        kit::Network::Testnet11 => TESTNET11_CONSTANTS.agg_sig_me_additional_data,
+        kit::Network::Custom { agg_sig_me, .. } => *agg_sig_me,
+    })
+}
+
+/// The maker's signature must verify over the maker's own spends **before** the user is
+/// asked: an offer with a missing or forged signature can never be completed, and the user
+/// would approve a take that is then refused. Wallet-kit checks the whole bundle again after
+/// signing; this only moves a broken offer's refusal in front of the prompt.
+fn check_maker_signature(offer: &SpendBundle, network: &kit::Network) -> Result<(), RpcError> {
+    use chia_wallet_sdk::signer::RequiredSignature;
+    // The maker's own spends. The others are placeholders for what the maker asks (a coin
+    // with no parent, as `Offer::from_spend_bundle` reads them): they are never signed, and a
+    // CAT placeholder cannot even be run without its ring.
+    let makers: Vec<CoinSpend> = offer
+        .coin_spends
+        .iter()
+        .filter(|spend| spend.coin.parent_coin_info != Bytes32::default())
+        .cloned()
+        .collect();
+    if makers.is_empty() {
+        return Err(invalid("offer"));
+    }
+    let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
+    let required =
+        RequiredSignature::from_coin_spends(&mut allocator, &makers, &agg_sig_constants(network))
+            .map_err(|_| invalid("offer"))?;
+    let mut pairs = Vec::with_capacity(required.len());
+    for requirement in required {
+        match requirement {
+            RequiredSignature::Bls(bls) => pairs.push((bls.public_key, bls.message())),
+            // No wallet Klimper knows makes secp offers; refused rather than half-checked.
+            RequiredSignature::Secp(_) => {
+                return Err(error(
+                    codes::UNSUPPORTED_CONTENT,
+                    "this offer is not supported",
+                    Some("secp_signature"),
+                ));
+            }
+        }
+    }
+    let verified = chia_bls::aggregate_verify(
+        &offer.aggregated_signature,
+        pairs.iter().map(|(key, message)| (key, message.as_slice())),
+    );
+    if !verified {
+        return Err(error(
+            codes::INVALID_PARAMS,
+            "the offer's signature does not match it",
+            Some("offer_signature"),
+        ));
+    }
+    Ok(())
+}
+
+/// The message of the coin announcement Klimper adds to tie a spend, when the bound spend
+/// makes none of its own. Never starts with `0xcb`, the prefix a CAT reserves for its ring.
+const BIND_MESSAGE: &[u8] = b"klimper:bind";
+
+/// Change the conditions of one of the user's own, still unsigned spends: a plain standard
+/// spend (`(() (q . conditions) ())`, as Sage builds them) or a CAT whose inner puzzle is
+/// one. Returns `false`, leaving the spend as it was, for any other shape.
+fn edit_user_conditions(
+    allocator: &mut chia_wallet_sdk::prelude::Allocator,
+    spend: &mut CoinSpend,
+    edit: impl FnOnce(&mut Vec<chia_wallet_sdk::prelude::Condition<chia_wallet_sdk::prelude::NodePtr>>),
+) -> bool {
+    use chia_puzzle_types::{cat::CatSolution, standard::StandardSolution};
+    use chia_wallet_sdk::driver::CatLayer;
+    use chia_wallet_sdk::prelude::{
+        Condition, FromClvm, Layer, NodePtr, Puzzle, StandardLayer, ToClvm,
+    };
+
+    type Standard = StandardSolution<(u8, NodePtr), NodePtr>;
+
+    // The standard solution's condition list, edited and rebuilt; `None` if it is not the
+    // plain shape.
+    fn edited(
+        allocator: &mut chia_wallet_sdk::prelude::Allocator,
+        solution: NodePtr,
+        edit: impl FnOnce(&mut Vec<Condition<NodePtr>>),
+    ) -> Option<NodePtr> {
+        let standard = Standard::from_clvm(allocator, solution).ok()?;
+        if standard.original_public_key.is_some() || standard.delegated_puzzle.0 != 1 {
+            return None;
+        }
+        let mut conditions =
+            Vec::<Condition<NodePtr>>::from_clvm(allocator, standard.delegated_puzzle.1).ok()?;
+        edit(&mut conditions);
+        StandardSolution::from_conditions(conditions)
+            .to_clvm(allocator)
+            .ok()
+    }
+
+    let (Ok(puzzle), Ok(solution)) = (
+        spend.puzzle_reveal.to_clvm(allocator),
+        spend.solution.to_clvm(allocator),
+    ) else {
+        return false;
+    };
+    let puzzle = Puzzle::parse(allocator, puzzle);
+    let rebuilt = if matches!(StandardLayer::parse_puzzle(allocator, puzzle), Ok(Some(_))) {
+        edited(allocator, solution, edit)
+    } else if matches!(
+        CatLayer::<StandardLayer>::parse_puzzle(allocator, puzzle),
+        Ok(Some(_))
+    ) {
+        let Ok(mut cat) = CatSolution::<NodePtr>::from_clvm(allocator, solution) else {
+            return false;
+        };
+        let Some(inner) = edited(allocator, cat.inner_puzzle_solution, edit) else {
+            return false;
+        };
+        cat.inner_puzzle_solution = inner;
+        cat.to_clvm(allocator).ok()
+    } else {
+        None
+    };
+    let Some(rebuilt) = rebuilt.and_then(|ptr| Program::from_clvm(allocator, ptr).ok()) else {
+        return false;
+    };
+    spend.solution = rebuilt;
+    true
+}
+
+/// Tie every one of the user's spends to the maker's payment before anything is signed.
+///
+/// Wallet-kit signs a two-party bundle only if each user spend is *bound* (spec 11.2): it
+/// asserts the settlement announcement of the payment the user expects, or a coin
+/// announcement of a user spend that does. Otherwise that spend could be taken out of the
+/// bundle and sent alone. Sage's take can leave one of the user's spends loose (with a fee,
+/// the assertions sit on one coin and the user's other coin asserts none of them). Such a
+/// spend is tied here: it asserts a coin announcement of a bound user spend (one that spend
+/// makes anyway, or one added to it). Both are the user's own, still unsigned spends, and
+/// both changes only add conditions: an assertion narrows when a coin can be spent, an
+/// announcement gives nothing away. A spend of any other shape is left as it is, and
+/// wallet-kit then refuses the take as `unbound_partial`.
+fn bind_user_spends(
+    mut spends: Vec<CoinSpend>,
+    ownership: &kit::Ownership,
+) -> Result<Vec<CoinSpend>, RpcError> {
+    use chia_wallet_sdk::prelude::{Allocator, Condition, FromClvm, NodePtr, ToClvm, run_puzzle};
+    use chia_wallet_sdk::types::{
+        announcement_id,
+        conditions::{AssertCoinAnnouncement, CreateCoinAnnouncement},
+    };
+
+    let max_cost = kit::simulate::DEFAULT_MAX_COST;
+    let report = kit::verify_binding(&spends, ownership, max_cost).map_err(RpcError::from)?;
+    if report.all_bound {
+        return Ok(spends);
+    }
+    let summary = kit::simulate(&spends, ownership, max_cost).map_err(RpcError::from)?;
+    let bound: Vec<usize> = summary
+        .spends
+        .iter()
+        .enumerate()
+        .filter(|(index, info)| info.owned && !report.unbound_user_spends.contains(index))
+        .map(|(index, _)| index)
+        .collect();
+    let mut allocator = Allocator::new();
+
+    // The anchor: a coin announcement a bound user spend makes in this bundle.
+    let mut anchor = None;
+    for &index in &bound {
+        let spend = &spends[index];
+        let (Ok(puzzle), Ok(solution)) = (
+            spend.puzzle_reveal.to_clvm(&mut allocator),
+            spend.solution.to_clvm(&mut allocator),
+        ) else {
+            continue;
+        };
+        let made = run_puzzle(&mut allocator, puzzle, solution)
+            .ok()
+            .and_then(|output| Vec::<Condition<NodePtr>>::from_clvm(&allocator, output).ok())
+            .and_then(|conditions| {
+                conditions
+                    .into_iter()
+                    .find_map(|condition| match condition {
+                        Condition::CreateCoinAnnouncement(created) => Some(created.message),
+                        _ => None,
+                    })
+            });
+        if let Some(message) = made {
+            anchor = Some(announcement_id(spend.coin.coin_id(), message));
+            break;
+        }
+    }
+    // None made: give a bound spend one.
+    if anchor.is_none() {
+        for &index in &bound {
+            let spend = &mut spends[index];
+            let coin_id = spend.coin.coin_id();
+            if edit_user_conditions(&mut allocator, spend, |conditions| {
+                conditions.push(Condition::CreateCoinAnnouncement(
+                    CreateCoinAnnouncement::new(BIND_MESSAGE.to_vec().into()),
+                ));
+            }) {
+                anchor = Some(announcement_id(coin_id, BIND_MESSAGE));
+                break;
+            }
+        }
+    }
+    let Some(anchor) = anchor else {
+        return Ok(spends);
+    };
+
+    for &index in &report.unbound_user_spends {
+        if let Some(spend) = spends.get_mut(index) {
+            edit_user_conditions(&mut allocator, spend, |conditions| {
+                conditions.push(Condition::AssertCoinAnnouncement(
+                    AssertCoinAnnouncement::new(anchor),
+                ));
+            });
+        }
+    }
+    Ok(spends)
+}
+
+/// The take, built from the wallet's own coins with Sage's offer code and **no key**: the
+/// user's side comes back unsigned, joined with the maker's spends, and with the maker's
+/// signature alone. The wallet's key is used once, by wallet-kit, after the approval, as for
+/// a send. (Sage's `take_offer` endpoint signs the user's side as it builds; not used here.)
+async fn build_take(
+    wallet: &sage_wallet::Wallet,
+    offer: SpendBundle,
+    fee: u64,
+) -> Result<(Vec<CoinSpend>, Signature), sage_wallet::WalletError> {
+    let taken = wallet.take_offer(offer, fee).await?;
+    // `Offer::take` puts the maker's spends first and adds the signatures; the user's side
+    // carries none yet, so the result's signature is the maker's.
+    let joined = taken.offer.take(SpendBundle::new(
+        taken.spend_bundle.coin_spends,
+        Signature::default(),
+    ));
+    Ok((joined.coin_spends, joined.aggregated_signature))
 }
 
 /// `chia_takeOffer { offer, fee? }`: Sage takes the offer from the wallet's own coins with
@@ -470,7 +710,8 @@ pub fn take_offer(
         .ok_or_else(|| invalid("offer"))?
         .to_owned();
     let fee = amount_param(&params, "fee")?.unwrap_or(0);
-    let other_signature = maker_signature(&offer)?;
+    let offer = decode_offer_bundle(&offer)?;
+    check_maker_signature(&offer, &ctx.network)?;
     // As for a send: a take that cannot be built tells the website the wallet cannot pay
     // for it, so a run of them is a search for the balance.
     if failed_builds::too_many(ctx.dapp, ctx.now) {
@@ -481,15 +722,7 @@ pub fn take_offer(
         ));
     }
 
-    let built = on_sage(state, async move |sage| {
-        sage.take_offer(TakeOffer {
-            offer,
-            fee: Amount::u64(fee),
-            auto_submit: false,
-        })
-        .await
-    })
-    .map_err(|e| {
+    let build_failed = |e: String| {
         // Sage's own words stay here, as for a send: they name balances and coins.
         tracing::info!("xchonnect: chia_takeOffer could not be built: {e}");
         failed_builds::record(ctx.dapp, ctx.now);
@@ -498,26 +731,30 @@ pub fn take_offer(
             "the wallet could not take this offer",
             Some("build_failed"),
         )
-    })?;
-
-    // Sage's bundle carries both signatures; only the spends are kept, and wallet-kit signs
-    // the user's side again after the approval.
-    let spends: Vec<CoinSpend> = built
-        .spend_bundle
-        .coin_spends
-        .iter()
-        .map(from_json)
-        .collect::<Option<_>>()
-        .ok_or_else(|| invalid("coin_spends"))?;
+    };
+    let (spends, maker_signature) = on_sage(state, async move |sage| {
+        Ok(build_take(&*sage.wallet()?, offer, fee).await?)
+    })
+    .map_err(build_failed)?;
+    let spends = bind_user_spends(spends, ctx.ownership)?;
+    // Sage's own reading of the whole bundle, from the wallet database, for the
+    // cross-check: the same summary its take_offer endpoint returns.
+    let request = ViewCoinSpends {
+        coin_spends: spends.iter().map(to_json).collect(),
+    };
+    let summary = on_sage(state, async move |sage| {
+        Ok(sage.view_coin_spends(request).await?.summary)
+    })
+    .map_err(build_failed)?;
 
     submit_take(
         ctx,
         signer,
         approver,
         broadcaster,
-        &built.summary,
+        &summary,
         spends,
-        other_signature,
+        maker_signature,
     )
 }
 
@@ -570,6 +807,12 @@ fn submit_take(
     )?;
     Ok(submitted.to_json())
 }
+
+#[cfg(test)]
+mod sage_sim;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod take_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -670,19 +913,22 @@ mod tests {
     /// The maker's signature is the offer's own aggregated signature, untouched: it is what
     /// completes the bundle after the user signs their side.
     #[test]
-    fn the_maker_signature_comes_from_the_offer() {
+    fn the_offer_decodes_with_the_makers_signature() {
         let maker = chia_bls::SecretKey::from_seed(&[7; 32]);
         let signature = chia_bls::sign(&maker, b"maker");
         let offer =
             chia_wallet_sdk::driver::encode_offer(&SpendBundle::new(vec![], signature.clone()))
                 .unwrap();
-        assert_eq!(maker_signature(&offer).unwrap(), signature);
+        assert_eq!(
+            decode_offer_bundle(&offer).unwrap().aggregated_signature,
+            signature
+        );
     }
 
     #[test]
     fn a_take_without_a_readable_offer_is_refused_before_the_wallet_is_asked() {
         for offer in ["", "offer1notanoffer", "hello"] {
-            let error = maker_signature(offer).unwrap_err();
+            let error = decode_offer_bundle(offer).unwrap_err();
             assert_eq!(error.code, codes::INVALID_PARAMS, "{offer:?}");
         }
     }
