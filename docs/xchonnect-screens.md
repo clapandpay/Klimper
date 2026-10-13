@@ -163,11 +163,13 @@ the prompt's `trade` (`src/trade.rs`, read by `readPrompt`, drawn by `XchonnectT
 │ │ (X) −1.5 XCH               ≈ $18.60  │ │  display face, tabular, thousands set apart
 │ │  ↓                                   │ │
 │ │ YOU RECEIVE                          │ │
-│ │ (S) +3 000 SBX             ≈ $18.60  │ │  the wallet's ticker and icon …
+│ │ (S) +3 000 SBX                       │ │  the wallet's ticker and icon, no dollars …
 │ │     Spacebucks  CAT 5b5b5b5b…5b5b5b  │ │  … with the asset id, always
+│ │     Two tokens in your wallet use    │ │  only when another CAT's ticker reads
+│ │     the ticker SBX. Check the id.    │ │  the same
 │ │ ──────────────────────────────────── │ │
-│ │ Price      1 SBX = 0.0005 XCH   [⇄]  │ │  the flip shows it the other way round
-│ │ ≋ 3 offers taken together — all or nothing ⓘ
+│ │ Price  1 SBX 5b5b5b5b = 0.0005 XCH [⇄] │  ticker and id; the flip turns it round
+│ │ ≋ 3 separate offers taken together — all or nothing ⓘ
 │ │ Your network fee   0.0001 XCH        │ │  the user's own; the whole trade's is below
 │ └──────────────────────────────────────┘ │
 │ One half of a trade …                    │  the binding panel, as before
@@ -179,7 +181,12 @@ the prompt's `trade` (`src/trade.rs`, read by `readPrompt`, drawn by `XchonnectT
 ```
 
 - **What is paid and what is received** are the wallet's figures for the bundle it signs. The
-  user's fee is taken out of the XCH paid and shown on its own line. Received counts what the
+  user's fee is taken out of the XCH paid and shown on its own line; it is the `RESERVE_FEE`
+  of the user's spends only as far as the user's own XCH paid for it (at most the XCH that left
+  the user's coins). A fee the user's spend declares but another party's coin funds (a
+  settlement coin needs no signature) is not the user's and is never counted as XCH received
+  (TASK-139 audit, H1). So when Sage pays the fee of a sale out of the XCH the offer pays the
+  user, the card shows the XCH that arrives, already less the fee, and no fee line. Received counts what the
   user's own spends create and what the user's spends are bound to receive from the other side
   (`binding.bound_received`): a settlement payment the user's spends assert cannot be left out
   without the user's spends failing, so it is as certain as change. Anything conditional and
@@ -188,17 +195,32 @@ the prompt's `trade` (`src/trade.rs`, read by `readPrompt`, drawn by `XchonnectT
   in full); the button expands and folds again. The binding panel folds a list of more than
   three payments under "Depends on N payments to you". The card never pushes the slider away:
   the body scrolls, the actions stay. Nothing is cut at 320px; a long amount wraps.
-- **Names, icons and dollars** come from the wallet's own records (`getToken`, the last price
-  fetch), never from the website. A CAT's id (`CAT 1a2b3c4d…9f8e7d`) is under every CAT, ticker
-  or not; a ticker that claims to be the network's coin (`XCH`, `TXCH`) is not used as a unit
-  ("CAT" instead), and a CAT the wallet has never held says "new to your wallet". A CAT without
-  an icon gets a monogram coin in one of six warm Klimper colours chosen by its id, so two CATs
-  do not look alike; XCH is the blue coin. Icons load only from `https:` URLs.
+- **Names and icons** come from the wallet's own records (`getToken`, `getCats`), never from
+  the website. A CAT's id (`CAT 1a2b3c4d…9f8e7d`) is under every CAT, ticker or not, and a CAT
+  the wallet has never held says "new to your wallet". (Audit of TASK-139, M2 and L3.)
+  - A ticker is used only when it is plain ASCII (`A–Z a–z 0–9 . $ _ -`, at most 12) after
+    NFKC, and its skeleton (look-alike Cyrillic and Greek letters and digits mapped to the
+    Latin letter they imitate, separators dropped, upper case; `ticker.ts`) holds neither
+    `XCH` nor `CHIA`: "ХСН", "ΧCΗ", "ＸＣＨ", "XCH.", "X-CH", "wXCH", "CH1A" are refused.
+    A refused ticker shows "CAT" as the unit and loses its icon too: a monogram of the id.
+  - When another CAT the wallet knows has a ticker with the same skeleton, the leg says "Two
+    tokens in your wallet use the ticker SBX. Check the id."
+  - A CAT's icon is loaded only for a CAT the wallet holds and shows (its token list loads
+    that icon anyway) and only from `https:`; XCH is always the screen's own blue coin. So
+    an approval never asks an icon host about a CAT the user has never had: that request
+    would tell it the user's IP address and the trade before the user decided. Otherwise a
+    monogram coin in one of six warm Klimper colours chosen by its id.
+- **Dollars** for XCH only, from the last price fetch. A CAT shows none (M1): its last price
+  on a market is whatever its maker last traded it at, with themselves if they like.
 - **Price** only for one asset for one asset: a CAT priced in XCH, otherwise what is received
-  priced in what is paid; six significant digits, cut, never rounded up.
-- **Offers**: "N offers taken together — all or nothing" when a take holds more than one
-  offer, counted by the wallet from the offer itself; one transaction, so either every offer
-  goes through or none does.
+  priced in what is paid; six significant digits, cut, never rounded up. A CAT's unit in the
+  price always carries the start of its id (`SBX 5b5b5b5b`, or `CAT 5b5b5b5b`).
+- **Offers**: "N separate offers taken together — all or nothing" when a take holds more than
+  one offer, counted by the wallet from the offer itself (L1): the smaller of the distinct
+  nonces of its requested payments and the groups of maker coins not tied to each other by an
+  announcement, a concurrent-spend assertion or a shared puzzle hash. A maker chooses nonces
+  freely, so one offer notarized five times still counts as one. One transaction, so either
+  every offer goes through or none does.
 - Danger panels (unknown contract, unsafe signature) stay above the card; the binding panel,
   destinations, the whole trade's fee, the intent and time locks follow it unchanged.
 
@@ -223,8 +245,8 @@ the prompt's `trade` (`src/trade.rs`, read by `readPrompt`, drawn by `XchonnectT
   only a lettered coin; one the wallet holds none of says "not in your wallet". The id shows
   both ends (`CAT 1a2b3c4d…9f8e7d`), since matching the first 32 bits is cheap. A
   CAT whose id did not parse gets none of this. None of it comes from the website. (This is
-  the per-asset verdict; the trade card above shows the wallet's ticker, icon and price for a
-  CAT, with its id beside them, as described there.)
+  the per-asset verdict; the trade card above shows the wallet's ticker and icon for a CAT
+  when they pass its checks, with its id beside them, and no dollars, as described there.)
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve. Going back puts the slider back.
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
@@ -323,9 +345,9 @@ including anything a dApp managed to influence — is dropped before the view se
 | `binding.all_bound` = false                                         | danger panel — this should have been refused upstream                                                                                                                                                                                                                                                                           | "Not bound — do not sign"                 |
 | `binding.bound_payments[]`                                          | what the signature depends on receiving, per payment                                                                                                                                                                                                                                                                            | "Your signature only pays out if…"        |
 | `trade.pays[]`, `trade.receives[]` (`asset`, `amount`)              | the trade card at the top: you pay, you receive, per asset; a malformed leg makes the prompt unreadable                                                                                                                                                                                                                         |
-| `trade.fee`                                                         | "Your network fee" in the trade card                                                                                                                                                                                                                                                                                            |
+| `trade.fee`                                                         | "Your network fee" in the trade card: the part of the user's `RESERVE_FEE` the user's own XCH funds                                                                                                                                                                                                                             |
 | `trade.price` (`base`, `quote`, `quote_per_base`, `base_per_quote`) | "Price: 1 base = x quote" with a flip; dropped unless both are plain decimals                                                                                                                                                                                                                                                   |
-| `trade.offers`                                                      | "N offers taken together — all or nothing" when above 1, and the headline "Take N offers together"; dropped unless a whole number 1–10000                                                                                                                                                                                       |
+| `trade.offers`                                                      | "N separate offers taken together — all or nothing" when above 1, and the headline "Take N offers together"; dropped unless a whole number 1–10000                                                                                                                                                                              |
 | `message_text` (signMessage)                                        | a labelled quoted block, monospace, control characters escaped, length shown                                                                                                                                                                                                                                                    | "The website asks you to sign this text"  |
 | `message_hex` (signMessage)                                         | the same block when there is no text form                                                                                                                                                                                                                                                                                       | "…this data"                              |
 | `public_key` (signMessage)                                          | monospace, full                                                                                                                                                                                                                                                                                                                 | "With this key"                           |

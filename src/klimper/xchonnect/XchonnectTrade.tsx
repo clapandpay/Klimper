@@ -6,7 +6,8 @@
 // bundle that is signed, read by `readPrompt` by explicit key). What the wallet knows about
 // each asset from its own records (ticker, name, icon, balance, price) is shown with it; a
 // CAT's asset id stays on screen next to every name, because whoever made a CAT chose its
-// name, and a ticker that claims to be the network's coin is not used at all.
+// name, and a ticker that reads as the network's coin is not used at all, nor its icon
+// (`ticker.ts`). A CAT has no dollar value here: its market price is the maker's to set.
 
 import { Trans } from '@lingui/react/macro';
 import { t } from '@lingui/core/macro';
@@ -14,10 +15,10 @@ import BigNumber from 'bignumber.js';
 import { ArrowDown, ArrowLeftRight, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { Hint } from '../Hint';
+import { safeTicker } from './ticker';
 import {
   AssetFacts,
   AssetRef,
-  catUsd,
   factsOf,
   formatUsd,
   xchUsd,
@@ -60,35 +61,37 @@ export function monogramColour(assetId: string): readonly [string, string] {
 
 /**
  * The wallet's ticker for a CAT as a unit, or null when there is none it may use: one that is
- * empty, not a plain short word, or that claims to be the network's coin.
+ * empty, not a plain ASCII word, or that reads as the network's coin (`safeTicker`).
  */
 export function walletTicker(
   facts: AssetFacts | undefined,
   xchLabel: string,
 ): string | null {
-  const ticker = claimedText(facts?.ticker).trim();
-  if (!/^[\p{L}\p{N}.$_-]{1,12}$/u.test(ticker)) return null;
-  const upper = ticker.toUpperCase();
-  if (upper === 'XCH' || upper === 'TXCH' || upper === xchLabel.toUpperCase()) {
-    return null;
-  }
-  return ticker;
+  return safeTicker(claimedText(facts?.ticker), xchLabel);
 }
 
-/** What an amount of this asset is called on the card: XCH, the wallet's ticker, or `CAT 1a2b3c4d`. */
+/**
+ * What an amount of this asset is called in the price: XCH, or a CAT's ticker with the start
+ * of its id (`SBX 5b5b5b5b`), or `CAT 1a2b3c4d`. The id is always there: two CATs may share
+ * a ticker, and the price is the line a user compares with the website's.
+ */
 export function unitOf(
   asset: AssetRef & { readonly label: string },
   facts: AssetFacts | undefined,
   xchLabel: string,
 ): string {
   if (asset.isXch) return asset.label;
-  return (
-    walletTicker(facts, xchLabel) ??
-    (asset.assetId ? `CAT ${asset.assetId.slice(0, 8)}` : asset.label)
-  );
+  if (!asset.assetId) return asset.label;
+  const short = asset.assetId.slice(0, 8);
+  const ticker = walletTicker(facts, xchLabel);
+  return ticker === null ? `CAT ${short}` : `${ticker} ${short}`;
 }
 
-/** The asset's round coin: the wallet's icon, else XCH's blue coin, else a monogram. */
+/**
+ * The asset's round coin: XCH's blue coin; for a CAT the wallet's icon, only when its ticker
+ * may be used (an icon can wear the network's logo as easily as a ticker its name) and the
+ * wallet holds and shows the CAT (`useApprovalAssets`); else a monogram.
+ */
 export function TokenCoin({
   asset,
   facts,
@@ -99,7 +102,8 @@ export function TokenCoin({
   readonly xchLabel: string;
 }) {
   const [broken, setBroken] = useState(false);
-  const icon = facts?.iconUrl ?? null;
+  const ticker = asset.isXch ? null : walletTicker(facts, xchLabel);
+  const icon = ticker === null ? null : (facts?.iconUrl ?? null);
   if (icon !== null && !broken) {
     return (
       <img
@@ -122,7 +126,6 @@ export function TokenCoin({
     );
   }
   const id = asset.assetId ?? '';
-  const ticker = walletTicker(facts, xchLabel);
   const letters = ticker
     ? Array.from(ticker.replace(/[^\p{L}\p{N}]/gu, '') || ticker)
         .slice(0, 2)
@@ -151,10 +154,12 @@ export function groupedAmount(amount: BigNumber, precision: number): string {
   return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
 
-/** Dollars for an amount of this asset, when Klimper has a price. */
+/**
+ * Dollars for an amount of XCH, when Klimper has a price. Never for a CAT: its last price is
+ * whatever its maker last traded it at, with themselves if they like (TASK-139 audit, M1).
+ */
 function usdOf(leg: TradeLegView): number | null {
-  if (leg.isXch) return xchUsd(leg.amount);
-  return leg.assetId ? catUsd(leg.assetId, leg.amount) : null;
+  return leg.isXch ? xchUsd(leg.amount) : null;
 }
 
 function Leg({
@@ -169,7 +174,10 @@ function Leg({
   readonly side: 'pay' | 'receive';
 }) {
   // Without a ticker the id is the line under the amount; the unit only says what it is.
-  const unit = leg.isXch ? leg.label : (walletTicker(facts, xchLabel) ?? 'CAT');
+  const ticker = leg.isXch ? null : walletTicker(facts, xchLabel);
+  const unit = leg.isXch ? leg.label : (ticker ?? 'CAT');
+  // Another CAT the wallet knows reads the same: say so, under the id.
+  const twin = ticker !== null && (facts?.twins?.length ?? 0) > 0;
   const usd = usdOf(leg);
   const name = leg.isXch ? null : claimedText(facts?.name).trim();
   // Looked up, and the wallet holds none of it: a CAT the user has never had.
@@ -206,6 +214,13 @@ function Leg({
                 <Trans>new to your wallet</Trans>
               </span>
             )}
+          </div>
+        )}
+        {twin && (
+          <div className='xc-leg-twin' data-testid='trade-twin'>
+            <Trans>
+              Two tokens in your wallet use the ticker {ticker}. Check the id.
+            </Trans>
           </div>
         )}
       </div>
@@ -355,16 +370,17 @@ export function TradeCard({
                 aria-hidden='true'
               />
               <span>
-                <Trans>{offers} offers taken together</Trans>
+                <Trans>{offers} separate offers taken together</Trans>
                 <span className='text-muted-foreground'>
                   {' '}
                   — <Trans>all or nothing</Trans>
                 </span>{' '}
                 <Hint>
                   <Trans>
-                    Klimper counted the offers in the offer itself. They are
-                    taken in one transaction: either every one of them goes
-                    through, or none does and you pay nothing.
+                    Klimper counted the offers in the offer itself: groups of
+                    coins that are not tied to each other, each asking for its
+                    own payment. They are taken in one transaction: either every
+                    one of them goes through, or none does and you pay nothing.
                   </Trans>
                 </Hint>
               </span>

@@ -131,7 +131,7 @@ const TOKENS: Record<
     ticker: 'SBX',
     name: 'Spacebucks',
     icon: 'https://icons.preview.invalid/sbx.svg',
-    balance: 0,
+    balance: 4_000,
   },
   ['d1'.repeat(32)]: {
     ticker: 'DBX',
@@ -147,6 +147,15 @@ const TOKENS: Record<
     balance: 75_000,
   },
   ['c4'.repeat(32)]: { ticker: 'XCH', name: 'Totally XCH', balance: 0 },
+  // A look-alike in Cyrillic, held, with an icon of its own: neither is used.
+  ['e2'.repeat(32)]: {
+    ticker: 'ХСН',
+    name: 'Chia Network',
+    icon: 'https://icons.preview.invalid/xch.svg',
+    balance: 1_000,
+  },
+  // A second token calling itself SBX: both get the twin warning.
+  ['0f'.repeat(32)]: { ticker: 'SBX', name: 'Spacebucks', balance: 0 },
 };
 
 type Leg = [Asset, number];
@@ -326,6 +335,22 @@ mockIPC(
       ];
     }
     if (cmd === 'get_user_themes') return { themes: [] };
+    if (cmd === 'get_cats') {
+      return {
+        cats: Object.entries(TOKENS).map(([id, known]) => ({
+          asset_id: id,
+          name: known.name,
+          ticker: known.ticker,
+          precision: 3,
+          description: null,
+          icon_url: known.icon ?? null,
+          visible: true,
+          balance: String(known.balance),
+          selectable_balance: String(known.balance),
+          revocation_address: null,
+        })),
+      };
+    }
     if (cmd === 'get_token') {
       const id = (args as { req: { asset_id: string | null } }).req.asset_id;
       if (id === null) {

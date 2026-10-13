@@ -6,33 +6,54 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const tokens = vi.hoisted(
-  () =>
-    new Map<
-      string,
-      { ticker: string; name: string; icon_url: string | null; balance: string }
-    >(),
-);
+interface Token {
+  ticker: string;
+  name: string;
+  icon_url: string | null;
+  balance: string;
+  visible?: boolean;
+}
+const tokens = vi.hoisted(() => new Map<string, Token>());
+/** CATs the wallet knows that are not part of the request (for the twin check). */
+const others = vi.hoisted(() => new Map<string, Token>());
+const prices = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('@/bindings', () => ({
   commands: {
     getToken: ({ asset_id }: { asset_id: string | null }) => {
       if (asset_id === null) {
         return Promise.resolve({
-          token: { ticker: 'XCH', name: 'Chia', icon_url: null, balance: '0' },
+          token: {
+            ticker: 'XCH',
+            name: 'Chia',
+            icon_url: 'https://icons.example/xch.png',
+            balance: '0',
+            visible: true,
+          },
         });
       }
       const token = tokens.get(asset_id);
-      return Promise.resolve({ token: token ?? null });
+      return Promise.resolve({
+        token: token ? { visible: true, ...token } : null,
+      });
     },
+    getCats: () =>
+      Promise.resolve({
+        cats: [...tokens, ...others].map(([asset_id, token]) => ({
+          asset_id,
+          visible: true,
+          ...token,
+        })),
+      }),
   },
 }));
-vi.mock('../price', () => ({ lastPrices: () => null }));
+vi.mock('../price', () => ({ lastPrices: () => prices.current }));
 
 const { renderScreen } = await import('../testHarness');
 const { XchonnectPromptView, promptHeadline } =
   await import('./XchonnectPromptView');
 const { readPrompt } = await import('./xchonnectPrompt');
 const { monogramColour, groupedAmount } = await import('./XchonnectTrade');
+const { safeTicker, tickerSkeleton } = await import('./ticker');
 const BigNumber = (await import('bignumber.js')).default;
 
 type Asset = { type: 'xch' } | { type: 'cat'; asset_id: string };
@@ -113,6 +134,8 @@ const legs = (side: 'pay' | 'receive') =>
 afterEach(() => {
   cleanup();
   tokens.clear();
+  others.clear();
+  prices.current = null;
 });
 
 describe('the trade card', () => {
@@ -145,7 +168,7 @@ describe('the trade card', () => {
       ticker: 'SBX',
       name: 'Spacebucks',
       icon_url: 'https://icons.example/sbx.png',
-      balance: '0',
+      balance: '2000',
     });
     const view = show(
       take([[XCH, 1_500_000_000_000]], [[cat('5b'), 3_000_000]], 3, 100, {
@@ -168,16 +191,17 @@ describe('the trade card', () => {
       'https://icons.example/sbx.png',
     );
 
+    // The price names the CAT by ticker and the start of its id.
     expect(text(screen.getByTestId('trade-price-text'))).toContain(
-      '1 SBX = 0.0005 XCH',
+      '1 SBX 5b5b5b5b = 0.0005 XCH',
     );
     fireEvent.click(screen.getByTestId('trade-price-flip'));
     expect(text(screen.getByTestId('trade-price-text'))).toContain(
-      '1 XCH = 2000 SBX',
+      '1 XCH = 2000 SBX 5b5b5b5b',
     );
 
     expect(text(screen.getByTestId('trade-offers'))).toContain(
-      '3 offers taken together — all or nothing',
+      '3 separate offers taken together — all or nothing',
     );
     expect(text(screen.getByTestId('trade-fee'))).toContain('0.0000000001 XCH');
     // The per-asset verdict is still there, folded under the card.
@@ -262,12 +286,48 @@ describe('the trade card', () => {
     expect(legs('receive')).toHaveLength(8);
     expect(text(more)).toContain('Show fewer');
     expect(text(screen.getByTestId('trade-offers'))).toContain(
-      '9 offers taken together',
+      '9 separate offers taken together',
     );
     // Eight bound payments are folded in the binding panel under the card.
     expect(text(screen.getByTestId('bound-payments-folded'))).toContain(
       'Depends on 8 payments to you',
     );
+  });
+
+  it('never uses a ticker or an icon that passes for the network coin', async () => {
+    const lookalikes = [
+      'ХСН', // Cyrillic
+      'ΧCΗ', // Greek
+      'ＸＣＨ', // fullwidth
+      'XCH.',
+      'X-CH',
+      'wXCH',
+      'xch',
+      'CH1A',
+      'Chia',
+    ];
+    for (const ticker of lookalikes) {
+      tokens.set('c4'.repeat(32), {
+        ticker,
+        name: 'Lookalike',
+        icon_url: 'https://icons.example/chia-logo.png',
+        balance: '5000',
+      });
+      show(take([[XCH, 500]], [[cat('c4'), 5_000]], 1, 0));
+      expect(await screen.findByText('Lookalike')).toBeTruthy();
+      const received = legs('receive')[0];
+      expect(text(within(received).getByTestId('trade-amount'))).toContain(
+        '+5 CAT',
+      );
+      // No icon of the token's own, not even one the wallet holds: a monogram of its id.
+      expect(screen.queryByTestId('trade-icon')).toBeNull();
+      expect(within(received).getByTestId('trade-monogram').textContent).toBe(
+        'C4',
+      );
+      expect(screen.queryByTestId('trade-twin')).toBeNull();
+      cleanup();
+      tokens.clear();
+    }
   });
 
   it('never uses a ticker that claims to be the network coin', async () => {
@@ -286,6 +346,80 @@ describe('the trade card', () => {
     expect(text(within(received).getByTestId('trade-asset-id'))).toContain(
       'CAT c4c4c4c4…c4c4c4',
     );
+  });
+
+  it('loads no icon for a CAT the wallet does not hold or hides, and none for XCH', async () => {
+    tokens.set('5b'.repeat(32), {
+      ticker: 'SBX',
+      name: 'Spacebucks',
+      icon_url: 'https://icons.example/sbx.png',
+      balance: '0',
+    });
+    tokens.set('d1'.repeat(32), {
+      ticker: 'DBX',
+      name: 'dexie bucks',
+      icon_url: 'https://icons.example/dbx.png',
+      balance: '12000',
+      visible: false,
+    });
+    show(
+      take(
+        [[XCH, 500]],
+        [
+          [cat('5b'), 5_000],
+          [cat('d1'), 7_000],
+        ],
+        1,
+        0,
+      ),
+    );
+    expect(await screen.findByText('Spacebucks')).toBeTruthy();
+    expect(await screen.findByText('dexie bucks')).toBeTruthy();
+    expect(screen.queryByTestId('trade-icon')).toBeNull();
+    expect(
+      screen.getAllByTestId('trade-monogram').map((m) => m.textContent),
+    ).toEqual(['SB', 'DB']);
+  });
+
+  it('says so when another token in the wallet reads the same', async () => {
+    tokens.set('5b'.repeat(32), {
+      ticker: 'SBX',
+      name: 'Spacebucks',
+      icon_url: null,
+      balance: '0',
+    });
+    // The real one, already in the wallet; the one offered is spelled with a 5.
+    others.set('aa'.repeat(32), {
+      ticker: '5BX',
+      name: 'Spacebucks',
+      icon_url: null,
+      balance: '1000',
+    });
+    show(take([[XCH, 500]], [[cat('5b'), 5_000]], 1, 0));
+    expect(text(await screen.findByTestId('trade-twin'))).toContain(
+      'Two tokens in your wallet use the ticker SBX',
+    );
+  });
+
+  it('shows dollars for XCH and never for a CAT, whatever its last price', async () => {
+    prices.current = {
+      xchUsd: 20,
+      cats: { ['5b'.repeat(32)]: { lastPrice: 1_000, askPrice: 1_000 } },
+      source: 'nodexch',
+      at: 0,
+    };
+    tokens.set('5b'.repeat(32), {
+      ticker: 'SBX',
+      name: 'Spacebucks',
+      icon_url: null,
+      balance: '0',
+    });
+    show(take([[XCH, 500_000_000_000]], [[cat('5b'), 5_000]], 1, 0));
+    expect(await screen.findByText('Spacebucks')).toBeTruthy();
+    expect(
+      within(legs('pay')[0]).getByTestId('trade-usd').textContent,
+    ).toContain('$10.00');
+    expect(within(legs('receive')[0]).queryByTestId('trade-usd')).toBeNull();
   });
 
   it('marks a CAT the wallet has never held, and draws it a monogram of its own', async () => {
@@ -314,5 +448,51 @@ describe('groupedAmount', () => {
     expect(groupedAmount(BigNumber(99_999_999), 3)).toBe('99 999.999');
     expect(groupedAmount(BigNumber(1_500_000_000_000), 12)).toBe('1.5');
     expect(groupedAmount(BigNumber(1_234_567_000), 3)).toBe('1 234 567');
+  });
+});
+
+describe('safeTicker', () => {
+  it('keeps plain ASCII tickers, folded', () => {
+    expect(safeTicker('SBX')).toBe('SBX');
+    expect(safeTicker('wUSDC.b')).toBe('wUSDC.b');
+    expect(safeTicker(' $HOA ')).toBe('$HOA');
+    expect(safeTicker('ＳＢＸ')).toBe('SBX');
+  });
+
+  it('refuses anything that is not plain ASCII, or too long', () => {
+    expect(safeTicker('ЅВХ')).toBeNull();
+    expect(safeTicker('SBX🚀')).toBeNull();
+    expect(safeTicker('A'.repeat(13))).toBeNull();
+    expect(safeTicker('')).toBeNull();
+    expect(safeTicker(null)).toBeNull();
+  });
+
+  it('refuses whatever reads as XCH or Chia', () => {
+    for (const ticker of [
+      'XCH',
+      'xch',
+      'TXCH',
+      'XCH.',
+      'X-CH',
+      'X_C_H',
+      'wXCH',
+      'XCHX',
+      'CHIA',
+      'CH1A',
+      'chia',
+      'ＸＣＨ',
+      'ХСН',
+      'ΧCΗ',
+    ]) {
+      expect(safeTicker(ticker), ticker).toBeNull();
+    }
+    expect(safeTicker('TXCH', 'TXCH')).toBeNull();
+  });
+
+  it('gives look-alikes one skeleton', () => {
+    expect(tickerSkeleton('ХСН')).toBe('XCH');
+    expect(tickerSkeleton('ΧCΗ')).toBe('XCH');
+    expect(tickerSkeleton('x.c-h')).toBe('XCH');
+    expect(tickerSkeleton('5BX')).toBe(tickerSkeleton('SBX'));
   });
 });

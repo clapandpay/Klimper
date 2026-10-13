@@ -113,7 +113,7 @@ msgstr ""
 msgid "{coinCount} coins"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:241
+#: src/klimper/xchonnect/XchonnectTrade.tsx:250
 msgid "{count} assets"
 msgstr ""
 
@@ -206,7 +206,11 @@ msgid "{offers, plural, one {This cancels an open offer that holds some of the s
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectTrade.tsx:358
-msgid "{offers} offers taken together"
+#~ msgid "{offers} offers taken together"
+#~ msgstr ""
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:367
+msgid "{offers} separate offers taken together"
 msgstr ""
 
 #: src/components/confirmations/TokenConfirmation.tsx:294
@@ -579,7 +583,7 @@ msgstr ""
 msgid "All Levels"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:361
+#: src/klimper/xchonnect/XchonnectTrade.tsx:370
 msgid "all or nothing"
 msgstr ""
 
@@ -652,7 +656,7 @@ msgstr ""
 msgid "Analyze Duration"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:264
+#: src/klimper/xchonnect/XchonnectTrade.tsx:273
 msgid "and {hidden} more"
 msgstr ""
 
@@ -2924,9 +2928,13 @@ msgstr ""
 msgid "Klimper could not read the clipboard."
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:364
-msgid "Klimper counted the offers in the offer itself. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
+#: src/klimper/xchonnect/XchonnectTrade.tsx:373
+msgid "Klimper counted the offers in the offer itself: groups of coins that are not tied to each other, each asking for its own payment. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
 msgstr ""
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:364
+#~ msgid "Klimper counted the offers in the offer itself. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
+#~ msgstr ""
 
 #: src/klimper/Scanner.tsx:140
 msgid "Klimper does not know this code"
@@ -3453,7 +3461,7 @@ msgstr ""
 msgid "New Offer"
 msgstr "Neuer Offer"
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:206
+#: src/klimper/xchonnect/XchonnectTrade.tsx:208
 msgid "new to your wallet"
 msgstr ""
 
@@ -4328,7 +4336,7 @@ msgid "Previous page"
 msgstr "Vorherige Seite"
 
 #: src/components/TokenColumns.tsx:140
-#: src/klimper/xchonnect/XchonnectTrade.tsx:295
+#: src/klimper/xchonnect/XchonnectTrade.tsx:304
 msgid "Price"
 msgstr ""
 
@@ -5132,7 +5140,7 @@ msgstr ""
 #~ msgid "Show collection"
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:264
+#: src/klimper/xchonnect/XchonnectTrade.tsx:273
 msgid "Show fewer"
 msgstr ""
 
@@ -5165,7 +5173,7 @@ msgstr ""
 msgid "Show spent coins"
 msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:305
+#: src/klimper/xchonnect/XchonnectTrade.tsx:314
 msgid "Show the price the other way round"
 msgstr ""
 
@@ -6512,6 +6520,10 @@ msgstr ""
 msgid "Turn on Face ID"
 msgstr ""
 
+#: src/klimper/xchonnect/XchonnectTrade.tsx:215
+msgid "Two tokens in your wallet use the ticker {ticker}. Check the id."
+msgstr ""
+
 #: src/pages/PeerList.tsx:81
 msgid "Type"
 msgstr ""
@@ -7213,7 +7225,7 @@ msgid "You have not made any transactions yet."
 msgstr "Sie haben noch keine Transaktionen durchgeführt."
 
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:144
-#: src/klimper/xchonnect/XchonnectTrade.tsx:330
+#: src/klimper/xchonnect/XchonnectTrade.tsx:339
 msgid "You pay"
 msgstr ""
 
@@ -7222,7 +7234,7 @@ msgid "You Pay"
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:148
-#: src/klimper/xchonnect/XchonnectTrade.tsx:340
+#: src/klimper/xchonnect/XchonnectTrade.tsx:349
 msgid "You receive"
 msgstr ""
 
@@ -7258,7 +7270,7 @@ msgstr ""
 #~ msgid "Your keys open with your passkey."
 #~ msgstr ""
 
-#: src/klimper/xchonnect/XchonnectTrade.tsx:377
+#: src/klimper/xchonnect/XchonnectTrade.tsx:387
 msgid "Your network fee"
 msgstr ""
 
