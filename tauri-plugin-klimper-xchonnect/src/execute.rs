@@ -446,6 +446,57 @@ fn decode_offer_bundle(offer: &str) -> Result<SpendBundle, RpcError> {
     chia_wallet_sdk::driver::decode_offer(offer).map_err(|_| invalid("offer"))
 }
 
+/// The most coin spends an offer may carry. Real offers have a handful (a few coins and
+/// the placeholders for what they ask); this only bounds what a website can make the wallet
+/// read before anyone is asked.
+const MAX_OFFER_SPENDS: usize = 64;
+
+/// What is checked about an offer before the wallet builds anything from it:
+///
+/// * its size ([`MAX_OFFER_SPENDS`]);
+/// * that it asks for something: an offer with no requested payment (a gift) gives the user
+///   no settlement payment to tie their spends to, so the take could never be signed safely;
+/// * the maker's spends run within wallet-kit's cost budget and are all puzzles wallet-kit
+///   recognises. An unknown one (an NFT, a DID, an option) is refused whatever the website's
+///   "unknown contracts" setting: the approval could not say what is being traded;
+/// * the maker's signature covers the maker's spends ([`check_maker_signature`]).
+fn check_offer(offer: &SpendBundle, ctx: &RequestContext<'_>) -> Result<(), RpcError> {
+    if offer.coin_spends.len() > MAX_OFFER_SPENDS {
+        return Err(invalid("offer_too_large"));
+    }
+    let (placeholders, makers): (Vec<CoinSpend>, Vec<CoinSpend>) = offer
+        .coin_spends
+        .iter()
+        .cloned()
+        .partition(|spend| spend.coin.parent_coin_info == Bytes32::default());
+    if placeholders.is_empty() {
+        return Err(error(
+            codes::UNSUPPORTED_CONTENT,
+            "an offer that asks for nothing cannot be taken here",
+            Some("nothing_requested"),
+        ));
+    }
+    let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
+    let (executed, _) = kit::simulate::execute(
+        &mut allocator,
+        &makers,
+        ctx.ownership,
+        kit::simulate::DEFAULT_MAX_COST,
+    )
+    .map_err(|_| invalid("offer"))?;
+    if executed
+        .iter()
+        .any(|spend| spend.kind == kit::SpendKind::Unknown)
+    {
+        return Err(error(
+            codes::UNSUPPORTED_CONTENT,
+            "unknown contract",
+            Some("unknown_contract"),
+        ));
+    }
+    check_maker_signature(offer, &ctx.network)
+}
+
 /// `AGG_SIG` constants of the request's network, as wallet-kit's policy computes them.
 fn agg_sig_constants(network: &kit::Network) -> chia_wallet_sdk::signer::AggSigConstants {
     use chia_wallet_sdk::types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
@@ -592,7 +643,7 @@ fn bind_user_spends(
     mut spends: Vec<CoinSpend>,
     ownership: &kit::Ownership,
 ) -> Result<Vec<CoinSpend>, RpcError> {
-    use chia_wallet_sdk::prelude::{Allocator, Condition, FromClvm, NodePtr, ToClvm, run_puzzle};
+    use chia_wallet_sdk::prelude::{Allocator, Condition};
     use chia_wallet_sdk::types::{
         announcement_id,
         conditions::{AssertCoinAnnouncement, CreateCoinAnnouncement},
@@ -603,42 +654,30 @@ fn bind_user_spends(
     if report.all_bound {
         return Ok(spends);
     }
-    let summary = kit::simulate(&spends, ownership, max_cost).map_err(RpcError::from)?;
-    let bound: Vec<usize> = summary
-        .spends
+    // One run for which spends are the user's and what each announces.
+    let mut allocator = Allocator::new();
+    let (executed, _) = kit::simulate::execute(&mut allocator, &spends, ownership, max_cost)
+        .map_err(RpcError::from)?;
+    let bound: Vec<usize> = executed
         .iter()
         .enumerate()
-        .filter(|(index, info)| info.owned && !report.unbound_user_spends.contains(index))
+        .filter(|(index, spend)| spend.owned && !report.unbound_user_spends.contains(index))
         .map(|(index, _)| index)
         .collect();
-    let mut allocator = Allocator::new();
 
     // The anchor: a coin announcement a bound user spend makes in this bundle.
-    let mut anchor = None;
-    for &index in &bound {
-        let spend = &spends[index];
-        let (Ok(puzzle), Ok(solution)) = (
-            spend.puzzle_reveal.to_clvm(&mut allocator),
-            spend.solution.to_clvm(&mut allocator),
-        ) else {
-            continue;
-        };
-        let made = run_puzzle(&mut allocator, puzzle, solution)
-            .ok()
-            .and_then(|output| Vec::<Condition<NodePtr>>::from_clvm(&allocator, output).ok())
-            .and_then(|conditions| {
-                conditions
-                    .into_iter()
-                    .find_map(|condition| match condition {
-                        Condition::CreateCoinAnnouncement(created) => Some(created.message),
-                        _ => None,
-                    })
-            });
-        if let Some(message) = made {
-            anchor = Some(announcement_id(spend.coin.coin_id(), message));
-            break;
-        }
-    }
+    let mut anchor = bound.iter().find_map(|&index| {
+        let spend = &executed[index];
+        spend
+            .conditions
+            .iter()
+            .find_map(|condition| match condition {
+                Condition::CreateCoinAnnouncement(created) => {
+                    Some(announcement_id(spend.coin.coin_id(), &created.message))
+                }
+                _ => None,
+            })
+    });
     // None made: give a bound spend one.
     if anchor.is_none() {
         for &index in &bound {
@@ -701,19 +740,9 @@ pub fn take_offer(
     broadcaster: &dyn Broadcaster,
     params_json: &str,
 ) -> Result<String, RpcError> {
-    let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
-    let offer = params
-        .get("offer")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|offer| !offer.is_empty())
-        .ok_or_else(|| invalid("offer"))?
-        .to_owned();
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
-    let offer = decode_offer_bundle(&offer)?;
-    check_maker_signature(&offer, &ctx.network)?;
     // As for a send: a take that cannot be built tells the website the wallet cannot pay
-    // for it, so a run of them is a search for the balance.
+    // for it, so a run of them is a search for the balance. Checked first, so a website
+    // that keeps sending offers the wallet refuses gets nothing more done.
     if failed_builds::too_many(ctx.dapp, ctx.now) {
         return Err(error(
             codes::SPENDABLE_BALANCE_EXCEEDED,
@@ -721,8 +750,24 @@ pub fn take_offer(
             Some("build_failed"),
         ));
     }
+    let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
+    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let offer = params
+        .get("offer")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|offer| !offer.is_empty())
+        .ok_or_else(|| invalid("offer"))?;
+    // Everything about the offer itself is settled before Sage, its asset lookups or the
+    // wallet lock are touched, and every refusal here counts like a failed build.
+    let offer = decode_offer_bundle(offer)
+        .and_then(|offer| check_offer(&offer, ctx).map(|()| offer))
+        .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
 
-    let build_failed = |e: String| {
+    let (spends, maker_signature) = on_sage(state, async move |sage| {
+        Ok(build_take(&*sage.wallet()?, offer, fee).await?)
+    })
+    .map_err(|e| {
         // Sage's own words stay here, as for a send: they name balances and coins.
         tracing::info!("xchonnect: chia_takeOffer could not be built: {e}");
         failed_builds::record(ctx.dapp, ctx.now);
@@ -731,21 +776,25 @@ pub fn take_offer(
             "the wallet could not take this offer",
             Some("build_failed"),
         )
-    };
-    let (spends, maker_signature) = on_sage(state, async move |sage| {
-        Ok(build_take(&*sage.wallet()?, offer, fee).await?)
-    })
-    .map_err(build_failed)?;
+    })?;
     let spends = bind_user_spends(spends, ctx.ownership)?;
     // Sage's own reading of the whole bundle, from the wallet database, for the
-    // cross-check: the same summary its take_offer endpoint returns.
+    // cross-check: the same summary its take_offer endpoint returns. A failure here is
+    // not about the balance, and is answered as `check_spends` answers it.
     let request = ViewCoinSpends {
         coin_spends: spends.iter().map(to_json).collect(),
     };
     let summary = on_sage(state, async move |sage| {
         Ok(sage.view_coin_spends(request).await?.summary)
     })
-    .map_err(build_failed)?;
+    .map_err(|e| {
+        tracing::warn!("xchonnect: the wallet could not summarise a take: {e}");
+        error(
+            codes::UNSUPPORTED_CONTENT,
+            "the wallet could not read this transaction",
+            Some("crosscheck_unavailable"),
+        )
+    })?;
 
     submit_take(
         ctx,
@@ -790,6 +839,15 @@ fn submit_take(
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
+    // Whatever the website's "unknown contracts" setting: a take moves assets between two
+    // parties, and the approval must be able to say which.
+    if !kit_summary.unknown_puzzles.is_empty() {
+        return Err(error(
+            codes::UNSUPPORTED_CONTENT,
+            "unknown contract",
+            Some("unknown_contract"),
+        ));
+    }
     cross_check(sage_summary, &kit_summary)?;
 
     let submitted = kit::submit(

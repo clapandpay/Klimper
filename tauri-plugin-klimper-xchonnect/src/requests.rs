@@ -345,28 +345,28 @@ fn run(
         broadcaster: Some(&broadcaster),
     };
     let outcome = match canonical_method(&meta.method) {
-        execute::CHIA_SEND => {
-            if !permissions.allows_method(execute::CHIA_SEND) {
-                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
+        // The requests Klimper builds from its own coins: one gate for all of them.
+        method @ (execute::CHIA_SEND | execute::CHIA_TAKE_OFFER) => {
+            if !permissions.allows_method(method) {
+                // Most often a connection paired before the method existed: the reason lets
+                // the website say "pair again" instead of a bare refusal.
+                Err(RpcError {
+                    code: codes::UNAUTHORIZED,
+                    message: "this connection may not use this request; pair again".to_owned(),
+                    data: Some(serde_json::json!({ "reason": "not_granted" }).to_string()),
+                })
             } else if approvals.paused(&record.id) {
-                // Refused before anything is built: whether a paused website's send could
+                // Refused before anything is built: whether a paused website's request could
                 // be built would tell it the wallet's balance without a prompt.
                 Err(rejected())
             } else {
                 approver.mark_cross_checked();
-                execute::send(state, &context, &signer, &approver, &broadcaster, params)
-            }
-        }
-        execute::CHIA_TAKE_OFFER => {
-            if !permissions.allows_method(execute::CHIA_TAKE_OFFER) {
-                Err(rpc_error(codes::UNAUTHORIZED, "unauthorized"))
-            } else if approvals.paused(&record.id) {
-                // As for a send: whether a paused website's take could be built would tell
-                // it the wallet's balance without a prompt.
-                Err(rejected())
-            } else {
-                approver.mark_cross_checked();
-                execute::take_offer(state, &context, &signer, &approver, &broadcaster, params)
+                let build = if method == execute::CHIA_SEND {
+                    execute::send
+                } else {
+                    execute::take_offer
+                };
+                build(state, &context, &signer, &approver, &broadcaster, params)
             }
         }
         kit::SUBMIT_COIN_SPENDS => {

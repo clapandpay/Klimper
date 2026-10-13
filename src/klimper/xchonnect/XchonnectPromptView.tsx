@@ -437,10 +437,18 @@ function Handling({ view }: { readonly view: SpendPromptView }) {
           <Badge
             icon={<Send className='h-3.5 w-3.5' aria-hidden='true' />}
             hint={
-              <Trans>
-                Klimper built this from your own coins and sends it to the
-                network itself.
-              </Trans>
+              view.partial ? (
+                <Trans>
+                  Klimper built your side from your own coins, completes it with
+                  the other side&apos;s offer and sends the trade to the network
+                  itself.
+                </Trans>
+              ) : (
+                <Trans>
+                  Klimper built this from your own coins and sends it to the
+                  network itself.
+                </Trans>
+              )
             }
           >
             <Trans>Built by Klimper</Trans>
@@ -650,8 +658,20 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
               className='flex justify-between gap-3'
               data-testid='prompt-implied-fee'
             >
-              <span className='text-muted-foreground'>
-                <Trans>Network fee</Trans>
+              <span className='flex items-center gap-1 text-muted-foreground'>
+                {view.partial ? (
+                  <>
+                    <Trans>Network fee of the whole trade</Trans>
+                    <Hint>
+                      <Trans>
+                        Both sides&apos; fees together. Your own part is in what
+                        you pay above.
+                      </Trans>
+                    </Hint>
+                  </>
+                ) : (
+                  <Trans>Network fee</Trans>
+                )}
               </span>
               <span className='text-right'>
                 {formatAmount(view.impliedFee, XCH_PRECISION)} {view.xchLabel}
@@ -821,6 +841,8 @@ export function XchonnectPromptView({ view }: { readonly view: PromptView }) {
 export function promptHeadline(view: PromptView): React.ReactNode {
   if (view.kind === 'message') return <Trans>Sign a message</Trans>;
   if (view.kind === 'unreadable') return <Trans>Unreadable request</Trans>;
+  // A take is wallet-built too, but it is a trade, not a payment (TASK-137).
+  if (view.walletBuilt && view.partial) return <Trans>Take an offer</Trans>;
   if (view.walletBuilt) return <Trans>Send</Trans>;
   if (view.broadcasts) return <Trans>Sign and send</Trans>;
   return view.partial ? (
