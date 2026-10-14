@@ -734,6 +734,7 @@ fn limits_refuse_before_prompting_and_survive_a_restart() {
     let record = DailySpend {
         day: NOW / 86_400,
         spent: [(AssetId::Xch, 700_u128)].into_iter().collect(),
+        options: 2,
     };
     // One backing store, two `SessionStore` objects: an app that restarted.
     let shared: Arc<MemorySecrets> = Arc::new(secrets);
@@ -747,6 +748,7 @@ fn limits_refuse_before_prompting_and_survive_a_restart() {
         .unwrap();
     assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&700));
     assert_eq!(loaded.day, NOW / 86_400);
+    assert_eq!(loaded.options, 2);
 }
 
 /// A signature that does not verify for the key that was asked for is never returned.
@@ -1077,14 +1079,18 @@ fn spend_of(coin: Coin, who: &BlsPair, amount: u64) -> Vec<CoinSpend> {
     ctx.take()
 }
 
-/// The record of a sealed bundle that held `spends`: per coin, the digests of what `who`
-/// signed for it.
+/// The record of a sealed bundle that held `spends`: the digests of what `who` signed in it,
+/// and the coins it signed for.
 fn sealed_record(spends: &[CoinSpend], who: &BlsPair) -> SignedCoins {
     use chia_wallet_sdk::signer::{AggSigConstants, RequiredSignature};
     use chia_wallet_sdk::types::TESTNET11_CONSTANTS;
     let constants = AggSigConstants::new(TESTNET11_CONSTANTS.agg_sig_me_additional_data);
     let mut allocator = Allocator::new();
     let mut record = kit::BroadcastRecord::default();
+    let mut bundle = kit::SealedBundle {
+        id: Bytes32::new([0x5e; 32]),
+        ..Default::default()
+    };
     for cs in spends {
         record.coins.push(cs.coin.coin_id());
         for required in RequiredSignature::from_coin_spend(&mut allocator, cs, &constants).unwrap()
@@ -1092,14 +1098,15 @@ fn sealed_record(spends: &[CoinSpend], who: &BlsPair) -> SignedCoins {
             if let RequiredSignature::Bls(bls) = required
                 && bls.public_key == who.pk
             {
-                record.sealed.push((
-                    cs.coin.coin_id(),
-                    kit::sealed_digest(&bls.public_key, &bls.message()),
-                ));
+                bundle
+                    .digests
+                    .push(kit::sealed_digest(&bls.public_key, &bls.message()));
+                bundle.coins.push(cs.coin.coin_id());
             }
         }
     }
-    assert!(!record.sealed.is_empty());
+    assert!(!bundle.digests.is_empty());
+    record.sealed = Some(bundle);
     let mut signed = SignedCoins::default();
     signed.add(&record);
     signed
@@ -1120,7 +1127,11 @@ fn a_sealed_signature_is_never_made_again_but_the_coin_can_be_spent_otherwise() 
     let signed_hash = kit::signed_message_hash(&message);
     harness.signed.add(&kit::BroadcastRecord {
         coins: vec![],
-        sealed: vec![(coin.coin_id(), kit::sealed_digest(&who.pk, &signed_hash))],
+        sealed: Some(kit::SealedBundle {
+            id: Bytes32::new([0x5f; 32]),
+            digests: vec![kit::sealed_digest(&who.pk, &signed_hash)],
+            coins: vec![coin.coin_id()],
+        }),
     });
 
     for method in [
@@ -1233,6 +1244,7 @@ fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
                 methods: vec!["chia_send".to_owned()],
                 exposed_keys: vec![who.pk],
                 limits: BTreeMap::new(),
+                options: kit::DEFAULT_OPTION_LIMIT,
             };
             let limits =
                 PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
@@ -1268,6 +1280,7 @@ fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
                     other_signature: None,
                     intent: Some(&intent),
                     wallet_built: true,
+                    wallet_fee: 0,
                     signatures_released: false,
                 },
                 &context,
@@ -1294,7 +1307,7 @@ fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
         assert_eq!(calls, 0);
     });
     assert_eq!(chain.accepted.lock().unwrap().len(), 1);
-    assert!(!record.load().unwrap().to_kit().sealed.is_empty());
+    assert!(!record.load().unwrap().to_kit().unwrap().sealed.is_empty());
 }
 
 /// wallet-kit reports the coins of every `signCoinSpends` answer before the signature is

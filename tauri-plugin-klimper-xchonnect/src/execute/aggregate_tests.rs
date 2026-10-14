@@ -317,10 +317,13 @@ async fn aggregated_take_settles(
         asked,
         sent,
         trade,
+        linking,
         ..
     } = take(&taker, &cats, &offer, taker_fee, &take_permissions(), true).await;
     let answer = result.unwrap_or_else(|error| panic!("{label}: refused: {error:?}"));
     assert!(asked, "{label}: the user was never asked");
+    // With the fee Klimper chose, Sage's take of several offers is still sealed.
+    assert_eq!(linking.as_deref(), Some("sealed"), "{label}");
     assert!(answer.contains("transactionId"), "{answer}");
 
     // What the approval screen shows, worked out by the wallet.

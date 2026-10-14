@@ -221,7 +221,10 @@ pub struct SessionSummary {
     pub developer_mode: bool,
     pub methods: Vec<String>,
     pub exposed_keys: Vec<String>,
-    pub limits: BTreeMap<String, StoredLimit>,
+    pub limits: BTreeMap<String, LimitView>,
+    /// How many options may leave the user, per request and per day (the default unless
+    /// the user changed it; an empty side is no limit).
+    pub option_limit: LimitView,
     pub allow_agg_sig_unsafe: bool,
     pub allow_unknown_contracts: bool,
     /// The website sees every receive address, not only its own (the user allowed it, or it
@@ -231,13 +234,53 @@ pub struct SessionSummary {
     pub connected: bool,
 }
 
+/// One limit as the webview reads and writes it (`perRequest`, `perDay`). The stored form,
+/// [`StoredLimit`], keeps its field names: records in the keyring are written with them.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitView {
+    #[serde(default)]
+    pub per_request: Option<u128>,
+    #[serde(default)]
+    pub per_day: Option<u128>,
+}
+
+impl From<StoredLimit> for LimitView {
+    fn from(limit: StoredLimit) -> Self {
+        LimitView {
+            per_request: limit.per_request,
+            per_day: limit.per_day,
+        }
+    }
+}
+
+impl From<LimitView> for StoredLimit {
+    fn from(limit: LimitView) -> Self {
+        StoredLimit {
+            per_request: limit.per_request,
+            per_day: limit.per_day,
+        }
+    }
+}
+
+fn limit_views(limits: &BTreeMap<String, StoredLimit>) -> BTreeMap<String, LimitView> {
+    limits
+        .iter()
+        .map(|(key, limit)| (key.clone(), LimitView::from(*limit)))
+        .collect()
+}
+
 /// Changes a user can make to one dApp's permissions (the full screen is TASK-083).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DappPolicy {
     /// Replace the per-asset limits. Keys are `xch` or `cat:<64 hex>`.
     #[serde(default)]
-    pub limits: Option<BTreeMap<String, StoredLimit>>,
+    pub limits: Option<BTreeMap<String, LimitView>>,
+    /// Replace the option limit: how many options may leave the user per request and per
+    /// day (xchonnect spec 11.1 item 5). An empty side is no limit.
+    #[serde(default)]
+    pub option_limit: Option<LimitView>,
     /// Allow `AGG_SIG_UNSAFE` for this dApp. Off by default and a scary confirmation in
     /// the UI: such a signature is valid in any spend context.
     #[serde(default)]
@@ -278,7 +321,8 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         developer_mode: stored.record.developer_mode,
         methods: stored.record.permissions.methods.clone(),
         exposed_keys: stored.record.permissions.exposed_keys.clone(),
-        limits: stored.record.permissions.limits.clone(),
+        limits: limit_views(&stored.record.permissions.limits),
+        option_limit: stored.record.permissions.option_limit().into(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
         all_receive_keys: stored.record.permissions.exposed_keys.len() > 1,
@@ -718,6 +762,20 @@ async fn push_status<R: Runtime>(
     })
 }
 
+/// The wallet's default fee, in mojos, as the user set it in the wallet's settings: the fee
+/// of every request Klimper builds and broadcasts itself (`chia_send`, offer takes, the
+/// option methods), never a website's `fee` (xchonnect spec 11.1.1, 11.2). Capped at
+/// `execute::MAX_FEE`.
+#[command]
+async fn set_own_fee(fee: String) -> Result<()> {
+    let mojos: u64 = fee
+        .trim()
+        .parse()
+        .map_err(|_| Error::Protocol(format!("not a fee in mojos: {fee}")))?;
+    execute::set_own_fee(mojos);
+    Ok(())
+}
+
 /// The connected dApps of the active wallet. Also resumes the message loop of every
 /// session that is not already running, which is how sessions come back after a restart
 /// or after a wallet was opened.
@@ -919,7 +977,13 @@ async fn set_dapp_policy<R: Runtime>(
                 record.permissions.exposed_keys = exposed;
             }
             if let Some(limits) = policy.limits {
-                record.permissions.limits = limits;
+                record.permissions.limits = limits
+                    .into_iter()
+                    .map(|(key, limit)| (key, StoredLimit::from(limit)))
+                    .collect();
+            }
+            if let Some(limit) = policy.option_limit {
+                record.permissions.options = Some(limit.into());
             }
             if let Some(methods) = policy.methods {
                 record.permissions.methods = methods;
@@ -1049,7 +1113,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             pending_approvals,
             resolve_approval,
             cancel_approval,
-            push_status
+            push_status,
+            set_own_fee
         ])
         .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;
@@ -1098,6 +1163,28 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 #[cfg(test)]
 mod lib_tests {
     use super::*;
+
+    /// The limits the webview sends (`perRequest`, `perDay`) reach the stored record, and
+    /// the summary hands them back in the same words. Before `LimitView`, the stored form's
+    /// `per_request` was expected and the webview's limits were read as no limit.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_webviews_limits_are_read_as_sent() {
+        let policy: DappPolicy = serde_json::from_value(serde_json::json!({
+            "limits": { "xch": { "perRequest": 250, "perDay": 1000 } },
+            "optionLimit": { "perRequest": 2 },
+        }))
+        .unwrap();
+        let xch = StoredLimit::from(policy.limits.unwrap()["xch"]);
+        assert_eq!((xch.per_request, xch.per_day), (Some(250), Some(1000)));
+        let options = StoredLimit::from(policy.option_limit.unwrap());
+        assert_eq!((options.per_request, options.per_day), (Some(2), None));
+        let shown = serde_json::to_value(LimitView::from(xch)).unwrap();
+        assert_eq!(
+            shown,
+            serde_json::json!({ "perRequest": 250, "perDay": 1000 })
+        );
+    }
 
     #[test]
     fn a_release_build_never_accepts_a_developer_mode_uri() {

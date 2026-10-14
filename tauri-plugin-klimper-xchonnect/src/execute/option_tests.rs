@@ -64,6 +64,7 @@ fn granted(method: &str) -> DappPermissions {
         methods: vec![method.to_owned()],
         exposed_keys: vec![],
         limits: BTreeMap::new(),
+        options: kit::DEFAULT_OPTION_LIMIT,
     }
 }
 
@@ -106,6 +107,8 @@ struct Setup {
     now: u64,
     /// The wallet's record of signed coins (spec 11.2).
     signed: kit::SignedCoins,
+    /// Options that already left the user today (`DailySpend::options`).
+    options_today: u128,
 }
 
 impl Setup {
@@ -115,6 +118,7 @@ impl Setup {
             session_chain_id: "testnet11",
             now,
             signed: kit::SignedCoins::default(),
+            options_today: 0,
         }
     }
 }
@@ -133,6 +137,11 @@ fn run(
     ) -> Result<String, RpcError>,
 ) -> Run {
     let limits = Limits::default();
+    *limits.0.borrow_mut() = kit::DailySpend {
+        day: setup.now / 86_400,
+        options: setup.options_today,
+        ..kit::DailySpend::default()
+    };
     let ctx = RequestContext {
         dapp: "options.test",
         network: kit::Network::Testnet11,
@@ -371,39 +380,64 @@ async fn written(
 
 /// Send `launcher_id` from `from` to `to_ph`, as `chia_transferOption` does.
 async fn send_option(from: &mut SimWallet, launcher_id: Bytes32, to: Bytes32) -> Run {
-    let w = who(from).await;
     let now = chain_time(from).await;
-    let (spends, amount) = build_transfer(&from.wallet, launcher_id, to, 0)
+    send_option_with(
+        from,
+        launcher_id,
+        to,
+        Setup::new(CHIA_TRANSFER_OPTION, now),
+        0,
+    )
+    .await
+}
+
+/// [`send_option`] under `setup` (its permissions and today's option count).
+async fn send_option_with(
+    from: &mut SimWallet,
+    launcher_id: Bytes32,
+    to: Bytes32,
+    setup: Setup,
+    fee: u64,
+) -> Run {
+    let w = who(from).await;
+    let (spends, amount) = build_transfer(&from.wallet, launcher_id, to, fee)
         .await
         .unwrap()
         .expect("refused");
     let summary = sage_summary(from, &[], &spends).await;
-    run(
-        &w,
-        &Setup::new(CHIA_TRANSFER_OPTION, now),
-        |ctx, signer, approver, broadcaster, _| {
-            submit_transfer(
-                ctx,
-                signer,
-                approver,
-                broadcaster,
-                &summary,
-                spends,
-                Part {
-                    asset: AssetId::Option(launcher_id),
-                    amount,
-                },
-                to,
-                0,
-            )
-        },
-    )
+    run(&w, &setup, |ctx, signer, approver, broadcaster, _| {
+        submit_transfer(
+            ctx,
+            signer,
+            approver,
+            broadcaster,
+            &summary,
+            spends,
+            Part {
+                asset: AssetId::Option(launcher_id),
+                amount,
+            },
+            to,
+            fee,
+        )
+    })
 }
 
 /// Use `launcher_id` with `holder`'s wallet, as `chia_exerciseOption` does, at `now`.
 async fn exercise(holder: &SimWallet, launcher_id: Bytes32, cats: &[Bytes32], now: u64) -> Run {
+    exercise_paying(holder, launcher_id, cats, now, 0).await
+}
+
+/// [`exercise`] with Klimper's own `fee`.
+async fn exercise_paying(
+    holder: &SimWallet,
+    launcher_id: Bytes32,
+    cats: &[Bytes32],
+    now: u64,
+    fee: u64,
+) -> Run {
     let w = who(holder).await;
-    let spends = match build_exercise(&holder.wallet, launcher_id, 0, now)
+    let spends = match build_exercise(&holder.wallet, launcher_id, fee, now)
         .await
         .unwrap()
     {
@@ -422,7 +456,7 @@ async fn exercise(holder: &SimWallet, launcher_id: Bytes32, cats: &[Bytes32], no
         &w,
         &Setup::new(CHIA_EXERCISE_OPTION, now),
         |ctx, signer, approver, broadcaster, _| {
-            submit_exercise(ctx, signer, approver, broadcaster, &summary, spends, 0)
+            submit_exercise(ctx, signer, approver, broadcaster, &summary, spends, fee)
         },
     )
 }
@@ -694,6 +728,7 @@ async fn a_website_mint_with_a_fake_collateral_stays_unknown_and_is_refused() {
                     other_signature: None,
                     intent: None,
                     wallet_built: false,
+                    wallet_fee: 0,
                     signatures_released: true,
                 },
                 ctx,
@@ -720,7 +755,9 @@ fn mint_params_are_read_strictly() {
     let params = super::options::mint_params(good, now).unwrap();
     assert_eq!(params.collateral, xch(1_000));
     assert_eq!(params.strike, cat(Bytes32::new([0x51; 32]), 500));
-    assert_eq!(params.fee, 7);
+    // The website's fee is read (and must be well formed), never used: the fee is
+    // Klimper's own.
+    assert_eq!(params.fee, crate::execute::own_fee());
     for (bad, why) in [
         (
             r#"{"strike":{"amount":5},"expiresAt":1100000}"#,
@@ -1047,6 +1084,118 @@ async fn an_xch_option_is_used_before_the_expiry() {
     settle(&mut alice, &used).await;
 }
 
+/// With a fee Klimper chose (`wallet_fee`), Sage's exercise is still sealed, and the fee is
+/// paid (xchonnect rc.5, H1: the fee credit is at most the wallet's own fee).
+///
+/// Ignored: Sage's `exercise_options` with a fee spends one of the wallet's XCH coins twice
+/// in the bundle it builds (here a 1000-mojo coin), which wallet-kit refuses as an invalid
+/// request (4000, `coinSpends`) and the chain would refuse too. Sage is not changed here;
+/// run with `--ignored` to reproduce.
+#[tokio::test]
+#[ignore = "Sage's exercise_options with a fee spends one coin twice"]
+async fn an_option_is_used_with_klimpers_fee() {
+    let mut alice = SimWallet::new(5_000).await;
+    let strike = xch_strike_cat(&mut alice).await;
+    let AssetId::Cat(strike_cat) = strike.asset else {
+        unreachable!()
+    };
+    let (launcher_id, _) = written(&mut alice, xch(1_000), strike, &[]).await;
+    let now = chain_time(&alice).await;
+    let used = exercise_paying(&alice, launcher_id, &[strike_cat], now, 100).await;
+    used.ok();
+    let prompt = used.prompt.as_ref().unwrap();
+    assert_eq!(prompt["linking"], "sealed");
+    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    settle(&mut alice, &used).await;
+}
+
+/// Sage's mint with a fee Klimper chose (`wallet_fee`) is sealed, and the chain takes it.
+#[tokio::test]
+async fn an_option_is_written_with_klimpers_fee() {
+    let mut alice = SimWallet::new(5_000).await;
+    let now = chain_time(&alice).await;
+    let params = mint_params(
+        xch(1_000),
+        cat(Bytes32::new([0x58; 32]), 10),
+        now + TERM,
+        100,
+    );
+    let (run, _) = write(&alice, &params, &[], &Setup::new(CHIA_MINT_OPTION, now)).await;
+    run.ok();
+    let prompt = run.prompt.as_ref().unwrap();
+    assert_eq!(prompt["linking"], "sealed");
+    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    settle(&mut alice, &run).await;
+}
+
+/// Options leaving the user have a limit of their own (spec 11.1 item 5): one per request
+/// and five a day by default, refused before the user is asked (4029).
+#[tokio::test]
+async fn sending_options_is_limited() {
+    let mut alice = SimWallet::new(5_000).await;
+    let bob = alice.next(2_000).await;
+    let (launcher_id, _) = written(
+        &mut alice,
+        xch(1_000),
+        cat(Bytes32::new([0x57; 32]), 10),
+        &[],
+    )
+    .await;
+    let bob_ph = bob.wallet.change_p2_puzzle_hash().await.unwrap();
+    let now = chain_time(&alice).await;
+
+    // The day's five already left: refused.
+    let mut setup = Setup::new(CHIA_TRANSFER_OPTION, now);
+    assert_eq!(setup.permissions.options, kit::DEFAULT_OPTION_LIMIT);
+    setup.options_today = kit::DEFAULT_OPTIONS_PER_DAY;
+    let refused = send_option_with(&mut alice, launcher_id, bob_ph, setup, 0).await;
+    assert!(!refused.asked());
+    assert_eq!(
+        refused.reason(),
+        format!(
+            "{} {}",
+            codes::LIMIT_EXCEEDED,
+            r#"{"reason":"options_per_day"}"#
+        )
+    );
+    let explained = crate::requests::explain(refused.result.unwrap_err());
+    assert!(
+        explained.message.contains("option limit"),
+        "{}",
+        explained.message
+    );
+
+    // No option may leave in one request.
+    let mut setup = Setup::new(CHIA_TRANSFER_OPTION, now);
+    setup.permissions.options.per_request = Some(0);
+    let refused = send_option_with(&mut alice, launcher_id, bob_ph, setup, 0).await;
+    assert!(!refused.asked());
+    assert!(
+        refused.reason().contains("options_per_request"),
+        "{}",
+        refused.reason()
+    );
+
+    // Under the default, one goes, sealed, with Klimper's own fee.
+    let sent = send_option_with(
+        &mut alice,
+        launcher_id,
+        bob_ph,
+        Setup::new(CHIA_TRANSFER_OPTION, now),
+        100,
+    )
+    .await;
+    sent.ok();
+    let prompt = sent.prompt.as_ref().unwrap();
+    assert_eq!(prompt["linking"], "sealed");
+    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    // The chain takes it.
+    alice
+        .push_bundle(sent.sent.clone().unwrap())
+        .await
+        .expect("the chain refused the bundle");
+}
+
 /// A strike in a CAT the wallet holds, so the writer can use its own option.
 async fn xch_strike_cat(wallet: &mut SimWallet) -> Part {
     cat(issue_amount(wallet, 500).await, 300)
@@ -1203,7 +1352,7 @@ async fn coins_signed_for_a_website_make_a_later_wallet_built_request_strict() {
         )
     });
     answered.ok();
-    let signed = record.load().unwrap().to_kit();
+    let signed = record.load().unwrap().to_kit().unwrap();
     assert!(signed.sealed.is_empty());
     let user_coins = crate::signed_coins::user_coins(&spends, &w.ownership);
     assert!(!user_coins.is_empty());
@@ -1249,9 +1398,9 @@ fn our_signatures(
     out
 }
 
-/// The coins the record holds sealed signatures for.
+/// The coins the record holds sealed signatures for (by bundle).
 fn held(signed: &kit::SignedCoins) -> HashSet<Bytes32> {
-    signed.sealed.values().flatten().copied().collect()
+    signed.sealed_bundles.values().flatten().copied().collect()
 }
 
 /// Refuses every bundle, as a network that does not take it.
@@ -1271,7 +1420,8 @@ impl Broadcaster for Refusing {
 /// signature). Its bytes are kept and can be sent again unchanged. Its signatures are never
 /// made again: the same spends are refused in a wallet-built request, a `signCoinSpends` and a
 /// website's bundle (`sealed_signature`), before anything is shown. Once its coins are spent
-/// on chain the record and the kept bundle are empty, and the next mint is sealed again.
+/// on chain they leave the released coins and the kept bundle is dropped; its sealed
+/// signatures stay (Klimper never prunes them), and the next mint is sealed again.
 #[tokio::test]
 async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     let mut alice = SimWallet::new(5_000).await;
@@ -1293,7 +1443,7 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     first.ok();
     assert_eq!(first.prompt.as_ref().unwrap()["linking"], "sealed");
     let bundle = first.sent.clone().unwrap();
-    let signed = record.load().unwrap().to_kit();
+    let signed = record.load().unwrap().to_kit().unwrap();
     let signed_coin_count = held(&signed).len();
     for cs in &bundle.coin_spends {
         assert!(signed.released.contains(&cs.coin.coin_id()));
@@ -1303,7 +1453,8 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     assert!(!user_coins.is_empty());
     assert!(user_coins.iter().all(|c| held(&signed).contains(c)));
     for (coin, key, message) in &ours {
-        assert!(signed.sealed[&kit::sealed_digest(key, message)].contains(coin));
+        assert!(signed.sealed[&kit::sealed_digest(key, message)].contains(&bundle.name()));
+        assert!(signed.sealed_bundles[&bundle.name()].contains(coin));
     }
     assert_eq!(
         signed.sealed.values().map(HashSet::len).sum::<usize>(),
@@ -1363,6 +1514,7 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
                 other_signature: None,
                 intent: None,
                 wallet_built: false,
+                wallet_fee: 0,
                 signatures_released: true,
             },
             ctx,
@@ -1424,10 +1576,13 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
         .filter(|c| !known.contains(c))
         .copied()
         .collect();
-    let pruned = record.prune(&spent).unwrap().to_kit();
+    let pruned = record.prune(&spent).unwrap().to_kit().unwrap();
     assert_eq!(pruned.released, unknown);
-    assert!(held(&pruned).iter().all(|c| unknown.contains(c)));
-    assert!(held(&pruned).len() < signed_coin_count);
+    // Sealed signatures are never pruned.
+    assert_eq!(held(&pruned).len(), signed_coin_count);
+    for (_, key, message) in &ours {
+        assert!(pruned.is_sealed(key, message));
+    }
     assert!(record.sealed_bundles().unwrap().bundles.is_empty());
     assert!(
         crate::signed_coins::resend(&record, &bundle.name(), resent_never)
@@ -1442,7 +1597,7 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
         .unwrap();
     let summary = sage_summary(&alice, &[], &next.spends).await;
     let mut setup = Setup::new(CHIA_MINT_OPTION, now);
-    setup.signed = record.load().unwrap().to_kit();
+    setup.signed = record.load().unwrap().to_kit().unwrap();
     let sealed = run(&w, &setup, |ctx, s, a, b, _| {
         submit_mint(ctx, s, a, b, &summary, next, 0)
     });
@@ -1479,7 +1634,7 @@ async fn a_sealed_bundle_the_network_refuses_is_recorded() {
         "{}",
         refused.reason()
     );
-    let signed = record.load().unwrap().to_kit();
+    let signed = record.load().unwrap().to_kit().unwrap();
     let ours = our_signatures(&spends, &w.keys);
     assert!(!ours.is_empty());
     for (_, key, message) in &ours {
@@ -1575,10 +1730,15 @@ async fn the_coins_of_an_offer_sage_made_count_as_released() {
     assert!(!held.is_empty(), "{ours:?} {by_sage:?}");
     let (_dir, record) = record_of_signed();
     record.release(by_sage).unwrap();
-    assert!(
-        held.iter()
-            .all(|c| record.load().unwrap().to_kit().released.contains(c))
-    );
+    assert!(held.iter().all(|c| {
+        record
+            .load()
+            .unwrap()
+            .to_kit()
+            .unwrap()
+            .released
+            .contains(c)
+    }));
 }
 
 /// Only a coin seen spent leaves the record: a released coin that is still unspent stays.
@@ -1591,7 +1751,7 @@ async fn an_unspent_released_coin_stays_in_the_record() {
     let spent = spent_coins(&alice.wallet, &record.load().unwrap().coins()).await;
     assert!(spent.is_empty());
     let kept = record.prune(&spent).unwrap();
-    assert!(kept.to_kit().released.contains(&coin.coin_id()));
+    assert!(kept.to_kit().unwrap().released.contains(&coin.coin_id()));
 }
 
 /// A loan request's signed offer goes to the website: every coin of the borrower's in it is
@@ -1603,7 +1763,7 @@ async fn a_loan_requests_offer_releases_the_borrowers_coins() {
     let (_dir, record) = record_of_signed();
     crate::requests::record_released(CHIA_MINT_OPTION, loan.request.ok(), &w.ownership, &record)
         .unwrap();
-    let signed = record.load().unwrap().to_kit();
+    let signed = record.load().unwrap().to_kit().unwrap();
     let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
     let borrower = crate::signed_coins::user_coins(&offer.coin_spends, &w.ownership);
     assert!(!borrower.is_empty());

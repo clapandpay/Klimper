@@ -219,11 +219,15 @@ pub(super) struct User {
     offers: usize,
     asked: Cell<bool>,
     trade: RefCell<Option<crate::trade::TradeOverview>>,
+    linking: RefCell<Option<String>>,
 }
 
 impl kit::Approver for User {
     fn approve(&self, prompt: &kit::Prompt<'_>) -> bool {
         self.asked.set(true);
+        *self.linking.borrow_mut() = serde_json::to_value(prompt)
+            .ok()
+            .and_then(|v| Some(v.get("linking")?.as_str()?.to_owned()));
         *self.trade.borrow_mut() = crate::trade::of_prompt(prompt, Some(self.offers));
         self.approves
     }
@@ -248,7 +252,7 @@ impl Broadcaster for Kept {
 }
 
 #[derive(Default)]
-pub(super) struct Limits(RefCell<DailySpend>);
+pub(super) struct Limits(pub(super) RefCell<DailySpend>);
 
 impl LimitStore for Limits {
     fn load(&self) -> Result<DailySpend, PermissionError> {
@@ -269,6 +273,8 @@ pub(super) struct Outcome {
     pub trade: Option<crate::trade::TradeOverview>,
     /// The loan the screen showed, for a loan the user lends (TASK-140).
     pub loan: Option<super::options::LoanView>,
+    /// How wallet-kit read the links between the user's spends (`sealed` or `direct`).
+    pub linking: Option<String>,
 }
 
 impl Outcome {
@@ -279,6 +285,7 @@ impl Outcome {
             sent: None,
             trade: None,
             loan: None,
+            linking: None,
         }
     }
 }
@@ -288,6 +295,7 @@ pub(super) fn take_permissions() -> DappPermissions {
         methods: vec![CHIA_TAKE_OFFER.to_owned()],
         exposed_keys: vec![],
         limits: BTreeMap::new(),
+        options: kit::DEFAULT_OPTION_LIMIT,
     }
 }
 
@@ -368,6 +376,7 @@ pub(super) async fn take(
         offers,
         asked: Cell::new(false),
         trade: RefCell::new(None),
+        linking: RefCell::new(None),
     };
     let kept = Kept::default();
     let loan = Cell::new(None);
@@ -380,6 +389,7 @@ pub(super) async fn take(
         spends,
         &maker_coins(offer),
         maker_signature,
+        fee,
         &|view, _| loan.set(Some(*view)),
     );
     Outcome {
@@ -388,6 +398,7 @@ pub(super) async fn take(
         sent: kept.0.into_inner(),
         trade: user.trade.into_inner(),
         loan: loan.get(),
+        linking: user.linking.into_inner(),
     }
 }
 
@@ -409,6 +420,12 @@ async fn takes_and_settles(trade: Trade, maker_fee: u64, taker_fee: u64) {
     });
     assert!(outcome.asked, "the user was never asked");
     assert!(answer.contains("transactionId"), "{answer}");
+    // Sage's take, with the fee Klimper chose (`wallet_fee`), is still read as sealed.
+    assert_eq!(
+        outcome.linking.as_deref(),
+        Some("sealed"),
+        "{trade:?} maker fee {maker_fee} taker fee {taker_fee}"
+    );
     // The screen's trade overview: one offer, what it asks for what it gives, the user's
     // own fee apart, and a price (TASK-139).
     let overview = outcome.trade.expect("no trade overview");

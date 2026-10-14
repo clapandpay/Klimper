@@ -93,6 +93,11 @@ export interface OutputView {
   readonly option: OptionOutputView | null;
   /** To the offer settlement puzzle: whoever takes the offer collects it. */
   readonly toSettlement: boolean;
+  /**
+   * Created by a spend Klimper signs but cannot read (an unknown contract around the user's
+   * key: an NFT, a vault). Never counted as received or shown as change (spec 11.1 item 3).
+   */
+  readonly unaccounted: boolean;
 }
 
 export interface OptionOutputView {
@@ -263,6 +268,11 @@ export interface SpendPromptView {
   readonly reserveFee: BigNumber;
   /** Puzzle hashes the wallet does not recognise. Shown in full, and they gate a second confirmation. */
   readonly unknownPuzzles: readonly string[];
+  /**
+   * Coin ids of the spends Klimper signs without recognising the coin as the user's
+   * (`summary.unaccounted_spends`): what they move is unknown. Shown as a danger.
+   */
+  readonly unaccountedSpends: readonly string[];
   readonly timeLocks: TimeLockView;
   readonly signatures: readonly SignatureView[];
   readonly foreignSignatures: number;
@@ -447,7 +457,28 @@ function outputViewOf(entry: unknown, xchLabel: string): OutputView | null {
     toSettlement:
       option === null &&
       exactHex(entry.puzzle_hash, 32) === SETTLEMENT_PAYMENT_HASH,
+    unaccounted: optionalStrictBool(entry.unaccounted),
   };
+}
+
+/**
+ * A flag a newer wallet-kit writes: absent (an older one) is false; present, it must be a
+ * boolean, or the prompt is unreadable.
+ */
+function optionalStrictBool(value: unknown): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') throw new UnreadableAmount();
+  return value;
+}
+
+/**
+ * `summary.unaccounted_spends`: absent (an older wallet-kit) is none; present, every entry
+ * must be a coin id, or the prompt is unreadable. Never shortened.
+ */
+function unaccountedSpendsOf(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new UnreadableAmount();
+  return value.map((entry) => strictHex32(entry));
 }
 
 /** The offer settlement puzzle's hash (chia-puzzles `SETTLEMENT_PAYMENT_HASH`). */
@@ -900,6 +931,8 @@ function readPromptStrict(
     if (hash !== null) unknownPuzzles.push(hash);
   }
 
+  const unaccountedSpends = unaccountedSpendsOf(summary.unaccounted_spends);
+
   const impliedFee =
     summary.implied_fee === null || summary.implied_fee === undefined
       ? null
@@ -939,6 +972,7 @@ function readPromptStrict(
     impliedFee,
     reserveFee: amountOf(summary.reserve_fee),
     unknownPuzzles,
+    unaccountedSpends,
     timeLocks: timeLocksOf(summary.time_locks),
     signatures,
     foreignSignatures: arrayOf(plan.foreign).length,
@@ -975,5 +1009,16 @@ export function formatMagnitude(amount: BigNumber, precision: number): string {
  * approving the request (spec 11.1 item 3).
  */
 export function needsSecondConfirmation(view: PromptView): boolean {
-  return view.kind === 'spend' && view.unknownPuzzles.length > 0;
+  return (
+    view.kind === 'spend' &&
+    (view.unknownPuzzles.length > 0 || hasUnaccounted(view))
+  );
+}
+
+/** The request spends coins Klimper signs but cannot account for (spec 11.1 item 3). */
+export function hasUnaccounted(view: SpendPromptView): boolean {
+  return (
+    view.unaccountedSpends.length > 0 ||
+    view.outputs.some((output) => output.unaccounted)
+  );
 }

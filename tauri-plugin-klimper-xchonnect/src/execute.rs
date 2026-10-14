@@ -22,6 +22,7 @@
 //!   user is never asked to approve a figure one of the two engines contradicts.
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
@@ -375,17 +376,45 @@ fn amount_param(params: &Value, key: &str) -> Result<Option<u64>, RpcError> {
     }
 }
 
-/// The most a website's `fee` can make the user pay in a request Klimper builds and
-/// broadcasts itself: 0.001 XCH (`1_000_000_000` mojos), well above what a Chia transaction
-/// needs to get in, even in a full mempool.
+/// The most fee Klimper pays in a request it builds and broadcasts itself: 0.001 XCH
+/// (`1_000_000_000` mojos), well above what a Chia transaction needs to get in, even in a
+/// full mempool. A larger default fee set in the wallet is taken as this much.
 pub const MAX_FEE: u64 = 1_000_000_000;
 
-/// The fee of a request Klimper builds and broadcasts sealed: Klimper's own choice (xchonnect
-/// spec 11.1.1 and 11.2: wallet-kit credits a sealed bundle's fee as the wallet's, so it must
-/// never be a figure a dApp picked). A website's `fee` is only a hint: taken as asked up to
-/// [`MAX_FEE`], never above it. The approval shows the fee the bundle pays.
+/// The fee of Klimper's own requests, in mojos: the wallet's default fee, as the user set it
+/// in the wallet's settings (the webview hands it over, [`set_own_fee`]). 0 until it has.
+static OWN_FEE: AtomicU64 = AtomicU64::new(0);
+
+/// The user's default fee, in mojos, for the requests Klimper builds itself; at most
+/// [`MAX_FEE`].
+pub fn set_own_fee(mojos: u64) {
+    OWN_FEE.store(capped_fee(mojos), Ordering::SeqCst);
+}
+
+fn capped_fee(mojos: u64) -> u64 {
+    mojos.min(MAX_FEE)
+}
+
+/// The fee of Klimper's own requests now ([`set_own_fee`]).
+pub fn own_fee() -> u64 {
+    OWN_FEE.load(Ordering::SeqCst)
+}
+
+/// The fee of a request Klimper builds and broadcasts sealed: Klimper's own choice, the
+/// user's default fee ([`set_own_fee`]), and never a figure a website picked (xchonnect spec
+/// 11.1.1 and 11.2: wallet-kit credits a sealed bundle's fee as the wallet's, and a host
+/// MUST NOT build a sealed bundle with a fee from a dApp's parameters). A website's `fee`
+/// is still read, so a malformed one is refused as before, and then ignored: not even a
+/// capped hint. It is passed to wallet-kit as `SubmitRequest::wallet_fee`, and the approval
+/// shows the fee the bundle pays.
 fn wallet_fee(params: &Value) -> Result<u64, RpcError> {
-    Ok(amount_param(params, "fee")?.unwrap_or(0).min(MAX_FEE))
+    fee_of(params, own_fee())
+}
+
+/// [`wallet_fee`] with the wallet's fee given: the website's `fee` checked, then dropped.
+fn fee_of(params: &Value, own: u64) -> Result<u64, RpcError> {
+    amount_param(params, "fee")?;
+    Ok(own)
 }
 
 /// `chia_send { address, amount, fee?, assetId?, memos? }`: Sage builds the send from the
@@ -524,6 +553,8 @@ pub fn send(
             other_signature: None,
             intent: Some(&intent),
             wallet_built: true,
+            // Klimper's own fee ([`wallet_fee`]), which the bundle reserves.
+            wallet_fee: fee,
             signatures_released: false,
         },
         ctx,
@@ -859,6 +890,7 @@ pub fn take_offer(
         spends,
         &maker_coins,
         maker_signature,
+        fee,
         on_loan,
     )
 }
@@ -879,7 +911,7 @@ fn maker_coins(offer: &SpendBundle) -> HashSet<Bytes32> {
 /// included, is shown from the simulation. No fee is claimed: wallet-kit checks a fee claim
 /// against the whole bundle's fee, and an offer's maker may pay a fee of their own in the
 /// same bundle, so the user's fee alone would never match ("unauthorized",
-/// `intent_mismatch`; TASK-137). The fee Sage built with is the one the website asked for,
+/// `intent_mismatch`; TASK-137). The fee Sage built with is Klimper's own ([`wallet_fee`]),
 /// and the cross-check holds both engines to the same total.
 fn take_intent(loan: bool) -> Intent {
     Intent {
@@ -905,6 +937,7 @@ fn submit_take(
     spends: Vec<CoinSpend>,
     maker_coins: &HashSet<Bytes32>,
     maker_signature: Signature,
+    fee: u64,
     on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
     // Sage spends the wallet's coins with quoted conditions; held to it all the same. Only
@@ -944,6 +977,9 @@ fn submit_take(
             other_signature: Some(maker_signature),
             intent: Some(&intent),
             wallet_built: true,
+            // The fee Klimper built the take with ([`wallet_fee`]): the user's spends
+            // reserve it (a maker's own fee is reserved by the maker's spends).
+            wallet_fee: fee,
             // Sealed, as for a send: only the transaction id goes back to the website.
             signatures_released: false,
         },
@@ -1091,19 +1127,24 @@ mod tests {
         }
     }
 
-    /// The fee of a sealed request is Klimper's: a website's `fee` is a hint, taken up to
-    /// `MAX_FEE` and never above it (xchonnect spec 11.1.1).
+    /// The fee of a sealed request is Klimper's own, the user's default fee: a website's
+    /// `fee` is read (a malformed one is refused) and ignored, whatever it is (xchonnect
+    /// spec 11.1.1, 11.2). The default fee is capped at `MAX_FEE`.
     #[test]
-    fn a_websites_fee_is_a_hint_capped_by_klimper() {
-        let fee = |params: Value| wallet_fee(&params).unwrap();
-        assert_eq!(fee(serde_json::json!({})), 0);
-        assert_eq!(fee(serde_json::json!({ "fee": 50_000_000 })), 50_000_000);
-        assert_eq!(fee(serde_json::json!({ "fee": "1000000000" })), MAX_FEE);
+    fn a_websites_fee_is_ignored_for_klimpers_own() {
+        let fee = |params: Value| fee_of(&params, 2_000_000).unwrap();
+        assert_eq!(fee(serde_json::json!({})), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": 0 })), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": 50_000_000 })), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": "1000000000" })), 2_000_000);
+        assert!(fee_of(&serde_json::json!({ "fee": -1 }), 0).is_err());
         assert_eq!(
-            fee(serde_json::json!({ "fee": 10_000_000_000_000_u64 })),
-            MAX_FEE
+            fee_of(&serde_json::json!({ "fee": 50_000_000 }), 0).unwrap(),
+            0
         );
-        assert!(wallet_fee(&serde_json::json!({ "fee": -1 })).is_err());
+        // The default fee as the webview hands it over: capped.
+        assert_eq!(capped_fee(10_000_000_000_000), MAX_FEE);
+        assert_eq!(capped_fee(2_000_000), 2_000_000);
     }
 
     /// The shape of a real offer take (found by taking an offer Sage built between two

@@ -556,7 +556,9 @@ fn run(
 }
 
 /// What a website is told for the refusals of the record of signed coins (xchonnect spec
-/// 11.2), in words it can show its user. The code and reason stay wallet-kit's.
+/// 11.2), of a contract in a multi-party request Klimper cannot read, and of the option
+/// limit (spec 11.1 item 5), in words it can show its user. The code and reason stay
+/// wallet-kit's.
 pub fn explain(mut error: RpcError) -> RpcError {
     let reason = error
         .data
@@ -572,6 +574,24 @@ pub fn explain(mut error: RpcError) -> RpcError {
         Some("record_failed") => {
             "Klimper could not save its record of this transaction, so nothing was sent. \
              Try again."
+                .clone_into(&mut error.message);
+        }
+        Some("unknown_partial") => {
+            "This trade has Klimper sign a contract it cannot read (an NFT, a vault or \
+             another wrapped coin), so it cannot check what the other side gets. Klimper \
+             does not sign it."
+                .clone_into(&mut error.message);
+        }
+        Some("options_per_request") => {
+            "This request sends more options out of the wallet than Klimper allows this \
+             website in one request. The user can change the option limit in the \
+             website's settings in Klimper."
+                .clone_into(&mut error.message);
+        }
+        Some("options_per_day") => {
+            "This request would send more options out of the wallet today than Klimper \
+             allows this website per day. Try again tomorrow (UTC), or the user can change \
+             the option limit in the website's settings in Klimper."
                 .clone_into(&mut error.message);
         }
         _ => {}
@@ -824,6 +844,25 @@ mod tests {
         let old: SessionRecord = serde_json::from_value(value).unwrap();
         assert_eq!(old.origin_kid, None);
         assert!(!old.revoked);
+    }
+
+    /// The round-5 refusals reach the website in words it can show, code and reason kept.
+    #[test]
+    fn the_new_refusals_are_explained() {
+        for (code, reason, words) in [
+            (codes::UNAUTHORIZED, "unknown_partial", "cannot read"),
+            (codes::LIMIT_EXCEEDED, "options_per_request", "option limit"),
+            (codes::LIMIT_EXCEEDED, "options_per_day", "option limit"),
+        ] {
+            let data = serde_json::json!({ "reason": reason }).to_string();
+            let error = explain(RpcError {
+                code,
+                message: "x".to_owned(),
+                data: Some(data.clone()),
+            });
+            assert!(error.message.contains(words), "{reason}: {}", error.message);
+            assert_eq!((error.code, error.data), (code, Some(data)));
+        }
     }
 
     #[test]

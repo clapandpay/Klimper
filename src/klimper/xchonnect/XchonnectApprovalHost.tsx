@@ -37,6 +37,7 @@ import {
   XCHONNECT_EVENTS,
 } from './xchonnect';
 import { clock, XchonnectApprovalDetail } from './XchonnectApprovalDetail';
+import { useOwnFeeSync } from './useOwnFeeSync';
 import { goToXchonnectRoute, XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
 import './xchonnect.css';
@@ -155,6 +156,8 @@ function SentToast({
 }
 
 export function XchonnectApprovalHost() {
+  // Klimper's own fee for what it builds for a website: the wallet's default fee.
+  useOwnFeeSync();
   const route = useCurrentRoute();
   const testnet = useTicker().toUpperCase().startsWith('T');
   const testnetRef = useRef(testnet);

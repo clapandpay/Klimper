@@ -242,6 +242,8 @@ pub async fn inspect(
         methods: granted_methods(),
         exposed_keys: receive_keys,
         limits: std::collections::BTreeMap::new(),
+        // Options leaving the user: one per request, five a day, unless the user changes it.
+        options: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT,
     };
     Ok(Attempt {
         id: new_id(),

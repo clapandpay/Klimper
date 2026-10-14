@@ -100,6 +100,8 @@ export interface SessionSummary {
   methods: string[];
   exposedKeys: string[];
   limits: Record<string, AssetLimit>;
+  /** How many options may leave the wallet, per request and per day (a count). */
+  optionLimit: AssetLimit;
   allowAggSigUnsafe: boolean;
   allowUnknownContracts: boolean;
   /** It sees every receive address, not only its own one. */
@@ -110,6 +112,8 @@ export interface SessionSummary {
 
 export interface DappPolicy {
   limits?: Record<string, AssetLimit>;
+  /** Replace the option limit (a count; an empty side is no limit). */
+  optionLimit?: AssetLimit;
   allowAggSigUnsafe?: boolean;
   allowUnknownContracts?: boolean;
   methods?: string[];
@@ -134,6 +138,12 @@ export interface Approval {
 
 export const xchonnect = {
   status: () => call<XchonnectStatus>('status'),
+
+  /**
+   * The wallet's default fee, in mojos: the fee of every request Klimper builds and sends
+   * itself for a website. A website's own `fee` is never used.
+   */
+  setOwnFee: (mojos: string) => call<null>('set_own_fee', { fee: mojos }),
 
   /**
    * Verify a pairing URI: parse it, fetch the origin document fresh over HTTPS and check

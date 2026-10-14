@@ -352,9 +352,21 @@ pub struct StoredPermissions {
     pub exposed_keys: Vec<String>,
     #[serde(default)]
     pub limits: BTreeMap<String, StoredLimit>,
+    /// How many options may leave the user ([`DappPermissions::options`]); absent: the
+    /// default, [`xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT`] (one per request, five a day).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<StoredLimit>,
 }
 
 impl StoredPermissions {
+    /// The option limit in force ([`Self::options`], else the default).
+    pub fn option_limit(&self) -> StoredLimit {
+        self.options.unwrap_or(StoredLimit {
+            per_request: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT.per_request,
+            per_day: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT.per_day,
+        })
+    }
+
     pub fn from_kit(perms: &DappPermissions) -> Result<Self> {
         Ok(StoredPermissions {
             methods: perms.methods.clone(),
@@ -376,6 +388,12 @@ impl StoredPermissions {
                     ))
                 })
                 .collect::<Result<_>>()?,
+            options: (perms.options != xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT).then_some(
+                StoredLimit {
+                    per_request: perms.options.per_request,
+                    per_day: perms.options.per_day,
+                },
+            ),
         })
     }
 
@@ -403,6 +421,13 @@ impl StoredPermissions {
                     ))
                 })
                 .collect(),
+            options: {
+                let limit = self.option_limit();
+                AssetLimit {
+                    per_request: limit.per_request,
+                    per_day: limit.per_day,
+                }
+            },
         }
     }
 }
@@ -838,7 +863,7 @@ impl SessionStore {
     /// forgetting a sealed signature would let its bundle be split.
     pub fn load_signed_coins(&self, fingerprint: u32, chain_id: &str) -> Result<SignedCoinsRecord> {
         self.load_entry::<SignedCoinsRecord>(&Self::signed_coins_key(fingerprint, chain_id))
-            .map(SignedCoinsRecord::migrated)
+            .and_then(SignedCoinsRecord::migrated)
     }
 
     /// Change the record of signed coins under the store's write lock, and write it back if
@@ -849,13 +874,23 @@ impl SessionStore {
         chain_id: &str,
         change: impl FnOnce(&mut SignedCoinsRecord),
     ) -> Result<SignedCoinsRecord> {
-        self.update_entry(
+        // A record that does not migrate is left as stored (nothing changes, nothing is
+        // written) and refused.
+        let mut refused = None;
+        let stored = self.update_entry(
             &Self::signed_coins_key(fingerprint, chain_id),
-            |record: &mut SignedCoinsRecord| {
-                *record = std::mem::take(record).migrated();
-                change(record);
+            |record: &mut SignedCoinsRecord| match record.clone().migrated() {
+                Ok(migrated) => {
+                    *record = migrated;
+                    change(record);
+                }
+                Err(error) => refused = Some(error),
             },
-        )
+        )?;
+        match refused {
+            Some(error) => Err(error),
+            None => Ok(stored),
+        }
     }
 
     /// The sealed bundles kept to send again ([`SealedBundles`]).
@@ -894,6 +929,7 @@ impl SessionStore {
                 .iter()
                 .filter_map(|(key, amount)| Some((parse_asset_key(key)?, *amount)))
                 .collect(),
+            options: stored.options,
         })
     }
 
@@ -905,6 +941,7 @@ impl SessionStore {
                 .iter()
                 .map(|(asset, amount)| Ok((known_asset_key(*asset)?, *amount)))
                 .collect::<Result<_>>()?,
+            options: record.options,
         };
         let blob = serde_json::to_vec(&stored).map_err(Error::internal)?;
         self.secrets
@@ -917,6 +954,10 @@ struct StoredDailySpend {
     day: u64,
     #[serde(default)]
     spent: BTreeMap<String, u128>,
+    /// Options that left the user that day ([`DailySpend::options`]). Absent in totals
+    /// written before options had a limit: none was counted then.
+    #[serde(default)]
+    options: u128,
 }
 
 /// wallet-kit's [`xchonnect_wallet_kit::LimitStore`] backed by the keyring, so daily
@@ -1176,6 +1217,7 @@ mod tests {
         let mut record = DailySpend {
             day: 20_000,
             spent: BTreeMap::new(),
+            options: 3,
         };
         record.spent.insert(AssetId::Xch, 500);
         limits.save(&record).unwrap();
@@ -1184,6 +1226,8 @@ mod tests {
         let after_restart = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let loaded = after_restart.load().unwrap();
         assert_eq!(loaded.day, 20_000);
+        // The day's option count too: a restart does not hand out a fresh option budget.
+        assert_eq!(loaded.options, 3);
         assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&500));
         // Connecting the same website again (a new session) does not reset its budget.
         let again = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "five".into());
@@ -1204,6 +1248,14 @@ mod tests {
                 per_day: Some(5_000),
             },
         );
+        let back = StoredPermissions::from_kit(&perms).unwrap().to_kit();
+        assert_eq!(back, perms);
+        // The default option limit is not written; a record without one reads as the default.
+        let stored = StoredPermissions::from_kit(&perms).unwrap();
+        assert!(stored.options.is_none());
+        assert_eq!(back.options, xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT);
+        // Another option limit (here: none) is kept.
+        perms.options = AssetLimit::default();
         let back = StoredPermissions::from_kit(&perms).unwrap().to_kit();
         assert_eq!(back, perms);
     }

@@ -157,10 +157,10 @@ tauri-runtime = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb8
 tauri-runtime-wry = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb844bd56b4ee027905d1b068553d867ebe" }
 tauri-utils = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb844bd56b4ee027905d1b068553d867ebe" }
 wry = { git = "https://github.com/Rigidity/wry.git", rev = "997ce01862c23b0220b95b4b5541e55fd48670ec" }
-# Ours: wallet-kit's option contracts (TASK-140), xchonnect fix/wallet-built-binding (c97e978, 0.1.0-rc.5, unpublished), until
+# Ours: wallet-kit's option contracts (TASK-140), xchonnect fix/wallet-built-binding (7c6bfa2, 0.1.0-rc.5, unpublished), until
 # xchonnect 0.1.0-rc.5 (or later) is published; the owner publishes; then drop this patch
 # and pin the published version in tauri-plugin-klimper-xchonnect/Cargo.toml.
-xchonnect-core = { git = "https://github.com/xchonnect/xchonnect.git", rev = "c97e97852d5104131e7c01c05c5700d224c74f6c" }
-xchonnect-wallet-kit = { git = "https://github.com/xchonnect/xchonnect.git", rev = "c97e97852d5104131e7c01c05c5700d224c74f6c" }
+xchonnect-core = { git = "https://github.com/xchonnect/xchonnect.git", rev = "7c6bfa2410b365e352c5046894cd3fd851651959" }
+xchonnect-wallet-kit = { git = "https://github.com/xchonnect/xchonnect.git", rev = "7c6bfa2410b365e352c5046894cd3fd851651959" }
 # Ours: Xcode 27 iOS link, see vendor/swift-rs and docs/UPSTREAM.md.
 swift-rs = { path = "vendor/swift-rs" }

@@ -18,4 +18,5 @@ permissions = [
   "allow-resolve-approval",
   "allow-cancel-approval",
   "allow-push-status",
+  "allow-set-own-fee",
 ]

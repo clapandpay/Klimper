@@ -337,6 +337,9 @@ fn checked_submit(
             other_signature: None,
             intent: Some(intent),
             wallet_built: true,
+            // The fee Klimper built the request with and claims in its intent: its own
+            // (`wallet_fee`), never the website's.
+            wallet_fee: intent.fee.unwrap_or_default(),
             signatures_released,
         },
         ctx,

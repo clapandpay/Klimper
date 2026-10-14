@@ -42,6 +42,7 @@ import {
   IntentView,
   formatAmount,
   formatMagnitude,
+  hasUnaccounted,
   MessagePromptView,
   optionLabel,
   OutputView,
@@ -374,11 +375,15 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
   if (view.outputs.length === 0) return null;
   const prefix = view.xchLabel.toLowerCase();
   // An option's collateral and launcher are locked, not paid (TASK-140): listed on their own.
-  const locked = view.outputs.filter((output) => output.option !== null);
-  const toOthers = view.outputs.filter(
+  // What a spend Klimper cannot read creates is in the danger box, never here: it is
+  // neither a payment Klimper can name nor change (spec 11.1 item 3).
+  const outputs = view.outputs.filter((output) => !output.unaccounted);
+  if (outputs.length === 0) return null;
+  const locked = outputs.filter((output) => output.option !== null);
+  const toOthers = outputs.filter(
     (output) => !output.toUser && output.option === null,
   );
-  const toUser = view.outputs.filter(
+  const toUser = outputs.filter(
     (output) => output.toUser && output.option === null,
   );
 
@@ -428,6 +433,53 @@ function Destinations({ view }: { readonly view: SpendPromptView }) {
       <OthersList outputs={toOthers} view={view} prefix={prefix} />
       {toUser.length > 0 && <Change outputs={toUser} />}
     </div>
+  );
+}
+
+/**
+ * Spends Klimper signs but cannot read (an unknown contract around the user's key): what
+ * they move is unknown, and nothing they create is counted as the user's (spec 11.1 item 3).
+ */
+function Unaccounted({ view }: { readonly view: SpendPromptView }) {
+  const created = view.outputs.filter((output) => output.unaccounted);
+  return (
+    <Danger
+      testId='prompt-unaccounted'
+      title={<Trans>Coins Klimper can’t account for</Trans>}
+    >
+      <p>
+        <Trans>
+          This request spends coins Klimper can’t account for: a contract around
+          your key that Klimper cannot read, such as an NFT or a vault. Nobody
+          can tell you what it moves, and nothing it creates is counted as
+          yours.
+        </Trans>
+      </p>
+      {view.unaccountedSpends.map((coin) => (
+        <div key={coin} className='font-mono text-xs break-all mt-1'>
+          {coin}
+        </div>
+      ))}
+      {created.length > 0 && (
+        <ul
+          className='mt-2 space-y-0.5'
+          data-testid='prompt-unaccounted-outputs'
+        >
+          {created.map((output, index) => {
+            const amount = formatAmount(output.amount, output.precision);
+            const label = output.label;
+            return (
+              // eslint-disable-next-line react/no-array-index-key
+              <li key={index} className='tabular-nums'>
+                <Trans>
+                  Creates {amount} {label}
+                </Trans>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Danger>
   );
 }
 
@@ -802,7 +854,7 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
   const trade = view.loan === null ? view.trade : null;
   const hasOptions = view.options.length > 0 || view.loan !== null;
   const sendsToOthers = view.outputs.some(
-    (output) => !output.toUser && output.option === null,
+    (output) => !output.toUser && output.option === null && !output.unaccounted,
   );
   // With a trade or an option card on top, the per-asset figures are detail: an option's
   // locked collateral is not "paid", whatever the gross balance says.
@@ -840,6 +892,8 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
           ))}
         </Danger>
       )}
+
+      {hasUnaccounted(view) && <Unaccounted view={view} />}
 
       {view.hasUnsafe && (
         <Danger

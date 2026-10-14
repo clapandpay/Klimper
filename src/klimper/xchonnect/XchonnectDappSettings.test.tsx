@@ -65,6 +65,7 @@ const fresh: SessionSummary = {
   methods: [...DEFAULT_METHODS],
   exposedKeys: [`0x${'a'.repeat(96)}`],
   limits: {},
+  optionLimit: { perRequest: 1, perDay: 5 },
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
   allReceiveKeys: false,
@@ -325,8 +326,53 @@ describe('limits', () => {
       expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
         limits: { xch: { perRequest: 250_000_000_000 } },
         methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 1, perDay: 5 },
       }),
     );
+  });
+
+  it('shows the option limit next to the others and writes it as a count', async () => {
+    openSettings();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Options per request')).toHaveProperty(
+        'value',
+        '1',
+      ),
+    );
+    expect(screen.getByLabelText('Options per day')).toHaveProperty(
+      'value',
+      '5',
+    );
+
+    fireEvent.change(screen.getByLabelText('Options per day'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        limits: {},
+        methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 2 },
+      }),
+    );
+  });
+
+  it('refuses an option limit that is not a whole number', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Options per request'));
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '1.5' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('An option limit has to be a whole number, like 2.'),
+      ).toBeTruthy(),
+    );
+    expect(setDappPolicy).not.toHaveBeenCalled();
   });
 
   it('refuses a limit it cannot store exactly instead of rounding it', async () => {

@@ -10716,7 +10716,7 @@ dependencies = [
 [[package]]
 name = "xchonnect-core"
 version = "0.1.0-rc.5"
-source = "git+https://github.com/xchonnect/xchonnect.git?rev=c97e97852d5104131e7c01c05c5700d224c74f6c#c97e97852d5104131e7c01c05c5700d224c74f6c"
+source = "git+https://github.com/xchonnect/xchonnect.git?rev=7c6bfa2410b365e352c5046894cd3fd851651959#7c6bfa2410b365e352c5046894cd3fd851651959"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -10737,7 +10737,7 @@ dependencies = [
 [[package]]
 name = "xchonnect-wallet-kit"
 version = "0.1.0-rc.5"
-source = "git+https://github.com/xchonnect/xchonnect.git?rev=c97e97852d5104131e7c01c05c5700d224c74f6c#c97e97852d5104131e7c01c05c5700d224c74f6c"
+source = "git+https://github.com/xchonnect/xchonnect.git?rev=7c6bfa2410b365e352c5046894cd3fd851651959#7c6bfa2410b365e352c5046894cd3fd851651959"
 dependencies = [
  "chia-bls 0.36.1",
  "chia-protocol",

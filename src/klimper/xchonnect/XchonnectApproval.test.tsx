@@ -330,6 +330,44 @@ describe('a conditional receipt never looks received', () => {
 });
 
 describe('the dangerous cases', () => {
+  it('shows coins Klimper cannot account for as a danger, never as change', async () => {
+    const COIN = 'd'.repeat(64);
+    pendingApprovals.mockResolvedValue([
+      request(
+        spendPrompt({
+          summary: {
+            ...spendPrompt().summary,
+            unknown_puzzles: [PUZZLE],
+            unaccounted_spends: [COIN],
+            outputs: [
+              {
+                asset: { type: 'xch' },
+                amount: 1,
+                puzzle_hash: PUZZLE,
+                recipient: PUZZLE,
+                to_user: true,
+                option: null,
+                unaccounted: true,
+              },
+            ],
+          },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    const danger = await waitFor(() =>
+      screen.getByTestId('prompt-unaccounted'),
+    );
+    expect(danger.textContent).toContain('can’t account for');
+    expect(danger.textContent).toContain(COIN);
+    expect(
+      screen.getByTestId('prompt-unaccounted-outputs').textContent,
+    ).toContain('Creates');
+    // Not shown as coming back to the user.
+    expect(screen.queryByTestId('prompt-only-own')).toBeNull();
+  });
+
   it('needs a second confirmation for an unknown contract, with the puzzle hash', async () => {
     pendingApprovals.mockResolvedValue([
       request(

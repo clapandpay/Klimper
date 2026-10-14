@@ -12,17 +12,18 @@
 //!   `signCoinSpends` answered to a website, a loan request handed out as an offer, any
 //!   bundle broadcast (also one the network refused). A request spending one of the user's
 //!   coins in it is never sealed: only direct assertions bind it.
-//! * **sealed**: per coin of a sealed bundle Klimper broadcast (or tried to), the
-//!   signatures it made for it, as `sha256(public key || message)`. The kit never signs one
-//!   of them again, in any request (4001 `sealed_signature`); another spend of the coin signs
-//!   another message and is allowed, so nothing is locked.
+//! * **sealed**: per sealed bundle Klimper broadcast (or tried to), the signatures it made
+//!   in it, as `sha256(public key || message)`, and the coins it signed for. The kit never
+//!   signs one of them again, in any request (4001 `sealed_signature`); another spend of the
+//!   coin signs another message and is allowed, so nothing is locked.
 //!
 //! The kit says what to add before every broadcast ([`Broadcaster::record`]); Klimper's
 //! broadcaster ([`crate::execute::SageBroadcaster`]) writes it into the record before it
 //! returns, and nothing is sent when that fails (4000 `record_failed`). The record lives
 //! next to the sessions in the OS keyring, per wallet and network
-//! ([`crate::store::SessionStore::load_signed_coins`]), and survives restarts. A coin leaves
-//! it only once **that** coin is spent on chain ([`SignedCoins::spent`]), as the wallet's own
+//! ([`crate::store::SessionStore::load_signed_coins`]), and survives restarts. Sealed
+//! signatures never leave it (wallet-kit's recommended default: a few dozen bytes per
+//! signature). A released coin leaves it once it is spent on chain, as the wallet's own
 //! synced database says, [`CONFIRMATIONS`] blocks deep: checked before every request that
 //! signs ([`refresh`]). A coin the database does not hold stays; no peer is asked.
 //!
@@ -50,15 +51,40 @@ use crate::error::{Error, Result};
 use crate::store::SessionStore;
 use crate::wallet::AppState;
 
-/// What is stored: coin ids and digests as lowercase hex.
+/// The current form of the stored record ([`SignedCoinsRecord::format`]). A record written
+/// in a later form is refused, never read as something less.
+pub const RECORD_FORMAT: u32 = 3;
+
+/// The bundle id the sealed signatures recorded before per-bundle records (a4d8c02f to
+/// 8cb4ee2a) are kept under: one bundle for all of them, so none of them leaves before every
+/// coin they were made for is spent. No spend bundle hashes to all zeros.
+pub const LEGACY_BUNDLE: Bytes32 = Bytes32::new([0; 32]);
+
+/// What is stored: coin ids, bundle ids and digests as lowercase hex.
+///
+/// Sealed signatures are never pruned: wallet-kit allows dropping a sealed bundle once every
+/// coin the wallet signed for in it is spent, and recommends never dropping it (the record
+/// grows by a few dozen bytes per signature). Only `released` coins leave, each once it is
+/// spent on chain.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedCoinsRecord {
+    /// [`RECORD_FORMAT`] when written by this version; absent (0) in the earlier forms.
+    #[serde(default)]
+    format: u32,
     /// Coins with a signature outside the wallet ([`SignedCoins::released`]).
     #[serde(default)]
     released: BTreeSet<String>,
-    /// Per coin of a sealed bundle, the [`kit::sealed_digest`]s of the signatures Klimper
-    /// made for it there ([`SignedCoins::sealed`]).
+    /// Every [`kit::sealed_digest`] Klimper made in a sealed bundle, with the bundles it was
+    /// made in ([`SignedCoins::sealed`]).
     #[serde(default)]
+    sealed_digests: BTreeMap<String, BTreeSet<String>>,
+    /// Every sealed bundle Klimper broadcast (or tried to), with the coins it signed for in
+    /// it ([`SignedCoins::sealed_bundles`]).
+    #[serde(default)]
+    sealed_bundles: BTreeMap<String, BTreeSet<String>>,
+    /// The second form of the sealed record (acc73afe to 8cb4ee2a): per coin, its digests.
+    /// Read once and moved into [`LEGACY_BUNDLE`] ([`Self::migrated`]); never written.
+    #[serde(default, skip_serializing)]
     sealed: BTreeMap<String, BTreeSet<String>>,
     /// The first form of the sealed record (a4d8c02f): `<public key>:<signed message>` per
     /// coin. Read once and turned into digests ([`Self::migrated`]); never written.
@@ -71,48 +97,96 @@ fn parse(hex_id: &str) -> Option<Bytes32> {
     Bytes32::try_from(bytes.as_slice()).ok()
 }
 
+/// Every id of `ids`, or an error naming the first that does not read: a record that does
+/// not read is refused, never read as less than it holds.
+fn parse_all<'a>(ids: impl IntoIterator<Item = &'a String>) -> Result<HashSet<Bytes32>> {
+    ids.into_iter()
+        .map(|id| {
+            parse(id).ok_or_else(|| {
+                Error::internal(format!(
+                    "the record of signed coins holds an unreadable id: {id}"
+                ))
+            })
+        })
+        .collect()
+}
+
 impl SignedCoinsRecord {
-    /// The record as wallet-kit takes it.
-    pub fn to_kit(&self) -> SignedCoins {
-        SignedCoins {
-            released: self.released.iter().filter_map(|c| parse(c)).collect(),
-            // wallet-kit keys it by digest, each with the coins it is held for; stored per
-            // coin, as the entries leave the record coin by coin.
-            sealed: {
-                let mut sealed: HashMap<Bytes32, HashSet<Bytes32>> = HashMap::new();
-                for (coin, digests) in &self.sealed {
-                    let Some(coin) = parse(coin) else { continue };
-                    for digest in digests.iter().filter_map(|d| parse(d)) {
-                        sealed.entry(digest).or_default().insert(coin);
-                    }
-                }
-                sealed
-            },
+    /// The record as wallet-kit takes it. An error if any entry does not read.
+    pub fn to_kit(&self) -> Result<SignedCoins> {
+        if self.format > RECORD_FORMAT {
+            return Err(Error::internal(format!(
+                "the record of signed coins was written by a later version (form {})",
+                self.format
+            )));
         }
+        if !self.sealed.is_empty() || !self.sealed_messages.is_empty() {
+            return Err(Error::internal(
+                "the record of signed coins was not migrated".to_owned(),
+            ));
+        }
+        let by_id = |map: &BTreeMap<String, BTreeSet<String>>| {
+            map.iter()
+                .map(|(key, values)| {
+                    let key = parse_all([key])?.into_iter().next().unwrap_or_default();
+                    Ok((key, parse_all(values)?))
+                })
+                .collect::<Result<HashMap<Bytes32, HashSet<Bytes32>>>>()
+        };
+        Ok(SignedCoins {
+            released: parse_all(&self.released)?,
+            sealed: by_id(&self.sealed_digests)?,
+            sealed_bundles: by_id(&self.sealed_bundles)?,
+        })
     }
 
-    /// The record in its current form: messages recorded by the first version become
-    /// digests, so nothing it recorded is ever signed again.
-    #[must_use]
-    pub fn migrated(mut self) -> Self {
+    /// The record in its current form. What the earlier forms recorded moves into one bundle,
+    /// [`LEGACY_BUNDLE`], with every coin it was recorded for: nothing they recorded is ever
+    /// signed again. An entry of theirs that does not read is an error, not dropped.
+    pub fn migrated(mut self) -> Result<Self> {
+        if self.format > RECORD_FORMAT {
+            return Err(Error::internal(format!(
+                "the record of signed coins was written by a later version (form {})",
+                self.format
+            )));
+        }
+        let legacy = hex::encode(LEGACY_BUNDLE);
         for (coin, entries) in std::mem::take(&mut self.sealed_messages) {
             for entry in entries {
-                let Some((key, message)) = entry.split_once(':') else {
-                    continue;
+                let unreadable = || {
+                    Error::internal(format!(
+                        "the record of signed coins holds an unreadable message: {entry}"
+                    ))
                 };
+                let (key, message) = entry.split_once(':').ok_or_else(unreadable)?;
                 let key = hex::decode(key)
                     .ok()
                     .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
-                    .and_then(|bytes| PublicKey::from_bytes(&bytes).ok());
-                if let (Some(key), Ok(message)) = (key, hex::decode(message)) {
-                    self.sealed
-                        .entry(coin.clone())
-                        .or_default()
-                        .insert(hex::encode(kit::sealed_digest(&key, &message)));
-                }
+                    .and_then(|bytes| PublicKey::from_bytes(&bytes).ok())
+                    .ok_or_else(unreadable)?;
+                let message = hex::decode(message).map_err(|_| unreadable())?;
+                self.sealed
+                    .entry(coin.clone())
+                    .or_default()
+                    .insert(hex::encode(kit::sealed_digest(&key, &message)));
             }
         }
-        self
+        for (coin, digests) in std::mem::take(&mut self.sealed) {
+            parse_all([&coin])?;
+            parse_all(&digests)?;
+            self.sealed_bundles
+                .entry(legacy.clone())
+                .or_default()
+                .insert(coin);
+            for digest in digests {
+                self.sealed_digests
+                    .entry(digest)
+                    .or_default()
+                    .insert(legacy.clone());
+            }
+        }
+        self.format = RECORD_FORMAT;
+        Ok(self)
     }
 
     /// Signatures over these coins left the wallet.
@@ -123,27 +197,32 @@ impl SignedCoinsRecord {
     /// What the kit reported before a broadcast ([`SignedCoins::add`]).
     pub fn add(&mut self, record: &BroadcastRecord) {
         self.release(record.coins.iter().copied());
-        for (coin, digest) in &record.sealed {
-            self.sealed
-                .entry(hex::encode(coin))
+        if let Some(bundle) = &record.sealed {
+            let id = hex::encode(bundle.id);
+            self.sealed_bundles
+                .entry(id.clone())
                 .or_default()
-                .insert(hex::encode(digest));
+                .extend(bundle.coins.iter().map(hex::encode));
+            for digest in &bundle.digests {
+                self.sealed_digests
+                    .entry(hex::encode(digest))
+                    .or_default()
+                    .insert(id.clone());
+            }
         }
     }
 
-    /// Every coin whose state on chain decides what stays in the record.
+    /// Every coin whose state on chain decides what stays in the record: the released
+    /// coins (sealed signatures never leave).
     pub fn coins(&self) -> Vec<Bytes32> {
-        let mut all: BTreeSet<&String> = self.released.iter().collect();
-        all.extend(self.sealed.keys());
-        all.into_iter().filter_map(|c| parse(c)).collect()
+        self.released.iter().filter_map(|c| parse(c)).collect()
     }
 
-    /// `coin` is spent on chain: forget it ([`SignedCoins::spent`]). Only that coin: the
-    /// other coins of its bundle keep their entries until each is spent itself.
+    /// `coin` is spent on chain: it leaves `released`. Its sealed signatures stay, as every
+    /// other sealed signature: Klimper never prunes them (wallet-kit's recommended default;
+    /// [`SignedCoins::spent`] would drop a bundle only once all of its coins are spent).
     pub fn spent(&mut self, coin: &Bytes32) {
-        let coin = hex::encode(coin);
-        self.released.remove(&coin);
-        self.sealed.remove(&coin);
+        self.released.remove(&hex::encode(coin));
     }
 
     /// Every coin of `spent` is spent on chain.
@@ -155,7 +234,11 @@ impl SignedCoinsRecord {
 
     /// Nothing recorded.
     pub fn is_empty(&self) -> bool {
-        self.released.is_empty() && self.sealed.is_empty() && self.sealed_messages.is_empty()
+        self.released.is_empty()
+            && self.sealed_digests.is_empty()
+            && self.sealed_bundles.is_empty()
+            && self.sealed.is_empty()
+            && self.sealed_messages.is_empty()
     }
 }
 
@@ -364,8 +447,7 @@ impl<'a> Recorder<'a> {
             tracing::error!("xchonnect: the record of signed coins could not be written: {error}");
             return Err("the wallet could not record this transaction".to_owned());
         }
-        self.sealed
-            .store(!record.sealed.is_empty(), Ordering::SeqCst);
+        self.sealed.store(record.sealed.is_some(), Ordering::SeqCst);
         Ok(())
     }
 
@@ -488,9 +570,9 @@ pub async fn spent_coins(wallet: &sage_wallet::Wallet, coins: &[Bytes32]) -> Has
     )
 }
 
-/// The record, with every coin spent [`CONFIRMATIONS`] deep in the wallet's synced database
-/// taken out (each coin on its own: [`SignedCoins::spent`]), and the kept bundles that can
-/// no longer be included dropped. Run on the request thread (see `requests::answer`).
+/// The record, with every released coin spent [`CONFIRMATIONS`] deep in the wallet's synced
+/// database taken out (sealed signatures stay), and the kept bundles that can no longer be
+/// included dropped. Run on the request thread (see `requests::answer`).
 pub fn refresh(state: &AppState, handle: &SignedCoinsHandle) -> Result<SignedCoinsRecord> {
     let wallet = {
         let state = state.clone();
@@ -622,7 +704,7 @@ pub fn checked_record(
     }
     let guard = gate();
     let record = refresh(handle)?;
-    Ok((Some(guard), record.to_kit()))
+    Ok((Some(guard), record.to_kit()?))
 }
 
 #[cfg(test)]
@@ -632,6 +714,7 @@ mod tests {
     use crate::store::{MemorySecrets, SecretStore};
     use chia_bls::Signature;
     use chia_protocol::{Coin, Program};
+    use std::sync::atomic::AtomicBool;
 
     fn coin(byte: u8) -> Coin {
         Coin::new(Bytes32::new([byte; 32]), Bytes32::new([0x42; 32]), 1)
@@ -651,21 +734,32 @@ mod tests {
         chia_bls::SecretKey::from_seed(&[seed; 32]).public_key()
     }
 
-    /// Spec 11.2: each coin's sealed signatures stay until **that** coin is spent, never
-    /// because another coin of the bundle was spent.
+    fn sealed_record(id: u8, coins: &[Coin], digests: &[Bytes32]) -> BroadcastRecord {
+        BroadcastRecord {
+            coins: coins.iter().map(Coin::coin_id).collect(),
+            sealed: Some(kit::SealedBundle {
+                id: Bytes32::new([id; 32]),
+                digests: digests.to_vec(),
+                coins: coins.iter().map(Coin::coin_id).collect(),
+            }),
+        }
+    }
+
+    /// Spec 11.2: a sealed signature is never signed again. Klimper never prunes sealed
+    /// signatures (wallet-kit's recommended default): not when the coin it names is spent,
+    /// not when every coin of its bundle is. Released coins leave once each is spent.
     #[test]
-    fn a_sealed_coin_leaves_the_record_only_when_it_is_spent_itself() {
+    fn sealed_signatures_are_never_pruned() {
         let (a, b, c) = (coin(1), coin(2), coin(3));
         let mut record = SignedCoinsRecord::default();
         record.release([c.coin_id()]);
-        let digest = kit::sealed_digest(&key(9), b"signed");
-        // `b` is someone else's coin in the bundle: released, with no signature of ours.
-        record.add(&BroadcastRecord {
-            coins: vec![a.coin_id(), b.coin_id()],
-            sealed: vec![(a.coin_id(), digest)],
-        });
-        let kit = record.to_kit();
-        assert!(kit.is_sealed(&key(9), b"signed"));
+        let (da, db) = (
+            kit::sealed_digest(&key(9), b"a"),
+            kit::sealed_digest(&key(9), b"b"),
+        );
+        record.add(&sealed_record(7, &[a, b], &[da, db]));
+        let kit = record.to_kit().unwrap();
+        assert!(kit.is_sealed(&key(9), b"a") && kit.is_sealed(&key(9), b"b"));
         assert!(!kit.is_sealed(&key(9), b"another spend"));
         assert_eq!(
             kit.released,
@@ -673,52 +767,43 @@ mod tests {
                 .into_iter()
                 .collect()
         );
-
-        // The other party's coin is spent elsewhere: the bundle can never be included, but
-        // what Klimper signed for `a` stays recorded, and `a` stays released.
-        record.prune(&[b.coin_id()].into_iter().collect());
-        let kit = record.to_kit();
-        assert!(kit.is_sealed(&key(9), b"signed"));
-        assert!(kit.released.contains(&a.coin_id()));
-
-        record.prune(&[a.coin_id(), c.coin_id()].into_iter().collect());
-        assert!(record.is_empty());
-    }
-
-    /// A spend leaves the record only `CONFIRMATIONS` blocks below the synced peak; an
-    /// unspent coin, or any coin without a synced peak, never.
-    #[test]
-    fn a_spend_counts_only_once_it_is_deep_enough() {
-        let (a, b) = (coin(1).coin_id(), coin(2).coin_id());
-        let rows = || [(a, Some(100)), (b, None)];
-        assert!(confirmed_spent(rows(), None).is_empty());
-        assert!(confirmed_spent(rows(), Some(100)).is_empty());
-        assert!(confirmed_spent(rows(), Some(100 + CONFIRMATIONS - 1)).is_empty());
         assert_eq!(
-            confirmed_spent(rows(), Some(100 + CONFIRMATIONS)),
-            [a].into_iter().collect()
+            kit.sealed_bundles[&Bytes32::new([7; 32])],
+            [a.coin_id(), b.coin_id()].into_iter().collect()
         );
+
+        // One coin spent: still refused, both messages. Both spent: still refused.
+        record.prune(&[a.coin_id()].into_iter().collect());
+        let kit = record.to_kit().unwrap();
+        assert!(kit.is_sealed(&key(9), b"a") && kit.is_sealed(&key(9), b"b"));
+        assert!(!kit.released.contains(&a.coin_id()));
+        record.prune(&[b.coin_id(), c.coin_id()].into_iter().collect());
+        let kit = record.to_kit().unwrap();
+        assert!(kit.is_sealed(&key(9), b"a") && kit.is_sealed(&key(9), b"b"));
+        assert!(kit.released.is_empty());
+        // Only released coins are looked up on chain.
+        assert!(record.coins().is_empty());
     }
 
-    /// The record's own pruning is wallet-kit's `SignedCoins::spent`, coin by coin.
+    /// Ours, read by wallet-kit, is what wallet-kit's own `SignedCoins::add` makes.
     #[test]
-    fn pruning_is_the_kits_spent() {
+    fn the_record_reads_as_the_kits() {
         let (a, b) = (coin(1), coin(2));
-        let report = BroadcastRecord {
-            coins: vec![a.coin_id(), b.coin_id()],
-            sealed: vec![
-                (a.coin_id(), kit::sealed_digest(&key(1), b"a")),
-                (b.coin_id(), kit::sealed_digest(&key(1), b"b")),
-            ],
-        };
+        let reports = [
+            sealed_record(1, &[a, b], &[kit::sealed_digest(&key(1), b"a")]),
+            sealed_record(2, &[b], &[kit::sealed_digest(&key(1), b"a")]),
+            BroadcastRecord {
+                coins: vec![coin(3).coin_id()],
+                sealed: None,
+            },
+        ];
         let mut ours = SignedCoinsRecord::default();
-        ours.add(&report);
         let mut theirs = SignedCoins::default();
-        theirs.add(&report);
-        assert_eq!(ours.to_kit(), theirs);
-        ours.prune(&[a.coin_id()].into_iter().collect());
-        theirs.spent(&a.coin_id());
-        assert_eq!(ours.to_kit(), theirs);
+        for report in &reports {
+            ours.add(report);
+            theirs.add(report);
+        }
+        assert_eq!(ours.to_kit().unwrap(), theirs);
     }
 
     /// What the first version stored (`sealed_messages`) is read as digests, never lost.
@@ -737,11 +822,61 @@ mod tests {
             }
         });
         let record: SignedCoinsRecord = serde_json::from_value(stored).unwrap();
-        let record = record.migrated();
-        assert!(record.to_kit().is_sealed(&key(4), b"message"));
+        let record = record.migrated().unwrap();
+        assert!(record.to_kit().unwrap().is_sealed(&key(4), b"message"));
         let written = serde_json::to_value(&record).unwrap();
         assert!(written.get("sealed_messages").is_none());
         assert!(written.get("in_flight").is_none());
+    }
+
+    /// What the per-coin version stored (`sealed`: coin -> digests, a4d8c02f to 8cb4ee2a)
+    /// moves into one bundle holding every coin it named: refused as before, and kept.
+    #[test]
+    fn the_per_coin_record_moves_into_one_bundle() {
+        let (a, b) = (coin(1), coin(2));
+        let stored = serde_json::json!({
+            "released": [hex::encode(a.coin_id())],
+            "sealed": {
+                hex::encode(a.coin_id()): [hex::encode(kit::sealed_digest(&key(4), b"a"))],
+                hex::encode(b.coin_id()): [hex::encode(kit::sealed_digest(&key(4), b"b"))],
+            }
+        });
+        let record: SignedCoinsRecord = serde_json::from_value(stored).unwrap();
+        // Not migrated: refused rather than read as less.
+        assert!(record.to_kit().is_err());
+        let record = record.migrated().unwrap();
+        let kit = record.to_kit().unwrap();
+        assert!(kit.is_sealed(&key(4), b"a") && kit.is_sealed(&key(4), b"b"));
+        assert_eq!(
+            kit.sealed_bundles[&LEGACY_BUNDLE],
+            [a.coin_id(), b.coin_id()].into_iter().collect()
+        );
+        let written = serde_json::to_value(&record).unwrap();
+        assert!(written.get("sealed").is_none());
+        assert_eq!(written["format"], RECORD_FORMAT);
+        // Written and read back: the same record, nothing left to migrate.
+        let again: SignedCoinsRecord = serde_json::from_value(written).unwrap();
+        assert_eq!(again.clone().migrated().unwrap(), again);
+    }
+
+    /// A record that does not read, or one a later version wrote, is refused: never read as
+    /// less than it holds.
+    #[test]
+    fn a_record_that_does_not_read_is_refused() {
+        let bad = [
+            serde_json::json!({ "released": ["zz"] }),
+            serde_json::json!({ "format": 3, "sealed_digests": { "00": ["11"] } }),
+            serde_json::json!({ "sealed": { hex::encode(coin(1).coin_id()): ["nothex"] } }),
+            serde_json::json!({ "sealed_messages": { "00": ["no separator"] } }),
+            serde_json::json!({ "format": RECORD_FORMAT + 1 }),
+        ];
+        for stored in bad {
+            let record: SignedCoinsRecord = serde_json::from_value(stored.clone()).unwrap();
+            assert!(
+                record.migrated().and_then(|r| r.to_kit()).is_err(),
+                "{stored}"
+            );
+        }
     }
 
     #[test]
@@ -757,22 +892,31 @@ mod tests {
         let handle = SignedCoinsHandle::new(open(), 7, "testnet11");
         handle.release(vec![a.coin_id()]).unwrap();
         handle
-            .add(&BroadcastRecord {
-                coins: vec![b.coin_id()],
-                sealed: vec![(b.coin_id(), kit::sealed_digest(&key(2), b"m"))],
-            })
+            .add(&sealed_record(
+                5,
+                &[b],
+                &[kit::sealed_digest(&key(2), b"m")],
+            ))
             .unwrap();
         handle.keep_bundle(&bundle(&[b]), 1).unwrap();
 
         // A new store over the same keyring: the app started again.
         let again = SignedCoinsHandle::new(open(), 7, "testnet11");
         assert_eq!(again.load().unwrap(), handle.load().unwrap());
-        assert!(again.load().unwrap().to_kit().is_sealed(&key(2), b"m"));
         assert!(
             again
                 .load()
                 .unwrap()
                 .to_kit()
+                .unwrap()
+                .is_sealed(&key(2), b"m")
+        );
+        assert!(
+            again
+                .load()
+                .unwrap()
+                .to_kit()
+                .unwrap()
                 .released
                 .contains(&a.coin_id())
         );
@@ -819,6 +963,113 @@ mod tests {
         secrets.put("signed:7:testnet11", b"not json").unwrap();
         let store = SessionStore::open(dir.path(), Box::new(SharedSecrets(secrets))).unwrap();
         assert!(store.load_signed_coins(7, "testnet11").is_err());
+    }
+
+    /// The keyring, failing every write while `failing` is set (a full or locked keychain).
+    #[derive(Debug)]
+    struct FailingSecrets {
+        inner: Arc<MemorySecrets>,
+        failing: Arc<AtomicBool>,
+    }
+
+    impl SecretStore for FailingSecrets {
+        fn put(&self, key: &str, bytes: &[u8]) -> Result<()> {
+            if self.failing.load(Ordering::SeqCst) {
+                return Err(Error::internal("the keychain refused the write"));
+            }
+            self.inner.put(key, bytes)
+        }
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+            self.inner.get(key)
+        }
+        fn delete(&self, key: &str) -> Result<()> {
+            self.inner.delete(key)
+        }
+    }
+
+    /// Klimper's real host for wallet-kit's `host_checks`: the record as a request reads it
+    /// (`checked_record`, from the keyring), stored by `SageBroadcaster::record` (the
+    /// broadcaster every request uses), pruned as `refresh` prunes it, over a keyring that
+    /// can be made to fail. A fresh store object for every load: the record must survive a
+    /// restart.
+    struct KlimperHost {
+        secrets: Arc<MemorySecrets>,
+        failing: Arc<AtomicBool>,
+        dir: tempfile::TempDir,
+        sage: crate::wallet::AppState,
+    }
+
+    impl KlimperHost {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let sage = Arc::new(tokio::sync::Mutex::new(sage::Sage::new(dir.path(), true)));
+            KlimperHost {
+                secrets: Arc::new(MemorySecrets::default()),
+                failing: Arc::new(AtomicBool::new(false)),
+                dir,
+                sage,
+            }
+        }
+
+        fn handle(&self) -> SignedCoinsHandle {
+            let secrets = FailingSecrets {
+                inner: self.secrets.clone(),
+                failing: self.failing.clone(),
+            };
+            let store = SessionStore::open(self.dir.path(), Box::new(secrets)).unwrap();
+            SignedCoinsHandle::new(Arc::new(store), 7, "testnet11")
+        }
+    }
+
+    impl kit::host_checks::HostRecord for KlimperHost {
+        fn load(&self) -> std::result::Result<SignedCoins, String> {
+            checked_record(&self.handle(), true, SignedCoinsHandle::load)
+                .map(|(_one_at_a_time, record)| record)
+                .map_err(|e| e.to_string())
+        }
+        fn record(&self, record: &BroadcastRecord) -> std::result::Result<(), String> {
+            let handle = self.handle();
+            crate::execute::SageBroadcaster::new(self.sage.clone(), &handle).record(record)
+        }
+        fn spent(&self, coin_id: Bytes32) -> std::result::Result<(), String> {
+            self.handle()
+                .prune(&[coin_id].into_iter().collect())
+                .map(drop)
+                .map_err(|e| e.to_string())
+        }
+        fn set_failing(&self, failing: bool) -> bool {
+            self.failing.store(failing, Ordering::SeqCst);
+            true
+        }
+    }
+
+    /// wallet-kit's check of a host's record of sealed signatures (spec 11.2), run against
+    /// Klimper's own storage and broadcaster.
+    #[test]
+    fn klimpers_record_passes_the_kits_host_checks() {
+        let host = KlimperHost::new();
+        kit::host_checks::check_sealed_record(&host).unwrap();
+        // Never pruned: both coins of the test bundle are spent, its signatures stay.
+        let kept = kit::host_checks::HostRecord::load(&host).unwrap();
+        assert!(!kept.sealed.is_empty());
+        assert!(kept.released.is_empty());
+    }
+
+    /// The signing lock every request that signs holds (`checked_record`).
+    struct KlimperGate(SignedCoinsHandle);
+
+    impl kit::host_checks::RequestGate for KlimperGate {
+        fn exclusive(&self, request: &mut dyn FnMut()) {
+            let (_one_at_a_time, _record) =
+                checked_record(&self.0, true, SignedCoinsHandle::load).unwrap();
+            request();
+        }
+    }
+
+    #[test]
+    fn klimper_runs_one_signing_request_at_a_time() {
+        let host = KlimperHost::new();
+        kit::host_checks::check_one_at_a_time(&KlimperGate(host.handle()), 20).unwrap();
     }
 
     /// One `MemorySecrets` behind several stores, as the OS keyring is behind every start.

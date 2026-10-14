@@ -156,6 +156,48 @@ describe('readPrompt', () => {
     expect(needsSecondConfirmation(view)).toBe(true);
   });
 
+  it('reads spends Klimper cannot account for strictly, and asks twice', () => {
+    const COIN = 'd'.repeat(64);
+    const output = (unaccounted: unknown) => ({
+      asset: { type: 'xch' },
+      amount: 1,
+      puzzle_hash: PUZZLE,
+      recipient: PUZZLE,
+      to_user: true,
+      option: null,
+      unaccounted,
+    });
+    const view = readPrompt({
+      ...simpleSend,
+      summary: {
+        ...simpleSend.summary,
+        unknown_puzzles: [PUZZLE],
+        unaccounted_spends: [COIN],
+        outputs: [output(true), output(false)],
+      },
+    });
+    if (view.kind !== 'spend') throw new Error('expected a spend');
+    expect(view.unaccountedSpends).toEqual([COIN]);
+    expect(view.outputs.map((o) => o.unaccounted)).toEqual([true, false]);
+    expect(needsSecondConfirmation(view)).toBe(true);
+
+    // Anything but a list of coin ids, or a flag that is not a boolean: unreadable.
+    for (const summary of [
+      { unaccounted_spends: ['not a coin'] },
+      { unaccounted_spends: COIN },
+      { unaccounted_spends: [COIN, null] },
+      { outputs: [output('yes')] },
+      { outputs: [output(null)] },
+    ]) {
+      expect(
+        readPrompt({
+          ...simpleSend,
+          summary: { ...simpleSend.summary, ...summary },
+        }).kind,
+      ).toBe('unreadable');
+    }
+  });
+
   it('flags an unsafe signature from either place it is written', () => {
     const fromFlag = readPrompt({
       ...simpleSend,
