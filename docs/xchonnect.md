@@ -36,6 +36,7 @@ approval UI, and signing.
 | `wallet`       | TASK-078      | ownership and the signable key set from the Sage database; signing through `sage-keychain`                                           |
 | `requests`     | TASK-079      | the request context, the approver bridge, the limit store, the response                                                              |
 | `sign_guard`   | TASK-141      | refuses spends whose conditions the signature does not fix, before wallet-kit or the user sees them                                  |
+| `signed_coins` | TASK-140      | the record of coins with signatures outside the wallet (released, in flight), pruned from the chain; sealed or released requests     |
 | `approval`     | TASK-078, 079 | wallet-kit's synchronous hooks parked on a channel until the webview answers                                                         |
 
 ## Session storage
@@ -47,6 +48,9 @@ each other:
 | ---------------------------- | -------------------------------------------- |
 | `session:<fingerprint>:<id>` | the session record and `Session::to_bytes()` |
 | `limits:<fingerprint>:<id>`  | the daily spend totals                       |
+
+One more entry per wallet and network, `signed:<fingerprint>:<chain id>`, holds the record of
+signed coins (below, "Sealed and released").
 
 A plaintext index, `xchonnect-sessions.json` in the Sage app data directory, lists the
 session ids per fingerprint with the last `state_version` written. The keyring entry is
@@ -147,9 +151,9 @@ and is gone.
    an option: whatever the website's "unknown contracts" setting) or a maker signature that
    does not cover the maker's spends; each refusal counts like a failed build. The take is
    then built from the wallet's own coins with Sage's offer code and **no key** (the wallet's
-   `take_offer`, unsigned), and each of the user's spends is tied to the maker's payment
-   (spec 11.2): with a fee, Sage leaves one of the user's coins asserting nothing, and that
-   coin then asserts a coin announcement of a bound user spend. The key is used once, by
+   `take_offer`, unsigned) and handed to wallet-kit exactly as Sage built it: the take is a
+   sealed request (below, "Sealed and released"), so the links Sage makes between the
+   user's spends count. The key is used once, by
    wallet-kit, after the approval. The intent is `offer.take` and claims **no fee**:
    wallet-kit checks a fee claim against the whole bundle's fee, which also holds the maker's
    own fee. What the user pays, their fee included, is the net change the approval shows; the
@@ -192,31 +196,34 @@ and is gone.
    | `chia_transferOption` | `launcherId`, `address`, `fee?` | `option.transfer` |
 
    - **Write** (`chia_mintOption`, no `creatorAddress` or one of the wallet's own): the wallet
-     locks the collateral, is the creator and holds the option. Built from the wallet's coins
-     with Sage's coin selection and spend code and the SDK's option launcher, key-free: the fee
-     and the launcher's coin, then the collateral locked at the option's collateral puzzle (XCH
-     set aside first at another of the wallet's addresses, so a one-coin wallet works), then
-     the launch, whose eve option has a quoted inner puzzle: its outputs are fixed and
-     wallet-kit shows the option as guaranteed. Sage's own `mint_option` spends the eve with
-     the wallet's standard puzzle, which wallet-kit counts as conditional, so `option.mint`
-     would not verify. The two coin sets assert each other's spend; the launcher's parent
-     asserts the launcher's announcement. Intent: nothing paid to anyone (collateral and
-     launcher are option outputs), this fee. Answer `{ transactionId, status, launcherId }`.
+     locks the collateral, is the creator and holds the option. Sage's own `mint_option`, key-free,
+     unchanged; sealed, so Sage's `ASSERT_CONCURRENT_SPEND` between the collateral and the launch
+     makes the launch guaranteed (XCH or CAT collateral). Intent: nothing paid to anyone
+     (collateral and launcher are option outputs), this fee. Answer
+     `{ transactionId, status, launcherId }`.
    - **Loan request** (`creatorAddress` someone else's, and `loan`, the principal): the
-     creator is the lender, the option (the right to repay) stays with the borrower. Nothing is
-     sent: the same build plus an assertion that the principal is paid to the wallet and a
-     1-mojo payment offered to whoever takes it, signed after one approval and returned as an
-     offer, `{ offer, launcherId }`, valid until `expiresAt`. The mojo is what lets wallet-kit
-     bind the lender's take (spec 11.2 binds a taker only to a settlement payment it
-     receives). A lender's address without `loan`, or `loan` without a lender, is refused.
+     creator is the lender, the option (the right to repay) stays with the borrower. Sage has no
+     builder for an option written for someone else, so Klimper builds it from the wallet's
+     coins with Sage's coin selection and spend code and the SDK's option launcher (XCH
+     collateral set aside first at another of the wallet's addresses, so a one-coin wallet
+     works; the eve's inner puzzle is quoted, so its outputs are fixed). Nothing is sent: the
+     signed spends go back as an offer, `{ offer, launcherId }`, valid until `expiresAt`, so
+     its signatures are **released** and only direct assertions bind it (spec 11.2): every
+     spend of the borrower asserts the settlement announcement of the principal paid to the
+     wallet, and every spend that locks the collateral asserts the launcher's announcement.
+     A 1-mojo payment is offered to whoever takes it, so wallet-kit can bind the lender's take
+     (spec 11.2 binds a taker only to a settlement payment it receives). A lender's address
+     without `loan`, or `loan` without a lender, is refused.
    - **Lend**: the lender takes the request with `chia_takeOffer`. When the bundle mints an
      option whose creator is the wallet and whose collateral and option are someone else's,
      the intent is `loan.take` (verified: the creator is the wallet). A take that mints an
      option neither the wallet's to hold nor to claim is refused (`option_not_yours`).
+     wallet-kit does not verify `loan.take` yet (xchonnect TASK-78), so a lender's take is
+     refused before the lender is asked (`intent_mismatch`).
    - **Use** (`chia_exerciseOption`): Sage's `exercise_options`, only before the expiry
-     (`option_expired`), for an option the wallet holds (`unknown_option`). Every user spend,
-     the melted option included, is tied to the settlement payment that releases the
-     collateral to the wallet (wallet-kit refuses an unbound exercise, `unbound_exercise`).
+     (`option_expired`), for an option the wallet holds (`unknown_option`), as Sage builds it:
+     sealed, so Sage's links tie every user spend, the melted option included, to the spend
+     that receives the collateral (wallet-kit refuses an unbound exercise, `unbound_exercise`).
    - **Claim back** (`chia_claimOption`): Sage has none, so it is built from the SDK's
      clawback spend, only from the expiry on (`option_not_expired`) and only by the creator
      (`not_creator`). The terms come from the wallet database, or for an option the wallet never
@@ -246,12 +253,52 @@ and is gone.
      the wrong network, and a website's mint with a fake collateral (an unknown contract).
    - **Dependency**: wallet-kit's option support is in xchonnect 0.1.0-rc.5, not yet on
      crates.io; `../Cargo.toml` patches both crates to the git revision until it is published.
-4. **Checked twice**: before the prompt, Sage's summary from the wallet database and
+4. **Sealed and released** (xchonnect spec 11.2, `src/signed_coins.rs`). Whether one of the
+   user's spends could be taken out of a bundle and used without the others depends on who
+   holds the user's signatures:
+   - **Sealed**: Klimper built the request, sends it itself and answers the website only
+     with the transaction id and status (`chia_send`, `chia_takeOffer`, writing, using,
+     claiming and sending an option). Every signature exists only inside the one bundle
+     Klimper sends, so the user's spends reach the network together or not at all, and the
+     links Sage's builders make between them count. Sage's bundles are signed as Sage builds
+     them; Klimper adds nothing. The approval shows **Sealed by Klimper** (prompt key
+     `linking: "sealed"`).
+   - **Released**: everything else — a `signCoinSpends` (the signature goes to the
+     website), a website's own bundle (`xchonnect_submitCoinSpends`), a loan request (an
+     offer). Each of the user's spends must then itself assert what the user is paid, or the
+     request is refused.
+   A request is sealed only if no coin it spends has a signature outside the wallet. So
+   Klimper keeps a **record of signed coins**, per wallet and network, in the OS keyring
+   next to the sessions (`signed:<fingerprint>:<chain id>`), across restarts:
+   - **released** coins: every coin of the wallet's whose signature left it — answered to a
+     `signCoinSpends`, in a loan request's offer, or in any bundle sent (also one the network
+     refused). Recorded before the answer or the bundle leaves; if the record cannot be
+     written, nothing leaves. A request spending one of them is never sealed.
+   - **in flight**: every coin of a sealed bundle Klimper sent, until any coin of that bundle
+     is spent on chain. A request spending one is refused (`4001`, reason `coin_in_flight`,
+     "wait for your last transaction to confirm"); a loan request's coin selection leaves them
+     out. Sage's own coin selection already leaves out the coins of a transaction it holds as
+     pending.
+   - **signed messages**: for each coin of the wallet's in a sealed bundle, the exact
+     `AGG_SIG_ME` messages Klimper signed for it, kept until that coin itself is spent on
+     chain (for the follow-up in xchonnect, where wallet-kit refuses to sign a recorded
+     message again).
+   Coins leave the record once seen spent on chain: before every request that signs coin
+   spends, Klimper checks the record's coins against Sage's wallet database, and coins the
+   database does not hold (another party's, or created inside a bundle) against a peer. A
+   coin neither can tell about stays. Requests that sign coin spends run one at a time, so
+   the record a request was checked against is still the record when its signature leaves.
+   For the user this means: a website can never take apart a transaction Klimper sends; a
+   coin the user signed for a website stays under the strict rule until it is spent; and a
+   second request using coins of a transaction still on its way is refused until that
+   transaction confirms. Signatures made by Sage's own screens, outside Xchonnect, are not in
+   the record.
+5. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
    is verified claim by claim against the simulation; `chia_send` and `chia_takeOffer` carry
    one Klimper derives from the request itself.
-5. **Only spends the signature fixes** (`sign_guard.rs`, TASK-141): a standard coin's key
+6. **Only spends the signature fixes** (`sign_guard.rs`, TASK-141): a standard coin's key
    signs the spend's delegated puzzle, not the conditions it returns, so Klimper signs a
    standard spend — the coin's own puzzle, or the inner puzzle of a CAT, NFT, DID, option or
    other layer it can follow — only when its delegated puzzle is quoted conditions,

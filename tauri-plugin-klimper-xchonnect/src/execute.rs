@@ -335,6 +335,25 @@ pub fn check_spends(
     cross_check(&sage_summary.summary, &kit_summary)
 }
 
+/// A coin of a bundle Klimper broadcast and kept sealed is not spent again until that bundle
+/// settles (xchonnect spec 11.2): wallet-kit refuses such a request too (4001
+/// `coin_in_flight`), this says it before anything is checked or shown. Sage's coin selection
+/// leaves out the coins of a transaction it holds as pending, so this is met only when Sage
+/// does not (no peer gave a verdict on the earlier bundle, or the network refused it).
+pub fn refuse_in_flight(spends: &[CoinSpend], ctx: &RequestContext<'_>) -> Result<(), RpcError> {
+    if spends
+        .iter()
+        .any(|cs| ctx.signed_coins.in_flight.contains(&cs.coin.coin_id()))
+    {
+        return Err(error(
+            codes::UNAUTHORIZED,
+            "wait for your last transaction to confirm",
+            Some("coin_in_flight"),
+        ));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------------------
 // chia_send
 // ---------------------------------------------------------------------------------------
@@ -471,11 +490,14 @@ pub fn send(
     };
 
     // Sage spends the wallet's coins with quoted conditions; held to it all the same.
+    refuse_in_flight(&spends, ctx)?;
     crate::sign_guard::check_spends(&spends, ctx.keys, &ctx.network)?;
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
     cross_check(&built.summary, &kit_summary)?;
 
+    // Klimper broadcasts the bundle itself and answers only its id and status: sealed
+    // (xchonnect spec 11.2). The caller's broadcaster records its coins.
     let submitted = kit::submit(
         SubmitRequest {
             method: CHIA_SEND,
@@ -483,6 +505,7 @@ pub fn send(
             other_signature: None,
             intent: Some(&intent),
             wallet_built: true,
+            signatures_released: false,
         },
         ctx,
         signer,
@@ -564,7 +587,9 @@ fn check_offer(offer: &SpendBundle, ctx: &RequestContext<'_>) -> Result<(), RpcE
 }
 
 /// `AGG_SIG` constants of the request's network, as wallet-kit's policy computes them.
-fn agg_sig_constants(network: &kit::Network) -> chia_wallet_sdk::signer::AggSigConstants {
+pub(crate) fn agg_sig_constants(
+    network: &kit::Network,
+) -> chia_wallet_sdk::signer::AggSigConstants {
     use chia_wallet_sdk::types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
     chia_wallet_sdk::signer::AggSigConstants::new(match network {
         kit::Network::Mainnet => MAINNET_CONSTANTS.agg_sig_me_additional_data,
@@ -623,14 +648,13 @@ fn check_maker_signature(offer: &SpendBundle, network: &kit::Network) -> Result<
     Ok(())
 }
 
-/// The message of the coin announcement Klimper adds to tie a spend, when the bound spend
-/// makes none of its own. Never starts with `0xcb`, the prefix a CAT reserves for its ring.
-const BIND_MESSAGE: &[u8] = b"klimper:bind";
-
 /// Change the conditions of one of the user's own, still unsigned spends: a plain standard
 /// spend (`(() (q . conditions) ())`, as Sage builds them), a CAT whose inner puzzle is one,
 /// or an option contract whose owner's puzzle is one (TASK-140: the option an exercise melts).
-/// Returns `false`, leaving the spend as it was, for any other shape.
+/// Returns `false`, leaving the spend as it was, for any other shape. Only the tests use it,
+/// to make a website's tampered spend: Klimper hands Sage's spends to wallet-kit as Sage
+/// builds them (xchonnect spec 11.2, sealed requests).
+#[cfg(test)]
 fn edit_user_conditions(
     allocator: &mut chia_wallet_sdk::prelude::Allocator,
     spend: &mut CoinSpend,
@@ -708,88 +732,6 @@ fn edit_user_conditions(
     };
     spend.solution = rebuilt;
     true
-}
-
-/// Tie every one of the user's spends to the maker's payment before anything is signed.
-///
-/// Wallet-kit signs a two-party bundle only if each user spend is *bound* (spec 11.2): it
-/// asserts the settlement announcement of the payment the user expects, or a coin
-/// announcement of a user spend that does. Otherwise that spend could be taken out of the
-/// bundle and sent alone. Sage's take can leave one of the user's spends loose (with a fee,
-/// the assertions sit on one coin and the user's other coin asserts none of them). Such a
-/// spend is tied here: it asserts a coin announcement of a bound user spend (one that spend
-/// makes anyway, or one added to it). Both are the user's own, still unsigned spends, and
-/// both changes only add conditions: an assertion narrows when a coin can be spent, an
-/// announcement gives nothing away. A spend of any other shape is left as it is, and
-/// wallet-kit then refuses the take as `unbound_partial`.
-fn bind_user_spends(
-    mut spends: Vec<CoinSpend>,
-    ownership: &kit::Ownership,
-) -> Result<Vec<CoinSpend>, RpcError> {
-    use chia_wallet_sdk::prelude::{Allocator, Condition};
-    use chia_wallet_sdk::types::{
-        announcement_id,
-        conditions::{AssertCoinAnnouncement, CreateCoinAnnouncement},
-    };
-
-    let max_cost = kit::simulate::DEFAULT_MAX_COST;
-    let report = kit::verify_binding(&spends, ownership, max_cost).map_err(RpcError::from)?;
-    if report.all_bound {
-        return Ok(spends);
-    }
-    // One run for which spends are the user's and what each announces.
-    let mut allocator = Allocator::new();
-    let (executed, _) = kit::simulate::execute(&mut allocator, &spends, ownership, max_cost)
-        .map_err(RpcError::from)?;
-    let bound: Vec<usize> = executed
-        .iter()
-        .enumerate()
-        .filter(|(index, spend)| spend.owned && !report.unbound_user_spends.contains(index))
-        .map(|(index, _)| index)
-        .collect();
-
-    // The anchor: a coin announcement a bound user spend makes in this bundle.
-    let mut anchor = bound.iter().find_map(|&index| {
-        let spend = &executed[index];
-        spend
-            .conditions
-            .iter()
-            .find_map(|condition| match condition {
-                Condition::CreateCoinAnnouncement(created) => {
-                    Some(announcement_id(spend.coin.coin_id(), &created.message))
-                }
-                _ => None,
-            })
-    });
-    // None made: give a bound spend one.
-    if anchor.is_none() {
-        for &index in &bound {
-            let spend = &mut spends[index];
-            let coin_id = spend.coin.coin_id();
-            if edit_user_conditions(&mut allocator, spend, |conditions| {
-                conditions.push(Condition::CreateCoinAnnouncement(
-                    CreateCoinAnnouncement::new(BIND_MESSAGE.to_vec().into()),
-                ));
-            }) {
-                anchor = Some(announcement_id(coin_id, BIND_MESSAGE));
-                break;
-            }
-        }
-    }
-    let Some(anchor) = anchor else {
-        return Ok(spends);
-    };
-
-    for &index in &report.unbound_user_spends {
-        if let Some(spend) = spends.get_mut(index) {
-            edit_user_conditions(&mut allocator, spend, |conditions| {
-                conditions.push(Condition::AssertCoinAnnouncement(
-                    AssertCoinAnnouncement::new(anchor),
-                ));
-            });
-        }
-    }
-    Ok(spends)
 }
 
 /// The take, built from the wallet's own coins with Sage's offer code and **no key**: the
@@ -871,7 +813,6 @@ pub fn take_offer(
             Some("build_failed"),
         )
     })?;
-    let spends = bind_user_spends(spends, ctx.ownership)?;
     // Sage's own reading of the whole bundle, from the wallet database, for the
     // cross-check: the same summary its take_offer endpoint returns. A failure here is
     // not about the balance, and is answered as `check_spends` answers it.
@@ -957,6 +898,7 @@ fn submit_take(
         .filter(|spend| !maker_coins.contains(&spend.coin.coin_id()))
         .cloned()
         .collect();
+    refuse_in_flight(&spends, ctx)?;
     crate::sign_guard::check_spends(&user_spends, ctx.keys, &ctx.network)?;
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
@@ -984,6 +926,8 @@ fn submit_take(
             other_signature: Some(maker_signature),
             intent: Some(&intent),
             wallet_built: true,
+            // Sealed, as for a send: only the transaction id goes back to the website.
+            signatures_released: false,
         },
         ctx,
         signer,

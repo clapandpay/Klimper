@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use xchonnect_wallet_kit::{AssetId, AssetLimit, DailySpend, DappPermissions, PermissionError};
 
 use crate::error::{Error, Result};
+pub use crate::signed_coins::SignedCoinsRecord;
 
 /// Keyring service name. Deliberately distinct from anything Sage uses: Klimper's signing
 /// keys are Sage's own file (`keys.bin`), and no Xchonnect secret may ever be
@@ -794,6 +795,45 @@ impl SessionStore {
             self.remove(fingerprint, id)?;
         }
         Ok(ids)
+    }
+
+    /// The record of the wallet's coins with signatures outside it (xchonnect spec 11.2), per
+    /// wallet and network: one keyring entry, `signed:<fingerprint>:<chain id>`.
+    fn signed_coins_key(fingerprint: u32, chain_id: &str) -> String {
+        format!("signed:{fingerprint}:{chain_id}")
+    }
+
+    /// The wallet's record of signed coins ([`SignedCoinsRecord`]); empty when the wallet
+    /// never let a signature leave it. An unreadable record is an error, never an empty one:
+    /// forgetting a coin in flight would let its bundle be split.
+    pub fn load_signed_coins(&self, fingerprint: u32, chain_id: &str) -> Result<SignedCoinsRecord> {
+        match self
+            .secrets
+            .get(&Self::signed_coins_key(fingerprint, chain_id))?
+        {
+            Some(blob) => serde_json::from_slice(&blob).map_err(Error::internal),
+            None => Ok(SignedCoinsRecord::default()),
+        }
+    }
+
+    /// Change the record of signed coins under the store's write lock, and write it back if
+    /// it changed. Returns the record as stored.
+    pub fn update_signed_coins(
+        &self,
+        fingerprint: u32,
+        chain_id: &str,
+        change: impl FnOnce(&mut SignedCoinsRecord),
+    ) -> Result<SignedCoinsRecord> {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut record = self.load_signed_coins(fingerprint, chain_id)?;
+        let before = record.clone();
+        change(&mut record);
+        if record != before {
+            let blob = serde_json::to_vec(&record).map_err(Error::internal)?;
+            self.secrets
+                .put(&Self::signed_coins_key(fingerprint, chain_id), &blob)?;
+        }
+        Ok(record)
     }
 
     fn load_limits(&self, fingerprint: u32, dapp: &str, id: &str) -> Result<DailySpend> {

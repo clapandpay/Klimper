@@ -104,6 +104,8 @@ struct Setup {
     permissions: DappPermissions,
     session_chain_id: &'static str,
     now: u64,
+    /// The wallet's record of signed coins (spec 11.2).
+    signed: kit::SignedCoins,
 }
 
 impl Setup {
@@ -112,6 +114,7 @@ impl Setup {
             permissions: granted(method),
             session_chain_id: "testnet11",
             now,
+            signed: kit::SignedCoins::default(),
         }
     }
 }
@@ -142,6 +145,7 @@ fn run(
         limits: &limits,
         now: setup.now,
         chain: None,
+        signed_coins: &setup.signed,
     };
     let seen = Seen::new(true);
     let kept = Kept::default();
@@ -314,10 +318,6 @@ async fn writing_an_xch_option_with_a_cat_strike_locks_the_collateral_and_settle
     assert_eq!(alice.wallet.db.xch_balance().await.unwrap(), 5_000 - 1 - 7);
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B1: a wallet-built mint
-/// whose collateral and launch come from different coins, linked by Sage's
-/// `Relation::AssertConcurrent`, is not a guaranteed launch, so `option.mint` does not hold).
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn writing_a_cat_option_with_an_xch_strike_settles() {
     let mut alice = SimWallet::new(5_000).await;
@@ -469,11 +469,6 @@ async fn claim(
     )
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B1: a wallet-built mint
-/// whose collateral and launch come from different coins, linked by Sage's
-/// `Relation::AssertConcurrent`, is not a guaranteed launch, so `option.mint` does not hold).
-/// (Past the mint, its exercise also meets B2.)
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn a_sent_option_is_used_by_its_new_holder_before_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;
@@ -572,10 +567,6 @@ async fn the_writer_claims_the_collateral_back_after_the_expiry() {
     assert_eq!(alice.wallet.db.xch_balance().await.unwrap(), before - 5);
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B1: a wallet-built mint
-/// whose collateral and launch come from different coins, linked by Sage's
-/// `Relation::AssertConcurrent`, is not a guaranteed launch, so `option.mint` does not hold).
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn a_cat_collateral_comes_back_after_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;
@@ -703,6 +694,7 @@ async fn a_website_mint_with_a_fake_collateral_stays_unknown_and_is_refused() {
                     other_signature: None,
                     intent: None,
                     wallet_built: false,
+                    signatures_released: true,
                 },
                 ctx,
                 signer,
@@ -803,7 +795,7 @@ async fn loan() -> Loan {
         loan: Some(xch(300)),
         ..mint_params(cat(collateral, 1_000), xch(315), now + TERM, 0)
     };
-    let built = build_mint(&alice.wallet, Some(lender), &params, Some(xch(300)))
+    let built = build_mint(&alice.wallet, Some(lender), &params, Some(xch(300)), &[])
         .await
         .unwrap()
         .expect("no loan request built");
@@ -845,8 +837,8 @@ async fn loan() -> Loan {
 /// a borrower's funding spend can be swapped for one that keeps the money, and nothing in
 /// the request ties the collateral to the lender's signature. Follow-up: the loan request
 /// must carry an announcement the lender can bind to; then this take is Klimper's again.
-/// Until then Bob's own wallet takes the offer (Sage's take, Klimper's `bind_user_spends`,
-/// signed by Sage) so the borrower's repayment and the lender's claim stay covered.
+/// Until then Bob's own wallet takes the offer (Sage's take as Sage builds it, signed by
+/// Sage) so the borrower's repayment and the lender's claim stay covered.
 async fn lend(loan: &mut Loan) {
     let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
     know_cats(&loan.bob, &[loan.collateral]).await;
@@ -876,9 +868,7 @@ async fn lend(loan: &mut Loan) {
     );
     assert!(outcome.sent.is_none());
 
-    let (_, _, ownership) = wallet_keys(&loan.bob).await;
     let (spends, maker_signature) = build_take(&loan.bob.wallet, offer, 0).await.unwrap();
-    let spends = bind_user_spends(spends, &ownership).unwrap();
     let bundle = loan
         .bob
         .wallet
@@ -899,10 +889,6 @@ async fn lend(loan: &mut Loan) {
     loan.alice.wait_for_puzzles().await;
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B3: the loan request's
-/// two coin sets are linked by `ASSERT_CONCURRENT_SPEND`, as Sage links them, so the launch
-/// is not guaranteed and `loan.request` does not hold).
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn a_loan_request_is_signed_as_an_offer_and_shows_the_loan() {
     let loan = Box::pin(loan()).await;
@@ -914,6 +900,8 @@ async fn a_loan_request_is_signed_as_an_offer_and_shows_the_loan() {
     let lender = loan.bob.wallet.change_p2_puzzle_hash().await.unwrap();
     assert_eq!(view.counterparty, lender);
     let prompt = loan.request.prompt.as_ref().unwrap();
+    // Its signatures go to the lender: released, held by direct assertions alone.
+    assert_eq!(prompt["linking"], "direct");
     assert_eq!(prompt["intent"]["kind"], "loan.request");
     assert_eq!(prompt["intent"]["kind_verified"], true);
     let mint = effect(&loan.request, "mint");
@@ -925,10 +913,6 @@ async fn a_loan_request_is_signed_as_an_offer_and_shows_the_loan() {
     assert!(loan.offer.starts_with("offer1"));
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B3: the loan request's
-/// two coin sets are linked by `ASSERT_CONCURRENT_SPEND`, as Sage links them, so the launch
-/// is not guaranteed and `loan.request` does not hold).
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn a_loan_is_taken_by_the_lender_and_repaid_by_the_borrower() {
     let mut loan = Box::pin(loan()).await;
@@ -969,10 +953,6 @@ async fn a_loan_is_taken_by_the_lender_and_repaid_by_the_borrower() {
     assert_eq!(after, alice_xch + 300 - 315 - u128::from(LOAN_TIE_MOJOS));
 }
 
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B3: the loan request's
-/// two coin sets are linked by `ASSERT_CONCURRENT_SPEND`, as Sage links them, so the launch
-/// is not guaranteed and `loan.request` does not hold).
-#[should_panic(expected = "intent_mismatch")]
 #[tokio::test]
 async fn a_loan_not_repaid_is_claimed_by_the_lender_after_the_expiry() {
     let mut loan = Box::pin(loan()).await;
@@ -1053,10 +1033,6 @@ async fn a_take_that_writes_someone_elses_option_is_refused() {
 
 /// Using an XCH-backed option with the writer's own strike CAT, with Sage's
 /// `exercise_options` as it builds it (nothing added).
-/// EXPECTED TO FAIL until the xchonnect follow-up to rc.5 f25f044 (B2: Sage's
-/// `exercise_options` links its spends with `ASSERT_CONCURRENT_SPEND`, which the kit no
-/// longer counts, so a wallet-built exercise is refused as `unbound_exercise`).
-#[should_panic(expected = "unbound_exercise")]
 #[tokio::test]
 async fn an_xch_option_is_used_before_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;
@@ -1144,4 +1120,259 @@ async fn an_offered_option_is_bought_with_xch() {
         .coin_state(option_coin)
         .and_then(|state| state.spent_height);
     assert!(spent.is_some(), "the take did not settle");
+}
+
+// ---------------------------------------------------------------------------------------
+// The record of signed coins (xchonnect spec 11.2)
+// ---------------------------------------------------------------------------------------
+
+use crate::signed_coins::{Recording, SignedCoinsHandle, spent_coins};
+
+/// An empty record of signed coins, in a session store of its own.
+fn record_of_signed() -> (tempfile::TempDir, SignedCoinsHandle) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = std::sync::Arc::new(
+        crate::store::SessionStore::open(
+            dir.path(),
+            Box::new(crate::store::MemorySecrets::default()),
+        )
+        .unwrap(),
+    );
+    (dir, SignedCoinsHandle::new(store, 1, "testnet11"))
+}
+
+/// `signCoinSpends` params for `spends`, as a website sends them.
+fn sign_params(spends: &[CoinSpend]) -> String {
+    let spends: Vec<Value> = spends
+        .iter()
+        .map(|cs| {
+            serde_json::json!({
+                "coin": {
+                    "parent_coin_info": hex0x(cs.coin.parent_coin_info),
+                    "puzzle_hash": hex0x(cs.coin.puzzle_hash),
+                    "amount": cs.coin.amount,
+                },
+                "puzzle_reveal": hex0x(cs.puzzle_reveal.as_ref()),
+                "solution": hex0x(cs.solution.as_ref()),
+            })
+        })
+        .collect();
+    serde_json::json!({ "coinSpends": spends }).to_string()
+}
+
+/// Sage's mint of a CAT-backed option (collateral and launch from different coins, linked by
+/// `ASSERT_CONCURRENT_SPEND`) holds only while sealed. Once a website holds a signature over
+/// one of those coins (a `signCoinSpends` answered earlier), the same request is released:
+/// only direct links count, the launch is not guaranteed and `option.mint` does not hold.
+#[tokio::test]
+async fn coins_signed_for_a_website_make_a_later_wallet_built_request_strict() {
+    let mut alice = SimWallet::new(5_000).await;
+    let collateral = issue_amount(&mut alice, 1_000).await;
+    let now = chain_time(&alice).await;
+    let params = mint_params(cat(collateral, 1_000), xch(300), now + TERM, 0);
+    let w = who(&alice).await;
+    let (_dir, record) = record_of_signed();
+
+    // Sealed, with an empty record: Sage's mint passes as Sage builds it.
+    let minted = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[collateral], &minted.spends).await;
+    let spends = minted.spends.clone();
+    let sealed = run(&w, &Setup::new(CHIA_MINT_OPTION, now), |ctx, s, a, b, _| {
+        submit_mint(ctx, s, a, b, &summary, minted, 0)
+    });
+    sealed.ok();
+    assert_eq!(sealed.prompt.as_ref().unwrap()["linking"], "sealed");
+
+    // A website had the user sign spends of the same coins.
+    crate::requests::record_released(
+        "signCoinSpends",
+        &sign_params(&spends),
+        r#""0x00""#,
+        &w.ownership,
+        &record,
+    )
+    .unwrap();
+    let signed = record.load().unwrap().to_kit();
+    assert!(signed.in_flight.is_empty());
+    let user_coins = crate::signed_coins::user_coins(&spends, &w.ownership);
+    assert!(!user_coins.is_empty());
+    assert!(user_coins.iter().all(|c| signed.released.contains(c)));
+
+    let minted = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[collateral], &minted.spends).await;
+    let mut setup = Setup::new(CHIA_MINT_OPTION, now);
+    setup.signed = signed;
+    let strict = run(&w, &setup, |ctx, s, a, b, _| {
+        submit_mint(ctx, s, a, b, &summary, minted, 0)
+    });
+    assert!(!strict.asked());
+    assert!(
+        strict.reason().contains("intent_mismatch"),
+        "{}",
+        strict.reason()
+    );
+}
+
+/// A sealed bundle Klimper broadcast puts its coins in flight: a second request spending one
+/// of them is refused (`coin_in_flight`) — Klimper's own build before anything is shown, a
+/// website's bundle by wallet-kit — until one of the bundle's coins is spent on chain. Then
+/// the record forgets the bundle and its coins.
+#[tokio::test]
+async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
+    let mut alice = SimWallet::new(5_000).await;
+    let now = chain_time(&alice).await;
+    let params = mint_params(xch(1_000), cat(Bytes32::new([0x58; 32]), 10), now + TERM, 0);
+    let w = who(&alice).await;
+    let (_dir, record) = record_of_signed();
+
+    let minted = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[], &minted.spends).await;
+    let first = run(&w, &Setup::new(CHIA_MINT_OPTION, now), |ctx, s, a, b, _| {
+        let recording = Recording::sealed(b, &record, ctx.ownership, ctx.keys, &ctx.network);
+        submit_mint(ctx, s, a, &recording, &summary, minted, 0)
+    });
+    first.ok();
+    assert_eq!(first.prompt.as_ref().unwrap()["linking"], "sealed");
+    let bundle = first.sent.clone().unwrap();
+    let signed = record.load().unwrap().to_kit();
+    for cs in &bundle.coin_spends {
+        assert!(signed.in_flight.contains(&cs.coin.coin_id()));
+    }
+    let user_coins = crate::signed_coins::user_coins(&bundle.coin_spends, &w.ownership);
+    assert!(!user_coins.is_empty());
+    assert_eq!(signed.released, user_coins.iter().copied().collect());
+    // And, per coin of the user's, the exact messages Klimper signed in the bundle: the
+    // bundle's signature is their aggregate.
+    let sealed = record.load().unwrap().sealed_messages();
+    assert!(
+        user_coins
+            .iter()
+            .all(|c| sealed.iter().any(|(coin, ..)| coin == c))
+    );
+    let signatures: Vec<chia_bls::Signature> = sealed
+        .iter()
+        .map(|(_, key, message)| kit::Signer::sign(&w.signer, key, message).unwrap())
+        .collect();
+    assert_eq!(
+        chia_bls::aggregate(&signatures),
+        bundle.aggregated_signature
+    );
+
+    // The network has not answered yet; Sage builds the same mint from the same coins.
+    let again = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[], &again.spends).await;
+    let spends = again.spends.clone();
+    let mut setup = Setup::new(CHIA_MINT_OPTION, now);
+    setup.signed = signed.clone();
+    let refused = run(&w, &setup, |ctx, s, a, b, _| {
+        submit_mint(ctx, s, a, b, &summary, again, 0)
+    });
+    assert!(!refused.asked());
+    assert!(
+        refused.reason().contains("coin_in_flight"),
+        "{}",
+        refused.reason()
+    );
+    assert!(refused.sent.is_none());
+
+    // A website's own bundle of those coins: wallet-kit refuses it the same way.
+    let mut setup = Setup::new(kit::SUBMIT_COIN_SPENDS, now);
+    setup.signed = signed;
+    let website = run(&w, &setup, |ctx, s, a, b, _| {
+        kit::submit(
+            SubmitRequest {
+                method: kit::SUBMIT_COIN_SPENDS,
+                spends,
+                other_signature: None,
+                intent: None,
+                wallet_built: false,
+                signatures_released: true,
+            },
+            ctx,
+            s,
+            a,
+            b,
+        )
+        .map(|s| s.to_json())
+    });
+    assert!(!website.asked());
+    assert!(
+        website.reason().contains("coin_in_flight"),
+        "{}",
+        website.reason()
+    );
+
+    // The bundle settles: every coin of it is spent on chain (the launcher and the eve,
+    // which the wallet's database does not hold, are read from a peer).
+    settle(&mut alice, &first).await;
+    let peer = alice.peer().await;
+    let coins = record.load().unwrap().coins();
+    let spent = spent_coins(&alice.wallet, Some(&peer), &coins).await;
+    for cs in &bundle.coin_spends {
+        assert!(spent.contains(&cs.coin.coin_id()), "{}", cs.coin.coin_id());
+    }
+    assert!(record.prune(&spent).unwrap().is_empty());
+
+    // With the record pruned, the next mint is sealed again.
+    let next = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[], &next.spends).await;
+    let mut setup = Setup::new(CHIA_MINT_OPTION, now);
+    setup.signed = record.load().unwrap().to_kit();
+    let sealed = run(&w, &setup, |ctx, s, a, b, _| {
+        submit_mint(ctx, s, a, b, &summary, next, 0)
+    });
+    sealed.ok();
+    assert_eq!(sealed.prompt.as_ref().unwrap()["linking"], "sealed");
+}
+
+/// Only a coin seen spent leaves the record: a released coin that is still unspent stays.
+#[tokio::test]
+async fn an_unspent_released_coin_stays_in_the_record() {
+    let alice = SimWallet::new(5_000).await;
+    let coin = alice.wallet.db.selectable_xch_coins().await.unwrap()[0];
+    let (_dir, record) = record_of_signed();
+    record.release(vec![coin.coin_id()]).unwrap();
+    let peer = alice.peer().await;
+    let spent = spent_coins(&alice.wallet, Some(&peer), &record.load().unwrap().coins()).await;
+    assert!(spent.is_empty());
+    let kept = record.prune(&spent).unwrap();
+    assert!(kept.to_kit().released.contains(&coin.coin_id()));
+}
+
+/// A loan request's signed offer goes to the website: every coin of the borrower's in it is
+/// released before the answer leaves (spec 11.2), none is in flight (nothing was sent).
+#[tokio::test]
+async fn a_loan_requests_offer_releases_the_borrowers_coins() {
+    let loan = Box::pin(loan()).await;
+    let w = who(&loan.alice).await;
+    let (_dir, record) = record_of_signed();
+    crate::requests::record_released(
+        CHIA_MINT_OPTION,
+        "{}",
+        loan.request.ok(),
+        &w.ownership,
+        &record,
+    )
+    .unwrap();
+    let signed = record.load().unwrap().to_kit();
+    let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
+    let borrower = crate::signed_coins::user_coins(&offer.coin_spends, &w.ownership);
+    assert!(!borrower.is_empty());
+    assert!(borrower.iter().all(|c| signed.released.contains(c)));
+    assert!(signed.in_flight.is_empty());
 }

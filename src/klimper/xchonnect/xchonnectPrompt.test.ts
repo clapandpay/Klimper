@@ -736,4 +736,26 @@ describe('option keys', () => {
     const signOnly = { ...f.loanRequest(), type: 'sign_coin_spends' };
     expect(spend(signOnly).makesOffer).toBe(false);
   });
+
+  it('reads linking strictly: sealed only on the wallet’s own build (spec 11.2)', () => {
+    expect(spend({ ...f.optionPrompt(), linking: 'sealed' }).sealed).toBe(true);
+    expect(spend({ ...f.optionPrompt(), linking: 'direct' }).sealed).toBe(
+      false,
+    );
+    expect(spend(f.optionPrompt()).sealed).toBe(false);
+    unreadable({ ...f.optionPrompt(), linking: 'Sealed' });
+    unreadable({ ...f.optionPrompt(), linking: true });
+    const website = {
+      ...f.optionPrompt(),
+      linking: 'sealed',
+      wallet_built: false,
+    };
+    expect(spend(website).sealed).toBe(false);
+    const signOnly = {
+      ...f.optionPrompt(),
+      linking: 'sealed',
+      type: 'sign_coin_spends',
+    };
+    expect(spend(signOnly).sealed).toBe(false);
+  });
 });

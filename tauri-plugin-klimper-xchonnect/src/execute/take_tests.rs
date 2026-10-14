@@ -349,6 +349,7 @@ pub(super) async fn take(
         limits: &limits,
         now: 1_760_000_000,
         chain: None,
+        signed_coins: &kit::SignedCoins::default(),
     };
     if let Err(error) = check_offer(offer, &ctx) {
         return Outcome::refused(error);
@@ -357,10 +358,6 @@ pub(super) async fn take(
     let (spends, maker_signature) = build_take(&taker.wallet, offer.clone(), fee)
         .await
         .expect("Sage could not build the take");
-    let spends = match bind_user_spends(spends, &ownership) {
-        Ok(spends) => spends,
-        Err(error) => return Outcome::refused(error),
-    };
     let summary = sage_summary(taker, cats, &spends).await;
     let user = User {
         approves,
@@ -627,6 +624,7 @@ pub(super) fn checked(offer: &SpendBundle) -> Result<(), RpcError> {
         limits: &limits,
         now: 1_760_000_000,
         chain: None,
+        signed_coins: &kit::SignedCoins::default(),
     };
     check_offer(offer, &ctx)
 }

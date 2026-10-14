@@ -231,6 +231,7 @@ impl Harness {
             limits: &limits,
             now: NOW,
             chain: None,
+            signed_coins: &xchonnect_wallet_kit::SignedCoins::default(),
         };
         let host = Host {
             signer: &signer,
@@ -493,6 +494,7 @@ fn a_cancelled_authentication_cancels_the_request() {
         limits: &limits,
         now: NOW,
         chain: None,
+        signed_coins: &xchonnect_wallet_kit::SignedCoins::default(),
     };
     let outcome = kit::handle(
         "signCoinSpends",
@@ -790,6 +792,7 @@ fn a_request_for_another_network_is_refused() {
         limits: &limits,
         now: NOW,
         chain: None,
+        signed_coins: &xchonnect_wallet_kit::SignedCoins::default(),
     };
     let outcome = kit::handle(
         "signCoinSpends",

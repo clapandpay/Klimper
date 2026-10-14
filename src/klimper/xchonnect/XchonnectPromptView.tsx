@@ -630,6 +630,21 @@ function Handling({ view }: { readonly view: SpendPromptView }) {
           <Trans>Checked twice</Trans>
         </Badge>
       )}
+      {view.sealed && (
+        <Badge
+          tone='verified'
+          testId='prompt-sealed'
+          icon={<BadgeCheck className='h-3.5 w-3.5' aria-hidden='true' />}
+          hint={
+            <Trans>
+              Klimper built this transaction, sends it itself and keeps every
+              signature: all of it reaches the network, or none of it.
+            </Trans>
+          }
+        >
+          <Trans>Sealed by Klimper</Trans>
+        </Badge>
+      )}
     </div>
   );
 }

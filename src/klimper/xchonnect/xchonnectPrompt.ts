@@ -245,6 +245,12 @@ export interface SpendPromptView {
   readonly walletBuilt: boolean;
   /** The wallet database and the independent simulation were compared and agree. */
   readonly crossChecked: boolean;
+  /**
+   * wallet-kit read the request as sealed (`linking: "sealed"`, xchonnect spec 11.2):
+   * Klimper built it, sends it itself and keeps every signature, so the user's spends reach
+   * the chain together or not at all. Only for a request Klimper builds and sends.
+   */
+  readonly sealed: boolean;
   /** The website's declared intent, every claim verified; `null` when none was given. */
   readonly intent: IntentView | null;
   /** The network's own name for its coin: `XCH`, or `TXCH` on testnet. */
@@ -908,12 +914,24 @@ function readPromptStrict(
     return { kind: 'unreadable' };
   }
   const makesOffer = broadcasts && prompt.makes_offer === true;
+  // Which links between the user's spends counted: absent (an older wallet-kit, or a
+  // signature request), "direct" or "sealed". Anything else is a prompt this build does not
+  // know.
+  if (
+    prompt.linking !== undefined &&
+    prompt.linking !== 'direct' &&
+    prompt.linking !== 'sealed'
+  ) {
+    return { kind: 'unreadable' };
+  }
+  const walletBuilt = broadcasts && boolOf(prompt.wallet_built);
 
   return {
     kind: 'spend',
     broadcasts,
-    walletBuilt: broadcasts && boolOf(prompt.wallet_built),
+    walletBuilt,
     crossChecked: boolOf(prompt.cross_checked),
+    sealed: walletBuilt && prompt.linking === 'sealed',
     intent: intentOf(prompt.intent, xchLabel),
     xchLabel,
     assets,
