@@ -234,6 +234,10 @@ impl kit::Approver for User {
 pub(super) struct Kept(pub RefCell<Option<SpendBundle>>);
 
 impl Broadcaster for Kept {
+    fn record(&self, _record: &kit::BroadcastRecord) -> Result<(), String> {
+        Ok(())
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
         *self.0.borrow_mut() = Some(bundle.clone());
         Ok(Broadcast {

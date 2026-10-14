@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use xchonnect_wallet_kit::{AssetId, AssetLimit, DailySpend, DappPermissions, PermissionError};
 
 use crate::error::{Error, Result};
-pub use crate::signed_coins::SignedCoinsRecord;
+pub use crate::signed_coins::{SealedBundles, SignedCoinsRecord};
 
 /// Keyring service name. Deliberately distinct from anything Sage uses: Klimper's signing
 /// keys are Sage's own file (`keys.bin`), and no Xchonnect secret may ever be
@@ -803,17 +803,42 @@ impl SessionStore {
         format!("signed:{fingerprint}:{chain_id}")
     }
 
+    /// The sealed bundles Klimper broadcast, kept to send again ([`SealedBundles`]): one
+    /// keyring entry per wallet and network, `bundles:<fingerprint>:<chain id>`.
+    fn sealed_bundles_key(fingerprint: u32, chain_id: &str) -> String {
+        format!("bundles:{fingerprint}:{chain_id}")
+    }
+
+    fn load_entry<T: Default + serde::de::DeserializeOwned>(&self, key: &str) -> Result<T> {
+        match self.secrets.get(key)? {
+            Some(blob) => serde_json::from_slice(&blob).map_err(Error::internal),
+            None => Ok(T::default()),
+        }
+    }
+
+    /// Read-modify-write of one JSON entry under the store's write lock; written back only
+    /// if it changed. Returns the entry as stored.
+    fn update_entry<T>(&self, key: &str, change: impl FnOnce(&mut T)) -> Result<T>
+    where
+        T: Default + Clone + PartialEq + Serialize + serde::de::DeserializeOwned,
+    {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut entry: T = self.load_entry(key)?;
+        let before = entry.clone();
+        change(&mut entry);
+        if entry != before {
+            let blob = serde_json::to_vec(&entry).map_err(Error::internal)?;
+            self.secrets.put(key, &blob)?;
+        }
+        Ok(entry)
+    }
+
     /// The wallet's record of signed coins ([`SignedCoinsRecord`]); empty when the wallet
     /// never let a signature leave it. An unreadable record is an error, never an empty one:
-    /// forgetting a coin in flight would let its bundle be split.
+    /// forgetting a sealed signature would let its bundle be split.
     pub fn load_signed_coins(&self, fingerprint: u32, chain_id: &str) -> Result<SignedCoinsRecord> {
-        match self
-            .secrets
-            .get(&Self::signed_coins_key(fingerprint, chain_id))?
-        {
-            Some(blob) => serde_json::from_slice(&blob).map_err(Error::internal),
-            None => Ok(SignedCoinsRecord::default()),
-        }
+        self.load_entry::<SignedCoinsRecord>(&Self::signed_coins_key(fingerprint, chain_id))
+            .map(SignedCoinsRecord::migrated)
     }
 
     /// Change the record of signed coins under the store's write lock, and write it back if
@@ -824,16 +849,28 @@ impl SessionStore {
         chain_id: &str,
         change: impl FnOnce(&mut SignedCoinsRecord),
     ) -> Result<SignedCoinsRecord> {
-        let _write = self.writes.lock().map_err(Error::internal)?;
-        let mut record = self.load_signed_coins(fingerprint, chain_id)?;
-        let before = record.clone();
-        change(&mut record);
-        if record != before {
-            let blob = serde_json::to_vec(&record).map_err(Error::internal)?;
-            self.secrets
-                .put(&Self::signed_coins_key(fingerprint, chain_id), &blob)?;
-        }
-        Ok(record)
+        self.update_entry(
+            &Self::signed_coins_key(fingerprint, chain_id),
+            |record: &mut SignedCoinsRecord| {
+                *record = std::mem::take(record).migrated();
+                change(record);
+            },
+        )
+    }
+
+    /// The sealed bundles kept to send again ([`SealedBundles`]).
+    pub fn load_sealed_bundles(&self, fingerprint: u32, chain_id: &str) -> Result<SealedBundles> {
+        self.load_entry(&Self::sealed_bundles_key(fingerprint, chain_id))
+    }
+
+    /// Change the kept sealed bundles under the store's write lock.
+    pub fn update_sealed_bundles(
+        &self,
+        fingerprint: u32,
+        chain_id: &str,
+        change: impl FnOnce(&mut SealedBundles),
+    ) -> Result<SealedBundles> {
+        self.update_entry(&Self::sealed_bundles_key(fingerprint, chain_id), change)
     }
 
     fn load_limits(&self, fingerprint: u32, dapp: &str, id: &str) -> Result<DailySpend> {

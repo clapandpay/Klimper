@@ -36,7 +36,7 @@ use crate::approval::{Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
 use crate::error::Error;
 use crate::execute::{self, SageBroadcaster};
 use crate::sign_guard;
-use crate::signed_coins::{self, Recording, SignedCoinsHandle};
+use crate::signed_coins::{self, SignedCoinsHandle};
 use crate::store::{PersistentLimits, SessionRecord, SessionStore};
 use crate::wallet::{AppState, KlimperSigner, WalletSnapshot};
 
@@ -352,7 +352,6 @@ fn run(
     let approver = UiApprover::new(approvals.clone(), meta.clone());
     // One approval per request, one key unlock per request (xchonnect-wiki 04).
     let signer = KlimperSigner::new(state.clone(), snapshot);
-    let broadcaster = SageBroadcaster::new(state.clone());
     // The optional reads and broadcast (TASK-082), scoped by wallet-kit to the keys this
     // dApp was given.
     let chain = crate::chain::KlimperChain::new(state.clone());
@@ -368,45 +367,36 @@ fn run(
         .copied()
         .collect();
     let wallet_built = execute::is_wallet_built(canonical_method(&meta.method));
-    // The record of the wallet's coins with signatures outside it (xchonnect spec 11.2): what
-    // decides whether a request Klimper builds and broadcasts is sealed, and which coins are
-    // in flight. Requests that sign coin spends run one at a time, from reading the record to
-    // writing what they release.
-    let signs_coins = wallet_built
+    // The record of the signatures outside the wallet (xchonnect spec 11.2): what decides
+    // whether a request Klimper builds and broadcasts is sealed, and which signatures the
+    // wallet never makes again. Requests that sign coin spends run one at a time, from
+    // reading the record to writing what they release.
+    let signs = wallet_built
         || matches!(
             canonical_method(&meta.method),
-            kit::SUBMIT_COIN_SPENDS | SIGN_COIN_SPENDS
+            kit::SUBMIT_COIN_SPENDS | SIGN_COIN_SPENDS | SIGN_MESSAGE
         );
-    let _one_at_a_time = signs_coins.then(signed_coins::gate);
     let record_of_signed = SignedCoinsHandle::new(
         store.clone(),
         record.fingerprint,
         snapshot.network.chain_id(),
     );
-    let signed = if signs_coins {
-        signed_coins::refresh(state, &record_of_signed)
-            .map_err(|error| {
-                tracing::error!("xchonnect: the record of signed coins could not be read: {error}");
-                rpc_error(
-                    codes::INVALID_PARAMS,
-                    "the wallet could not run this request",
-                )
-            })?
-            .to_kit()
-    } else {
-        kit::SignedCoins::default()
-    };
-    // Klimper's own bundles are sealed: their coins go in flight before they are sent. A
-    // website's bundle releases the user's coins in it.
-    let sealed_broadcaster = Recording::sealed(
-        &broadcaster,
-        &record_of_signed,
-        &snapshot.ownership,
-        &snapshot.keys,
-        &snapshot.network,
-    );
-    let released_broadcaster =
-        Recording::released(&broadcaster, &record_of_signed, &snapshot.ownership);
+    // Held until this function returns: across wallet-kit's check of the record, the
+    // approval prompt, the signature and what is recorded of it.
+    let (_one_at_a_time, signed) =
+        signed_coins::checked_record(&record_of_signed, signs, |handle| {
+            signed_coins::refresh(state, handle)
+        })
+        .map_err(|error| {
+            tracing::error!("xchonnect: the record of signed coins could not be read: {error}");
+            rpc_error(
+                codes::INVALID_PARAMS,
+                "the wallet could not run this request",
+            )
+        })?;
+    // Whatever Klimper broadcasts, wallet-kit first reports what goes into the record
+    // (Broadcaster::record): written before anything is sent, or nothing is sent.
+    let broadcaster = SageBroadcaster::new(state.clone(), &record_of_signed);
     let context = RequestContext {
         dapp: &record.dapp,
         network: snapshot.network.clone(),
@@ -428,7 +418,7 @@ fn run(
     let host = Host {
         signer: &signer,
         approver: &approver,
-        broadcaster: Some(&released_broadcaster),
+        broadcaster: Some(&broadcaster),
     };
     let outcome = match canonical_method(&meta.method) {
         // The requests Klimper builds from its own coins: one gate for all of them.
@@ -452,20 +442,15 @@ fn run(
                     approver.mark_loan(loan, makes_offer);
                 };
                 match method {
-                    execute::CHIA_SEND => execute::send(
-                        state,
-                        &context,
-                        &signer,
-                        &approver,
-                        &sealed_broadcaster,
-                        params,
-                    ),
+                    execute::CHIA_SEND => {
+                        execute::send(state, &context, &signer, &approver, &broadcaster, params)
+                    }
                     execute::CHIA_TAKE_OFFER => execute::take_offer(
                         state,
                         &context,
                         &signer,
                         &approver,
-                        &sealed_broadcaster,
+                        &broadcaster,
                         params,
                         &|count| approver.mark_offers(count),
                         &on_loan,
@@ -475,7 +460,7 @@ fn run(
                         &context,
                         &signer,
                         &approver,
-                        &sealed_broadcaster,
+                        &broadcaster,
                         params,
                         &on_loan,
                     ),
@@ -484,7 +469,7 @@ fn run(
                         &context,
                         &signer,
                         &approver,
-                        &sealed_broadcaster,
+                        &broadcaster,
                         params,
                     ),
                     execute::options::CHIA_CLAIM_OPTION => execute::options::claim_option(
@@ -492,7 +477,7 @@ fn run(
                         &context,
                         &signer,
                         &approver,
-                        &sealed_broadcaster,
+                        &broadcaster,
                         params,
                     ),
                     _ => execute::options::transfer_option(
@@ -500,7 +485,7 @@ fn run(
                         &context,
                         &signer,
                         &approver,
-                        &sealed_broadcaster,
+                        &broadcaster,
                         params,
                     ),
                 }
@@ -530,6 +515,7 @@ fn run(
         )
         .map(|()| result)
     });
+    let outcome = outcome.map_err(explain);
     // A transaction Klimper broadcast: the webview shows where to look it up.
     if let Ok(result) = &outcome
         && matches!(
@@ -570,13 +556,40 @@ fn run(
     outcome
 }
 
+/// What a website is told for the refusals of the record of signed coins (xchonnect spec
+/// 11.2), in words it can show its user. The code and reason stay wallet-kit's.
+pub fn explain(mut error: RpcError) -> RpcError {
+    let reason = error
+        .data
+        .as_deref()
+        .and_then(|data| serde_json::from_str::<Value>(data).ok())
+        .and_then(|data| Some(data.get("reason")?.as_str()?.to_owned()));
+    match reason.as_deref() {
+        Some("sealed_signature") => {
+            "Klimper already signed this exact spend for a transaction it sent, and never \
+             signs it again. Wait for that transaction to confirm, or build a new one."
+                .clone_into(&mut error.message);
+        }
+        Some("record_failed") => {
+            "Klimper could not save its record of this transaction, so nothing was sent. \
+             Try again."
+                .clone_into(&mut error.message);
+        }
+        _ => {}
+    }
+    error
+}
+
 /// CHIP-0002 `signCoinSpends`, without the `chip0002_` prefix.
 const SIGN_COIN_SPENDS: &str = "signCoinSpends";
+
+/// CHIP-0002 `signMessage`, without the `chip0002_` prefix: checked against the record too.
+const SIGN_MESSAGE: &str = "signMessage";
 
 /// The coins whose signatures an answer hands to the website (xchonnect spec 11.2): every
 /// coin of the user's a `signCoinSpends` signed, and every coin of the user's in a signed
 /// offer Klimper built (a loan request). Bundles Klimper broadcasts are recorded by its
-/// broadcaster ([`Recording`]) before they are sent.
+/// broadcaster ([`SageBroadcaster`], wallet-kit's `Broadcaster::record`) before they are sent.
 pub fn record_released(
     method: &str,
     params: &str,

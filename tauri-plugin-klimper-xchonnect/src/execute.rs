@@ -144,60 +144,86 @@ fn from_json(cs: &CoinSpendJson) -> Option<CoinSpend> {
 // Broadcasting through Klimper's own peers.
 // ---------------------------------------------------------------------------------------
 
-/// Submits through Sage's peer connections and records the transaction as pending.
-pub struct SageBroadcaster {
+/// Submits through Sage's peer connections (Sage records the transaction as pending), after
+/// writing what wallet-kit reports into the wallet's record of signed coins (xchonnect spec
+/// 11.2, [`Broadcaster::record`]) and keeping a sealed bundle's bytes to send it again.
+pub struct SageBroadcaster<'a> {
     state: AppState,
+    recorder: crate::signed_coins::Recorder<'a>,
 }
 
-impl std::fmt::Debug for SageBroadcaster {
+impl std::fmt::Debug for SageBroadcaster<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SageBroadcaster").finish_non_exhaustive()
     }
 }
 
-impl SageBroadcaster {
-    pub fn new(state: AppState) -> Self {
-        SageBroadcaster { state }
+impl<'a> SageBroadcaster<'a> {
+    pub fn new(state: AppState, record: &'a crate::signed_coins::SignedCoinsHandle) -> Self {
+        SageBroadcaster {
+            state,
+            recorder: crate::signed_coins::Recorder::new(record),
+        }
     }
 }
 
-impl Broadcaster for SageBroadcaster {
+impl Broadcaster for SageBroadcaster<'_> {
+    fn record(&self, record: &kit::BroadcastRecord) -> Result<(), String> {
+        self.recorder.record(record)
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
-        let request = SendTransactionImmediately {
-            spend_bundle: sage_api::wallet_connect::SpendBundle {
-                coin_spends: bundle
-                    .coin_spends
-                    .iter()
-                    .map(|cs| sage_api::wallet_connect::CoinSpend {
-                        coin: sage_api::wallet_connect::Coin {
-                            parent_coin_info: hex0x(cs.coin.parent_coin_info),
-                            puzzle_hash: hex0x(cs.coin.puzzle_hash),
-                            amount: Amount::u64(cs.coin.amount),
-                        },
-                        puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
-                        solution: hex0x(cs.solution.as_ref()),
-                    })
-                    .collect(),
-                aggregated_signature: hex0x(bundle.aggregated_signature.to_bytes()),
-            },
-        };
-        let response = on_sage(&self.state, async move |sage| {
-            sage.send_transaction_immediately(request).await
-        })?;
-        let transaction_id = hex0x(bundle.name());
-        match response.status {
-            // In a peer's mempool, and recorded by the wallet as pending.
-            1 => Ok(Broadcast {
-                transaction_id,
-                status: "pending".to_owned(),
-            }),
-            // No peer said yes or no. It may still propagate; the dApp is told so.
-            3 => Ok(Broadcast {
-                transaction_id,
-                status: "unknown".to_owned(),
-            }),
-            status => Err(response.error.unwrap_or_else(|| format!("status {status}"))),
-        }
+        self.recorder.before_send(bundle);
+        send_to_sage(&self.state, bundle)
+    }
+}
+
+/// Send a sealed bundle Klimper already broadcast once again, byte for byte, through Sage's
+/// peers (xchonnect spec 11.2: never re-signed). `None`: no such bundle is kept.
+pub fn resend_sealed(
+    state: &AppState,
+    record: &crate::signed_coins::SignedCoinsHandle,
+    bundle_id: &Bytes32,
+) -> crate::error::Result<Option<Result<Broadcast, String>>> {
+    crate::signed_coins::resend(record, bundle_id, |bundle| send_to_sage(state, bundle))
+}
+
+/// Hand `bundle` to Sage's peers as it is.
+fn send_to_sage(state: &AppState, bundle: &SpendBundle) -> Result<Broadcast, String> {
+    let request = SendTransactionImmediately {
+        spend_bundle: sage_api::wallet_connect::SpendBundle {
+            coin_spends: bundle
+                .coin_spends
+                .iter()
+                .map(|cs| sage_api::wallet_connect::CoinSpend {
+                    coin: sage_api::wallet_connect::Coin {
+                        parent_coin_info: hex0x(cs.coin.parent_coin_info),
+                        puzzle_hash: hex0x(cs.coin.puzzle_hash),
+                        amount: Amount::u64(cs.coin.amount),
+                    },
+                    puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
+                    solution: hex0x(cs.solution.as_ref()),
+                })
+                .collect(),
+            aggregated_signature: hex0x(bundle.aggregated_signature.to_bytes()),
+        },
+    };
+    let response = on_sage(state, async move |sage| {
+        sage.send_transaction_immediately(request).await
+    })?;
+    let transaction_id = hex0x(bundle.name());
+    match response.status {
+        // In a peer's mempool, and recorded by the wallet as pending.
+        1 => Ok(Broadcast {
+            transaction_id,
+            status: "pending".to_owned(),
+        }),
+        // No peer said yes or no. It may still propagate; the dApp is told so.
+        3 => Ok(Broadcast {
+            transaction_id,
+            status: "unknown".to_owned(),
+        }),
+        status => Err(response.error.unwrap_or_else(|| format!("status {status}"))),
     }
 }
 
@@ -335,25 +361,6 @@ pub fn check_spends(
     cross_check(&sage_summary.summary, &kit_summary)
 }
 
-/// A coin of a bundle Klimper broadcast and kept sealed is not spent again until that bundle
-/// settles (xchonnect spec 11.2): wallet-kit refuses such a request too (4001
-/// `coin_in_flight`), this says it before anything is checked or shown. Sage's coin selection
-/// leaves out the coins of a transaction it holds as pending, so this is met only when Sage
-/// does not (no peer gave a verdict on the earlier bundle, or the network refused it).
-pub fn refuse_in_flight(spends: &[CoinSpend], ctx: &RequestContext<'_>) -> Result<(), RpcError> {
-    if spends
-        .iter()
-        .any(|cs| ctx.signed_coins.in_flight.contains(&cs.coin.coin_id()))
-    {
-        return Err(error(
-            codes::UNAUTHORIZED,
-            "wait for your last transaction to confirm",
-            Some("coin_in_flight"),
-        ));
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------------------
 // chia_send
 // ---------------------------------------------------------------------------------------
@@ -366,6 +373,19 @@ fn amount_param(params: &Value, key: &str) -> Result<Option<u64>, RpcError> {
         Some(Value::String(s)) => s.parse().map(Some).map_err(|_| invalid(key)),
         Some(_) => Err(invalid(key)),
     }
+}
+
+/// The most a website's `fee` can make the user pay in a request Klimper builds and
+/// broadcasts itself: 0.001 XCH (`1_000_000_000` mojos), well above what a Chia transaction
+/// needs to get in, even in a full mempool.
+pub const MAX_FEE: u64 = 1_000_000_000;
+
+/// The fee of a request Klimper builds and broadcasts sealed: Klimper's own choice (xchonnect
+/// spec 11.1.1 and 11.2: wallet-kit credits a sealed bundle's fee as the wallet's, so it must
+/// never be a figure a dApp picked). A website's `fee` is only a hint: taken as asked up to
+/// [`MAX_FEE`], never above it. The approval shows the fee the bundle pays.
+fn wallet_fee(params: &Value) -> Result<u64, RpcError> {
+    Ok(amount_param(params, "fee")?.unwrap_or(0).min(MAX_FEE))
 }
 
 /// `chia_send { address, amount, fee?, assetId?, memos? }`: Sage builds the send from the
@@ -388,7 +408,7 @@ pub fn send(
     if amount == 0 {
         return Err(invalid("amount"));
     }
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     // A send that cannot be built is answered without a prompt, which tells the dApp the
     // wallet cannot afford it. A few are normal; a run of them is a search for the balance.
     if failed_builds::too_many(ctx.dapp, ctx.now) {
@@ -490,7 +510,6 @@ pub fn send(
     };
 
     // Sage spends the wallet's coins with quoted conditions; held to it all the same.
-    refuse_in_flight(&spends, ctx)?;
     crate::sign_guard::check_spends(&spends, ctx.keys, &ctx.network)?;
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
@@ -785,7 +804,7 @@ pub fn take_offer(
         ));
     }
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let offer = params
         .get("offer")
         .and_then(Value::as_str)
@@ -898,7 +917,6 @@ fn submit_take(
         .filter(|spend| !maker_coins.contains(&spend.coin.coin_id()))
         .cloned()
         .collect();
-    refuse_in_flight(&spends, ctx)?;
     crate::sign_guard::check_spends(&user_spends, ctx.keys, &ctx.network)?;
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
@@ -1071,6 +1089,21 @@ mod tests {
             let error = decode_offer_bundle(offer).unwrap_err();
             assert_eq!(error.code, codes::INVALID_PARAMS, "{offer:?}");
         }
+    }
+
+    /// The fee of a sealed request is Klimper's: a website's `fee` is a hint, taken up to
+    /// `MAX_FEE` and never above it (xchonnect spec 11.1.1).
+    #[test]
+    fn a_websites_fee_is_a_hint_capped_by_klimper() {
+        let fee = |params: Value| wallet_fee(&params).unwrap();
+        assert_eq!(fee(serde_json::json!({})), 0);
+        assert_eq!(fee(serde_json::json!({ "fee": 50_000_000 })), 50_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": "1000000000" })), MAX_FEE);
+        assert_eq!(
+            fee(serde_json::json!({ "fee": 10_000_000_000_000_u64 })),
+            MAX_FEE
+        );
+        assert!(wallet_fee(&serde_json::json!({ "fee": -1 })).is_err());
     }
 
     /// The shape of a real offer take (found by taking an offer Sage built between two

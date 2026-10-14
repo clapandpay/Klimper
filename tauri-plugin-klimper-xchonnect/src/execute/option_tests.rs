@@ -795,7 +795,7 @@ async fn loan() -> Loan {
         loan: Some(xch(300)),
         ..mint_params(cat(collateral, 1_000), xch(315), now + TERM, 0)
     };
-    let built = build_mint(&alice.wallet, Some(lender), &params, Some(xch(300)), &[])
+    let built = build_mint(&alice.wallet, Some(lender), &params, Some(xch(300)))
         .await
         .unwrap()
         .expect("no loan request built");
@@ -1127,6 +1127,7 @@ async fn an_offered_option_is_bought_with_xch() {
 // ---------------------------------------------------------------------------------------
 
 use crate::signed_coins::{Recording, SignedCoinsHandle, spent_coins};
+use crate::store::{MemorySecrets, SecretStore, SessionStore};
 
 /// An empty record of signed coins, in a session store of its own.
 fn record_of_signed() -> (tempfile::TempDir, SignedCoinsHandle) {
@@ -1196,7 +1197,7 @@ async fn coins_signed_for_a_website_make_a_later_wallet_built_request_strict() {
     )
     .unwrap();
     let signed = record.load().unwrap().to_kit();
-    assert!(signed.in_flight.is_empty());
+    assert!(signed.sealed.is_empty());
     let user_coins = crate::signed_coins::user_coins(&spends, &w.ownership);
     assert!(!user_coins.is_empty());
     assert!(user_coins.iter().all(|c| signed.released.contains(c)));
@@ -1219,12 +1220,48 @@ async fn coins_signed_for_a_website_make_a_later_wallet_built_request_strict() {
     );
 }
 
-/// A sealed bundle Klimper broadcast puts its coins in flight: a second request spending one
-/// of them is refused (`coin_in_flight`) — Klimper's own build before anything is shown, a
-/// website's bundle by wallet-kit — until one of the bundle's coins is spent on chain. Then
-/// the record forgets the bundle and its coins.
+/// Every BLS signature `keys` make for `spends`, per coin: the key and the exact message.
+fn our_signatures(
+    spends: &[CoinSpend],
+    keys: &HashSet<PublicKey>,
+) -> Vec<(Bytes32, PublicKey, Vec<u8>)> {
+    use chia_wallet_sdk::signer::RequiredSignature;
+    let constants = crate::execute::agg_sig_constants(&kit::Network::Testnet11);
+    let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
+    let mut out = Vec::new();
+    for cs in spends {
+        for required in RequiredSignature::from_coin_spend(&mut allocator, cs, &constants).unwrap()
+        {
+            if let RequiredSignature::Bls(bls) = required
+                && keys.contains(&bls.public_key)
+            {
+                out.push((cs.coin.coin_id(), bls.public_key, bls.message()));
+            }
+        }
+    }
+    out
+}
+
+/// Refuses every bundle, as a network that does not take it.
+struct Refusing;
+
+impl Broadcaster for Refusing {
+    fn record(&self, _record: &kit::BroadcastRecord) -> Result<(), String> {
+        Ok(())
+    }
+    fn submit(&self, _bundle: &SpendBundle) -> Result<kit::Broadcast, String> {
+        Err("refused by the network".to_owned())
+    }
+}
+
+/// A sealed bundle Klimper broadcasts is recorded before it leaves: every coin released, and
+/// per coin of the user's the exact signatures made for it (their aggregate is the bundle's
+/// signature). Its bytes are kept and can be sent again unchanged. Its signatures are never
+/// made again: the same spends are refused in a wallet-built request, a `signCoinSpends` and a
+/// website's bundle (`sealed_signature`), before anything is shown. Once its coins are spent
+/// on chain the record and the kept bundle are empty, and the next mint is sealed again.
 #[tokio::test]
-async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
+async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     let mut alice = SimWallet::new(5_000).await;
     let now = chain_time(&alice).await;
     let params = mint_params(xch(1_000), cat(Bytes32::new([0x58; 32]), 10), now + TERM, 0);
@@ -1236,29 +1273,31 @@ async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
         .unwrap()
         .unwrap();
     let summary = sage_summary(&alice, &[], &minted.spends).await;
+    let again = minted.clone();
     let first = run(&w, &Setup::new(CHIA_MINT_OPTION, now), |ctx, s, a, b, _| {
-        let recording = Recording::sealed(b, &record, ctx.ownership, ctx.keys, &ctx.network);
+        let recording = Recording::new(b, &record);
         submit_mint(ctx, s, a, &recording, &summary, minted, 0)
     });
     first.ok();
     assert_eq!(first.prompt.as_ref().unwrap()["linking"], "sealed");
     let bundle = first.sent.clone().unwrap();
     let signed = record.load().unwrap().to_kit();
+    let signed_coin_count = signed.sealed.len();
     for cs in &bundle.coin_spends {
-        assert!(signed.in_flight.contains(&cs.coin.coin_id()));
+        assert!(signed.released.contains(&cs.coin.coin_id()));
     }
+    let ours = our_signatures(&bundle.coin_spends, &w.keys);
     let user_coins = crate::signed_coins::user_coins(&bundle.coin_spends, &w.ownership);
     assert!(!user_coins.is_empty());
-    assert_eq!(signed.released, user_coins.iter().copied().collect());
-    // And, per coin of the user's, the exact messages Klimper signed in the bundle: the
-    // bundle's signature is their aggregate.
-    let sealed = record.load().unwrap().sealed_messages();
-    assert!(
-        user_coins
-            .iter()
-            .all(|c| sealed.iter().any(|(coin, ..)| coin == c))
+    assert!(user_coins.iter().all(|c| signed.sealed.contains_key(c)));
+    for (coin, key, message) in &ours {
+        assert!(signed.sealed[coin].contains(&kit::sealed_digest(key, message)));
+    }
+    assert_eq!(
+        signed.sealed.values().map(HashSet::len).sum::<usize>(),
+        ours.len()
     );
-    let signatures: Vec<chia_bls::Signature> = sealed
+    let signatures: Vec<chia_bls::Signature> = ours
         .iter()
         .map(|(_, key, message)| kit::Signer::sign(&w.signer, key, message).unwrap())
         .collect();
@@ -1267,12 +1306,15 @@ async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
         bundle.aggregated_signature
     );
 
-    // The network has not answered yet; Sage builds the same mint from the same coins.
-    let again = build_sage_mint(&alice.wallet, &params)
-        .await
+    // Kept, and sent again byte for byte without signing anything.
+    let resent = Kept::default();
+    let answer = crate::signed_coins::resend(&record, &bundle.name(), |b| resent.submit(b))
         .unwrap()
-        .unwrap();
-    let summary = sage_summary(&alice, &[], &again.spends).await;
+        .expect("the bundle was not kept");
+    assert!(answer.is_ok());
+    assert_eq!(resent.0.into_inner(), Some(bundle.clone()));
+
+    // The same mint again, exactly as built: refused before it is shown.
     let spends = again.spends.clone();
     let mut setup = Setup::new(CHIA_MINT_OPTION, now);
     setup.signed = signed.clone();
@@ -1281,13 +1323,24 @@ async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
     });
     assert!(!refused.asked());
     assert!(
-        refused.reason().contains("coin_in_flight"),
+        refused.reason().contains("4001") && refused.reason().contains("sealed_signature"),
         "{}",
         refused.reason()
     );
     assert!(refused.sent.is_none());
 
-    // A website's own bundle of those coins: wallet-kit refuses it the same way.
+    // A website asks for the same signatures, alone or as its own bundle.
+    let mut setup = Setup::new("signCoinSpends", now);
+    setup.signed = signed.clone();
+    let alone = run(&w, &setup, |ctx, s, a, _, _| {
+        kit::handle("signCoinSpends", &sign_params(&spends), ctx, s, a)
+    });
+    assert!(!alone.asked());
+    assert!(
+        alone.reason().contains("sealed_signature"),
+        "{}",
+        alone.reason()
+    );
     let mut setup = Setup::new(kit::SUBMIT_COIN_SPENDS, now);
     setup.signed = signed;
     let website = run(&w, &setup, |ctx, s, a, b, _| {
@@ -1309,21 +1362,66 @@ async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
     });
     assert!(!website.asked());
     assert!(
-        website.reason().contains("coin_in_flight"),
+        website.reason().contains("sealed_signature"),
         "{}",
         website.reason()
     );
+    assert!(website.sent.is_none());
+    let explained = crate::requests::explain(website.result.unwrap_err());
+    assert!(explained.message.contains("never signs it again"));
 
-    // The bundle settles: every coin of it is spent on chain (the launcher and the eve,
-    // which the wallet's database does not hold, are read from a peer).
+    // The bundle settles. A coin leaves the record only once the wallet's own synced
+    // database has its spend `CONFIRMATIONS` blocks below the peak; the launcher and the eve,
+    // which the database does not hold, stay (no peer is asked).
     settle(&mut alice, &first).await;
-    let peer = alice.peer().await;
-    let coins = record.load().unwrap().coins();
-    let spent = spent_coins(&alice.wallet, Some(&peer), &coins).await;
-    for cs in &bundle.coin_spends {
-        assert!(spent.contains(&cs.coin.coin_id()), "{}", cs.coin.coin_id());
+    let coins = record.coins().unwrap();
+    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
+    let rows = alice.wallet.db.coins_by_ids(&ids).await.unwrap();
+    let known: Vec<Bytes32> = rows.iter().map(|row| row.coin.coin_id()).collect();
+    assert!(!known.is_empty());
+    let spent_at = rows
+        .iter()
+        .map(|row| row.spent_height.expect("the bundle did not settle"))
+        .max()
+        .unwrap();
+    let peak = |height: u32| {
+        let db = alice.wallet.db.clone();
+        async move {
+            db.insert_block(height, Bytes32::new([0xbb; 32]), None, true)
+                .await
+                .unwrap();
+        }
+    };
+    let synced = alice.wallet.db.latest_peak().await.unwrap().map(|(h, _)| h);
+    if synced.is_none_or(|h| h < spent_at + crate::signed_coins::CONFIRMATIONS - 1) {
+        peak(spent_at + crate::signed_coins::CONFIRMATIONS - 1).await;
+        let shallow = spent_coins(&alice.wallet, &coins).await;
+        assert!(
+            shallow.is_empty(),
+            "pruned before {} confirmations",
+            crate::signed_coins::CONFIRMATIONS
+        );
     }
-    assert!(record.prune(&spent).unwrap().is_empty());
+    peak(spent_at + crate::signed_coins::CONFIRMATIONS).await;
+    let spent = spent_coins(&alice.wallet, &coins).await;
+    assert_eq!(spent, known.iter().copied().collect());
+    // What the database does not hold (the launcher, the eve, a coin created and spent
+    // inside the bundle) stays recorded.
+    let unknown: HashSet<Bytes32> = coins
+        .iter()
+        .filter(|c| !known.contains(c))
+        .copied()
+        .collect();
+    let pruned = record.prune(&spent).unwrap().to_kit();
+    assert_eq!(pruned.released, unknown);
+    assert!(pruned.sealed.keys().all(|c| unknown.contains(c)));
+    assert!(pruned.sealed.len() < signed_coin_count);
+    assert!(record.sealed_bundles().unwrap().bundles.is_empty());
+    assert!(
+        crate::signed_coins::resend(&record, &bundle.name(), resent_never)
+            .unwrap()
+            .is_none()
+    );
 
     // With the record pruned, the next mint is sealed again.
     let next = build_sage_mint(&alice.wallet, &params)
@@ -1340,6 +1438,91 @@ async fn a_bundle_in_flight_holds_its_coins_until_it_settles() {
     assert_eq!(sealed.prompt.as_ref().unwrap()["linking"], "sealed");
 }
 
+fn resent_never(_bundle: &SpendBundle) -> Result<kit::Broadcast, String> {
+    panic!("nothing is kept to send")
+}
+
+/// A sealed bundle the network refuses is recorded all the same (it may have reached other
+/// nodes): its signatures are never made again, and it is kept to send again.
+#[tokio::test]
+async fn a_sealed_bundle_the_network_refuses_is_recorded() {
+    let alice = SimWallet::new(5_000).await;
+    let now = chain_time(&alice).await;
+    let params = mint_params(xch(1_000), cat(Bytes32::new([0x58; 32]), 10), now + TERM, 0);
+    let w = who(&alice).await;
+    let (_dir, record) = record_of_signed();
+    let minted = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[], &minted.spends).await;
+    let spends = minted.spends.clone();
+    let refused = run(&w, &Setup::new(CHIA_MINT_OPTION, now), |ctx, s, a, _, _| {
+        let recording = Recording::new(&Refusing, &record);
+        submit_mint(ctx, s, a, &recording, &summary, minted, 0)
+    });
+    assert!(refused.asked());
+    assert!(
+        refused.reason().contains("broadcast_failed"),
+        "{}",
+        refused.reason()
+    );
+    let signed = record.load().unwrap().to_kit();
+    let ours = our_signatures(&spends, &w.keys);
+    assert!(!ours.is_empty());
+    for (_, key, message) in &ours {
+        assert!(signed.is_sealed(key, message));
+    }
+    assert_eq!(record.sealed_bundles().unwrap().bundles.len(), 1);
+}
+
+/// Fails every write, as a keyring that is locked or full.
+#[derive(Debug, Default)]
+struct Unwritable(MemorySecrets);
+
+impl SecretStore for Unwritable {
+    fn put(&self, _key: &str, _bytes: &[u8]) -> crate::error::Result<()> {
+        Err(crate::error::Error::internal("the keyring is locked"))
+    }
+    fn get(&self, key: &str) -> crate::error::Result<Option<Vec<u8>>> {
+        self.0.get(key)
+    }
+    fn delete(&self, key: &str) -> crate::error::Result<()> {
+        self.0.delete(key)
+    }
+}
+
+/// When the record cannot be written, nothing is broadcast (4000 `record_failed`).
+#[tokio::test]
+async fn a_record_that_cannot_be_written_sends_nothing() {
+    let alice = SimWallet::new(5_000).await;
+    let now = chain_time(&alice).await;
+    let params = mint_params(xch(1_000), cat(Bytes32::new([0x58; 32]), 10), now + TERM, 0);
+    let w = who(&alice).await;
+    let dir = tempfile::tempdir().unwrap();
+    let store = std::sync::Arc::new(
+        SessionStore::open(dir.path(), Box::new(Unwritable::default())).unwrap(),
+    );
+    let record = SignedCoinsHandle::new(store, 1, "testnet11");
+    let minted = build_sage_mint(&alice.wallet, &params)
+        .await
+        .unwrap()
+        .unwrap();
+    let summary = sage_summary(&alice, &[], &minted.spends).await;
+    let failed = run(&w, &Setup::new(CHIA_MINT_OPTION, now), |ctx, s, a, b, _| {
+        let recording = Recording::new(b, &record);
+        submit_mint(ctx, s, a, &recording, &summary, minted, 0)
+    });
+    assert!(
+        failed.reason().starts_with("4000") && failed.reason().contains("record_failed"),
+        "{}",
+        failed.reason()
+    );
+    assert!(failed.sent.is_none(), "broadcast without a record");
+    let explained = crate::requests::explain(failed.result.unwrap_err());
+    assert!(explained.message.contains("nothing was sent"));
+}
+
 /// Only a coin seen spent leaves the record: a released coin that is still unspent stays.
 #[tokio::test]
 async fn an_unspent_released_coin_stays_in_the_record() {
@@ -1347,8 +1530,7 @@ async fn an_unspent_released_coin_stays_in_the_record() {
     let coin = alice.wallet.db.selectable_xch_coins().await.unwrap()[0];
     let (_dir, record) = record_of_signed();
     record.release(vec![coin.coin_id()]).unwrap();
-    let peer = alice.peer().await;
-    let spent = spent_coins(&alice.wallet, Some(&peer), &record.load().unwrap().coins()).await;
+    let spent = spent_coins(&alice.wallet, &record.load().unwrap().coins()).await;
     assert!(spent.is_empty());
     let kept = record.prune(&spent).unwrap();
     assert!(kept.to_kit().released.contains(&coin.coin_id()));
@@ -1374,5 +1556,5 @@ async fn a_loan_requests_offer_releases_the_borrowers_coins() {
     let borrower = crate::signed_coins::user_coins(&offer.coin_spends, &w.ownership);
     assert!(!borrower.is_empty());
     assert!(borrower.iter().all(|c| signed.released.contains(c)));
-    assert!(signed.in_flight.is_empty());
+    assert!(signed.sealed.is_empty());
 }

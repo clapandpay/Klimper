@@ -243,7 +243,7 @@ pub fn mint_params(params_json: &str, now: u64) -> Result<MintParams, RpcError> 
         expires_at,
         creator_address,
         loan,
-        fee: amount_param(&params, "fee")?.unwrap_or(0),
+        fee: wallet_fee(&params)?,
     })
 }
 
@@ -327,7 +327,6 @@ fn checked_submit(
     intent: &Intent,
     signatures_released: bool,
 ) -> Result<kit::handlers::Submitted, RpcError> {
-    refuse_in_flight(&spends, ctx)?;
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
     cross_check(sage_summary, &kit_summary)?;
@@ -352,7 +351,7 @@ fn checked_submit(
 // ---------------------------------------------------------------------------------------
 
 /// The option written: its spends and its id, and for a loan request what its offer needs.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Minted {
     pub spends: Vec<CoinSpend>,
     pub launcher_id: Bytes32,
@@ -423,13 +422,12 @@ fn add_to_every_spend(spends: &mut Spends, conditions: &Conditions) {
 /// the collateral coin, which only Sage's build of step 2 names: step 2 is built once to
 /// find it and once more, from the same coins, with the assertion.
 ///
-/// `exclude`: coins not to spend (the coins of a sealed bundle still in flight).
+/// Sage's coin selection leaves out the coins of a transaction Sage holds as pending.
 pub async fn build_mint(
     wallet: &Wallet,
     creator: Option<Bytes32>,
     params: &MintParams,
     loan: Option<Part>,
-    exclude: &[Bytes32],
 ) -> Result<Option<Minted>, WalletError> {
     use chia_wallet_sdk::driver::{OptionLauncher, OptionLauncherInfo};
     use chia_wallet_sdk::prelude::Condition;
@@ -481,7 +479,7 @@ pub async fn build_mint(
     };
     let mut first = wallet.prepare_spends_for_selection(&mut ctx, &[]).await?;
     wallet
-        .select_spends_excluding(&mut ctx, &mut first, &actions, exclude)
+        .select_spends_excluding(&mut ctx, &mut first, &actions, &[])
         .await?;
     let first_ids = first.non_settlement_coin_ids();
     let nonce = Offer::nonce(first_ids.clone());
@@ -536,9 +534,8 @@ pub async fn build_mint(
         };
         second.add(coin);
     } else {
-        let excluded: Vec<Bytes32> = first_ids.iter().chain(exclude).copied().collect();
         wallet
-            .select_spends_excluding(&mut ctx, &mut second, &actions, &excluded)
+            .select_spends_excluding(&mut ctx, &mut second, &actions, &first_ids)
             .await?;
     }
     let collateral_puzzle_hash = match params.collateral.asset {
@@ -738,6 +735,13 @@ fn loan_requested(
 struct OfferOnly;
 
 impl Broadcaster for OfferOnly {
+    /// Nothing is broadcast. The request's signatures are released (the offer goes back
+    /// to the website), and the borrower's coins in it are written into the record before
+    /// the answer leaves (`requests::record_released`).
+    fn record(&self, _record: &kit::BroadcastRecord) -> Result<(), String> {
+        Ok(())
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
         Ok(Broadcast {
             transaction_id: hex0x(bundle.name()),
@@ -758,14 +762,12 @@ fn loan_request(
     on_loan: &dyn Fn(&LoanView, bool),
 ) -> Result<String, RpcError> {
     let build_params = params.clone();
-    let in_flight: Vec<Bytes32> = ctx.signed_coins.in_flight.iter().copied().collect();
     let built = on_sage(state, async move |sage| {
         Ok(build_mint(
             &*sage.wallet()?,
             Some(lender),
             &build_params,
             Some(principal),
-            &in_flight,
         )
         .await?)
     })
@@ -978,7 +980,7 @@ pub fn exercise_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let now = ctx.now;
     let spends = on_sage(state, async move |sage| {
         Ok(build_exercise(&*sage.wallet()?, launcher_id, fee, now).await?)
@@ -1112,7 +1114,7 @@ pub fn claim_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let now = ctx.now;
     let owned = ctx.ownership.p2_puzzle_hashes.clone();
     let spends = on_sage(state, async move |sage| {
@@ -1191,7 +1193,7 @@ pub fn transfer_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let address = params
         .get("address")
         .and_then(Value::as_str)
