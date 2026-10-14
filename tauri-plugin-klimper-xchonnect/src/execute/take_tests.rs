@@ -377,6 +377,7 @@ pub(super) async fn take(
         &kept,
         &summary,
         spends,
+        &maker_coins(offer),
         maker_signature,
         &|view, _| loan.set(Some(*view)),
     );
@@ -688,4 +689,106 @@ async fn the_maker_signature_is_checked_for_the_requests_network() {
     check_maker_signature(&offer, &kit::Network::Testnet11).unwrap();
     let error = check_maker_signature(&offer, &kit::Network::Mainnet).unwrap_err();
     assert!(reason(&error).contains("offer_signature"));
+}
+
+/// What Sage builds for `chia_send` — XCH and a CAT, each with a fee — is signed with the
+/// wallet's keys, and every one of those signatures fixes its spend's conditions, so the
+/// guard of TASK-141 lets it through. (The takes above run through it in `submit_take`.)
+#[tokio::test]
+async fn sages_sends_fix_their_conditions() {
+    let mut wallet = SimWallet::new(3_000).await;
+    let asset_id = issue(&mut wallet).await;
+    let keys: HashSet<PublicKey> = wallet_keys(&wallet).await.1;
+    let to = Bytes32::new([9; 32]);
+    let xch = wallet
+        .wallet
+        .send_xch(vec![(to, 500)], 100, vec![], None)
+        .await
+        .unwrap();
+    let cat = wallet
+        .wallet
+        .send_cat(asset_id, vec![(to, 400)], 100, true, vec![], None)
+        .await
+        .unwrap();
+    for spends in [xch, cat] {
+        // The spends are signed with the wallet's keys: the check is not vacuous.
+        let mut allocator = chia_wallet_sdk::prelude::Allocator::new();
+        let (executed, _) = kit::simulate::execute(
+            &mut allocator,
+            &spends,
+            &kit::Ownership::default(),
+            kit::simulate::DEFAULT_MAX_COST,
+        )
+        .unwrap();
+        assert!(
+            executed
+                .iter()
+                .flat_map(|spend| &spend.conditions)
+                .any(|condition| {
+                    condition
+                        .clone()
+                        .into_agg_sig()
+                        .is_some_and(|agg| keys.contains(&agg.public_key))
+                })
+        );
+        crate::sign_guard::check_spends(&spends, &keys, &kit::Network::Testnet11).unwrap();
+    }
+}
+
+/// Put `key`'s standard puzzle into the maker's standard spend, where its signature does not
+/// reach: as the (unused) solution of the quoted delegated puzzle. The maker's signature
+/// still verifies.
+fn tuck_standard_puzzle(offer: &mut SpendBundle, key: PublicKey) {
+    use chia_puzzle_types::standard::StandardSolution;
+    use chia_wallet_sdk::driver::{Layer, Puzzle, SpendContext, StandardLayer};
+    use chia_wallet_sdk::prelude::{FromClvm, NodePtr};
+
+    let mut ctx = SpendContext::new();
+    let spend = offer
+        .coin_spends
+        .iter_mut()
+        .filter(|spend| spend.coin.parent_coin_info != Bytes32::default())
+        .find(|spend| {
+            let puzzle = ctx.alloc(&spend.puzzle_reveal).unwrap();
+            let puzzle = Puzzle::parse(&ctx, puzzle);
+            matches!(StandardLayer::parse_puzzle(&ctx, puzzle), Ok(Some(_)))
+        })
+        .expect("the maker spends a standard coin");
+    let solution = ctx.alloc(&spend.solution).unwrap();
+    let mut solution = StandardSolution::<NodePtr, NodePtr>::from_clvm(&ctx, solution).unwrap();
+    solution.solution = StandardLayer::new(key).construct_puzzle(&mut ctx).unwrap();
+    let solution = ctx.alloc(&solution).unwrap();
+    spend.solution = ctx.serialize(&solution).unwrap();
+}
+
+/// The offer's own spends are the website's, not the wallet's: one of the user's standard
+/// puzzles inside one of them is answered exactly as any other key there would be, so a take
+/// says nothing about which keys the wallet holds.
+#[tokio::test]
+async fn a_makers_spend_holding_a_users_key_is_answered_as_any_other() {
+    let mut answers = Vec::new();
+    for users_key in [true, false] {
+        let World {
+            taker,
+            mut offer,
+            gets_cat,
+            pays_cat,
+        } = Box::pin(world(Trade::XchForCat, 0, 3_000)).await;
+        let key = if users_key {
+            *wallet_keys(&taker).await.1.iter().next().unwrap()
+        } else {
+            SecretKey::from_seed(&[8; 32]).public_key()
+        };
+        tuck_standard_puzzle(&mut offer, key);
+        check_maker_signature(&offer, &kit::Network::Testnet11).unwrap();
+        let cats: Vec<Bytes32> = gets_cat.into_iter().chain(pays_cat).collect();
+        let outcome = take(&taker, &cats, &offer, 0, &take_permissions(), false).await;
+        answers.push((
+            outcome.asked,
+            outcome.result.map_err(|error| (error.code, error.data)),
+            outcome.sent.is_none(),
+        ));
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert!(answers[0].0, "the user was asked, as for any take");
 }

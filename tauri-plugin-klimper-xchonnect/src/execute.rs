@@ -21,7 +21,7 @@
 //!   the user's coins spent, what goes to others, the fee — the request is refused and the
 //!   user is never asked to approve a figure one of the two engines contradicts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
@@ -470,6 +470,8 @@ pub fn send(
         net: None,
     };
 
+    // Sage spends the wallet's coins with quoted conditions; held to it all the same.
+    crate::sign_guard::check_spends(&spends, ctx.keys, &ctx.network)?;
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
     cross_check(&built.summary, &kit_summary)?;
@@ -854,6 +856,7 @@ pub fn take_offer(
         .and_then(|offer| check_offer(&offer, ctx).map(|()| offer))
         .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
     offers_taken(crate::trade::offers_in(&offer));
+    let maker_coins = maker_coins(&offer);
 
     let (spends, maker_signature) = on_sage(state, async move |sage| {
         Ok(build_take(&*sage.wallet()?, offer, fee).await?)
@@ -894,9 +897,20 @@ pub fn take_offer(
         broadcaster,
         &summary,
         spends,
+        &maker_coins,
         maker_signature,
         on_loan,
     )
+}
+
+/// The coins of every spend in the offer: the maker's, and the placeholders for what the
+/// maker asks. In the built take, every other spend is one Sage built from the user's coins.
+fn maker_coins(offer: &SpendBundle) -> HashSet<Bytes32> {
+    offer
+        .coin_spends
+        .iter()
+        .map(|spend| spend.coin.coin_id())
+        .collect()
 }
 
 /// What a take claims: only that it is one (`offer.take`), or for a loan the user lends,
@@ -919,6 +933,8 @@ fn take_intent(loan: bool) -> Intent {
 /// Everything after Sage built the take: the cross-check, then wallet-kit's submit with the
 /// maker's signature (binding, intent, limits, one approval, sign, broadcast). Separate so a
 /// real take can be run through it in tests without a running wallet.
+///
+/// `maker_coins` are the coins of the offer's own spends ([`maker_coins`]).
 #[allow(clippy::too_many_arguments)]
 fn submit_take(
     ctx: &RequestContext<'_>,
@@ -927,9 +943,22 @@ fn submit_take(
     broadcaster: &dyn Broadcaster,
     sage_summary: &TransactionSummary,
     spends: Vec<CoinSpend>,
+    maker_coins: &HashSet<Bytes32>,
     maker_signature: Signature,
     on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
+    // Sage spends the wallet's coins with quoted conditions; held to it all the same. Only
+    // the spends Sage built for the user: the offer's own spends are the website's, and a
+    // refusal of one of them would say which keys the wallet holds. Nothing in them is
+    // signed for the user's keys without passing here: any signature they need must already
+    // be in the maker's, which `check_maker_signature` verified before the build.
+    let user_spends: Vec<CoinSpend> = spends
+        .iter()
+        .filter(|spend| !maker_coins.contains(&spend.coin.coin_id()))
+        .cloned()
+        .collect();
+    crate::sign_guard::check_spends(&user_spends, ctx.keys, &ctx.network)?;
+
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
     let loan = options::take_loan(&kit_summary, &spends, ctx.ownership)?;

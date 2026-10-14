@@ -35,6 +35,7 @@ approval UI, and signing.
 | `session_loop` | TASK-077      | requests, rotation, ping, `session.end`; seal → persist → post → acknowledge                                                         |
 | `wallet`       | TASK-078      | ownership and the signable key set from the Sage database; signing through `sage-keychain`                                           |
 | `requests`     | TASK-079      | the request context, the approver bridge, the limit store, the response                                                              |
+| `sign_guard`   | TASK-141      | refuses spends whose conditions the signature does not fix, before wallet-kit or the user sees them                                  |
 | `approval`     | TASK-078, 079 | wallet-kit's synchronous hooks parked on a channel until the webview answers                                                         |
 
 ## Session storage
@@ -250,6 +251,25 @@ and is gone.
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent
    is verified claim by claim against the simulation; `chia_send` and `chia_takeOffer` carry
    one Klimper derives from the request itself.
+5. **Only spends the signature fixes** (`sign_guard.rs`, TASK-141): a standard coin's key
+   signs the spend's delegated puzzle, not the conditions it returns, so Klimper signs a
+   standard spend — the coin's own puzzle, or the inner puzzle of a CAT, NFT, DID, option or
+   other layer it can follow — only when its delegated puzzle is quoted conditions,
+   `(q . conditions)`, and never by the hidden puzzle. Anything else could be completed with
+   other conditions than the ones the approval showed, so it is refused before the user is
+   asked (`4001`, reason `unsigned_conditions`), as is one of the wallet's standard puzzles
+   anywhere in a spend in a shape Klimper cannot follow. Only the keys the request may sign
+   with are looked at. It applies to `signCoinSpends` and `xchonnect_submitCoinSpends` (and
+   their `chip0002_` aliases), and holds Sage's own builds for `chia_send` and
+   `chia_takeOffer` to the same rule; for a take, only the spends Sage built from the user's
+   coins, since the offer's own spends are the website's and a refusal of one would say
+   something about the wallet's keys.
+   The same guard limits `AGG_SIG_UNSAFE`, which a website can use only once the user allowed
+   it: its signature carries no coin or network data, so a message is refused (`4001`, reason
+   `unsafe_message`) when it has the shape of what another kind of signature covers — it ends
+   with any of the network's `AGG_SIG` additional data (mainnet's and testnet11's are always
+   included), it is 32 bytes long, the size of what `signMessage` signs, or it starts with
+   `signMessage`'s framing. Other unsafe messages are asked about as before.
 
 Key material lives only inside one `sign_all` call. `chia_bls::SecretKey` has neither `Drop` nor
 `Zeroize` in chia-bls 0.36, so its bytes are not scrubbed; the workspace denies

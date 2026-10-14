@@ -6,8 +6,9 @@
 //! and an atomic two-party XCH swap through offer settlement payments — rebuilt here
 //! because those fixtures are `#[cfg(test)]` inside that crate. What is under test is the
 //! wiring: that an approval really has to come back from the webview before anything is
-//! signed, that a refusal reaches the user as a CHIP-0002 error, and that the three
-//! refusals which must happen *before* any prompt really do.
+//! signed, that a refusal reaches the user as a CHIP-0002 error, and that the refusals
+//! which must happen *before* any prompt really do — among them Klimper's own, of a spend
+//! whose conditions the signature would not fix (TASK-141).
 // Test-only relaxations: the harness is deliberately a few structs with closures in them.
 #![allow(
     clippy::unwrap_used,
@@ -27,12 +28,12 @@ use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use chia_puzzle_types::Memos;
 use chia_puzzle_types::offer::{NotarizedPayment, Payment, SettlementPaymentsSolution};
 use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
-use chia_sdk_driver::{Layer, SettlementLayer, SpendContext, StandardLayer};
+use chia_sdk_driver::{Cat, CatSpend, Layer, SettlementLayer, Spend, SpendContext, StandardLayer};
 use chia_sdk_test::{BlsPair, Simulator};
 use chia_sdk_types::Conditions;
 use clvm_traits::{FromClvm, ToClvm};
 use clvm_utils::tree_hash;
-use clvmr::Allocator;
+use clvmr::{Allocator, NodePtr};
 use serde_json::{Value, json};
 use xchonnect_core::crypto::sha256_parts;
 use xchonnect_core::rpc::codes;
@@ -43,7 +44,9 @@ use xchonnect_wallet_kit::{
 
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Result as KitResult;
-use tauri_plugin_klimper_xchonnect::requests::{Progress, ProgressSender, RequestMeta, UiApprover};
+use tauri_plugin_klimper_xchonnect::requests::{
+    Progress, ProgressSender, RequestMeta, UiApprover, handle_dapp_built,
+};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, PersistentLimits, SecretStore, SessionStore, StoredPermissions,
 };
@@ -163,6 +166,8 @@ struct Harness {
     keys: HashSet<PublicKey>,
     who: BlsPair,
     faulty: bool,
+    /// The user allowed `AGG_SIG_UNSAFE` for the website.
+    allow_unsafe: bool,
     /// Where the approver reports progress, as the session loop would receive it.
     progress: Option<ProgressSender>,
 }
@@ -183,6 +188,7 @@ impl Harness {
             keys: [who.pk].into_iter().collect(),
             who,
             faulty: false,
+            allow_unsafe: false,
             progress: None,
         }
     }
@@ -218,7 +224,7 @@ impl Harness {
             network: Network::Testnet11,
             session_chain_id: "testnet11",
             permissions: &self.permissions,
-            allow_agg_sig_unsafe: false,
+            allow_agg_sig_unsafe: self.allow_unsafe,
             allow_unknown_contracts: false,
             ownership: &self.ownership,
             keys: &self.keys,
@@ -231,7 +237,8 @@ impl Harness {
             approver: &approver,
             broadcaster: Some(chain),
         };
-        let outcome = kit::handle_with_host(method, params, &context, &host);
+        // What `requests::run` calls for a request the dApp built.
+        let outcome = handle_dapp_built(method, params, &context, &host);
         (
             outcome,
             signer.calls.load(Ordering::SeqCst),
@@ -796,4 +803,242 @@ fn a_request_for_another_network_is_refused() {
     assert_eq!(error.data.as_deref(), Some(r#"{"reason":"wrong_network"}"#));
     assert_eq!(signer.calls.load(Ordering::SeqCst), 0);
     assert!(harness.webview.prompts().is_empty());
+}
+
+// ---------------------------------------------------------------------------------------
+// Spends whose conditions the signature does not fix (TASK-141)
+// ---------------------------------------------------------------------------------------
+
+/// A standard spend of a coin of `who` with `delegated` as its delegated puzzle and
+/// `solution` as the delegated puzzle's solution; the solution pays `who` back.
+fn delegated_spend(
+    who: &BlsPair,
+    delegated: &[u8],
+    solution: impl Fn(&mut SpendContext, NodePtr) -> NodePtr,
+) -> CoinSpend {
+    let mut ctx = SpendContext::new();
+    let coin = Coin::new(Bytes32::new([4; 32]), who.puzzle_hash, 1000);
+    let program = ctx.alloc(&Program::from(delegated.to_vec())).unwrap();
+    let conditions = ctx
+        .alloc(&Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None))
+        .unwrap();
+    let solution = solution(&mut ctx, conditions);
+    let spend = StandardLayer::new(who.pk)
+        .delegated_inner_spend(&mut ctx, Spend::new(program, solution))
+        .unwrap();
+    ctx.spend(coin, spend).unwrap();
+    ctx.take().remove(0)
+}
+
+/// `xchonnect_submitCoinSpends` under its `chip0002_` alias (spec 9.1).
+const SUBMIT_ALIAS: &str = "chip0002_xchonnect_submitCoinSpends";
+
+fn assert_unsigned_conditions(harness: &Harness, method: &str, spends: &[CoinSpend]) {
+    // A well-formed spend wallet-kit can run: the refusal is not about anything else.
+    let summary = kit::simulate(spends, &harness.ownership, kit::simulate::DEFAULT_MAX_COST);
+    assert!(summary.is_ok(), "{method}: {summary:?}");
+    let (outcome, calls) = harness.call(method, &params_for(spends, false));
+    let error = outcome.unwrap_err();
+    assert_eq!(error.code, codes::UNAUTHORIZED, "{method}");
+    assert_eq!(
+        error.data.as_deref(),
+        Some(r#"{"reason":"unsigned_conditions"}"#),
+        "{method}"
+    );
+    assert_eq!(calls, 0, "{method}: nothing was signed");
+    assert!(
+        harness.webview.prompts().is_empty(),
+        "{method}: the user was never asked"
+    );
+}
+
+/// The delegated puzzle `1` returns its solution as the conditions, so the signature, which
+/// covers only the delegated puzzle, does not fix them: refused before any prompt, whether
+/// the dApp asks for a signature or for the wallet to submit.
+#[test]
+fn a_delegated_puzzle_that_returns_its_solution_is_refused_without_a_prompt() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let spend = delegated_spend(&who, &[0x01], |_, conditions| conditions);
+    for method in [
+        "signCoinSpends",
+        "chip0002_signCoinSpends",
+        kit::SUBMIT_COIN_SPENDS,
+        SUBMIT_ALIAS,
+    ] {
+        assert_unsigned_conditions(&harness, method, std::slice::from_ref(&spend));
+    }
+    // One such spend among honest ones refuses the whole request.
+    let mut spends = send(&mut Simulator::new(), &who, 500);
+    spends.push(spend);
+    assert_unsigned_conditions(&harness, "signCoinSpends", &spends);
+}
+
+/// Any other delegated puzzle that reads its solution: one that returns part of it, `(f 1)`,
+/// and one that runs a program from it, `(a 2 3)`.
+#[test]
+fn other_delegated_puzzles_that_read_their_solution_are_refused() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let first = delegated_spend(&who, &[0xff, 0x05, 0xff, 0x01, 0x80], |ctx, conditions| {
+        ctx.alloc(&(conditions, ())).unwrap()
+    });
+    let apply = delegated_spend(
+        &who,
+        &[0xff, 0x02, 0xff, 0x02, 0xff, 0x03, 0x80],
+        |ctx, conditions| {
+            let quoted = ctx.alloc(&(1, conditions)).unwrap();
+            ctx.alloc(&(quoted, ())).unwrap()
+        },
+    );
+    for spend in [first, apply] {
+        assert_unsigned_conditions(&harness, "signCoinSpends", &[spend]);
+    }
+}
+
+/// The same inside a CAT: the inner standard spend is held to the same rule.
+#[test]
+fn a_cat_whose_inner_spend_reads_its_solution_is_refused() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut ctx = SpendContext::new();
+    let coin = Coin::new(Bytes32::new([5; 32]), who.puzzle_hash, 1000);
+    let (_, cats) = Cat::single_issuance(
+        &mut ctx,
+        coin.coin_id(),
+        None,
+        1000,
+        Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None),
+    )
+    .unwrap();
+    let one = ctx.alloc(&Program::from(vec![0x01])).unwrap();
+    let conditions = ctx
+        .alloc(&Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None))
+        .unwrap();
+    let inner = StandardLayer::new(who.pk)
+        .delegated_inner_spend(&mut ctx, Spend::new(one, conditions))
+        .unwrap();
+    // Only the CAT spend: the issuance itself is not part of the request.
+    let _ = ctx.take();
+    Cat::spend_all(&mut ctx, &[CatSpend::new(cats[0], inner)]).unwrap();
+    assert_unsigned_conditions(&harness, "signCoinSpends", &ctx.take());
+}
+
+/// The honest shape — quoted conditions — is signed as before and the chain accepts it,
+/// through both methods.
+#[test]
+fn quoted_conditions_are_signed_as_before() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let (outcome, _) = harness.call("signCoinSpends", &params_for(&spends, false));
+    sim.new_transaction(SpendBundle::new(spends, signature_of(&outcome.unwrap())))
+        .unwrap();
+
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let chain = SimChain::on(sim);
+    let (outcome, _, _) = harness.run(kit::SUBMIT_COIN_SPENDS, &params_for(&spends, false), &chain);
+    assert!(outcome.is_ok());
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert_eq!(harness.webview.prompts().len(), 2);
+}
+
+/// The `chip0002_` alias of the submit method is the same method: an honest spend is
+/// signed and broadcast through it.
+#[test]
+fn the_submit_alias_submits_quoted_conditions() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let chain = SimChain::on(sim);
+    let (outcome, calls, _) = harness.run(SUBMIT_ALIAS, &params_for(&spends, false), &chain);
+    assert!(outcome.unwrap().contains("transactionId"));
+    assert!(calls > 0);
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert_eq!(harness.webview.prompts().len(), 1);
+}
+
+// ---------------------------------------------------------------------------------------
+// AGG_SIG_UNSAFE messages that could stand in for another signature (TASK-141)
+// ---------------------------------------------------------------------------------------
+
+/// A spend of `who`'s coin, quoted conditions, asking for `who`'s `AGG_SIG_UNSAFE`
+/// signature of `message`.
+fn unsafe_spend(sim: &mut Simulator, who: &BlsPair, message: Vec<u8>) -> Vec<CoinSpend> {
+    let coin = sim.new_coin(who.puzzle_hash, 1000);
+    let mut ctx = SpendContext::new();
+    StandardLayer::new(who.pk)
+        .spend(
+            &mut ctx,
+            coin,
+            Conditions::new()
+                .create_coin(who.puzzle_hash, 1000, Memos::None)
+                .agg_sig_unsafe(who.pk, message.into()),
+        )
+        .unwrap();
+    ctx.take()
+}
+
+/// With `AGG_SIG_UNSAFE` allowed for the website, a message that ends with the network's
+/// `AGG_SIG_ME` data, or that has the size of what `signMessage` signs, is still refused
+/// before the user is asked, through every method.
+#[test]
+fn an_unsafe_message_shaped_like_another_signature_is_refused_without_a_prompt() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    harness.allow_unsafe = true;
+    let mut coin_bound = vec![7; 40];
+    coin_bound.extend_from_slice(
+        chia_sdk_types::TESTNET11_CONSTANTS
+            .agg_sig_me_additional_data
+            .as_ref(),
+    );
+    let signed_message = kit::signed_message_hash(b"I agree").to_vec();
+    for message in [coin_bound, signed_message] {
+        let spends = unsafe_spend(&mut Simulator::new(), &who, message);
+        for method in [
+            "signCoinSpends",
+            "chip0002_signCoinSpends",
+            kit::SUBMIT_COIN_SPENDS,
+            SUBMIT_ALIAS,
+        ] {
+            let (outcome, calls) = harness.call(method, &params_for(&spends, false));
+            let error = outcome.unwrap_err();
+            assert_eq!(error.code, codes::UNAUTHORIZED, "{method}");
+            assert_eq!(
+                error.data.as_deref(),
+                Some(r#"{"reason":"unsafe_message"}"#),
+                "{method}"
+            );
+            assert_eq!(calls, 0, "{method}: nothing was signed");
+        }
+    }
+    assert!(harness.webview.prompts().is_empty());
+}
+
+/// Any other unsafe message is asked about and signed as before once the user allowed
+/// `AGG_SIG_UNSAFE`, and still refused by wallet-kit when they did not.
+#[test]
+fn an_honest_unsafe_message_is_signed_when_allowed() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = unsafe_spend(&mut sim, &who, b"hello, dApp".to_vec());
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    assert_eq!(
+        outcome.unwrap_err().data.as_deref(),
+        Some(r#"{"reason":"agg_sig_unsafe"}"#)
+    );
+    assert_eq!(calls, 0);
+
+    harness.allow_unsafe = true;
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    assert!(calls > 0);
+    assert_eq!(harness.webview.prompts().len(), 1);
+    // A valid signature: the chain accepts the spend with it.
+    sim.new_transaction(SpendBundle::new(spends, signature_of(&outcome.unwrap())))
+        .unwrap();
 }
