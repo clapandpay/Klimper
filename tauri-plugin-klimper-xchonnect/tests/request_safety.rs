@@ -42,6 +42,7 @@ use xchonnect_wallet_kit::{
     LimitStore, Network, Ownership, RequestContext, RpcError, Signer, SignerError,
 };
 
+use tauri_plugin_klimper_xchonnect::DappPolicy;
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Result as KitResult;
 use tauri_plugin_klimper_xchonnect::requests::{
@@ -684,6 +685,42 @@ fn an_unknown_contract_is_refused() {
     let unknown = anyone_can_spend(0, 1, Conditions::new().agg_sig_me(who.pk, vec![1].into()));
     let (outcome, calls) = harness.call("signCoinSpends", &params_for(&[unknown], false));
     assert_eq!(outcome.unwrap_err().code, codes::UNSUPPORTED_CONTENT);
+    assert_eq!(calls, 0);
+    assert!(harness.webview.prompts().is_empty());
+}
+
+/// The limits exactly as the website-settings screen sends them reach wallet-kit through
+/// the stored record, and a request over them is refused with 4029 before any prompt.
+/// Before TASK-141 the screen's `perRequest` / `perDay` were skipped as unknown fields and
+/// every limit the user set meant no limit.
+#[test]
+fn the_screens_limits_refuse_a_request_over_them() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    let limits: Value = serde_json::from_str(include_str!("fixtures/webview_limits.json")).unwrap();
+    let policy: DappPolicy = serde_json::from_value(json!({ "limits": limits })).unwrap();
+    let stored = StoredPermissions {
+        limits: policy.stored_limits().unwrap(),
+        ..Default::default()
+    };
+    // Through the on-disk form, as the session loop reads it before every request.
+    let stored: StoredPermissions =
+        serde_json::from_str(&serde_json::to_string(&stored).unwrap()).unwrap();
+    harness.permissions.limits = stored.to_kit().limits;
+    assert_eq!(
+        harness.permissions.limits[&AssetId::Xch],
+        AssetLimit {
+            per_request: Some(100),
+            per_day: Some(1000),
+        }
+    );
+
+    let spends = send(&mut Simulator::new(), &who, 500);
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    let error = outcome.unwrap_err();
+    assert_eq!(error.code, codes::LIMIT_EXCEEDED);
+    assert_eq!(error.code, 4029);
+    assert_eq!(error.data.as_deref(), Some(r#"{"reason":"per_request"}"#));
     assert_eq!(calls, 0);
     assert!(harness.webview.prompts().is_empty());
 }

@@ -8,7 +8,8 @@
 
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionSummary } from './xchonnect';
+import webviewLimits from '../../../tauri-plugin-klimper-xchonnect/tests/fixtures/webview_limits.json';
+import type { DappPolicy, SessionSummary } from './xchonnect';
 
 vi.mock('@/components/Layout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -281,6 +282,28 @@ describe('limits', () => {
         methods: [...DEFAULT_METHODS],
       }),
     );
+  });
+
+  // The plugin reads exactly these words and refuses any other (TASK-141): before, the
+  // screen's `perRequest` / `perDay` were skipped as unknown and every limit meant none.
+  // The same file is what the plugin's own tests feed to `set_dapp_policy`'s `DappPolicy`.
+  it('sends limits in the shape the plugin reads, and reads back what it returns', async () => {
+    openSettings({ ...fresh, limits: webviewLimits });
+    await waitFor(() =>
+      expect(screen.getAllByLabelText('Per request')[0]).toHaveProperty(
+        'value',
+        '0.0000000001',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(setDappPolicy).toHaveBeenCalled());
+    const [, policy] = setDappPolicy.mock.calls[0] as [string, DappPolicy];
+    expect(policy.limits).toEqual(webviewLimits);
+    for (const limit of Object.values(policy.limits ?? {})) {
+      for (const field of Object.keys(limit)) {
+        expect(['perRequest', 'perDay']).toContain(field);
+      }
+    }
   });
 
   it('refuses a limit it cannot store exactly instead of rounding it', async () => {

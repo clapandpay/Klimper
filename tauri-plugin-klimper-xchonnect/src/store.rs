@@ -889,6 +889,29 @@ mod tests {
     use std::sync::Arc;
     use xchonnect_wallet_kit::LimitStore;
 
+    /// The stored form keeps its `snake_case` names: a record written before the webview's
+    /// limits were read still loads, with what it held (TASK-141).
+    #[test]
+    #[allow(clippy::indexing_slicing)]
+    fn a_stored_limit_reads_as_it_was_written() {
+        let stored: StoredPermissions = serde_json::from_str(
+            r#"{"methods":[],"exposed_keys":[],"limits":{"xch":{"per_request":7,"per_day":9},"cat:abababababababababababababababababababababababababababababababab":{}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            stored.limits["xch"],
+            StoredLimit {
+                per_request: Some(7),
+                per_day: Some(9),
+            }
+        );
+        let written = serde_json::to_value(&stored).unwrap();
+        assert_eq!(
+            written["limits"]["xch"],
+            serde_json::json!({ "per_request": 7, "per_day": 9 })
+        );
+    }
+
     fn record(id: &str) -> SessionRecord {
         SessionRecord {
             id: id.to_owned(),
