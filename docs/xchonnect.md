@@ -290,9 +290,19 @@ and is gone.
    `BroadcastRecord`); Klimper's broadcaster (`SageBroadcaster`) writes it to the keyring
    before it returns, and when that fails nothing is sent (`4000`, reason `record_failed`,
    "Klimper could not save its record of this transaction, so nothing was sent. Try
-   again."). Signatures that go back to the website (`signCoinSpends`, a loan request's
-   offer) are recorded as released before the answer leaves; if that fails, they do not
-   leave.
+   again."). wallet-kit reports a `signCoinSpends` answer the same way, after signing and
+   before the signature is returned (every coin of the request goes into released; if the
+   write fails the website gets `record_failed`, no signature, and nothing counts against
+   its limit). A loan request's offer is recorded as released by Klimper before the answer
+   leaves; if that fails, it does not leave.
+   **Signatures Sage makes outside Xchonnect** go into released too, read from Sage's own
+   database without changing Sage (`signed_coins::signed_by_sage`): every coin a
+   transaction in Sage's mempool table spends (Sage's send screen, its offer takes,
+   anything Sage submitted) and every coin of an offer Sage made, whatever its status, as
+   long as the coin is unspent. This runs before every signing request and every 30 seconds
+   while the app runs. Not covered, since they leave nothing in Sage's database: a
+   signature Sage's own `WalletConnect` hands to a website (`signCoinSpends`) and a signed
+   transaction shown for copying instead of being sent.
    A coin leaves the record only once **that** coin is spent on chain — never because
    another coin of its bundle was spent or the bundle expired — as the wallet's own synced
    database says, at least 6 blocks below its synced peak (`signed_coins::CONFIRMATIONS`; a
@@ -311,8 +321,8 @@ and is gone.
    one that fell out of the mempool). There is no screen for it yet.
    For the user this means: a website can never take apart a transaction Klimper sends; a
    coin the user signed for a website stays under the strict rule until it is spent; and the
-   exact same transaction is never signed twice. Signatures made by Sage's own screens,
-   outside Xchonnect, are not in the record.
+   exact same transaction is never signed twice. Signatures Sage makes outside Xchonnect
+   are in the record as far as Sage's database shows them (above).
    **The fee of a sealed request is Klimper's** (spec 11.1.1): wallet-kit credits a sealed
    bundle's fee as the wallet's own choice (in an exercise, the fee can come out of the
    released collateral), so it must not be a figure a website picked. A website's `fee`

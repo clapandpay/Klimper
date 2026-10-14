@@ -34,7 +34,7 @@
 //! prompt, to recording what they signed: the record a request is checked against must still
 //! be the record when its signature leaves the wallet.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -76,16 +76,18 @@ impl SignedCoinsRecord {
     pub fn to_kit(&self) -> SignedCoins {
         SignedCoins {
             released: self.released.iter().filter_map(|c| parse(c)).collect(),
-            sealed: self
-                .sealed
-                .iter()
-                .filter_map(|(coin, digests)| {
-                    Some((
-                        parse(coin)?,
-                        digests.iter().filter_map(|d| parse(d)).collect(),
-                    ))
-                })
-                .collect(),
+            // wallet-kit keys it by digest, each with the coins it is held for; stored per
+            // coin, as the entries leave the record coin by coin.
+            sealed: {
+                let mut sealed: HashMap<Bytes32, HashSet<Bytes32>> = HashMap::new();
+                for (coin, digests) in &self.sealed {
+                    let Some(coin) = parse(coin) else { continue };
+                    for digest in digests.iter().filter_map(|d| parse(d)) {
+                        sealed.entry(digest).or_default().insert(coin);
+                    }
+                }
+                sealed
+            },
         }
     }
 
@@ -490,20 +492,118 @@ pub async fn spent_coins(wallet: &sage_wallet::Wallet, coins: &[Bytes32]) -> Has
 /// taken out (each coin on its own: [`SignedCoins::spent`]), and the kept bundles that can
 /// no longer be included dropped. Run on the request thread (see `requests::answer`).
 pub fn refresh(state: &AppState, handle: &SignedCoinsHandle) -> Result<SignedCoinsRecord> {
+    let wallet = {
+        let state = state.clone();
+        tauri::async_runtime::block_on(async move {
+            state.lock().await.wallet().map_err(Error::internal)
+        })?
+    };
+    let by_sage = {
+        let wallet = wallet.clone();
+        tauri::async_runtime::block_on(async move { signed_by_sage(&wallet).await })?
+    };
+    handle.release(by_sage)?;
     let record = handle.load()?;
     let coins = handle.coins()?;
     if coins.is_empty() {
         return Ok(record);
     }
-    let state = state.clone();
-    let spent = tauri::async_runtime::block_on(async move {
-        let wallet = state.lock().await.wallet().map_err(Error::internal)?;
-        Ok::<_, Error>(spent_coins(&wallet, &coins).await)
-    })?;
+    let spent = tauri::async_runtime::block_on(async move { spent_coins(&wallet, &coins).await });
     if spent.is_empty() {
         return Ok(record);
     }
     handle.prune(&spent)
+}
+
+/// The wallet's unspent coins with a signature Sage made outside Xchonnect, as far as Sage's
+/// database shows them (xchonnect spec 11.2: the host records signatures made outside the
+/// kit): every coin a transaction in Sage's mempool table spends (Sage's own send screen,
+/// its offer takes, anything Sage submitted), and every coin of the wallet's an offer Sage
+/// made (any status: an expired or cancelled offer's signature is still out there). Only
+/// coins Sage's database holds unspent count; Sage's code is not changed for this.
+///
+/// Not covered, since they leave no trace in Sage's database: signatures Sage hands to a
+/// website through its own `WalletConnect` (`signCoinSpends`) and a signed transaction shown
+/// for copying instead of being submitted.
+pub async fn signed_by_sage(wallet: &sage_wallet::Wallet) -> Result<Vec<Bytes32>> {
+    let mut coins = BTreeSet::new();
+    for item in wallet
+        .db
+        .mempool_items_with_coins()
+        .await
+        .map_err(Error::internal)?
+    {
+        coins.extend(item.spent.iter().map(|spent| spent.coin.coin_id()));
+    }
+    for offer in wallet.db.offers(None).await.map_err(Error::internal)? {
+        match chia_wallet_sdk::driver::decode_offer(&offer.encoded_offer) {
+            Ok(bundle) => coins.extend(
+                bundle
+                    .coin_spends
+                    .iter()
+                    .filter(|cs| cs.coin.parent_coin_info != Bytes32::default())
+                    .map(|cs| cs.coin.coin_id()),
+            ),
+            Err(error) => tracing::warn!("xchonnect: an offer Sage made does not decode: {error}"),
+        }
+    }
+    if coins.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
+    Ok(wallet
+        .db
+        .coins_by_ids(&ids)
+        .await
+        .map_err(Error::internal)?
+        .into_iter()
+        .filter(|row| row.spent_height.is_none())
+        .map(|row| row.coin.coin_id())
+        .collect())
+}
+
+/// Every 30 seconds while the app runs, the coins Sage signed outside Xchonnect
+/// ([`signed_by_sage`]) go into the active wallet's record, so one Sage submitted and then
+/// dropped between two requests is not missed.
+pub fn spawn_sweeper<R: tauri::Runtime>(app: tauri::AppHandle<R>, store: Arc<SessionStore>) {
+    use tauri::Manager as _;
+    tauri::async_runtime::spawn(async move {
+        let mut ticks = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            ticks.tick().await;
+            // Sage's state is managed once the app has set up, after the plugins.
+            let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else {
+                continue;
+            };
+            let (wallet, chain_id) = {
+                let sage = state.lock().await;
+                let Ok(wallet) = sage.wallet() else { continue };
+                let chain_id = crate::wallet::network_of(sage.network())
+                    .chain_id()
+                    .to_owned();
+                (wallet, chain_id)
+            };
+            let coins = match signed_by_sage(&wallet).await {
+                Ok(coins) if !coins.is_empty() => coins,
+                Ok(_) => continue,
+                Err(error) => {
+                    tracing::warn!("xchonnect: could not read what Sage signed: {error}");
+                    continue;
+                }
+            };
+            let handle = SignedCoinsHandle::new(store.clone(), wallet.fingerprint, &chain_id);
+            let written = tauri::async_runtime::spawn_blocking(move || {
+                let _one_at_a_time = gate();
+                handle.release(coins)
+            })
+            .await;
+            if let Ok(Err(error)) = written {
+                tracing::error!(
+                    "xchonnect: the record of signed coins could not be written: {error}"
+                );
+            }
+        }
+    });
 }
 
 /// The record a coin-signing request is checked against, with the lock that keeps every

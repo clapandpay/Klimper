@@ -1066,6 +1066,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     tracing::warn!("could not emit {event}: {error}");
                 }
             });
+            // What Sage signs through its own screens goes into the record of signed coins
+            // (xchonnect spec 11.2).
+            signed_coins::spawn_sweeper(app.clone(), store.clone());
             app.manage(Xchonnect {
                 app: app.clone(),
                 store,

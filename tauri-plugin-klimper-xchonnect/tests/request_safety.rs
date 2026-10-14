@@ -264,6 +264,8 @@ struct SimChain {
     sim: Mutex<Simulator>,
     accepted: Mutex<Vec<SpendBundle>>,
     recorded: Mutex<SignedCoins>,
+    /// The record cannot be written (a locked keyring).
+    unwritable: bool,
 }
 
 impl SimChain {
@@ -277,6 +279,9 @@ impl SimChain {
 
 impl Broadcaster for SimChain {
     fn record(&self, record: &kit::BroadcastRecord) -> Result<(), String> {
+        if self.unwritable {
+            return Err("the keyring is locked".to_owned());
+        }
         self.recorded.lock().unwrap().add(record);
         Ok(())
     }
@@ -1290,4 +1295,42 @@ fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
     });
     assert_eq!(chain.accepted.lock().unwrap().len(), 1);
     assert!(!record.load().unwrap().to_kit().sealed.is_empty());
+}
+
+/// wallet-kit reports the coins of every `signCoinSpends` answer before the signature is
+/// returned: they go into the record as released. When the record cannot be written, no
+/// signature is returned (4000 `record_failed`) and nothing counts against the limit.
+#[test]
+fn a_signature_for_a_website_is_recorded_before_it_is_returned() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let spends = send(&mut Simulator::new(), &who, 500);
+    let chain = SimChain::default();
+    let (outcome, _, _) = harness.run("signCoinSpends", &params_for(&spends, false), &chain);
+    signature_of(&outcome.unwrap());
+    assert!(
+        chain
+            .recorded
+            .lock()
+            .unwrap()
+            .released
+            .contains(&spends[0].coin.coin_id())
+    );
+
+    let harness = Harness::new(who.clone(), true);
+    let locked = SimChain {
+        unwritable: true,
+        ..SimChain::default()
+    };
+    let (outcome, _, _) = harness.run(
+        "chip0002_signCoinSpends",
+        &params_for(&spends, false),
+        &locked,
+    );
+    let error = tauri_plugin_klimper_xchonnect::requests::explain(outcome.unwrap_err());
+    assert_eq!(error.code, codes::INVALID_PARAMS);
+    assert_eq!(error.data.as_deref(), Some(r#"{"reason":"record_failed"}"#));
+    assert!(error.message.contains("nothing was sent"));
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
+    assert!(limits.load().unwrap().spent.is_empty());
 }

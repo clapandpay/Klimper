@@ -508,7 +508,6 @@ fn run(
     let outcome = outcome.and_then(|result| {
         record_released(
             canonical_method(&meta.method),
-            params,
             &result,
             &snapshot.ownership,
             &record_of_signed,
@@ -586,22 +585,18 @@ const SIGN_COIN_SPENDS: &str = "signCoinSpends";
 /// CHIP-0002 `signMessage`, without the `chip0002_` prefix: checked against the record too.
 const SIGN_MESSAGE: &str = "signMessage";
 
-/// The coins whose signatures an answer hands to the website (xchonnect spec 11.2): every
-/// coin of the user's a `signCoinSpends` signed, and every coin of the user's in a signed
-/// offer Klimper built (a loan request). Bundles Klimper broadcasts are recorded by its
-/// broadcaster ([`SageBroadcaster`], wallet-kit's `Broadcaster::record`) before they are sent.
+/// The coins whose signatures an answer hands to the website (xchonnect spec 11.2) that
+/// wallet-kit does not report itself: every coin of the user's in a signed offer Klimper
+/// built (a loan request). A `signCoinSpends` answer and every bundle Klimper broadcasts are
+/// recorded through its broadcaster ([`SageBroadcaster`], wallet-kit's
+/// `Broadcaster::record`) before the signature leaves.
 pub fn record_released(
     method: &str,
-    params: &str,
     result: &str,
     ownership: &kit::Ownership,
     record: &SignedCoinsHandle,
 ) -> std::result::Result<(), RpcError> {
-    let spends = if method == SIGN_COIN_SPENDS {
-        serde_json::from_str::<Value>(params)
-            .ok()
-            .and_then(|value| kit::parse_coin_spends(value.get("coinSpends")?).ok())
-    } else if execute::is_wallet_built(method) {
+    let spends = if execute::is_wallet_built(method) {
         serde_json::from_str::<Value>(result)
             .ok()
             .and_then(|value| Some(value.get("offer")?.as_str()?.to_owned()))

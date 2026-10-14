@@ -1187,15 +1187,22 @@ async fn coins_signed_for_a_website_make_a_later_wallet_built_request_strict() {
     sealed.ok();
     assert_eq!(sealed.prompt.as_ref().unwrap()["linking"], "sealed");
 
-    // A website had the user sign spends of the same coins.
-    crate::requests::record_released(
-        "signCoinSpends",
-        &sign_params(&spends),
-        r#""0x00""#,
-        &w.ownership,
-        &record,
-    )
-    .unwrap();
+    // A website had the user sign spends of the same coins: wallet-kit reports the coins
+    // to Klimper's record before the signature is returned.
+    let answered = run(&w, &Setup::new("signCoinSpends", now), |ctx, s, a, b, _| {
+        let recording = Recording::new(b, &record);
+        kit::handle_with_host(
+            "signCoinSpends",
+            &sign_params(&spends),
+            ctx,
+            &kit::Host {
+                signer: s,
+                approver: a,
+                broadcaster: Some(&recording),
+            },
+        )
+    });
+    answered.ok();
     let signed = record.load().unwrap().to_kit();
     assert!(signed.sealed.is_empty());
     let user_coins = crate::signed_coins::user_coins(&spends, &w.ownership);
@@ -1242,6 +1249,11 @@ fn our_signatures(
     out
 }
 
+/// The coins the record holds sealed signatures for.
+fn held(signed: &kit::SignedCoins) -> HashSet<Bytes32> {
+    signed.sealed.values().flatten().copied().collect()
+}
+
 /// Refuses every bundle, as a network that does not take it.
 struct Refusing;
 
@@ -1282,16 +1294,16 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     assert_eq!(first.prompt.as_ref().unwrap()["linking"], "sealed");
     let bundle = first.sent.clone().unwrap();
     let signed = record.load().unwrap().to_kit();
-    let signed_coin_count = signed.sealed.len();
+    let signed_coin_count = held(&signed).len();
     for cs in &bundle.coin_spends {
         assert!(signed.released.contains(&cs.coin.coin_id()));
     }
     let ours = our_signatures(&bundle.coin_spends, &w.keys);
     let user_coins = crate::signed_coins::user_coins(&bundle.coin_spends, &w.ownership);
     assert!(!user_coins.is_empty());
-    assert!(user_coins.iter().all(|c| signed.sealed.contains_key(c)));
+    assert!(user_coins.iter().all(|c| held(&signed).contains(c)));
     for (coin, key, message) in &ours {
-        assert!(signed.sealed[coin].contains(&kit::sealed_digest(key, message)));
+        assert!(signed.sealed[&kit::sealed_digest(key, message)].contains(coin));
     }
     assert_eq!(
         signed.sealed.values().map(HashSet::len).sum::<usize>(),
@@ -1414,8 +1426,8 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
         .collect();
     let pruned = record.prune(&spent).unwrap().to_kit();
     assert_eq!(pruned.released, unknown);
-    assert!(pruned.sealed.keys().all(|c| unknown.contains(c)));
-    assert!(pruned.sealed.len() < signed_coin_count);
+    assert!(held(&pruned).iter().all(|c| unknown.contains(c)));
+    assert!(held(&pruned).len() < signed_coin_count);
     assert!(record.sealed_bundles().unwrap().bundles.is_empty());
     assert!(
         crate::signed_coins::resend(&record, &bundle.name(), resent_never)
@@ -1523,6 +1535,52 @@ async fn a_record_that_cannot_be_written_sends_nothing() {
     assert!(explained.message.contains("nothing was sent"));
 }
 
+/// What Sage signs through its own screens is recorded too (spec 11.2): the coins of an
+/// offer Sage made, read from Sage's database, unchanged.
+#[tokio::test]
+async fn the_coins_of_an_offer_sage_made_count_as_released() {
+    let loan = Box::pin(loan()).await;
+    let w = who(&loan.alice).await;
+    let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
+    let ours = crate::signed_coins::user_coins(&offer.coin_spends, &w.ownership);
+    assert!(
+        crate::signed_coins::signed_by_sage(&loan.alice.wallet)
+            .await
+            .unwrap()
+            .iter()
+            .all(|c| !ours.contains(c))
+    );
+    // As if the user had made this offer in Sage's own offer screen.
+    let mut tx = loan.alice.wallet.db.tx().await.unwrap();
+    tx.insert_offer(sage_database::OfferRow {
+        offer_id: offer.name(),
+        encoded_offer: loan.offer.clone(),
+        expiration_height: None,
+        expiration_timestamp: None,
+        fee: 0,
+        status: sage_database::OfferStatus::Active,
+        inserted_timestamp: 0,
+    })
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let by_sage = crate::signed_coins::signed_by_sage(&loan.alice.wallet)
+        .await
+        .unwrap();
+    let held: Vec<Bytes32> = ours
+        .iter()
+        .filter(|c| by_sage.contains(c))
+        .copied()
+        .collect();
+    assert!(!held.is_empty(), "{ours:?} {by_sage:?}");
+    let (_dir, record) = record_of_signed();
+    record.release(by_sage).unwrap();
+    assert!(
+        held.iter()
+            .all(|c| record.load().unwrap().to_kit().released.contains(c))
+    );
+}
+
 /// Only a coin seen spent leaves the record: a released coin that is still unspent stays.
 #[tokio::test]
 async fn an_unspent_released_coin_stays_in_the_record() {
@@ -1543,14 +1601,8 @@ async fn a_loan_requests_offer_releases_the_borrowers_coins() {
     let loan = Box::pin(loan()).await;
     let w = who(&loan.alice).await;
     let (_dir, record) = record_of_signed();
-    crate::requests::record_released(
-        CHIA_MINT_OPTION,
-        "{}",
-        loan.request.ok(),
-        &w.ownership,
-        &record,
-    )
-    .unwrap();
+    crate::requests::record_released(CHIA_MINT_OPTION, loan.request.ok(), &w.ownership, &record)
+        .unwrap();
     let signed = record.load().unwrap().to_kit();
     let offer = chia_wallet_sdk::driver::decode_offer(&loan.offer).unwrap();
     let borrower = crate::signed_coins::user_coins(&offer.coin_spends, &w.ownership);
