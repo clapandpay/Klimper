@@ -460,13 +460,15 @@ fn tie_concurrent(mut spends: Vec<CoinSpend>, a: Bytes32, b: Bytes32) -> Vec<Coi
 ///    the wallet's addresses, a CAT from the wallet's CAT coins;
 /// 3. the launch: the eve option's inner puzzle is a quoted program that hands the option to
 ///    the wallet, so its outputs are fixed and wallet-kit can show the new option as
-///    guaranteed (spec 11.1.1). (Sage's own `mint_option` spends the eve with the wallet's
-///    standard puzzle instead; wallet-kit 0.1.0-rc.5 counts that as guaranteed too and
-///    verifies `option.mint` for it, but it cannot write a loan request, whose creator is
-///    the lender, so one builder serves both here.)
+///    guaranteed (spec 11.1.1).
 ///
-/// The two sets of coins assert each other's spend, and the launcher's parent asserts the
-/// launcher's announcement ([`guarantee_launch`]).
+/// Used for loan requests only: Sage's own `mint_option` ([`build_sage_mint`]) writes a
+/// plain option, but cannot write one whose creator is the lender. The two sets of coins
+/// assert each other's spend, as Sage's `Relation::AssertConcurrent` links them, and the
+/// launcher's parent asserts the launcher's announcement ([`guarantee_launch`]). wallet-kit
+/// 0.1.0-rc.5 at f25f044 no longer counts `ASSERT_CONCURRENT_SPEND` (spec 11.2 rule 2), so
+/// it does not see the launch as guaranteed and refuses `loan.request` until the xchonnect
+/// follow-up (B3 in TASK-140).
 pub async fn build_mint(
     wallet: &Wallet,
     creator: Option<Bytes32>,
@@ -617,6 +619,37 @@ pub async fn build_mint(
     }))
 }
 
+/// A plain option, written with Sage's own `mint_option`, unchanged: the wallet is the
+/// creator (its change address) and holds the option. Sage is the source of truth for the
+/// spends it builds; Klimper adds nothing to them.
+pub async fn build_sage_mint(
+    wallet: &Wallet,
+    params: &MintParams,
+) -> Result<Option<Minted>, WalletError> {
+    let (Some(strike_type), Some(underlying_type)) =
+        (params.strike.option_type(), params.collateral.option_type())
+    else {
+        return Ok(None);
+    };
+    let receive = wallet.change_p2_puzzle_hash().await?;
+    let (spends, option) = wallet
+        .mint_option(
+            sage_wallet::WalletOptionMint {
+                expiration_seconds: params.expires_at,
+                underlying_type,
+                strike_type,
+            },
+            params.fee,
+        )
+        .await?;
+    Ok(Some(Minted {
+        spends,
+        launcher_id: option.info.launcher_id,
+        nonce: Bytes32::default(),
+        receive,
+    }))
+}
+
 /// `chia_mintOption`: a plain option (the wallet is the creator and holds it), or with a
 /// lender as creator and a `loan` principal, a loan request returned as an offer.
 #[allow(clippy::too_many_arguments)]
@@ -653,9 +686,11 @@ pub fn mint_option(
         (Some(_), None) | (None, Some(_)) => return Err(invalid("loan")),
         (None, None) => {}
     }
+    // The creator is the wallet itself: Sage writes with its change address as creator,
+    // whichever of the wallet's own addresses the website named.
     let build_params = params.clone();
     let minted = on_sage(state, async move |sage| {
-        Ok(build_mint(&*sage.wallet()?, creator, &build_params, None).await?)
+        Ok(build_sage_mint(&*sage.wallet()?, &build_params).await?)
     })
     .map_err(|e| build_failed(CHIA_MINT_OPTION, ctx, &e))?
     .ok_or_else(|| invalid("underlying"))?;
@@ -969,7 +1004,7 @@ pub fn exercise_option(
     })
     .map_err(|e| build_failed(CHIA_EXERCISE_OPTION, ctx, &e))?
     .map_err(Refusal::rpc)?;
-    let spends = bind_user_spends(spends, ctx.ownership)?;
+    // Sage's spends as Sage builds them: nothing is added (Sage is the source of truth).
     let summary = sage_view(state, &spends)?;
     submit_exercise(ctx, signer, approver, broadcaster, &summary, spends, fee)
 }
@@ -977,7 +1012,9 @@ pub fn exercise_option(
 /// After the build: wallet-kit requires the user's spends to require one another and the
 /// user's guaranteed outcome to cover the collateral less the strike and the fee (spec
 /// 11.1.1, `BindingReport::exercises_covered`), and verifies the kind. Sage's
-/// `exercise_options` meets both as built (its spends are linked by `ASSERT_CONCURRENT_SPEND`).
+/// `exercise_options` links its spends by `ASSERT_CONCURRENT_SPEND`, which wallet-kit 0.1.0-rc.5
+/// at f25f044 no longer counts: refused as `unbound_exercise` until the xchonnect follow-up
+/// (B2 in TASK-140). Klimper does not add links to Sage's spends.
 pub fn submit_exercise(
     ctx: &RequestContext<'_>,
     signer: &dyn kit::Signer,
