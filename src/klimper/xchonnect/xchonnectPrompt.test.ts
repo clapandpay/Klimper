@@ -12,6 +12,7 @@ import {
   readPrompt,
   sanitiseMessageText,
 } from './xchonnectPrompt';
+import * as f from './optionFixtures';
 
 const TAIL = 'a'.repeat(64);
 const KEY = 'b'.repeat(96);
@@ -485,5 +486,254 @@ describe('the trade overview (TASK-139)', () => {
       if (view.kind !== 'spend') throw new Error('expected a spend');
       expect(view.trade?.offers).toBeNull();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Option contracts and loans (TASK-140): `summary.options`, `outputs[].option`, the option
+// asset, `intent.kind_verified`, Klimper's `loan` and `makes_offer`, read by explicit key.
+// ---------------------------------------------------------------------------------------
+
+describe('option keys', () => {
+  const spend = (prompt: unknown) => {
+    const view = readPrompt(prompt);
+    if (view.kind !== 'spend') throw new Error(`not a spend: ${view.kind}`);
+    return view;
+  };
+  const unreadable = (prompt: unknown) =>
+    expect(readPrompt(prompt).kind).toBe('unreadable');
+  /** The mint prompt with `summary.options` replaced. */
+  const withOptions = (options: unknown) => {
+    const prompt = f.optionPrompt();
+    return { ...prompt, summary: { ...prompt.summary, options } };
+  };
+
+  it('reads a mint exactly', () => {
+    const view = spend(f.optionPrompt());
+    expect(view.options).toHaveLength(1);
+    const [mint] = view.options;
+    if (mint?.action !== 'mint') throw new Error('not a mint');
+    expect(mint.launcherId).toBe(f.LAUNCHER);
+    expect(mint.terms.expiresAt).toBe(f.EXPIRY);
+    expect(mint.terms.collateral.isXch).toBe(true);
+    expect(mint.terms.collateral.amount.toString()).toBe(
+      String(100 * f.ONE_XCH),
+    );
+    expect(mint.terms.strike.assetId).toBe('3c'.repeat(32));
+    expect(mint.guaranteed).toBe(true);
+    // Nothing the plugin did not list reaches the view.
+    expect(Object.keys(mint).sort()).toEqual(
+      [
+        'action',
+        'creatorIsUser',
+        'fundedByUser',
+        'guaranteed',
+        'launcherId',
+        'owner',
+        'ownerIsUser',
+        'terms',
+      ].sort(),
+    );
+  });
+
+  it('reads every action', () => {
+    const view = spend(
+      withOptions([f.mint(), f.exercise(), f.clawback(), f.transfer()]),
+    );
+    expect(view.options.map((o) => o.action)).toEqual([
+      'mint',
+      'exercise',
+      'clawback',
+      'transfer',
+    ]);
+  });
+
+  it('absent options are none', () => {
+    const prompt = f.optionPrompt();
+    const summary: Record<string, unknown> = { ...prompt.summary };
+    delete summary.options;
+    const view = spend({ ...prompt, summary, intent: null });
+    expect(view.options).toEqual([]);
+    expect(view.loan).toBeNull();
+    expect(view.makesOffer).toBe(false);
+  });
+
+  it('malformed options make the whole prompt unreadable', () => {
+    unreadable(withOptions({}));
+    unreadable(withOptions('mint'));
+    unreadable(withOptions([null]));
+    unreadable(withOptions([{ ...f.mint(), action: 'buy' }]));
+    unreadable(withOptions([{ ...f.mint(), action: undefined }]));
+    unreadable(withOptions([{ ...f.mint(), owner_is_user: 'true' }]));
+    unreadable(withOptions([{ ...f.mint(), guaranteed: undefined }]));
+    unreadable(withOptions([{ ...f.mint(), launcher_id: 'abcd' }]));
+    unreadable(withOptions([{ ...f.mint(), terms: null }]));
+    unreadable(
+      withOptions([
+        f.mint({ terms: { ...f.terms(), expiration_seconds: '1794578400' } }),
+      ]),
+    );
+    unreadable(
+      withOptions([
+        f.mint({ terms: f.terms({ collateral: f.leg(f.XCH, 0) }) }),
+      ]),
+    );
+    // An option backed by an option is not one this build reads.
+    unreadable(
+      withOptions([
+        f.mint({
+          terms: f.terms({ strike: f.leg(f.optionAsset(f.LAUNCHER_2), 1) }),
+        }),
+      ]),
+    );
+    unreadable(withOptions([{ ...f.transfer(), to: null }]));
+    unreadable(withOptions([{ ...f.exercise(), by_user: 1 }]));
+    unreadable(withOptions([{ ...f.clawback(), unlocks_at_seconds: -1 }]));
+    unreadable(withOptions([{ ...f.clawback(), launcher_id: 'zz' }]));
+  });
+
+  it('a clawback may leave its option unnamed (null), and only null', () => {
+    const view = spend(withOptions([f.clawback({ launcher_id: null })]));
+    expect(view.options[0]).toMatchObject({ launcherId: null });
+    unreadable(withOptions([{ ...f.clawback(), launcher_id: undefined }]));
+  });
+
+  it('reads the option asset as its own kind, counted whole', () => {
+    const view = spend(f.optionPrompt());
+    const option = view.assets.find((a) => a.isOption);
+    expect(option).toMatchObject({
+      isXch: false,
+      isOption: true,
+      assetId: f.LAUNCHER,
+      precision: 0,
+    });
+    unreadable(
+      f.optionPrompt({ assets: [[{ type: 'option' } as f.Asset, 0, 1]] }),
+    );
+    unreadable(f.optionPrompt({ assets: [[{ type: 'nft' } as never, 0, 1]] }));
+  });
+
+  it('reads an option output as locked, with no recipient', () => {
+    const view = spend(f.optionPrompt());
+    const [collateral, launcher, change] = view.outputs;
+    expect(collateral?.option).toEqual({
+      launcherId: f.LAUNCHER,
+      role: 'collateral',
+    });
+    expect(collateral?.recipient).toBeNull();
+    expect(launcher?.option?.role).toBe('launcher');
+    expect(change?.option).toBeNull();
+    // A recipient on an option output is dropped: it is nobody's payment.
+    const out = spend(
+      f.optionPrompt({
+        outputs: [
+          {
+            asset: f.XCH,
+            amount: 5,
+            puzzle_hash: f.STRANGER,
+            recipient: f.STRANGER,
+            to_user: false,
+            option: { launcher_id: f.LAUNCHER, role: 'collateral' },
+          },
+        ],
+      }),
+    );
+    expect(out.outputs[0]?.recipient).toBeNull();
+  });
+
+  it('a malformed option output makes the prompt unreadable', () => {
+    const output = (option: unknown) =>
+      f.optionPrompt({
+        outputs: [
+          {
+            asset: f.XCH,
+            amount: 5,
+            puzzle_hash: 'f1'.repeat(32),
+            recipient: null,
+            to_user: false,
+            option,
+          },
+        ],
+      });
+    unreadable(output({ launcher_id: f.LAUNCHER, role: 'payment' }));
+    unreadable(output({ launcher_id: 'ab', role: 'collateral' }));
+    unreadable(output('collateral'));
+    expect(readPrompt(output(null)).kind).toBe('spend');
+    expect(readPrompt(output(undefined)).kind).toBe('spend');
+  });
+
+  it('marks an output to the settlement puzzle', () => {
+    const view = spend(f.loanRequest());
+    expect(view.outputs.map((o) => o.toSettlement)).toEqual([false, true]);
+  });
+
+  it('reads kind_verified only for a verified kind', () => {
+    const intent = (value: Record<string, unknown>) =>
+      f.optionPrompt({ extra: { intent: value } });
+    expect(
+      spend(intent({ kind: 'option.mint', kind_verified: true })).intent
+        ?.kindVerified,
+    ).toBe(true);
+    expect(
+      spend(intent({ kind: 'option.buy', kind_verified: false })).intent
+        ?.kindVerified,
+    ).toBe(false);
+    // Absent: an older wallet-kit, not verified.
+    expect(spend(intent({ kind: 'option.mint' })).intent?.kindVerified).toBe(
+      false,
+    );
+    unreadable(intent({ kind: 'option.mint', kind_verified: 'true' }));
+    unreadable(intent({ kind: 'swap', kind_verified: true }));
+    unreadable(intent({ kind: 'Option.Mint', kind_verified: true }));
+    unreadable(intent({ kind_verified: true }));
+  });
+
+  it('reads a loan, tied to its mint', () => {
+    const borrower = spend(f.loanRequest());
+    expect(borrower.loan?.role).toBe('borrower');
+    expect(borrower.loan?.principal.amount.toString()).toBe('300000');
+    expect(borrower.loan?.counterparty).toBe(f.LENDER);
+    expect(borrower.loan?.tie?.amount.toString()).toBe('1');
+    expect(borrower.makesOffer).toBe(true);
+    const lender = spend(f.loanTake());
+    expect(lender.loan?.role).toBe('lender');
+    expect(lender.loan?.counterparty).toBe(f.BORROWER);
+    expect(lender.makesOffer).toBe(false);
+    expect(
+      spend(f.loanRequest({ loan: { ...loanOf(), tie: null } })).loan?.tie,
+    ).toBeNull();
+  });
+
+  function loanOf() {
+    return (f.loanRequest() as unknown as { loan: Record<string, unknown> })
+      .loan;
+  }
+
+  it('a loan that does not match its option is unreadable', () => {
+    unreadable(f.loanRequest({ loan: { ...loanOf(), role: 'friend' } }));
+    unreadable(
+      f.loanRequest({ loan: { ...loanOf(), counterparty: f.STRANGER } }),
+    );
+    unreadable(f.loanRequest({ loan: { ...loanOf(), principal: null } }));
+    unreadable(f.loanRequest({ loan: { ...loanOf(), tie: 'one mojo' } }));
+    unreadable(f.loanRequest({ loan: 'borrower' }));
+    // The borrower's role with the lender's mint, and a loan with no mint at all.
+    unreadable(f.loanTake({ loan: { ...loanOf(), counterparty: f.BORROWER } }));
+    const noMint = f.loanRequest();
+    unreadable({ ...noMint, summary: { ...noMint.summary, options: [] } });
+    // Two mints: which one is the loan cannot be said.
+    unreadable({
+      ...noMint,
+      summary: {
+        ...noMint.summary,
+        options: [...noMint.summary.options, ...noMint.summary.options],
+      },
+    });
+  });
+
+  it('makes_offer must be a boolean, and only counts on the wallet’s own build', () => {
+    unreadable(f.loanRequest({ makes_offer: 'yes' }));
+    const signOnly = { ...f.loanRequest(), type: 'sign_coin_spends' };
+    expect(spend(signOnly).makesOffer).toBe(false);
   });
 });

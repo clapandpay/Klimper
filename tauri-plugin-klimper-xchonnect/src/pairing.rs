@@ -208,6 +208,18 @@ pub fn granted_methods() -> Vec<String> {
         .collect()
 }
 
+/// Add the option methods (`chia_mintOption`, …) to a connection's methods, once. They are
+/// never in [`granted_methods`]: they lock funds until a date, so a website gets them only
+/// when the user turns option contracts on for it, on the pairing screen or in its settings
+/// (TASK-140). A connection paired before they existed is not upgraded either.
+pub fn grant_option_methods(methods: &mut Vec<String>) {
+    for method in crate::execute::options::OPTION_METHODS {
+        if !methods.iter().any(|m| m == method) {
+            methods.push(method.to_owned());
+        }
+    }
+}
+
 /// Step 1 and 2: verify, then describe what the user has to agree to.
 pub async fn inspect(
     uri_text: &str,
@@ -495,6 +507,28 @@ mod tests {
             .copied()
             .collect();
         assert_eq!(granted, expected);
+    }
+
+    /// Option contracts lock funds until a date: never part of the default grant, added
+    /// once when the user turns them on (TASK-140).
+    #[test]
+    fn option_methods_are_granted_only_when_turned_on() {
+        use crate::execute::options::OPTION_METHODS;
+        let mut methods = granted_methods();
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| !methods.iter().any(|g| g == m))
+        );
+        grant_option_methods(&mut methods);
+        grant_option_methods(&mut methods);
+        for method in OPTION_METHODS {
+            assert_eq!(
+                methods.iter().filter(|m| *m == method).count(),
+                1,
+                "{method}"
+            );
+        }
     }
 
     /// A homograph domain must reach the screen with both forms and a warning.

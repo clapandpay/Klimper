@@ -2,6 +2,7 @@
 // The Tauri backend for the approvals preview: sample requests and their answers.
 import { emit } from '@tauri-apps/api/event';
 import { mockIPC } from '@tauri-apps/api/mocks';
+import * as opt from '@/klimper/xchonnect/optionFixtures';
 
 const now = () => Math.floor(Date.now() / 1000);
 const TAIL = '1a2b3c4d'.repeat(8);
@@ -295,8 +296,98 @@ const TRADES: Record<string, unknown> = {
   ),
 };
 
+// ---------------------------------------------------------------------------------------
+// Option contracts (TASK-140): `?option=mint|exercise|claim|send|loan|lend` shows one
+// option approval as the plugin sends it (`optionFixtures.ts`), on testnet's coin.
+// ---------------------------------------------------------------------------------------
+
+function optionApproval(method: string, prompt: Record<string, unknown>) {
+  return {
+    id: `o-${method}`,
+    sessionId: 's1',
+    dapp: 'options.example',
+    method,
+    expiresAt: now() + 271,
+    kind: 'request',
+    prompt,
+  };
+}
+
+const soon = now() + 30 * 24 * 3600;
+const OPTIONS: Record<string, () => unknown> = {
+  mint: () =>
+    optionApproval(
+      'chia_mintOption',
+      opt.optionPrompt({
+        options: [opt.mint({ terms: opt.terms({ expiresAt: soon }) })],
+      }),
+    ),
+  exercise: () =>
+    optionApproval(
+      'chia_exerciseOption',
+      opt.optionPrompt({
+        method: 'chia_exerciseOption',
+        options: [opt.exercise()],
+        assets: [
+          [opt.USDC, 500 * opt.ONE_CAT, 0],
+          [opt.XCH, 1_000_000, 1, 100 * opt.ONE_XCH],
+          [opt.optionAsset(opt.LAUNCHER), 1, 0],
+        ],
+        outputs: [],
+        kind: 'option.exercise',
+        extra: {
+          binding: {
+            all_bound: true,
+            bound_payments: [{ asset: opt.XCH, amount: 100 * opt.ONE_XCH }],
+            bound_received: [{ asset: opt.XCH, amount: 100 * opt.ONE_XCH }],
+          },
+        },
+      }),
+    ),
+  claim: () =>
+    optionApproval(
+      'chia_claimOption',
+      opt.optionPrompt({
+        method: 'chia_claimOption',
+        options: [opt.clawback({ unlocks_at_seconds: now() - 86_400 })],
+        assets: [[opt.XCH, 100 * opt.ONE_XCH, 100 * opt.ONE_XCH - 1_000_000]],
+        outputs: [
+          {
+            asset: opt.XCH,
+            amount: 100 * opt.ONE_XCH - 1_000_000,
+            puzzle_hash: opt.ME,
+            recipient: opt.ME,
+            to_user: true,
+            option: null,
+          },
+        ],
+        kind: 'option.clawback',
+      }),
+    ),
+  send: () =>
+    optionApproval(
+      'chia_transferOption',
+      opt.optionPrompt({
+        method: 'chia_transferOption',
+        options: [opt.transfer()],
+        assets: [
+          [opt.optionAsset(opt.LAUNCHER), 1, 0],
+          [opt.XCH, 1_000_000, 0],
+        ],
+        outputs: [],
+        kind: 'option.transfer',
+      }),
+    ),
+  loan: () => optionApproval('chia_mintOption', opt.loanRequest()),
+  lend: () => optionApproval('chia_takeOffer', opt.loanTake()),
+};
+
 const params = new URLSearchParams(location.search);
 if (params.get('n')) pending = pending.slice(0, Number(params.get('n')));
+const optionCase = params.get('option');
+if (optionCase !== null && OPTIONS[optionCase]) {
+  pending = [OPTIONS[optionCase]()];
+}
 const tradeCase = params.get('trade');
 if (tradeCase === '1') pending = pending.slice(0, 1);
 else if (tradeCase !== null && TRADES[tradeCase]) pending = [TRADES[tradeCase]];

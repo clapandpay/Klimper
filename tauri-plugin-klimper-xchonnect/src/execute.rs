@@ -50,10 +50,13 @@ pub const CHIA_TAKE_OFFER: &str = "chia_takeOffer";
 pub const WALLET_BUILT_METHODS: [&str; 2] = [CHIA_SEND, CHIA_TAKE_OFFER];
 
 /// Whether Klimper builds this request from the wallet's own coins (and so signs it with
-/// every key of the wallet, not only the ones the website was shown).
+/// every key of the wallet, not only the ones the website was shown): the methods above and
+/// the option methods ([`options::OPTION_METHODS`], TASK-140).
 pub fn is_wallet_built(method: &str) -> bool {
-    WALLET_BUILT_METHODS.contains(&method)
+    WALLET_BUILT_METHODS.contains(&method) || options::OPTION_METHODS.contains(&method)
 }
+
+pub mod options;
 
 /// The revision of [`WALLET_BUILT_METHODS`] a new pairing is granted. 1: `chia_takeOffer`.
 pub const METHODS_REVISION: u32 = 1;
@@ -227,7 +230,9 @@ fn sage_asset(asset: Option<&sage_api::Asset>) -> Option<AssetId> {
 /// Refuse when the wallet database and the simulation disagree about what leaves the
 /// wallet. Only coins wallet-kit counts as the user's are compared — the other inputs of
 /// a multi-party bundle are someone else's — and only XCH and CATs, the assets both engines
-/// value.
+/// value. An option singleton is left out (TASK-140): Sage does not see the eve of an option a
+/// request mints as the wallet's coin, and where an option goes is checked by wallet-kit's own
+/// option effects and the request's verified intent instead.
 pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(), RpcError> {
     let owned: std::collections::HashSet<String> = kit_summary
         .spends
@@ -255,11 +260,15 @@ pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(
 
     let mut from_kit = Outflow::default();
     for delta in &kit_summary.assets {
-        if delta.sent > 0 {
+        if delta.sent > 0 && !matches!(delta.asset, AssetId::Option(_)) {
             from_kit.spent.insert(delta.asset, delta.sent);
         }
     }
-    for output in kit_summary.outputs.iter().filter(|o| !o.to_user) {
+    for output in kit_summary
+        .outputs
+        .iter()
+        .filter(|o| !o.to_user && !matches!(o.asset, AssetId::Option(_)))
+    {
         *from_kit.paid.entry(output.asset).or_default() += u128::from(output.amount);
     }
     // Zero on either side is no amount at all: an offer take creates zero-amount coins (a
@@ -371,8 +380,12 @@ pub fn send(
 
     // Build from the wallet's own coins; nothing is signed or submitted here.
     let to_address = address.clone();
-    let built = on_sage(state, async move |sage| match asset {
-        AssetId::Xch => {
+    let cat = match asset {
+        AssetId::Cat(id) => Some(id),
+        AssetId::Xch | AssetId::Option(_) => None,
+    };
+    let built = on_sage(state, async move |sage| match cat {
+        None => {
             sage.send_xch(SendXch {
                 address: to_address,
                 amount: Amount::u64(amount),
@@ -383,7 +396,7 @@ pub fn send(
             })
             .await
         }
-        AssetId::Cat(id) => {
+        Some(id) => {
             sage.send_cat(SendCat {
                 asset_id: hex::encode(id),
                 address: to_address,
@@ -593,8 +606,9 @@ fn check_maker_signature(offer: &SpendBundle, network: &kit::Network) -> Result<
 const BIND_MESSAGE: &[u8] = b"klimper:bind";
 
 /// Change the conditions of one of the user's own, still unsigned spends: a plain standard
-/// spend (`(() (q . conditions) ())`, as Sage builds them) or a CAT whose inner puzzle is
-/// one. Returns `false`, leaving the spend as it was, for any other shape.
+/// spend (`(() (q . conditions) ())`, as Sage builds them), a CAT whose inner puzzle is one,
+/// or an option contract whose owner's puzzle is one (TASK-140: the option an exercise melts).
+/// Returns `false`, leaving the spend as it was, for any other shape.
 fn edit_user_conditions(
     allocator: &mut chia_wallet_sdk::prelude::Allocator,
     spend: &mut CoinSpend,
@@ -648,6 +662,22 @@ fn edit_user_conditions(
         };
         cat.inner_puzzle_solution = inner;
         cat.to_clvm(allocator).ok()
+    } else if let Ok(Some((_, p2, _))) =
+        chia_wallet_sdk::driver::OptionContract::parse(allocator, spend.coin, puzzle, solution)
+        && matches!(StandardLayer::parse_puzzle(allocator, p2), Ok(Some(_)))
+    {
+        use chia_puzzle_types::singleton::SingletonSolution;
+        use chia_wallet_sdk::types::puzzles::OptionContractSolution;
+        let Ok(mut option) =
+            SingletonSolution::<OptionContractSolution<NodePtr>>::from_clvm(allocator, solution)
+        else {
+            return false;
+        };
+        let Some(inner) = edited(allocator, option.inner_solution.inner_solution, edit) else {
+            return false;
+        };
+        option.inner_solution.inner_solution = inner;
+        option.to_clvm(allocator).ok()
     } else {
         None
     };
@@ -767,7 +797,9 @@ async fn build_take(
 /// The offer may be several makers' offers aggregated into one (TASK-139): their spends
 /// together and their signatures summed, as Sage's `aggregate_offers` makes it. It is
 /// checked, built and taken the same way, all or nothing; `offers_taken` is told how many
-/// offers it holds, for the approval screen, once the offer passed its checks.
+/// offers it holds, for the approval screen, once the offer passed its checks, and `on_loan`
+/// the loan the user lends, if the offer is a loan request (TASK-140).
+#[allow(clippy::too_many_arguments)]
 pub fn take_offer(
     state: &AppState,
     ctx: &RequestContext<'_>,
@@ -776,6 +808,7 @@ pub fn take_offer(
     broadcaster: &dyn Broadcaster,
     params_json: &str,
     offers_taken: &dyn Fn(usize),
+    on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
     // As for a send: a take that cannot be built tells the website the wallet cannot pay
     // for it, so a run of them is a search for the balance. Checked first, so a website
@@ -842,18 +875,21 @@ pub fn take_offer(
         &summary,
         spends,
         maker_signature,
+        on_loan,
     )
 }
 
-/// What a take claims: only that it is one. What the user pays and receives, the fee
+/// What a take claims: only that it is one (`offer.take`), or for a loan the user lends,
+/// `loan.take`, which wallet-kit verifies: the user is the option's creator, the collateral
+/// and the option are the borrower's (TASK-140). What the user pays and receives, the fee
 /// included, is shown from the simulation. No fee is claimed: wallet-kit checks a fee claim
 /// against the whole bundle's fee, and an offer's maker may pay a fee of their own in the
 /// same bundle, so the user's fee alone would never match ("unauthorized",
 /// `intent_mismatch`; TASK-137). The fee Sage built with is the one the website asked for,
 /// and the cross-check holds both engines to the same total.
-fn take_intent() -> Intent {
+fn take_intent(loan: bool) -> Intent {
     Intent {
-        kind: Some("offer.take".to_owned()),
+        kind: Some(if loan { "loan.take" } else { "offer.take" }.to_owned()),
         recipients: None,
         fee: None,
         net: None,
@@ -872,11 +908,15 @@ fn submit_take(
     sage_summary: &TransactionSummary,
     spends: Vec<CoinSpend>,
     maker_signature: Signature,
+    on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
-    let intent = take_intent();
-
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
+    let loan = options::take_loan(&kit_summary, &spends, ctx.ownership)?;
+    if let Some(loan) = &loan {
+        on_loan(loan, false);
+    }
+    let intent = take_intent(loan.is_some());
     // Whatever the website's "unknown contracts" setting: a take moves assets between two
     // parties, and the approval must be able to say which.
     if !kit_summary.unknown_puzzles.is_empty() {
@@ -912,6 +952,14 @@ fn submit_take(
     clippy::indexing_slicing
 )]
 mod aggregate_tests;
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod option_tests;
 #[cfg(test)]
 mod sage_sim;
 #[cfg(test)]
@@ -959,6 +1007,7 @@ mod tests {
                     puzzle_hash: "33".repeat(32),
                     recipient: Some("33".repeat(32)),
                     to_user: false,
+                    option: None,
                 },
                 OutputInfo {
                     asset: AssetId::Xch,
@@ -966,8 +1015,10 @@ mod tests {
                     puzzle_hash: "22".repeat(32),
                     recipient: Some("22".repeat(32)),
                     to_user: true,
+                    option: None,
                 },
             ],
+            options: vec![],
         }
     }
 
@@ -1047,7 +1098,7 @@ mod tests {
     /// is what every offer with a maker fee got.
     #[test]
     fn a_take_claims_no_fee_of_its_own() {
-        let intent = take_intent();
+        let intent = take_intent(false);
         assert_eq!(intent.kind.as_deref(), Some("offer.take"));
         assert_eq!(intent.fee, None);
         assert!(intent.recipients.is_none() && intent.net.is_none());
@@ -1064,6 +1115,7 @@ mod tests {
             puzzle_hash: "21".repeat(32),
             recipient: None,
             to_user: false,
+            option: None,
         }];
         let mut sage = sage_summary(1_000, 0, 0, 0);
         sage.inputs[0].asset = Some(sage_api::Asset {

@@ -15,7 +15,7 @@ import BigNumber from 'bignumber.js';
 import { ArrowDown, ArrowLeftRight, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { Hint } from '../Hint';
-import { safeTicker } from './ticker';
+import { safeName, safeTicker } from './ticker';
 import {
   AssetFacts,
   AssetRef,
@@ -27,6 +27,7 @@ import {
   catLabel,
   claimedText,
   formatAmount,
+  optionLabel,
   PricedAssetView,
   TradeLegView,
   TradeView,
@@ -82,9 +83,26 @@ export function unitOf(
 ): string {
   if (asset.isXch) return asset.label;
   if (!asset.assetId) return asset.label;
+  if (asset.isOption) return `option ${asset.assetId.slice(0, 8)}`;
   const short = asset.assetId.slice(0, 8);
   const ticker = walletTicker(facts, xchLabel);
   return ticker === null ? `CAT ${short}` : `${ticker} ${short}`;
+}
+
+/**
+ * The wallet's name for a CAT as the approval may show it: `null` when it has none, and
+ * "Unnamed token" when the name reads as the network's coin (`safeName`), the id beside it.
+ */
+export function walletName(
+  facts: AssetFacts | undefined,
+  xchLabel: string,
+): { readonly text: string; readonly unnamed: boolean } | null {
+  const name = claimedText(facts?.name).trim();
+  if (name === '') return null;
+  const safe = safeName(name, xchLabel);
+  return safe === null
+    ? { text: t`Unnamed token`, unnamed: true }
+    : { text: safe, unnamed: false };
 }
 
 /**
@@ -126,6 +144,17 @@ export function TokenCoin({
     );
   }
   const id = asset.assetId ?? '';
+  if (asset.isOption) {
+    return (
+      <span
+        className='xc-token xc-token-option'
+        aria-hidden='true'
+        data-testid='trade-option-coin'
+      >
+        OP
+      </span>
+    );
+  }
   const letters = ticker
     ? Array.from(ticker.replace(/[^\p{L}\p{N}]/gu, '') || ticker)
         .slice(0, 2)
@@ -174,14 +203,22 @@ function Leg({
   readonly side: 'pay' | 'receive';
 }) {
   // Without a ticker the id is the line under the amount; the unit only says what it is.
-  const ticker = leg.isXch ? null : walletTicker(facts, xchLabel);
-  const unit = leg.isXch ? leg.label : (ticker ?? 'CAT');
+  const option = leg.isOption;
+  const ticker = leg.isXch || option ? null : walletTicker(facts, xchLabel);
+  const unit = leg.isXch
+    ? leg.label
+    : option
+      ? leg.amount.isEqualTo(1)
+        ? t`option`
+        : t`options`
+      : (ticker ?? 'CAT');
   // Another CAT the wallet knows reads the same: say so, under the id.
   const twin = ticker !== null && (facts?.twins?.length ?? 0) > 0;
   const usd = usdOf(leg);
-  const name = leg.isXch ? null : claimedText(facts?.name).trim();
+  const name = leg.isXch || option ? null : walletName(facts, xchLabel);
   // Looked up, and the wallet holds none of it: a CAT the user has never had.
-  const unheld = !leg.isXch && facts !== undefined && facts.balance === null;
+  const unheld =
+    !leg.isXch && !option && facts !== undefined && facts.balance === null;
   return (
     <li className='xc-leg' data-testid='trade-leg' data-side={side}>
       <TokenCoin asset={leg} facts={facts} xchLabel={xchLabel} />
@@ -203,11 +240,21 @@ function Leg({
         </div>
         {!leg.isXch && (
           <div className='xc-leg-meta' title={leg.assetId ?? undefined}>
-            {name !== null && name !== '' && (
-              <span className='xc-leg-name'>{name}</span>
+            {name !== null && (
+              <span
+                className='xc-leg-name'
+                data-unnamed={name.unnamed || undefined}
+                data-testid={name.unnamed ? 'trade-unnamed' : 'trade-name'}
+              >
+                {name.text}
+              </span>
             )}
             <span className='xc-leg-id' data-testid='trade-asset-id'>
-              {leg.assetId ? catLabel(leg.assetId) : leg.label}
+              {leg.assetId
+                ? option
+                  ? optionLabel(leg.assetId)
+                  : catLabel(leg.assetId)
+                : leg.label}
             </span>
             {unheld && (
               <span className='xc-leg-new' data-testid='trade-unheld'>

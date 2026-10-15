@@ -153,12 +153,19 @@ export const xchonnect = {
   /**
    * The user compared the six digits. `false` ends the session and deletes everything.
    * `allReceiveKeys`: the website sees every receive address, not only its own one.
+   * `optionContracts`: it may ask for the option methods (`OPTION_METHODS`, TASK-140).
    */
-  confirmSas: (pairingId: string, matches: boolean, allReceiveKeys = false) =>
+  confirmSas: (
+    pairingId: string,
+    matches: boolean,
+    allReceiveKeys = false,
+    optionContracts = false,
+  ) =>
     call<SessionSummary | null>('confirm_sas', {
       pairingId,
       matches,
       allReceiveKeys,
+      optionContracts,
     }),
 
   /** Connected dApps. Also resumes the message loop of every stored session. */

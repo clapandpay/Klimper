@@ -200,7 +200,7 @@ pub(super) async fn sage_summary(
 }
 
 /// Signs with the taker's keys, as `KlimperSigner` does once the wallet is unlocked.
-struct TakerKeys(HashMap<PublicKey, SecretKey>);
+pub(super) struct TakerKeys(pub HashMap<PublicKey, SecretKey>);
 
 impl kit::Signer for TakerKeys {
     fn sign(&self, public_key: &PublicKey, message: &[u8]) -> Result<Signature, kit::SignerError> {
@@ -231,7 +231,7 @@ impl kit::Approver for User {
 
 /// Keeps the bundle it is handed; the test sends it to the simulated chain itself.
 #[derive(Default)]
-struct Kept(RefCell<Option<SpendBundle>>);
+pub(super) struct Kept(pub RefCell<Option<SpendBundle>>);
 
 impl Broadcaster for Kept {
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
@@ -263,6 +263,8 @@ pub(super) struct Outcome {
     pub sent: Option<SpendBundle>,
     /// What the approval screen showed as the trade, if it was asked.
     pub trade: Option<crate::trade::TradeOverview>,
+    /// The loan the screen showed, for a loan the user lends (TASK-140).
+    pub loan: Option<super::options::LoanView>,
 }
 
 impl Outcome {
@@ -272,6 +274,7 @@ impl Outcome {
             asked: false,
             sent: None,
             trade: None,
+            loan: None,
         }
     }
 }
@@ -284,19 +287,12 @@ pub(super) fn take_permissions() -> DappPermissions {
     }
 }
 
-/// Take `offer` with the taker's wallet the way `take_offer` does after reading its
-/// params: the offer's checks (size, puzzles, the makers' signature), the key-free build,
-/// Sage's summary, then `submit_take`.
-pub(super) async fn take(
-    taker: &SimWallet,
-    cats: &[Bytes32],
-    offer: &SpendBundle,
-    fee: u64,
-    permissions: &DappPermissions,
-    approves: bool,
-) -> Outcome {
-    let network = kit::Network::Testnet11;
-    let db = &taker.wallet.db;
+/// Every key of a simulated wallet, as `KlimperSigner` holds them once the wallet is unlocked,
+/// and the puzzle hashes wallet-kit counts as the wallet's.
+pub(super) async fn wallet_keys(
+    wallet: &SimWallet,
+) -> (TakerKeys, HashSet<PublicKey>, kit::Ownership) {
+    let db = &wallet.wallet.db;
     let mut keys = HashMap::new();
     for hardened in [false, true] {
         let max = db
@@ -306,9 +302,9 @@ pub(super) async fn take(
             .unwrap_or(0);
         for index in 0..=max {
             let secret = if hardened {
-                master_to_wallet_hardened(&taker.master_sk, index)
+                master_to_wallet_hardened(&wallet.master_sk, index)
             } else {
-                master_to_wallet_unhardened(&taker.master_sk, index)
+                master_to_wallet_unhardened(&wallet.master_sk, index)
             }
             .derive_synthetic();
             keys.insert(secret.public_key(), secret);
@@ -324,6 +320,22 @@ pub(super) async fn take(
             .into_iter()
             .collect(),
     };
+    (signer, public_keys, ownership)
+}
+
+/// Take `offer` with the taker's wallet the way `take_offer` does after reading its
+/// params: the offer's checks (size, puzzles, the makers' signature), the key-free build,
+/// Sage's summary, then `submit_take`.
+pub(super) async fn take(
+    taker: &SimWallet,
+    cats: &[Bytes32],
+    offer: &SpendBundle,
+    fee: u64,
+    permissions: &DappPermissions,
+    approves: bool,
+) -> Outcome {
+    let network = kit::Network::Testnet11;
+    let (signer, public_keys, ownership) = wallet_keys(taker).await;
     let limits = Limits::default();
     let ctx = RequestContext {
         dapp: "pengui.test",
@@ -357,6 +369,7 @@ pub(super) async fn take(
         trade: RefCell::new(None),
     };
     let kept = Kept::default();
+    let loan = Cell::new(None);
     let result = submit_take(
         &ctx,
         &signer,
@@ -365,12 +378,14 @@ pub(super) async fn take(
         &summary,
         spends,
         maker_signature,
+        &|view, _| loan.set(Some(*view)),
     );
     Outcome {
         result,
         asked: user.asked.get(),
         sent: kept.0.into_inner(),
         trade: user.trade.into_inner(),
+        loan: loan.get(),
     }
 }
 

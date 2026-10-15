@@ -47,11 +47,14 @@ export interface AssetFacts {
 /** What identifies an asset for a lookup: XCH, or a CAT by its id. */
 export interface AssetRef {
   readonly isXch: boolean;
+  /** An option contract (TASK-140): the wallet's token records do not describe one. */
+  readonly isOption?: boolean;
   readonly assetId: string | null;
 }
 
-/** XCH, a CAT by its id, or nothing to look up (a CAT whose id did not parse). */
-const key = (asset: AssetRef) => (asset.isXch ? 'xch' : asset.assetId);
+/** XCH, a CAT by its id, or nothing to look up (an option, or a CAT whose id did not parse). */
+const key = (asset: AssetRef) =>
+  asset.isXch ? 'xch' : asset.isOption ? null : asset.assetId;
 
 /** An icon URL the screen may load: https only, so a record cannot point at a local file. */
 function iconOf(value: string | null | undefined): string | null {

@@ -4,7 +4,8 @@ import './mock';
 // the Tauri backend replaced by mockIPC (`mock.ts`). Development only, never bundled:
 //   npx vite --config vite.preview.config.ts   then open /preview-approvals.html#/wallet
 //   (?n=1 one request, ?dark=1 dark theme, ?trade=1|2|5|10 one request with that many
-//   assets, ?usd=0 no prices) or /preview-phone.html for phone sizes.
+//   assets, ?option=mint|exercise|claim|send|loan|lend one option approval, ?usd=0 no
+//   prices) or /preview-phone.html for phone sizes.
 import '@/lib/klimperTheme';
 import { discoverThemes, resolveThemeImage } from '@/lib/themes';
 import { i18n } from '@lingui/core';

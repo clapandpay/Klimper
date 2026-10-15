@@ -32,6 +32,8 @@ fn precision(asset: AssetId) -> u32 {
     match asset {
         AssetId::Xch => XCH_PRECISION,
         AssetId::Cat(_) => CAT_PRECISION,
+        // One option is one singleton coin (normally 1 mojo): counted in whole options.
+        AssetId::Option(_) => 0,
     }
 }
 
@@ -350,6 +352,7 @@ mod tests {
             cost: 0,
             spends: vec![],
             outputs: vec![],
+            options: vec![],
         }
     }
 

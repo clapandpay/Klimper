@@ -53,7 +53,7 @@ const { XchonnectPromptView, promptHeadline } =
   await import('./XchonnectPromptView');
 const { readPrompt } = await import('./xchonnectPrompt');
 const { monogramColour, groupedAmount } = await import('./XchonnectTrade');
-const { safeTicker, tickerSkeleton } = await import('./ticker');
+const { safeName, safeTicker, tickerSkeleton } = await import('./ticker');
 const BigNumber = (await import('bignumber.js')).default;
 
 type Asset = { type: 'xch' } | { type: 'cat'; asset_id: string };
@@ -338,7 +338,9 @@ describe('the trade card', () => {
       balance: '0',
     });
     show(take([[XCH, 500]], [[cat('c4'), 5_000]], 1, 0));
-    expect(await screen.findByText('Totally XCH')).toBeTruthy();
+    // Its name claims the network coin as well: "Unnamed token", the id beside it (TASK-140).
+    expect(await screen.findByTestId('trade-unnamed')).toBeTruthy();
+    expect(screen.queryByText('Totally XCH')).toBeNull();
     const received = legs('receive')[0];
     expect(text(within(received).getByTestId('trade-amount'))).toContain(
       '+5 CAT',
@@ -494,5 +496,60 @@ describe('safeTicker', () => {
     expect(tickerSkeleton('ΧCΗ')).toBe('XCH');
     expect(tickerSkeleton('x.c-h')).toBe('XCH');
     expect(tickerSkeleton('5BX')).toBe(tickerSkeleton('SBX'));
+  });
+});
+
+describe('a CAT name that reads as the network coin (TASK-140)', () => {
+  it('is refused by the same skeleton as a ticker', () => {
+    for (const name of [
+      'Totally XCH',
+      'Chia',
+      'Chia Network',
+      'XCH',
+      'ＸＣＨ',
+      'Х С Н',
+      'CH1A Coin',
+      'wrapped xch',
+    ]) {
+      expect(safeName(name), name).toBeNull();
+    }
+    for (const name of ['Spacebucks', 'dexie bucks', 'Base warp.green USDC']) {
+      expect(safeName(name), name).toBe(name);
+    }
+    expect(safeName('   ')).toBeNull();
+    expect(safeName(null)).toBeNull();
+  });
+
+  it('shows "Unnamed token" and the id, never the name', async () => {
+    for (const name of ['Chia', 'Totally XCH', 'Сhia Network']) {
+      tokens.set('e2'.repeat(32), {
+        ticker: 'SAFE',
+        name,
+        icon_url: null,
+        balance: '1000',
+      });
+      show(take([[XCH, 500]], [[cat('e2'), 5_000]], 1, 0));
+      const unnamed = await screen.findByTestId('trade-unnamed');
+      expect(text(unnamed)).toBe('Unnamed token');
+      expect(screen.queryByText(name)).toBeNull();
+      const received = legs('receive')[0];
+      expect(text(within(received).getByTestId('trade-asset-id'))).toContain(
+        'CAT e2e2e2e2…e2e2e2',
+      );
+      cleanup();
+      tokens.clear();
+    }
+  });
+
+  it('keeps an ordinary name', async () => {
+    tokens.set('5b'.repeat(32), {
+      ticker: 'SBX',
+      name: 'Spacebucks',
+      icon_url: null,
+      balance: '1000',
+    });
+    show(take([[XCH, 500]], [[cat('5b'), 5_000]], 1, 0));
+    expect(text(await screen.findByTestId('trade-name'))).toBe('Spacebucks');
+    expect(screen.queryByTestId('trade-unnamed')).toBeNull();
   });
 });

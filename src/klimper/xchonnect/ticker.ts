@@ -75,3 +75,20 @@ export function safeTicker(
   if (impersonatesXch(folded, xchLabel)) return null;
   return folded;
 }
+
+/**
+ * A CAT's name as the approval may show it, or null (TASK-140, from the TASK-139 audit): the
+ * same look-alike check as a ticker's, since a CAT called "Totally XCH" or "Chia Network" is
+ * as much a costume as one with the ticker "XCH". The screen then calls it "Unnamed token",
+ * next to its id as always. `name` has already been through `claimedText`.
+ */
+export function safeName(
+  name: string | null | undefined,
+  xchLabel = 'XCH',
+): string | null {
+  if (typeof name !== 'string') return null;
+  const folded = name.trim().normalize('NFKC');
+  if (folded === '') return null;
+  if (impersonatesXch(folded, xchLabel)) return null;
+  return folded;
+}
