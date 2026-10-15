@@ -10,7 +10,7 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Sage
+      PRODUCT_NAME: Klimper
       PRODUCT_BUNDLE_IDENTIFIER: com.clapandpay.klimper
       DEVELOPMENT_TEAM: HTP35W93ZF
 targetTemplates:
@@ -46,14 +46,9 @@ targets:
         # Klimper: a website's request wakes the app in the background, with the phone locked too
         # (clapandpay TASK-125.04).
         UIBackgroundModes: [remote-notification]
-        # Klimper: a phone shows the wallet upright only; an iPad keeps every orientation.
+        # Klimper: iPhone only (TARGETED_DEVICE_FAMILY 1, TASK-109), upright only.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.2.5
         CFBundleVersion: "0.2.5"
     entitlements:
@@ -64,6 +59,9 @@ targets:
         RUST_LOG: info
     settings:
       base:
+        # Klimper: iPhone only, so no iPad review or iPad screenshots (TASK-109). An iPad runs
+        # it as an iPhone app.
+        TARGETED_DEVICE_FAMILY: "1"
         ENABLE_BITCODE: false
         ARCHS: [arm64]
         VALID_ARCHS: arm64 

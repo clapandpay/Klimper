@@ -7,7 +7,7 @@ import {
 } from '@/bindings';
 import { useErrors } from '@/hooks/useErrors';
 import useOfferStateWithDefault from '@/hooks/useOfferStateWithDefault';
-import { offersEnabled } from '@/lib/features';
+import { offersEnabled, profilesEnabled } from '@/lib/features';
 import { amount } from '@/lib/formTypes';
 import { nftUri } from '@/lib/nftUri';
 import { cn, toMojos } from '@/lib/utils';
@@ -433,26 +433,33 @@ export function NftCard({ nft, updateNfts, selectionState }: NftCardProps) {
                   </span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
-                  className='cursor-pointer'
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAssignOpen(true);
-                  }}
-                  disabled={isTransactionDisabled || !nft.created_height}
-                  aria-label={
-                    nft.owner_did === null ? t`Assign profile` : t`Edit profile`
-                  }
-                >
-                  <UserRoundPlus className='mr-2 h-4 w-4' aria-hidden='true' />
-                  <span>
-                    {nft.owner_did === null ? (
-                      <Trans>Assign Profile</Trans>
-                    ) : (
-                      <Trans>Edit Profile</Trans>
-                    )}
-                  </span>
-                </DropdownMenuItem>
+                {profilesEnabled && (
+                  <DropdownMenuItem
+                    className='cursor-pointer'
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAssignOpen(true);
+                    }}
+                    disabled={isTransactionDisabled || !nft.created_height}
+                    aria-label={
+                      nft.owner_did === null
+                        ? t`Assign profile`
+                        : t`Edit profile`
+                    }
+                  >
+                    <UserRoundPlus
+                      className='mr-2 h-4 w-4'
+                      aria-hidden='true'
+                    />
+                    <span>
+                      {nft.owner_did === null ? (
+                        <Trans>Assign Profile</Trans>
+                      ) : (
+                        <Trans>Edit Profile</Trans>
+                      )}
+                    </span>
+                  </DropdownMenuItem>
+                )}
 
                 <DropdownMenuItem
                   className='cursor-pointer'

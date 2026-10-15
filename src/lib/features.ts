@@ -2,6 +2,10 @@ export const offersEnabled = import.meta.env.VITE_DISABLE_OFFERS !== 'true';
 export const optionsEnabled = import.meta.env.VITE_DISABLE_OPTIONS !== 'true';
 export const swapEnabled = import.meta.env.VITE_DISABLE_SWAP !== 'true';
 export const nftsEnabled = import.meta.env.VITE_DISABLE_NFTS !== 'true';
+// Minting is separate from the NFT gallery (TASK-138): Klimper shows the user's NFTs and lets
+// them send, hide and burn them, but makes none (decision-003). `VITE_DISABLE_NFT_MINTING`.
+export const nftMintingEnabled =
+  import.meta.env.VITE_DISABLE_NFT_MINTING !== 'true';
 export const profilesEnabled = import.meta.env.VITE_DISABLE_PROFILES !== 'true';
 export const tokenIssuingEnabled =
   import.meta.env.VITE_DISABLE_TOKEN_ISSUING !== 'true';
