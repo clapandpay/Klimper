@@ -32,6 +32,7 @@ import {
   useApprovalAssets,
 } from './useApprovalAssets';
 import { Hint } from '../Hint';
+import { TradeCard, tradeAssets } from './XchonnectTrade';
 import {
   AssetView,
   BindingView,
@@ -239,11 +240,15 @@ function TimeLocks({ locks }: { readonly locks: TimeLockView }) {
 function Binding({
   binding,
   partial,
+  folded = false,
 }: {
   readonly binding: BindingView | null;
   readonly partial: boolean;
+  /** Under a trade card, which lists the same payments: a long list folds away. */
+  readonly folded?: boolean;
 }) {
   if (!partial) return null;
+  const payments = binding?.payments.length ?? 0;
   if (binding !== null && !binding.allBound) {
     return (
       <Danger
@@ -275,19 +280,33 @@ function Binding({
           <Trans>You are signing your side.</Trans>
         )}
       </p>
-      {binding?.payments.map((payment, index) => (
-        <div
-          // eslint-disable-next-line react/no-array-index-key
-          key={index}
-          className='text-muted-foreground'
-          data-testid='bound-payment'
-        >
-          <Trans>Depends on receiving</Trans>{' '}
-          {formatAmount(payment.amount, payment.precision)} {payment.label}
-        </div>
-      ))}
+      {binding !== null &&
+        (folded && payments > 3 ? (
+          <details data-testid='bound-payments-folded'>
+            <summary className='cursor-pointer text-muted-foreground'>
+              <Trans>Depends on {payments} payments to you</Trans>
+            </summary>
+            <BoundPayments binding={binding} />
+          </details>
+        ) : (
+          <BoundPayments binding={binding} />
+        ))}
     </div>
   );
+}
+
+function BoundPayments({ binding }: { readonly binding: BindingView }) {
+  return binding.payments.map((payment, index) => (
+    <div
+      // eslint-disable-next-line react/no-array-index-key
+      key={index}
+      className='text-muted-foreground'
+      data-testid='bound-payment'
+    >
+      <Trans>Depends on receiving</Trans>{' '}
+      {formatAmount(payment.amount, payment.precision)} {payment.label}
+    </div>
+  ));
 }
 
 /** A puzzle hash as the network's address: shortened, the whole on a tap, with a copy button. */
@@ -570,8 +589,43 @@ function Intent({
   );
 }
 
+/** Each asset's net effect, in the verdict's large type. */
+function Verdict({
+  view,
+  facts,
+  sendsToOthers,
+}: {
+  readonly view: SpendPromptView;
+  readonly facts: ReadonlyMap<string, AssetFacts>;
+  readonly sendsToOthers: boolean;
+}) {
+  return (
+    <div className='xc-verdict space-y-4'>
+      {view.assets.length === 0 ? (
+        <p className='text-sm'>
+          <Trans>No change to your assets.</Trans>
+        </p>
+      ) : (
+        view.assets.map((asset) => (
+          <Asset
+            key={asset.assetId ?? asset.label}
+            asset={asset}
+            facts={factsOf(facts, asset)}
+            payLabel={
+              sendsToOthers && asset.isXch ? (
+                <Trans>In total, with the fee</Trans>
+              ) : undefined
+            }
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
 function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
-  const facts = useApprovalAssets(view.assets);
+  const facts = useApprovalAssets([...view.assets, ...tradeAssets(view.trade)]);
+  const trade = view.trade;
   const sendsToOthers = view.outputs.some((output) => !output.toUser);
   // The fee is one figure. Both readings are shown only when they disagree.
   const showReserve =
@@ -583,9 +637,12 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
 
       {/*
         What could go wrong comes first: the sheet scrolls and the slider is always in view,
-        so a warning under a long list of outputs could otherwise never be seen.
+        so a warning under a long list of outputs could otherwise never be seen. A trade's
+        binding panel says what makes its "you receive" certain, so it follows the trade card.
       */}
-      <Binding binding={view.binding} partial={view.partial} />
+      {trade === null && (
+        <Binding binding={view.binding} partial={view.partial} />
+      )}
 
       {view.unknownPuzzles.length > 0 && (
         <Danger
@@ -618,26 +675,22 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
         </Danger>
       )}
 
-      <div className='xc-verdict space-y-4'>
-        {view.assets.length === 0 ? (
-          <p className='text-sm'>
-            <Trans>No change to your assets.</Trans>
-          </p>
-        ) : (
-          view.assets.map((asset) => (
-            <Asset
-              key={asset.assetId ?? asset.label}
-              asset={asset}
-              facts={factsOf(facts, asset)}
-              payLabel={
-                sendsToOthers && asset.isXch ? (
-                  <Trans>In total, with the fee</Trans>
-                ) : undefined
-              }
-            />
-          ))
-        )}
-      </div>
+      {trade !== null && (
+        <>
+          <TradeCard trade={trade} facts={facts} xchLabel={view.xchLabel} />
+          <Binding binding={view.binding} partial={view.partial} folded />
+          <details className='xc-per-asset' data-testid='prompt-per-asset'>
+            <summary className='cursor-pointer text-sm text-muted-foreground'>
+              <Trans>Each asset, as simulated</Trans>
+            </summary>
+            <Verdict view={view} facts={facts} sendsToOthers={sendsToOthers} />
+          </details>
+        </>
+      )}
+
+      {trade === null && (
+        <Verdict view={view} facts={facts} sendsToOthers={sendsToOthers} />
+      )}
 
       <Destinations view={view} />
 
@@ -841,7 +894,12 @@ export function XchonnectPromptView({ view }: { readonly view: PromptView }) {
 export function promptHeadline(view: PromptView): React.ReactNode {
   if (view.kind === 'message') return <Trans>Sign a message</Trans>;
   if (view.kind === 'unreadable') return <Trans>Unreadable request</Trans>;
-  // A take is wallet-built too, but it is a trade, not a payment (TASK-137).
+  // A take is wallet-built too, but it is a trade, not a payment (TASK-137). Several
+  // offers taken together say how many (TASK-139): a count, not an amount.
+  const offers = view.trade?.offers ?? 1;
+  if (view.walletBuilt && view.partial && offers > 1) {
+    return <Trans>Take {offers} offers together</Trans>;
+  }
   if (view.walletBuilt && view.partial) return <Trans>Take an offer</Trans>;
   if (view.walletBuilt) return <Trans>Send</Trans>;
   if (view.broadcasts) return <Trans>Sign and send</Trans>;

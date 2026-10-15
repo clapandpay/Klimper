@@ -109,6 +109,47 @@ export interface IntentView {
   readonly recipientsComplete: boolean;
 }
 
+/** One asset of a trade and how much of it, in the smallest unit. */
+export interface TradeLegView {
+  /** `XCH`, or `CAT <first 8 hex>…<last 6>`: never a name from outside. */
+  readonly label: string;
+  readonly isXch: boolean;
+  readonly assetId: string | null;
+  readonly precision: number;
+  readonly amount: BigNumber;
+}
+
+/** An asset named in a price. */
+export interface PricedAssetView {
+  readonly label: string;
+  readonly isXch: boolean;
+  readonly assetId: string | null;
+}
+
+/** The effective price of a one-for-one trade, as the wallet computed it, both ways round. */
+export interface PriceView {
+  readonly base: PricedAssetView;
+  readonly quote: PricedAssetView;
+  /** How much `quote` one whole `base` costs: a plain decimal. */
+  readonly quotePerBase: string;
+  readonly basePerQuote: string;
+}
+
+/**
+ * The trade overview (TASK-139): Klimper's own key in the prompt, computed by the wallet from
+ * the same simulation (`trade.rs`). What is received includes what the user's spends are
+ * bound to receive from the other side, which is why it exists only for a bound or plain spend.
+ */
+export interface TradeView {
+  /** For a take: how many offers are taken together, all or nothing. */
+  readonly offers: number | null;
+  readonly pays: readonly TradeLegView[];
+  readonly receives: readonly TradeLegView[];
+  /** The fee the user's own spends pay. */
+  readonly fee: BigNumber;
+  readonly price: PriceView | null;
+}
+
 export interface SpendPromptView {
   readonly kind: 'spend';
   /** Klimper signs **and sends** this (`submit_coin_spends`); otherwise it only signs. */
@@ -136,6 +177,8 @@ export interface SpendPromptView {
   /** `partialSign`: one side of a multi-party spend. */
   readonly partial: boolean;
   readonly binding: BindingView | null;
+  /** What is paid for what, when the spend is a trade; `null` otherwise. */
+  readonly trade: TradeView | null;
 }
 
 export interface MessagePromptView {
@@ -363,6 +406,70 @@ function bindingOf(value: unknown, xchLabel: string): BindingView | null {
   return { allBound: boolOf(value.all_bound), payments };
 }
 
+/** A price as the wallet writes it: digits, at most one point. Anything else is dropped. */
+function decimalOf(value: unknown): string | null {
+  return typeof value === 'string' && /^\d{1,40}(\.\d{1,40})?$/.test(value)
+    ? value
+    : null;
+}
+
+function legOf(entry: unknown, xchLabel: string): TradeLegView {
+  if (!isRecord(entry)) throw new UnreadableAmount();
+  const asset = assetOf(entry.asset, xchLabel);
+  const amount = amountOf(entry.amount);
+  // A leg is a positive amount; anything else is a trade nobody can read.
+  if (!amount.isGreaterThan(0)) throw new UnreadableAmount();
+  return {
+    ...asset,
+    precision: asset.isXch ? XCH_PRECISION : CAT_PRECISION,
+    amount,
+  };
+}
+
+/**
+ * The trade overview. Absent is `null` (not a trade, or an older plugin); present but
+ * malformed makes the whole prompt unreadable, since its figures sit at the top of the screen.
+ */
+function tradeOf(value: unknown, xchLabel: string): TradeView | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) throw new UnreadableAmount();
+  const pays = arrayOf(value.pays).map((entry) => legOf(entry, xchLabel));
+  const receives = arrayOf(value.receives).map((entry) =>
+    legOf(entry, xchLabel),
+  );
+  if (pays.length === 0 || receives.length === 0) {
+    throw new UnreadableAmount();
+  }
+  // A count: a whole number, from one to a bound no real aggregate comes near.
+  const offers =
+    typeof value.offers === 'number' &&
+    Number.isSafeInteger(value.offers) &&
+    value.offers >= 1 &&
+    value.offers <= 10_000
+      ? value.offers
+      : null;
+  let price: PriceView | null = null;
+  if (isRecord(value.price)) {
+    const quotePerBase = decimalOf(value.price.quote_per_base);
+    const basePerQuote = decimalOf(value.price.base_per_quote);
+    if (quotePerBase !== null && basePerQuote !== null) {
+      price = {
+        base: assetOf(value.price.base, xchLabel),
+        quote: assetOf(value.price.quote, xchLabel),
+        quotePerBase,
+        basePerQuote,
+      };
+    }
+  }
+  return {
+    offers,
+    pays,
+    receives,
+    fee: amountOf(value.fee),
+    price,
+  };
+}
+
 /**
  * Neutralise a message body before it is shown.
  *
@@ -530,6 +637,7 @@ function readPromptStrict(
     // A submitted bundle another party's signature completes is the binding case too.
     partial: boolOf(prompt.partial) || (broadcasts && isRecord(prompt.binding)),
     binding: bindingOf(prompt.binding, xchLabel),
+    trade: tradeOf(prompt.trade, xchLabel),
   };
 }
 

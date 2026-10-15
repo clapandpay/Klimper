@@ -597,6 +597,255 @@
     color-mix(in srgb, var(--muted-foreground) 20%, transparent);
 }
 
+/*
+ * The trade card (TASK-139): you pay, a turn, you receive, then the price, the offers and
+ * the fee. The quiet verdict panel, tighter rows, so ten assets stay readable at 320px.
+ * Amounts in the display face with tabular figures; a CAT's id under its name, always.
+ */
+.xc-trade {
+  border-radius: 16px;
+  background: rgb(128 128 128 / 0.07);
+  background: color-mix(in srgb, var(--muted-foreground) 6%, var(--card));
+  padding: 0.875rem 1rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.xc-trade-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.xc-trade-count {
+  letter-spacing: 0.04em;
+}
+
+.xc-legs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.xc-leg {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.xc-leg-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 0.75rem;
+  row-gap: 0;
+}
+
+.xc-leg-amount {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.xc-leg-unit {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.xc-leg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--muted-foreground);
+}
+
+.xc-leg-name {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.xc-leg-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.xc-leg-new {
+  border-radius: 9999px;
+  padding: 0 0.375rem;
+  font-weight: 600;
+  color: var(--foreground);
+  background: rgb(233 178 58 / 0.22);
+}
+
+/* Another CAT the wallet knows has a ticker that reads the same: the id decides. */
+.xc-leg-twin {
+  margin-top: 0.25rem;
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  font-weight: 600;
+  color: var(--foreground);
+  background: rgb(231 88 57 / 0.14);
+}
+
+/* The coin of an asset: its icon on a saffron rim, XCH's blue coin, or a monogram. */
+.xc-token {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.125rem;
+  border-radius: 9999px;
+  font-family: var(--font-heading);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.22);
+}
+
+.xc-token-img {
+  object-fit: cover;
+  background: var(--card);
+  box-shadow: 0 0 0 2px var(--coin-yellow, #e9b23a);
+}
+
+.xc-token-xch {
+  background: var(--coin-blue, #3b5ba9);
+  color: #ffffff;
+  font-size: 0.9375rem;
+}
+
+.xc-trade-more {
+  margin: 0.5rem 0 0 3rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgb(59 91 169 / 0.1);
+}
+
+.xc-trade-more:focus-visible,
+.xc-trade-flip:focus-visible {
+  outline: 2px solid var(--ring, #3b5ba9);
+  outline-offset: 2px;
+}
+
+.xc-trade-turn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.625rem 0;
+  color: var(--muted-foreground);
+}
+
+.xc-trade-turn::before,
+.xc-trade-turn::after {
+  content: '';
+  height: 1px;
+  flex: 1 1 auto;
+  background: var(--border);
+}
+
+.xc-trade-turn::before {
+  flex: 0 0 0.625rem;
+}
+
+.xc-trade-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.625rem;
+  font-size: 0.875rem;
+}
+
+.xc-trade-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 0.75rem;
+  row-gap: 0.125rem;
+}
+
+/* The figure keeps to the right edge, also when it wraps under its label. */
+.xc-trade-row > :last-child:not(:first-child) {
+  margin-left: auto;
+  text-align: right;
+}
+
+.xc-trade-price {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.xc-trade-flip {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--primary);
+  background: rgb(59 91 169 / 0.1);
+}
+
+.xc-per-asset[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 380px) {
+  .xc-trade {
+    padding: 0.75rem 0.75rem 0.625rem;
+  }
+
+  .xc-leg {
+    gap: 0.625rem;
+  }
+
+  .xc-token {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .xc-leg-amount {
+    font-size: 1.1875rem;
+    line-height: 1.5rem;
+  }
+
+  .xc-trade-more {
+    margin-left: 2.625rem;
+  }
+}
+
 .xc-sub {
   font-size: 0.8125rem;
   color: var(--muted-foreground);

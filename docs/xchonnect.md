@@ -154,6 +154,28 @@ and is gone.
    own fee. What the user pays, their fee included, is the net change the approval shows; the
    whole trade's fee is shown as such. `src/execute/take_tests.rs` takes real offers between
    two Sage wallets on a simulated chain and checks that each settles.
+   **Several offers at once** (TASK-139): an offer may be several makers' offers joined into
+   one, their spends together and their signatures summed, as Sage's `aggregate_offers`
+   makes it, by plain concatenation, or merged (one placeholder per requested asset carrying
+   every maker's notarized payments, as chia's `Offer.aggregate` writes it and Pengui sends
+   by default). It is checked, built and taken the same
+   way, in one approval, all or nothing; the one extra check is that no maker coin is spent
+   twice (one offer joined twice is refused before the user is asked,
+   `offer_duplicate_coin`). The 64-spend bound holds for the aggregate as a whole.
+   `src/execute/aggregate_tests.rs` takes two and three makers' offers (one CAT bought from
+   all, one CAT sold to all, CATs for a CAT, with both fees, joined all three ways) and checks each
+   settles; a forged or missing signature of one maker refuses the whole. The approval's
+   **trade overview** is Klimper's own prompt key `trade`, next to `cross_checked`, computed
+   by the wallet (`src/trade.rs`) from the simulation of the bundle it signs: what is paid and
+   received (bound settlement payments counted as received, since the user's spends assert
+   them), the user's own fee (`RESERVE_FEE` of the user's spends, only as far as the user's
+   own XCH funds it: a fee another party's coin pays is neither the user's nor received), the
+   price of a one-for-one trade both ways round, and for a take how many offers it holds: the
+   smaller of the distinct nonces of its requested payments and the groups of maker coins not
+   tied to each other (a maker picks nonces freely). `tests/fixtures/aggregate_offers.json`
+   holds real offers, Sage's aggregate of them, the plain concatenation and the merged form,
+   for a website to test its
+   own aggregation against (`export_aggregate_fixtures`, ignored, writes it).
    A connection paired before `chia_takeOffer` existed is given it once, when Klimper next
    loads it, if it may use `chia_send` (`methods_revision`, `execute::upgrade_methods`), and
    the website is told by `session.permissions`; it does not have to pair again. A take the

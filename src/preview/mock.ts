@@ -111,8 +111,195 @@ let pending: unknown[] = [
     },
   },
 ];
+// ---------------------------------------------------------------------------------------
+// Trades (TASK-139): `?trade=2|5|10` shows one take with that many assets in all, the way
+// the plugin sends it: wallet-kit's prompt plus Klimper's `trade` and `cross_checked`.
+// ---------------------------------------------------------------------------------------
+
+type Asset = { type: 'xch' } | { type: 'cat'; asset_id: string };
+const XCH: Asset = { type: 'xch' };
+const cat = (seed: string): Asset => ({
+  type: 'cat',
+  asset_id: seed.repeat(64 / seed.length),
+});
+/** The wallet's own records for some of the CATs: ticker, name, icon, balance. */
+const TOKENS: Record<
+  string,
+  { ticker: string; name: string; icon?: string; balance: number }
+> = {
+  ['5b'.repeat(32)]: {
+    ticker: 'SBX',
+    name: 'Spacebucks',
+    icon: 'https://icons.preview.invalid/sbx.svg',
+    balance: 4_000,
+  },
+  ['d1'.repeat(32)]: {
+    ticker: 'DBX',
+    name: 'dexie bucks',
+    icon: 'https://icons.preview.invalid/dbx.svg',
+    balance: 12_500,
+  },
+  ['7e'.repeat(32)]: { ticker: 'HOA', name: 'HOA Coin', balance: 2_000_000 },
+  ['a9'.repeat(32)]: { ticker: 'MZ', name: 'Monkeyzoo Token', balance: 0 },
+  ['3c'.repeat(32)]: {
+    ticker: 'wUSDC.b',
+    name: 'Base warp.green USDC',
+    balance: 75_000,
+  },
+  ['c4'.repeat(32)]: { ticker: 'XCH', name: 'Totally XCH', balance: 0 },
+  // A look-alike in Cyrillic, held, with an icon of its own: neither is used.
+  ['e2'.repeat(32)]: {
+    ticker: 'ХСН',
+    name: 'Chia Network',
+    icon: 'https://icons.preview.invalid/xch.svg',
+    balance: 1_000,
+  },
+  // A second token calling itself SBX: both get the twin warning.
+  ['0f'.repeat(32)]: { ticker: 'SBX', name: 'Spacebucks', balance: 0 },
+};
+
+type Leg = [Asset, number];
+const asJson = ([asset, amount]: Leg) => ({ asset, amount: String(amount) });
+
+function take(
+  id: string,
+  pays: Leg[],
+  receives: Leg[],
+  offers: number,
+  fee: number,
+  price: Record<string, unknown> | null,
+) {
+  const assets = [
+    ...pays.map(([asset, amount]) => ({
+      asset,
+      sent: amount + (asset.type === 'xch' ? fee : 0),
+      received: 0,
+      conditional_received: 0,
+      net: -(amount + (asset.type === 'xch' ? fee : 0)),
+    })),
+    ...receives.map(([asset, amount]) => ({
+      asset,
+      sent: 0,
+      received: 0,
+      conditional_received: amount,
+      net: 0,
+    })),
+  ];
+  return {
+    id,
+    sessionId: 's1',
+    dapp: 'pengui.space',
+    method: 'chia_takeOffer',
+    expiresAt: now() + 271,
+    kind: 'request',
+    prompt: {
+      type: 'submit_coin_spends',
+      dapp: 'pengui.space',
+      method: 'chia_takeOffer',
+      wallet_built: true,
+      summary: {
+        assets,
+        implied_fee: fee + 250_000_000,
+        reserve_fee: fee + 250_000_000,
+        time_locks: {},
+        unknown_puzzles: [],
+        cost: 1,
+        spends: [],
+        outputs: [],
+      },
+      plan: {
+        ours: [
+          {
+            spend: 0,
+            opcode: 50,
+            public_key: 'a'.repeat(96),
+            message: 'ff',
+            is_unsafe: false,
+          },
+        ],
+        foreign: [{}],
+        has_unsafe: false,
+      },
+      binding: {
+        all_bound: true,
+        unbound_user_spends: [],
+        bound_payments: receives.map(([asset, amount], index) => ({
+          user_spend: 0,
+          settlement_spend: index + 1,
+          asset,
+          amount,
+        })),
+        bound_received: receives.map(([asset, amount]) => ({ asset, amount })),
+      },
+      intent: { kind: 'offer.take', verified: [], recipients_complete: false },
+      cross_checked: true,
+      trade: {
+        offers,
+        pays: pays.map(asJson),
+        receives: receives.map(asJson),
+        fee: String(fee),
+        price,
+      },
+    },
+  };
+}
+
+const TRADES: Record<string, unknown> = {
+  2: take(
+    't2',
+    [[XCH, 1_500_000_000_000]],
+    [[cat('5b'), 3_000_000]],
+    3,
+    100_000_000,
+    {
+      base: cat('5b'),
+      quote: XCH,
+      quote_per_base: '0.0005',
+      base_per_quote: '2000',
+    },
+  ),
+  5: take(
+    't5',
+    [
+      [XCH, 2_250_000_000_000],
+      [cat('7e'), 1_250_000],
+    ],
+    [
+      [cat('5b'), 3_000_000],
+      [cat('d1'), 420_000],
+      [cat('a9'), 99_999_999],
+    ],
+    4,
+    50_000_000,
+    null,
+  ),
+  10: take(
+    't10',
+    [
+      [XCH, 12_345_678_901_234],
+      [cat('3c'), 250_000_000],
+    ],
+    [
+      [cat('5b'), 3_000_000],
+      [cat('d1'), 420_000],
+      [cat('a9'), 99_999_999],
+      [cat('7e'), 18_000],
+      [cat('c4'), 5_000],
+      [cat('e2'), 1_000_000_000],
+      [cat('0f'), 7_000],
+      [cat('91'), 123_456_789],
+    ],
+    9,
+    100_000_000,
+    null,
+  ),
+};
+
 const params = new URLSearchParams(location.search);
 if (params.get('n')) pending = pending.slice(0, Number(params.get('n')));
+const tradeCase = params.get('trade');
+if (tradeCase === '1') pending = pending.slice(0, 1);
+else if (tradeCase !== null && TRADES[tradeCase]) pending = [TRADES[tradeCase]];
 
 mockIPC(
   (cmd, args) => {
@@ -148,6 +335,58 @@ mockIPC(
       ];
     }
     if (cmd === 'get_user_themes') return { themes: [] };
+    if (cmd === 'get_cats') {
+      return {
+        cats: Object.entries(TOKENS).map(([id, known]) => ({
+          asset_id: id,
+          name: known.name,
+          ticker: known.ticker,
+          precision: 3,
+          description: null,
+          icon_url: known.icon ?? null,
+          visible: true,
+          balance: String(known.balance),
+          selectable_balance: String(known.balance),
+          revocation_address: null,
+        })),
+      };
+    }
+    if (cmd === 'get_token') {
+      const id = (args as { req: { asset_id: string | null } }).req.asset_id;
+      if (id === null) {
+        return {
+          token: {
+            asset_id: null,
+            name: 'Chia',
+            ticker: 'XCH',
+            precision: 12,
+            description: null,
+            icon_url: null,
+            visible: true,
+            balance: '15250000000000',
+            selectable_balance: '15250000000000',
+            revocation_address: null,
+          },
+        };
+      }
+      const known = TOKENS[id];
+      return {
+        token: known
+          ? {
+              asset_id: id,
+              name: known.name,
+              ticker: known.ticker,
+              precision: 3,
+              description: null,
+              icon_url: known.icon ?? null,
+              visible: true,
+              balance: String(known.balance),
+              selectable_balance: String(known.balance),
+              revocation_address: null,
+            }
+          : null,
+      };
+    }
     if (cmd.endsWith('|resolve_approval')) {
       const id = (args as { approvalId: string }).approvalId;
       pending = pending.filter((p) => (p as { id: string }).id !== id);

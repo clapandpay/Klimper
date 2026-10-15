@@ -44,7 +44,12 @@ struct World {
 }
 
 async fn issue(wallet: &mut SimWallet) -> Bytes32 {
-    let (spends, asset_id) = wallet.wallet.issue_cat(1_000, 0, None).await.unwrap();
+    issue_amount(wallet, 1_000).await
+}
+
+/// A new CAT of `amount` in `wallet`.
+pub(super) async fn issue_amount(wallet: &mut SimWallet, amount: u64) -> Bytes32 {
+    let (spends, asset_id) = wallet.wallet.issue_cat(amount, 0, None).await.unwrap();
     wallet.transact(spends).await;
     wallet.wait_for_coins().await;
     asset_id
@@ -139,18 +144,12 @@ impl CloneFor for RequestedCat {
     }
 }
 
-/// A real Sage on testnet11 with the taker's wallet open: the summary for the cross-check
-/// comes from its own `view_coin_spends`, the call `take_offer` makes. The CATs the take
-/// touches are put in the taker's database first, so Sage reads them there and never asks
-/// Dexie (no network in tests).
-async fn sage_summary(
-    taker: &SimWallet,
-    cats: &[Bytes32],
-    spends: &[CoinSpend],
-) -> TransactionSummary {
+/// Put `cats` in `wallet`'s database, as Sage does once it has looked a CAT up (no network
+/// in tests).
+pub(super) async fn know_cats(wallet: &SimWallet, cats: &[Bytes32]) {
     for &asset_id in cats {
-        if taker.wallet.db.asset(asset_id).await.unwrap().is_none() {
-            taker
+        if wallet.wallet.db.asset(asset_id).await.unwrap().is_none() {
+            wallet
                 .wallet
                 .db
                 .insert_asset(sage_database::Asset {
@@ -169,6 +168,18 @@ async fn sage_summary(
                 .unwrap();
         }
     }
+}
+
+/// A real Sage on testnet11 with the taker's wallet open: the summary for the cross-check
+/// comes from its own `view_coin_spends`, the call `take_offer` makes. The CATs the take
+/// touches are put in the taker's database first, so Sage reads them there and never asks
+/// Dexie (no network in tests).
+pub(super) async fn sage_summary(
+    taker: &SimWallet,
+    cats: &[Bytes32],
+    spends: &[CoinSpend],
+) -> TransactionSummary {
+    know_cats(taker, cats).await;
     let dir = tempfile::tempdir().unwrap();
     let mut sage = sage::Sage::new(dir.path(), true);
     "testnet11".clone_into(&mut sage.config.network.default_network);
@@ -201,15 +212,19 @@ impl kit::Signer for TakerKeys {
     }
 }
 
-/// Answers the approval and remembers that it was asked: the pop-up opened.
-struct User {
+/// Answers the approval and remembers that it was asked (the pop-up opened) and the trade
+/// overview the screen would have shown, computed as `UiApprover` computes it.
+pub(super) struct User {
     approves: bool,
+    offers: usize,
     asked: Cell<bool>,
+    trade: RefCell<Option<crate::trade::TradeOverview>>,
 }
 
 impl kit::Approver for User {
-    fn approve(&self, _prompt: &kit::Prompt<'_>) -> bool {
+    fn approve(&self, prompt: &kit::Prompt<'_>) -> bool {
         self.asked.set(true);
+        *self.trade.borrow_mut() = crate::trade::of_prompt(prompt, Some(self.offers));
         self.approves
     }
 }
@@ -229,7 +244,7 @@ impl Broadcaster for Kept {
 }
 
 #[derive(Default)]
-struct Limits(RefCell<DailySpend>);
+pub(super) struct Limits(RefCell<DailySpend>);
 
 impl LimitStore for Limits {
     fn load(&self) -> Result<DailySpend, PermissionError> {
@@ -242,13 +257,26 @@ impl LimitStore for Limits {
 }
 
 /// What a take ended in.
-struct Outcome {
-    result: Result<String, RpcError>,
-    asked: bool,
-    sent: Option<SpendBundle>,
+pub(super) struct Outcome {
+    pub result: Result<String, RpcError>,
+    pub asked: bool,
+    pub sent: Option<SpendBundle>,
+    /// What the approval screen showed as the trade, if it was asked.
+    pub trade: Option<crate::trade::TradeOverview>,
 }
 
-fn take_permissions() -> DappPermissions {
+impl Outcome {
+    fn refused(error: RpcError) -> Self {
+        Outcome {
+            result: Err(error),
+            asked: false,
+            sent: None,
+            trade: None,
+        }
+    }
+}
+
+pub(super) fn take_permissions() -> DappPermissions {
     DappPermissions {
         methods: vec![CHIA_TAKE_OFFER.to_owned()],
         exposed_keys: vec![],
@@ -257,8 +285,9 @@ fn take_permissions() -> DappPermissions {
 }
 
 /// Take `offer` with the taker's wallet the way `take_offer` does after reading its
-/// params: the maker's signature, the key-free build, Sage's summary, then `submit_take`.
-async fn take(
+/// params: the offer's checks (size, puzzles, the makers' signature), the key-free build,
+/// Sage's summary, then `submit_take`.
+pub(super) async fn take(
     taker: &SimWallet,
     cats: &[Bytes32],
     offer: &SpendBundle,
@@ -267,17 +296,6 @@ async fn take(
     approves: bool,
 ) -> Outcome {
     let network = kit::Network::Testnet11;
-    if let Err(error) = check_maker_signature(offer, &network) {
-        return Outcome {
-            result: Err(error),
-            asked: false,
-            sent: None,
-        };
-    }
-    let (spends, maker_signature) = build_take(&taker.wallet, offer.clone(), fee)
-        .await
-        .expect("Sage could not build the take");
-
     let db = &taker.wallet.db;
     let mut keys = HashMap::new();
     for hardened in [false, true] {
@@ -306,17 +324,6 @@ async fn take(
             .into_iter()
             .collect(),
     };
-    let spends = match bind_user_spends(spends, &ownership) {
-        Ok(spends) => spends,
-        Err(error) => {
-            return Outcome {
-                result: Err(error),
-                asked: false,
-                sent: None,
-            };
-        }
-    };
-    let summary = sage_summary(taker, cats, &spends).await;
     let limits = Limits::default();
     let ctx = RequestContext {
         dapp: "pengui.test",
@@ -331,9 +338,23 @@ async fn take(
         now: 1_760_000_000,
         chain: None,
     };
+    if let Err(error) = check_offer(offer, &ctx) {
+        return Outcome::refused(error);
+    }
+    let offers = crate::trade::offers_in(offer);
+    let (spends, maker_signature) = build_take(&taker.wallet, offer.clone(), fee)
+        .await
+        .expect("Sage could not build the take");
+    let spends = match bind_user_spends(spends, &ownership) {
+        Ok(spends) => spends,
+        Err(error) => return Outcome::refused(error),
+    };
+    let summary = sage_summary(taker, cats, &spends).await;
     let user = User {
         approves,
+        offers,
         asked: Cell::new(false),
+        trade: RefCell::new(None),
     };
     let kept = Kept::default();
     let result = submit_take(
@@ -349,6 +370,7 @@ async fn take(
         result,
         asked: user.asked.get(),
         sent: kept.0.into_inner(),
+        trade: user.trade.into_inner(),
     }
 }
 
@@ -370,6 +392,34 @@ async fn takes_and_settles(trade: Trade, maker_fee: u64, taker_fee: u64) {
     });
     assert!(outcome.asked, "the user was never asked");
     assert!(answer.contains("transactionId"), "{answer}");
+    // The screen's trade overview: one offer, what it asks for what it gives, the user's
+    // own fee apart, and a price (TASK-139).
+    let overview = outcome.trade.expect("no trade overview");
+    assert_eq!(overview.offers, Some(1), "{trade:?}");
+    // Sold for XCH, Sage pays the user's fee out of the XCH the offer pays the user: no
+    // XCH of the user's moves, so the screen shows the XCH that arrives, already less the
+    // fee, and no fee of the user's (TASK-139 audit, H1: a fee another party's coin funds
+    // is never the user's, and never shown as received).
+    let from_proceeds = matches!(trade, Trade::XchForCat);
+    let shown_fee = if from_proceeds { 0 } else { taker_fee };
+    assert_eq!(overview.fee, shown_fee, "{trade:?}");
+    let (pays, gets) = match trade {
+        Trade::CatForXch => (AssetId::Xch, AssetId::Cat(gets_cat.unwrap())),
+        Trade::XchForCat => (AssetId::Cat(pays_cat.unwrap()), AssetId::Xch),
+        Trade::CatForCat => (
+            AssetId::Cat(pays_cat.unwrap()),
+            AssetId::Cat(gets_cat.unwrap()),
+        ),
+    };
+    let leg = |asset, amount| crate::trade::Leg { asset, amount };
+    let (paid, got) = match trade {
+        Trade::CatForXch => (500, 1_000),
+        Trade::XchForCat => (1_000, 500 - u128::from(taker_fee)),
+        Trade::CatForCat => (1_000, 1_000),
+    };
+    assert_eq!(overview.pays, [leg(pays, paid)], "{trade:?}");
+    assert_eq!(overview.receives, [leg(gets, got)], "{trade:?}");
+    assert!(overview.price.is_some(), "{trade:?}");
     let bundle = outcome.sent.expect("nothing was sent");
 
     taker
@@ -544,7 +594,7 @@ async fn an_offer_without_a_signature_is_refused_before_asking() {
 }
 
 /// `check_offer` on its own, with an empty wallet: it reads only the offer.
-fn checked(offer: &SpendBundle) -> Result<(), RpcError> {
+pub(super) fn checked(offer: &SpendBundle) -> Result<(), RpcError> {
     let permissions = take_permissions();
     let ownership = kit::Ownership::default();
     let keys = HashSet::new();
@@ -565,7 +615,7 @@ fn checked(offer: &SpendBundle) -> Result<(), RpcError> {
     check_offer(offer, &ctx)
 }
 
-fn reason(error: &RpcError) -> String {
+pub(super) fn reason(error: &RpcError) -> String {
     error.data.clone().unwrap_or_default()
 }
 
