@@ -16,6 +16,7 @@
 import { featureElement } from '@/lib/featureElement';
 import {
   clapAndPayConnectEnabled,
+  nftMintingEnabled,
   nftsEnabled,
   offersEnabled,
   optionsEnabled,
@@ -46,6 +47,7 @@ const GATED_CHILDREN: Readonly<
   Record<string, Readonly<Record<string, boolean>>>
 > = {
   '/wallet': { 'issue-token': tokenIssuingEnabled },
+  '/nfts': { mint: nftMintingEnabled },
 };
 
 function gated(route: RouteObject, enabled: boolean | undefined): RouteObject {
