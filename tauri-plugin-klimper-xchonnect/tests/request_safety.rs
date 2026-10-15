@@ -6,8 +6,9 @@
 //! and an atomic two-party XCH swap through offer settlement payments — rebuilt here
 //! because those fixtures are `#[cfg(test)]` inside that crate. What is under test is the
 //! wiring: that an approval really has to come back from the webview before anything is
-//! signed, that a refusal reaches the user as a CHIP-0002 error, and that the three
-//! refusals which must happen *before* any prompt really do.
+//! signed, that a refusal reaches the user as a CHIP-0002 error, and that the refusals
+//! which must happen *before* any prompt really do — among them Klimper's own, of a spend
+//! whose conditions the signature would not fix (TASK-141).
 // Test-only relaxations: the harness is deliberately a few structs with closures in them.
 #![allow(
     clippy::unwrap_used,
@@ -27,23 +28,26 @@ use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use chia_puzzle_types::Memos;
 use chia_puzzle_types::offer::{NotarizedPayment, Payment, SettlementPaymentsSolution};
 use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
-use chia_sdk_driver::{Layer, SettlementLayer, SpendContext, StandardLayer};
+use chia_sdk_driver::{Cat, CatSpend, Layer, SettlementLayer, Spend, SpendContext, StandardLayer};
 use chia_sdk_test::{BlsPair, Simulator};
 use chia_sdk_types::Conditions;
 use clvm_traits::{FromClvm, ToClvm};
 use clvm_utils::tree_hash;
-use clvmr::Allocator;
+use clvmr::{Allocator, NodePtr};
 use serde_json::{Value, json};
 use xchonnect_core::crypto::sha256_parts;
 use xchonnect_core::rpc::codes;
 use xchonnect_wallet_kit::{
     self as kit, AssetId, AssetLimit, Broadcast, Broadcaster, DailySpend, DappPermissions, Host,
-    LimitStore, Network, Ownership, RequestContext, RpcError, Signer, SignerError,
+    LimitStore, Network, Ownership, RequestContext, RpcError, SignedCoins, Signer, SignerError,
 };
 
+use tauri_plugin_klimper_xchonnect::DappPolicy;
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Result as KitResult;
-use tauri_plugin_klimper_xchonnect::requests::{Progress, ProgressSender, RequestMeta, UiApprover};
+use tauri_plugin_klimper_xchonnect::requests::{
+    Progress, ProgressSender, RequestMeta, UiApprover, handle_dapp_built,
+};
 use tauri_plugin_klimper_xchonnect::store::{
     MemorySecrets, PersistentLimits, SecretStore, SessionStore, StoredPermissions,
 };
@@ -163,8 +167,12 @@ struct Harness {
     keys: HashSet<PublicKey>,
     who: BlsPair,
     faulty: bool,
+    /// The user allowed `AGG_SIG_UNSAFE` for the website.
+    allow_unsafe: bool,
     /// Where the approver reports progress, as the session loop would receive it.
     progress: Option<ProgressSender>,
+    /// The wallet's record of signed coins the requests are checked against.
+    signed: SignedCoins,
 }
 
 impl Harness {
@@ -183,7 +191,9 @@ impl Harness {
             keys: [who.pk].into_iter().collect(),
             who,
             faulty: false,
+            allow_unsafe: false,
             progress: None,
+            signed: SignedCoins::default(),
         }
     }
 
@@ -218,20 +228,22 @@ impl Harness {
             network: Network::Testnet11,
             session_chain_id: "testnet11",
             permissions: &self.permissions,
-            allow_agg_sig_unsafe: false,
+            allow_agg_sig_unsafe: self.allow_unsafe,
             allow_unknown_contracts: false,
             ownership: &self.ownership,
             keys: &self.keys,
             limits: &limits,
             now: NOW,
             chain: None,
+            signed_coins: &self.signed,
         };
         let host = Host {
             signer: &signer,
             approver: &approver,
             broadcaster: Some(chain),
         };
-        let outcome = kit::handle_with_host(method, params, &context, &host);
+        // What `requests::run` calls for a request the dApp built.
+        let outcome = handle_dapp_built(method, params, &context, &host);
         (
             outcome,
             signer.calls.load(Ordering::SeqCst),
@@ -245,23 +257,36 @@ impl Harness {
     }
 }
 
-/// A broadcaster that is a simulated chain: what it accepts, a full node would.
+/// A broadcaster that is a simulated chain: what it accepts, a full node would. It keeps the
+/// wallet's record of signed coins as Klimper's broadcaster does (`SignedCoins::add` before
+/// the bundle goes out, also when the chain then refuses it).
 #[derive(Default)]
 struct SimChain {
     sim: Mutex<Simulator>,
     accepted: Mutex<Vec<SpendBundle>>,
+    recorded: Mutex<SignedCoins>,
+    /// The record cannot be written (a locked keyring).
+    unwritable: bool,
 }
 
 impl SimChain {
     fn on(sim: Simulator) -> Self {
         SimChain {
             sim: Mutex::new(sim),
-            accepted: Mutex::default(),
+            ..SimChain::default()
         }
     }
 }
 
 impl Broadcaster for SimChain {
+    fn record(&self, record: &kit::BroadcastRecord) -> Result<(), String> {
+        if self.unwritable {
+            return Err("the keyring is locked".to_owned());
+        }
+        self.recorded.lock().unwrap().add(record);
+        Ok(())
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
         self.sim
             .lock()
@@ -486,6 +511,7 @@ fn a_cancelled_authentication_cancels_the_request() {
         limits: &limits,
         now: NOW,
         chain: None,
+        signed_coins: &xchonnect_wallet_kit::SignedCoins::default(),
     };
     let outcome = kit::handle(
         "signCoinSpends",
@@ -681,6 +707,42 @@ fn an_unknown_contract_is_refused() {
     assert!(harness.webview.prompts().is_empty());
 }
 
+/// The limits exactly as the website-settings screen sends them reach wallet-kit through
+/// the stored record, and a request over them is refused with 4029 before any prompt.
+/// Before TASK-141 the screen's `perRequest` / `perDay` were skipped as unknown fields and
+/// every limit the user set meant no limit.
+#[test]
+fn the_screens_limits_refuse_a_request_over_them() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    let limits: Value = serde_json::from_str(include_str!("fixtures/webview_limits.json")).unwrap();
+    let policy: DappPolicy = serde_json::from_value(json!({ "limits": limits })).unwrap();
+    let stored = StoredPermissions {
+        limits: policy.stored_limits().unwrap(),
+        ..Default::default()
+    };
+    // Through the on-disk form, as the session loop reads it before every request.
+    let stored: StoredPermissions =
+        serde_json::from_str(&serde_json::to_string(&stored).unwrap()).unwrap();
+    harness.permissions.limits = stored.to_kit().limits;
+    assert_eq!(
+        harness.permissions.limits[&AssetId::Xch],
+        AssetLimit {
+            per_request: Some(100),
+            per_day: Some(1000),
+        }
+    );
+
+    let spends = send(&mut Simulator::new(), &who, 500);
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    let error = outcome.unwrap_err();
+    assert_eq!(error.code, codes::LIMIT_EXCEEDED);
+    assert_eq!(error.code, 4029);
+    assert_eq!(error.data.as_deref(), Some(r#"{"reason":"per_request"}"#));
+    assert_eq!(calls, 0);
+    assert!(harness.webview.prompts().is_empty());
+}
+
 /// A per-request limit refuses before any prompt, and the daily limit survives a restart
 /// of the store (TASK-079 AC #3).
 #[test]
@@ -709,6 +771,7 @@ fn limits_refuse_before_prompting_and_survive_a_restart() {
     let record = DailySpend {
         day: NOW / 86_400,
         spent: [(AssetId::Xch, 700_u128)].into_iter().collect(),
+        options: 2,
     };
     // One backing store, two `SessionStore` objects: an app that restarted.
     let shared: Arc<MemorySecrets> = Arc::new(secrets);
@@ -722,6 +785,7 @@ fn limits_refuse_before_prompting_and_survive_a_restart() {
         .unwrap();
     assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&700));
     assert_eq!(loaded.day, NOW / 86_400);
+    assert_eq!(loaded.options, 2);
 }
 
 /// A signature that does not verify for the key that was asked for is never returned.
@@ -743,7 +807,7 @@ fn a_faulty_signer_produces_nothing() {
 fn stored_permissions_limit_the_methods() {
     let who = BlsPair::new(1);
     let mut harness = Harness::new(who.clone(), true);
-    let mut stored = StoredPermissions::from_kit(&harness.permissions);
+    let mut stored = StoredPermissions::from_kit(&harness.permissions).unwrap();
     stored.methods = vec!["chainId".to_owned()];
     stored.limits = BTreeMap::new();
     harness.permissions = stored.to_kit();
@@ -783,6 +847,7 @@ fn a_request_for_another_network_is_refused() {
         limits: &limits,
         now: NOW,
         chain: None,
+        signed_coins: &xchonnect_wallet_kit::SignedCoins::default(),
     };
     let outcome = kit::handle(
         "signCoinSpends",
@@ -796,4 +861,526 @@ fn a_request_for_another_network_is_refused() {
     assert_eq!(error.data.as_deref(), Some(r#"{"reason":"wrong_network"}"#));
     assert_eq!(signer.calls.load(Ordering::SeqCst), 0);
     assert!(harness.webview.prompts().is_empty());
+}
+
+// ---------------------------------------------------------------------------------------
+// Spends whose conditions the signature does not fix (TASK-141)
+// ---------------------------------------------------------------------------------------
+
+/// A standard spend of a coin of `who` with `delegated` as its delegated puzzle and
+/// `solution` as the delegated puzzle's solution; the solution pays `who` back.
+fn delegated_spend(
+    who: &BlsPair,
+    delegated: &[u8],
+    solution: impl Fn(&mut SpendContext, NodePtr) -> NodePtr,
+) -> CoinSpend {
+    let mut ctx = SpendContext::new();
+    let coin = Coin::new(Bytes32::new([4; 32]), who.puzzle_hash, 1000);
+    let program = ctx.alloc(&Program::from(delegated.to_vec())).unwrap();
+    let conditions = ctx
+        .alloc(&Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None))
+        .unwrap();
+    let solution = solution(&mut ctx, conditions);
+    let spend = StandardLayer::new(who.pk)
+        .delegated_inner_spend(&mut ctx, Spend::new(program, solution))
+        .unwrap();
+    ctx.spend(coin, spend).unwrap();
+    ctx.take().remove(0)
+}
+
+/// `xchonnect_submitCoinSpends` under its `chip0002_` alias (spec 9.1).
+const SUBMIT_ALIAS: &str = "chip0002_xchonnect_submitCoinSpends";
+
+fn assert_unsigned_conditions(harness: &Harness, method: &str, spends: &[CoinSpend]) {
+    // A well-formed spend wallet-kit can run: the refusal is not about anything else.
+    let summary = kit::simulate(spends, &harness.ownership, kit::simulate::DEFAULT_MAX_COST);
+    assert!(summary.is_ok(), "{method}: {summary:?}");
+    let (outcome, calls) = harness.call(method, &params_for(spends, false));
+    let error = outcome.unwrap_err();
+    assert_eq!(error.code, codes::UNAUTHORIZED, "{method}");
+    assert_eq!(
+        error.data.as_deref(),
+        Some(r#"{"reason":"unsigned_conditions"}"#),
+        "{method}"
+    );
+    assert_eq!(calls, 0, "{method}: nothing was signed");
+    assert!(
+        harness.webview.prompts().is_empty(),
+        "{method}: the user was never asked"
+    );
+}
+
+/// The delegated puzzle `1` returns its solution as the conditions, so the signature, which
+/// covers only the delegated puzzle, does not fix them: refused before any prompt, whether
+/// the dApp asks for a signature or for the wallet to submit.
+#[test]
+fn a_delegated_puzzle_that_returns_its_solution_is_refused_without_a_prompt() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let spend = delegated_spend(&who, &[0x01], |_, conditions| conditions);
+    for method in [
+        "signCoinSpends",
+        "chip0002_signCoinSpends",
+        kit::SUBMIT_COIN_SPENDS,
+        SUBMIT_ALIAS,
+    ] {
+        assert_unsigned_conditions(&harness, method, std::slice::from_ref(&spend));
+    }
+    // One such spend among honest ones refuses the whole request.
+    let mut spends = send(&mut Simulator::new(), &who, 500);
+    spends.push(spend);
+    assert_unsigned_conditions(&harness, "signCoinSpends", &spends);
+}
+
+/// Any other delegated puzzle that reads its solution: one that returns part of it, `(f 1)`,
+/// and one that runs a program from it, `(a 2 3)`.
+#[test]
+fn other_delegated_puzzles_that_read_their_solution_are_refused() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let first = delegated_spend(&who, &[0xff, 0x05, 0xff, 0x01, 0x80], |ctx, conditions| {
+        ctx.alloc(&(conditions, ())).unwrap()
+    });
+    let apply = delegated_spend(
+        &who,
+        &[0xff, 0x02, 0xff, 0x02, 0xff, 0x03, 0x80],
+        |ctx, conditions| {
+            let quoted = ctx.alloc(&(1, conditions)).unwrap();
+            ctx.alloc(&(quoted, ())).unwrap()
+        },
+    );
+    for spend in [first, apply] {
+        assert_unsigned_conditions(&harness, "signCoinSpends", &[spend]);
+    }
+}
+
+/// The same inside a CAT: the inner standard spend is held to the same rule.
+#[test]
+fn a_cat_whose_inner_spend_reads_its_solution_is_refused() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut ctx = SpendContext::new();
+    let coin = Coin::new(Bytes32::new([5; 32]), who.puzzle_hash, 1000);
+    let (_, cats) = Cat::single_issuance(
+        &mut ctx,
+        coin.coin_id(),
+        None,
+        1000,
+        Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None),
+    )
+    .unwrap();
+    let one = ctx.alloc(&Program::from(vec![0x01])).unwrap();
+    let conditions = ctx
+        .alloc(&Conditions::new().create_coin(who.puzzle_hash, 1000, Memos::None))
+        .unwrap();
+    let inner = StandardLayer::new(who.pk)
+        .delegated_inner_spend(&mut ctx, Spend::new(one, conditions))
+        .unwrap();
+    // Only the CAT spend: the issuance itself is not part of the request.
+    let _ = ctx.take();
+    Cat::spend_all(&mut ctx, &[CatSpend::new(cats[0], inner)]).unwrap();
+    assert_unsigned_conditions(&harness, "signCoinSpends", &ctx.take());
+}
+
+/// The honest shape — quoted conditions — is signed as before and the chain accepts it,
+/// through both methods.
+#[test]
+fn quoted_conditions_are_signed_as_before() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let (outcome, _) = harness.call("signCoinSpends", &params_for(&spends, false));
+    sim.new_transaction(SpendBundle::new(spends, signature_of(&outcome.unwrap())))
+        .unwrap();
+
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let chain = SimChain::on(sim);
+    let (outcome, _, _) = harness.run(kit::SUBMIT_COIN_SPENDS, &params_for(&spends, false), &chain);
+    assert!(outcome.is_ok());
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert_eq!(harness.webview.prompts().len(), 2);
+}
+
+/// The `chip0002_` alias of the submit method is the same method: an honest spend is
+/// signed and broadcast through it.
+#[test]
+fn the_submit_alias_submits_quoted_conditions() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = send(&mut sim, &who, 500);
+    let chain = SimChain::on(sim);
+    let (outcome, calls, _) = harness.run(SUBMIT_ALIAS, &params_for(&spends, false), &chain);
+    assert!(outcome.unwrap().contains("transactionId"));
+    assert!(calls > 0);
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert_eq!(harness.webview.prompts().len(), 1);
+}
+
+// ---------------------------------------------------------------------------------------
+// AGG_SIG_UNSAFE messages that could stand in for another signature (TASK-141)
+// ---------------------------------------------------------------------------------------
+
+/// A spend of `who`'s coin, quoted conditions, asking for `who`'s `AGG_SIG_UNSAFE`
+/// signature of `message`.
+fn unsafe_spend(sim: &mut Simulator, who: &BlsPair, message: Vec<u8>) -> Vec<CoinSpend> {
+    let coin = sim.new_coin(who.puzzle_hash, 1000);
+    let mut ctx = SpendContext::new();
+    StandardLayer::new(who.pk)
+        .spend(
+            &mut ctx,
+            coin,
+            Conditions::new()
+                .create_coin(who.puzzle_hash, 1000, Memos::None)
+                .agg_sig_unsafe(who.pk, message.into()),
+        )
+        .unwrap();
+    ctx.take()
+}
+
+/// With `AGG_SIG_UNSAFE` allowed for the website, a message that ends with the network's
+/// `AGG_SIG_ME` data, or that has the size of what `signMessage` signs, is still refused
+/// before the user is asked, through every method.
+#[test]
+fn an_unsafe_message_shaped_like_another_signature_is_refused_without_a_prompt() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    harness.allow_unsafe = true;
+    let mut coin_bound = vec![7; 40];
+    coin_bound.extend_from_slice(
+        chia_sdk_types::TESTNET11_CONSTANTS
+            .agg_sig_me_additional_data
+            .as_ref(),
+    );
+    let signed_message = kit::signed_message_hash(b"I agree").to_vec();
+    for message in [coin_bound, signed_message] {
+        let spends = unsafe_spend(&mut Simulator::new(), &who, message);
+        for method in [
+            "signCoinSpends",
+            "chip0002_signCoinSpends",
+            kit::SUBMIT_COIN_SPENDS,
+            SUBMIT_ALIAS,
+        ] {
+            let (outcome, calls) = harness.call(method, &params_for(&spends, false));
+            let error = outcome.unwrap_err();
+            assert_eq!(error.code, codes::UNAUTHORIZED, "{method}");
+            assert_eq!(
+                error.data.as_deref(),
+                Some(r#"{"reason":"unsafe_message"}"#),
+                "{method}"
+            );
+            assert_eq!(calls, 0, "{method}: nothing was signed");
+        }
+    }
+    assert!(harness.webview.prompts().is_empty());
+}
+
+/// Any other unsafe message is asked about and signed as before once the user allowed
+/// `AGG_SIG_UNSAFE`, and still refused by wallet-kit when they did not.
+#[test]
+fn an_honest_unsafe_message_is_signed_when_allowed() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let spends = unsafe_spend(&mut sim, &who, b"hello, dApp".to_vec());
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    assert_eq!(
+        outcome.unwrap_err().data.as_deref(),
+        Some(r#"{"reason":"agg_sig_unsafe"}"#)
+    );
+    assert_eq!(calls, 0);
+
+    harness.allow_unsafe = true;
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&spends, false));
+    assert!(calls > 0);
+    assert_eq!(harness.webview.prompts().len(), 1);
+    // A valid signature: the chain accepts the spend with it.
+    sim.new_transaction(SpendBundle::new(spends, signature_of(&outcome.unwrap())))
+        .unwrap();
+}
+
+// ---------------------------------------------------------------------------------------
+// The record of signed coins (xchonnect spec 11.2)
+// ---------------------------------------------------------------------------------------
+
+/// One spend of `coin` paying `amount` to someone else.
+fn spend_of(coin: Coin, who: &BlsPair, amount: u64) -> Vec<CoinSpend> {
+    let mut ctx = SpendContext::new();
+    let conditions =
+        Conditions::new().create_coin(BlsPair::new(2).puzzle_hash, amount, Memos::None);
+    StandardLayer::new(who.pk)
+        .spend(&mut ctx, coin, conditions)
+        .unwrap();
+    ctx.take()
+}
+
+/// The record of a sealed bundle that held `spends`: the digests of what `who` signed in it,
+/// and the coins it signed for.
+fn sealed_record(spends: &[CoinSpend], who: &BlsPair) -> SignedCoins {
+    use chia_wallet_sdk::signer::{AggSigConstants, RequiredSignature};
+    use chia_wallet_sdk::types::TESTNET11_CONSTANTS;
+    let constants = AggSigConstants::new(TESTNET11_CONSTANTS.agg_sig_me_additional_data);
+    let mut allocator = Allocator::new();
+    let mut record = kit::BroadcastRecord::default();
+    let mut bundle = kit::SealedBundle {
+        id: Bytes32::new([0x5e; 32]),
+        ..Default::default()
+    };
+    for cs in spends {
+        record.coins.push(cs.coin.coin_id());
+        for required in RequiredSignature::from_coin_spend(&mut allocator, cs, &constants).unwrap()
+        {
+            if let RequiredSignature::Bls(bls) = required
+                && bls.public_key == who.pk
+            {
+                bundle
+                    .digests
+                    .push(kit::sealed_digest(&bls.public_key, &bls.message()));
+                bundle.coins.push(cs.coin.coin_id());
+            }
+        }
+    }
+    assert!(!bundle.digests.is_empty());
+    record.sealed = Some(bundle);
+    let mut signed = SignedCoins::default();
+    signed.add(&record);
+    signed
+}
+
+/// A signature recorded for a sealed bundle is never made again, for any request a website
+/// sends (`signCoinSpends`, `xchonnect_submitCoinSpends`, `signMessage`), before anything is
+/// shown; a different spend of the same coin, and another message, are signed as usual.
+#[test]
+fn a_sealed_signature_is_never_made_again_but_the_coin_can_be_spent_otherwise() {
+    let who = BlsPair::new(1);
+    let mut harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let coin = sim.new_coin(who.puzzle_hash, 1000);
+    let sealed = spend_of(coin, &who, 500);
+    harness.signed = sealed_record(&sealed, &who);
+    let message = b"sign in to pengui".to_vec();
+    let signed_hash = kit::signed_message_hash(&message);
+    harness.signed.add(&kit::BroadcastRecord {
+        coins: vec![],
+        sealed: Some(kit::SealedBundle {
+            id: Bytes32::new([0x5f; 32]),
+            digests: vec![kit::sealed_digest(&who.pk, &signed_hash)],
+            coins: vec![coin.coin_id()],
+        }),
+    });
+
+    for method in [
+        "signCoinSpends",
+        "chip0002_signCoinSpends",
+        kit::SUBMIT_COIN_SPENDS,
+    ] {
+        let chain = SimChain::on(Simulator::new());
+        let (outcome, calls, _) = harness.run(method, &params_for(&sealed, false), &chain);
+        let error = outcome.unwrap_err();
+        assert_eq!(error.code, codes::UNAUTHORIZED, "{method}");
+        assert_eq!(
+            error.data.as_deref(),
+            Some(r#"{"reason":"sealed_signature"}"#),
+            "{method}"
+        );
+        assert_eq!(calls, 0, "{method}: nothing was signed");
+        assert!(chain.accepted.lock().unwrap().is_empty());
+    }
+    let sign_message = |message: &[u8]| {
+        json!({
+            "message": format!("0x{}", hex::encode(message)),
+            "publicKey": format!("0x{}", hex::encode(who.pk.to_bytes())),
+        })
+        .to_string()
+    };
+    let (outcome, calls) = harness.call("signMessage", &sign_message(&message));
+    assert_eq!(
+        outcome.unwrap_err().data.as_deref(),
+        Some(r#"{"reason":"sealed_signature"}"#)
+    );
+    assert_eq!(calls, 0);
+    assert!(harness.webview.prompts().is_empty());
+
+    // Another spend of the same coin, and another message: signed, and valid on chain.
+    let other = spend_of(coin, &who, 400);
+    let (outcome, calls) = harness.call("signCoinSpends", &params_for(&other, false));
+    assert_eq!(calls, 1);
+    sim.new_transaction(SpendBundle::new(other, signature_of(&outcome.unwrap())))
+        .unwrap();
+    let (outcome, _) = harness.call("signMessage", &sign_message(b"another message"));
+    assert!(outcome.is_ok());
+}
+
+/// The wallet records a website's bundle before it is broadcast, also when the network then
+/// refuses it (it may have reached other nodes): its coins are released.
+#[test]
+fn a_refused_broadcast_is_recorded_all_the_same() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    // The coin exists nowhere the simulated chain knows of: it refuses the bundle.
+    let spends = send(&mut Simulator::new(), &who, 500);
+    let chain = SimChain::default();
+    let (outcome, _, _) = harness.run(kit::SUBMIT_COIN_SPENDS, &params_for(&spends, false), &chain);
+    let error = outcome.unwrap_err();
+    assert_eq!(
+        error.data.as_deref(),
+        Some(r#"{"reason":"broadcast_failed"}"#)
+    );
+    let recorded = chain.recorded.lock().unwrap();
+    assert!(recorded.released.contains(&spends[0].coin.coin_id()));
+    // A website's bundle is released, never sealed.
+    assert!(recorded.sealed.is_empty());
+}
+
+/// Approves after a pause: a prompt left open on the user's screen.
+struct SlowUser;
+
+impl kit::Approver for SlowUser {
+    fn approve(&self, _prompt: &kit::Prompt<'_>) -> bool {
+        std::thread::sleep(Duration::from_millis(300));
+        true
+    }
+}
+
+/// Coin-signing requests run one at a time, the record held from wallet-kit's check across
+/// the approval prompt to what is recorded: a request B that arrives while a sealed request A
+/// waits for its approval reads the record only after A recorded its signatures, and cannot
+/// have A's message signed.
+#[test]
+fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
+    use tauri_plugin_klimper_xchonnect::signed_coins::{
+        Recording, SignedCoinsHandle, checked_record,
+    };
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let record = SignedCoinsHandle::new(harness.store.clone(), 1, "testnet11");
+    let mut sim = Simulator::new();
+    let coin = sim.new_coin(who.puzzle_hash, 1000);
+    let to = BlsPair::new(2).puzzle_hash;
+    let mut ctx = SpendContext::new();
+    StandardLayer::new(who.pk)
+        .spend(
+            &mut ctx,
+            coin,
+            Conditions::new()
+                .create_coin(to, 400, Memos::None)
+                .create_coin(who.puzzle_hash, 600, Memos::None),
+        )
+        .unwrap();
+    let spends = ctx.take();
+    let chain = SimChain::on(sim);
+    let started = std::sync::Barrier::new(2);
+
+    std::thread::scope(|scope| {
+        let a = scope.spawn(|| {
+            let (_held, signed) = checked_record(&record, true, SignedCoinsHandle::load).unwrap();
+            started.wait();
+            let permissions = DappPermissions {
+                methods: vec!["chia_send".to_owned()],
+                exposed_keys: vec![who.pk],
+                limits: BTreeMap::new(),
+                options: kit::DEFAULT_OPTION_LIMIT,
+            };
+            let limits =
+                PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
+            let context = RequestContext {
+                dapp: DAPP,
+                network: Network::Testnet11,
+                session_chain_id: "testnet11",
+                permissions: &permissions,
+                allow_agg_sig_unsafe: false,
+                allow_unknown_contracts: false,
+                ownership: &harness.ownership,
+                keys: &harness.keys,
+                limits: &limits,
+                now: NOW,
+                chain: None,
+                signed_coins: &signed,
+            };
+            let intent = kit::Intent {
+                kind: Some("send".to_owned()),
+                recipients: Some(vec![kit::RecipientClaim {
+                    asset: AssetId::Xch,
+                    puzzle_hash: to,
+                    amount: 400,
+                }]),
+                fee: Some(0),
+                net: None,
+            };
+            let recording = Recording::new(&chain, &record);
+            kit::submit(
+                kit::SubmitRequest {
+                    method: "chia_send",
+                    spends: spends.clone(),
+                    other_signature: None,
+                    intent: Some(&intent),
+                    wallet_built: true,
+                    wallet_fee: 0,
+                    signatures_released: false,
+                },
+                &context,
+                &CountingSigner::new(&who),
+                &SlowUser,
+                &recording,
+            )
+            .map(|_| ())
+        });
+        let b = scope.spawn(|| {
+            started.wait();
+            // B arrives while A's prompt is open.
+            let (_held, signed) = checked_record(&record, true, SignedCoinsHandle::load).unwrap();
+            let mut late = Harness::new(who.clone(), true);
+            late.signed = signed;
+            late.call("signCoinSpends", &params_for(&spends, false))
+        });
+        a.join().unwrap().unwrap();
+        let (outcome, calls) = b.join().unwrap();
+        assert_eq!(
+            outcome.unwrap_err().data.as_deref(),
+            Some(r#"{"reason":"sealed_signature"}"#)
+        );
+        assert_eq!(calls, 0);
+    });
+    assert_eq!(chain.accepted.lock().unwrap().len(), 1);
+    assert!(!record.load().unwrap().to_kit().unwrap().sealed.is_empty());
+}
+
+/// wallet-kit reports the coins of every `signCoinSpends` answer before the signature is
+/// returned: they go into the record as released. When the record cannot be written, no
+/// signature is returned (4000 `record_failed`) and nothing counts against the limit.
+#[test]
+fn a_signature_for_a_website_is_recorded_before_it_is_returned() {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let spends = send(&mut Simulator::new(), &who, 500);
+    let chain = SimChain::default();
+    let (outcome, _, _) = harness.run("signCoinSpends", &params_for(&spends, false), &chain);
+    signature_of(&outcome.unwrap());
+    assert!(
+        chain
+            .recorded
+            .lock()
+            .unwrap()
+            .released
+            .contains(&spends[0].coin.coin_id())
+    );
+
+    let harness = Harness::new(who.clone(), true);
+    let locked = SimChain {
+        unwritable: true,
+        ..SimChain::default()
+    };
+    let (outcome, _, _) = harness.run(
+        "chip0002_signCoinSpends",
+        &params_for(&spends, false),
+        &locked,
+    );
+    let error = tauri_plugin_klimper_xchonnect::requests::explain(outcome.unwrap_err());
+    assert_eq!(error.code, codes::INVALID_PARAMS);
+    assert_eq!(error.data.as_deref(), Some(r#"{"reason":"record_failed"}"#));
+    assert!(error.message.contains("nothing was sent"));
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
+    assert!(limits.load().unwrap().spent.is_empty());
 }

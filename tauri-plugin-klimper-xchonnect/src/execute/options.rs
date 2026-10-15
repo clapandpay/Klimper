@@ -27,7 +27,7 @@ use chia_wallet_sdk::{
     chia::puzzle_types::offer::{NotarizedPayment, Payment},
     driver::{
         Action, AssetInfo, Cat, CatAssetInfo, CatSpend, Id, Offer, OptionType, RequestedPayments,
-        SpendContext, SpendWithConditions, StandardLayer,
+        SpendContext, SpendKind, SpendWithConditions, Spends, StandardLayer,
     },
     prelude::{Conditions, Memos},
     puzzles::SETTLEMENT_PAYMENT_HASH,
@@ -81,14 +81,16 @@ impl Part {
                 asset_id,
                 amount: self.amount,
             }),
-            AssetId::Option(_) => None,
+            _ => None,
         }
     }
 
-    fn id(self) -> Id {
+    /// The Wallet SDK's id of the asset; `None` for an asset this version does not know.
+    fn id(self) -> Option<Id> {
         match self.asset {
-            AssetId::Cat(asset_id) | AssetId::Option(asset_id) => Id::Existing(asset_id),
-            AssetId::Xch => Id::Xch,
+            AssetId::Cat(asset_id) | AssetId::Option(asset_id) => Some(Id::Existing(asset_id)),
+            AssetId::Xch => Some(Id::Xch),
+            _ => None,
         }
     }
 
@@ -241,7 +243,7 @@ pub fn mint_params(params_json: &str, now: u64) -> Result<MintParams, RpcError> 
         expires_at,
         creator_address,
         loan,
-        fee: amount_param(&params, "fee")?.unwrap_or(0),
+        fee: wallet_fee(&params)?,
     })
 }
 
@@ -310,7 +312,9 @@ fn intent(kind: &str, recipients: Option<Vec<RecipientClaim>>, fee: u64) -> Inte
     }
 }
 
-/// Simulate, cross-check, submit through wallet-kit.
+/// Simulate, cross-check, submit through wallet-kit. `signatures_released`: the signed
+/// bundle goes back to the website (a loan request's offer); otherwise Klimper broadcasts it
+/// and answers only its id and status, and the request is sealed (xchonnect spec 11.2).
 #[allow(clippy::too_many_arguments)]
 fn checked_submit(
     ctx: &RequestContext<'_>,
@@ -321,6 +325,7 @@ fn checked_submit(
     method: &'static str,
     spends: Vec<CoinSpend>,
     intent: &Intent,
+    signatures_released: bool,
 ) -> Result<kit::handlers::Submitted, RpcError> {
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
@@ -332,6 +337,10 @@ fn checked_submit(
             other_signature: None,
             intent: Some(intent),
             wallet_built: true,
+            // The fee Klimper built the request with and claims in its intent: its own
+            // (`wallet_fee`), never the website's.
+            wallet_fee: intent.fee.unwrap_or_default(),
+            signatures_released,
         },
         ctx,
         signer,
@@ -340,64 +349,12 @@ fn checked_submit(
     )
 }
 
-/// Make the launch of every option these spends mint unalterable: the spend that creates
-/// the singleton launcher asserts the launcher's announcement, which commits to the eve
-/// option's puzzle. [`build_mint`] creates the launcher's coin before it can build the
-/// launch, so the assertion is added here; without it wallet-kit can only show the new
-/// option as conditional (`guaranteed: false`, spec 11.1.1): the launcher, which nobody
-/// signs, could be spent into some other singleton. The parent is the user's own, still
-/// unsigned spend; the change only adds an assertion. A parent of another shape is left as
-/// it is.
-pub fn guarantee_launch(mut spends: Vec<CoinSpend>) -> Vec<CoinSpend> {
-    use chia_wallet_sdk::prelude::{Allocator, Condition, FromClvm, ToClvm};
-    use chia_wallet_sdk::puzzles::SINGLETON_LAUNCHER_HASH;
-    use chia_wallet_sdk::types::{announcement_id, conditions::AssertCoinAnnouncement, run_puzzle};
-
-    let mut allocator = Allocator::new();
-    let mut asserts: Vec<(Bytes32, Bytes32)> = Vec::new();
-    for launcher in spends
-        .iter()
-        .filter(|s| s.coin.puzzle_hash == Bytes32::from(SINGLETON_LAUNCHER_HASH))
-    {
-        let (Ok(puzzle), Ok(solution)) = (
-            launcher.puzzle_reveal.to_clvm(&mut allocator),
-            launcher.solution.to_clvm(&mut allocator),
-        ) else {
-            continue;
-        };
-        let Ok(output) = run_puzzle(&mut allocator, puzzle, solution) else {
-            continue;
-        };
-        let Ok(conditions) = Vec::<Condition>::from_clvm(&allocator, output) else {
-            continue;
-        };
-        for condition in conditions {
-            if let Condition::CreateCoinAnnouncement(created) = condition {
-                asserts.push((
-                    launcher.coin.parent_coin_info,
-                    announcement_id(launcher.coin.coin_id(), &created.message),
-                ));
-            }
-        }
-    }
-    for (parent_id, id) in asserts {
-        if let Some(parent) = spends.iter_mut().find(|s| s.coin.coin_id() == parent_id) {
-            edit_user_conditions(&mut allocator, parent, |conditions| {
-                conditions.push(Condition::AssertCoinAnnouncement(
-                    AssertCoinAnnouncement::new(id),
-                ));
-            });
-        }
-    }
-    spends
-}
-
 // ---------------------------------------------------------------------------------------
 // chia_mintOption
 // ---------------------------------------------------------------------------------------
 
 /// The option written: its spends and its id, and for a loan request what its offer needs.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Minted {
     pub spends: Vec<CoinSpend>,
     pub launcher_id: Bytes32,
@@ -429,40 +386,46 @@ fn created_coin(spends: &[CoinSpend], puzzle_hash: Bytes32, amount: u64) -> Opti
     })
 }
 
-/// Make two of the user's own, still unsigned spends assert each other's spend, so neither
-/// set of spends they stand for can reach the chain without the other.
-fn tie_concurrent(mut spends: Vec<CoinSpend>, a: Bytes32, b: Bytes32) -> Vec<CoinSpend> {
-    use chia_wallet_sdk::prelude::{Allocator, Condition};
-    use chia_wallet_sdk::types::conditions::AssertConcurrentSpend;
-    let mut allocator = Allocator::new();
-    for (this, other) in [(a, b), (b, a)] {
-        if let Some(spend) = spends.iter_mut().find(|s| s.coin.coin_id() == this) {
-            edit_user_conditions(&mut allocator, spend, |conditions| {
-                conditions.push(Condition::AssertConcurrentSpend(
-                    AssertConcurrentSpend::new(other),
-                ));
-            });
+/// Add `conditions` to every spend of the wallet's own coins in `spends`, before Sage's
+/// `complete_spends` turns them into coin spends.
+fn add_to_every_spend(spends: &mut Spends, conditions: &Conditions) {
+    let xch = spends.xch.items.iter_mut().map(|item| &mut item.kind);
+    let cats = spends
+        .cats
+        .values_mut()
+        .flat_map(|cat| cat.items.iter_mut().map(|item| &mut item.kind));
+    for kind in xch.chain(cats) {
+        if let SpendKind::Conditions(spend) = kind {
+            spend.add_conditions(conditions.clone());
         }
     }
-    spends
 }
 
 /// Lock the collateral and write the option, key-free, from the wallet's own coins with
-/// Sage's coin selection and spend code and the SDK's option launcher:
+/// Sage's coin selection and spend code and the SDK's option launcher, for a **loan
+/// request** (Sage's own `mint_option`, [`build_sage_mint`], cannot write an option whose
+/// creator is the lender):
 ///
 /// 1. the fee and the singleton launcher's coin (hinted with the creator), and for a loan
-///    request the tie to the lender and the assertion that the principal is paid to the
-///    wallet (Sage's offer code does the same for what an offer asks);
+///    request the tie to the lender. XCH collateral is set aside here too, at another of the
+///    wallet's addresses, and locked from there in step 2: the wallet may hold a single coin;
 /// 2. the collateral, locked at the option's collateral puzzle (which commits to the
-///    launcher, so only now can it be built): XCH from a coin step 1 set aside at another of
-///    the wallet's addresses, a CAT from the wallet's CAT coins;
+///    launcher, so only now can it be built): XCH from the coin step 1 set aside, a CAT from
+///    the wallet's CAT coins;
 /// 3. the launch: the eve option's inner puzzle is a quoted program that hands the option to
-///    the wallet, so its outputs are fixed and wallet-kit can show the new option as
-///    guaranteed (spec 11.1.1). (Sage's own `mint_option` spends the eve with the wallet's
-///    standard puzzle instead, which wallet-kit counts as conditional.)
+///    the wallet, so its outputs are fixed.
 ///
-/// The two sets of coins assert each other's spend, and the launcher's parent asserts the
-/// launcher's announcement ([`guarantee_launch`]).
+/// A loan request's signed spends go to the lender as an offer, so its signatures are
+/// released and only direct assertions bind it (xchonnect spec 11.2, "Loan requests"):
+/// **every** spend of the borrower asserts the settlement announcement of the principal paid
+/// to the borrower, and every spend that locks the collateral asserts the launcher's
+/// announcement, so the launch is guaranteed (spec 11.1.1 item 1). These are conditions of
+/// Klimper's own build, given to each spend before Sage's `complete_spends` makes the coin
+/// spends; nothing Sage built is changed afterwards. The launcher's announcement commits to
+/// the collateral coin, which only Sage's build of step 2 names: step 2 is built once to
+/// find it and once more, from the same coins, with the assertion.
+///
+/// Sage's coin selection leaves out the coins of a transaction Sage holds as pending.
 pub async fn build_mint(
     wallet: &Wallet,
     creator: Option<Bytes32>,
@@ -470,6 +433,7 @@ pub async fn build_mint(
     loan: Option<Part>,
 ) -> Result<Option<Minted>, WalletError> {
     use chia_wallet_sdk::driver::{OptionLauncher, OptionLauncherInfo};
+    use chia_wallet_sdk::prelude::Condition;
     use chia_wallet_sdk::puzzles::SINGLETON_LAUNCHER_HASH;
 
     let (Some(strike_type), Some(_)) =
@@ -482,9 +446,7 @@ pub async fn build_mint(
     let launcher_hash = Bytes32::from(SINGLETON_LAUNCHER_HASH);
     let mut ctx = SpendContext::new();
 
-    // 1. The fee, the launcher's coin, and for a loan the tie and the asked principal. XCH
-    //    collateral is set aside here too, at another of the wallet's own addresses, and
-    //    locked from there in step 2: the wallet may hold a single coin.
+    // 1. The fee, the launcher's coin, for a loan the tie, and the XCH collateral set aside.
     let hint = ctx.hint(creator)?;
     let mut actions = vec![
         Action::fee(params.fee),
@@ -519,18 +481,22 @@ pub async fn build_mint(
         None
     };
     let mut first = wallet.prepare_spends_for_selection(&mut ctx, &[]).await?;
-    wallet.select_spends(&mut ctx, &mut first, &actions).await?;
+    wallet
+        .select_spends_excluding(&mut ctx, &mut first, &actions, &[])
+        .await?;
     let first_ids = first.non_settlement_coin_ids();
     let nonce = Offer::nonce(first_ids.clone());
+    // What every spend of the borrower asserts: the principal paid to the borrower, before
+    // the option expires.
+    let mut asserted = Conditions::new();
     if let Some(principal) = loan {
         let (requested, asset_info) = loan_requested(&mut ctx, nonce, receive, principal)?;
-        first.conditions.required = first
-            .conditions
-            .required
+        asserted = asserted
             .extend(requested.assertions(&mut ctx, &asset_info)?)
             .assert_before_seconds_absolute(params.expires_at);
     }
     let deltas = first.apply(&mut ctx, &actions)?;
+    add_to_every_spend(&mut first, &asserted);
     wallet.complete_spends(&mut ctx, &deltas, first).await?;
     let mut spends = ctx.take();
     let Some(launcher_coin) = created_coin(&spends, launcher_hash, 1) else {
@@ -555,57 +521,107 @@ pub async fn build_mint(
 
     // 2. The collateral, locked at the option's collateral puzzle, from other coins.
     let locked_at = launcher.p2_puzzle_hash();
+    let Some(collateral_id) = params.collateral.id() else {
+        return Ok(None);
+    };
     let actions = [Action::send(
-        params.collateral.id(),
+        collateral_id,
         locked_at,
         params.collateral.amount,
         Memos::None,
     )];
     let mut second = wallet.prepare_spends_for_selection(&mut ctx, &[]).await?;
-    match set_aside {
-        Some(aside) => {
-            let Some(coin) = created_coin(&spends, aside, params.collateral.amount) else {
-                return Ok(None);
-            };
-            second.add(coin);
-        }
-        None => {
-            wallet
-                .select_spends_excluding(&mut ctx, &mut second, &actions, &first_ids)
-                .await?;
-        }
+    if let Some(aside) = set_aside {
+        let Some(coin) = created_coin(&spends, aside, params.collateral.amount) else {
+            return Ok(None);
+        };
+        second.add(coin);
+    } else {
+        wallet
+            .select_spends_excluding(&mut ctx, &mut second, &actions, &first_ids)
+            .await?;
     }
-    let second_ids = second.non_settlement_coin_ids();
-    let deltas = second.apply(&mut ctx, &actions)?;
-    wallet.complete_spends(&mut ctx, &deltas, second).await?;
-    let locking = ctx.take();
     let collateral_puzzle_hash = match params.collateral.asset {
         AssetId::Cat(asset_id) => Bytes32::from(
             chia_wallet_sdk::driver::CatInfo::new(asset_id, None, locked_at).puzzle_hash(),
         ),
         _ => locked_at,
     };
-    let Some(collateral) = created_coin(&locking, collateral_puzzle_hash, params.collateral.amount)
+    // Which coin the collateral is: from a first build of step 2, set aside.
+    let mut trial = second.clone();
+    let deltas = trial.apply(&mut ctx, &actions)?;
+    wallet.complete_spends(&mut ctx, &deltas, trial).await?;
+    let Some(collateral) = created_coin(
+        &ctx.take(),
+        collateral_puzzle_hash,
+        params.collateral.amount,
+    ) else {
+        return Ok(None);
+    };
+
+    // 3. The launch, with the eve's outputs fixed; the announcement every locking spend
+    //    asserts.
+    let launcher_id = launcher.launcher().coin().coin_id();
+    let (launch, _option) = launcher
+        .with_underlying(collateral.coin_id())
+        .mint(&mut ctx)?;
+    let launch: Vec<Bytes32> = launch
+        .into_iter()
+        .filter_map(|condition| match condition {
+            Condition::AssertCoinAnnouncement(assert) => Some(assert.announcement_id),
+            _ => None,
+        })
+        .collect();
+    let [launch] = launch.as_slice() else {
+        return Ok(None);
+    };
+    let deltas = second.apply(&mut ctx, &actions)?;
+    add_to_every_spend(
+        &mut second,
+        &asserted.clone().assert_coin_announcement(*launch),
+    );
+    wallet.complete_spends(&mut ctx, &deltas, second).await?;
+    let rest = ctx.take();
+    // The same coins, the same collateral coin.
+    if created_coin(&rest, collateral_puzzle_hash, params.collateral.amount) != Some(collateral) {
+        return Ok(None);
+    }
+    spends.extend(rest);
+    Ok(Some(Minted {
+        spends,
+        launcher_id,
+        nonce,
+        receive,
+    }))
+}
+
+/// A plain option, written with Sage's own `mint_option`, unchanged: the wallet is the
+/// creator (its change address) and holds the option. Sage is the source of truth for the
+/// spends it builds; Klimper adds nothing to them.
+pub async fn build_sage_mint(
+    wallet: &Wallet,
+    params: &MintParams,
+) -> Result<Option<Minted>, WalletError> {
+    let (Some(strike_type), Some(underlying_type)) =
+        (params.strike.option_type(), params.collateral.option_type())
     else {
         return Ok(None);
     };
-    spends.extend(locking);
-
-    // 3. The launch, with the eve's outputs fixed.
-    let launcher_id = launcher.launcher().coin().coin_id();
-    // What the launcher's parent must assert is added by `guarantee_launch` below: the parent
-    // spend was already built in step 1.
-    let (_parent_conditions, _option) = launcher
-        .with_underlying(collateral.coin_id())
-        .mint(&mut ctx)?;
-    spends.extend(ctx.take());
-    let (Some(&a), Some(&b)) = (first_ids.first(), second_ids.first()) else {
-        return Ok(None);
-    };
+    let receive = wallet.change_p2_puzzle_hash().await?;
+    let (spends, option) = wallet
+        .mint_option(
+            sage_wallet::WalletOptionMint {
+                expiration_seconds: params.expires_at,
+                underlying_type,
+                strike_type,
+            },
+            params.fee,
+        )
+        .await?;
     Ok(Some(Minted {
-        spends: tie_concurrent(guarantee_launch(spends), a, b),
-        launcher_id,
-        nonce,
+        spends,
+        launcher_id: option.info.launcher_id,
+        nonce: Bytes32::default(),
         receive,
     }))
 }
@@ -646,9 +662,11 @@ pub fn mint_option(
         (Some(_), None) | (None, Some(_)) => return Err(invalid("loan")),
         (None, None) => {}
     }
+    // The creator is the wallet itself: Sage writes with its change address as creator,
+    // whichever of the wallet's own addresses the website named.
     let build_params = params.clone();
     let minted = on_sage(state, async move |sage| {
-        Ok(build_mint(&*sage.wallet()?, creator, &build_params, None).await?)
+        Ok(build_sage_mint(&*sage.wallet()?, &build_params).await?)
     })
     .map_err(|e| build_failed(CHIA_MINT_OPTION, ctx, &e))?
     .ok_or_else(|| invalid("underlying"))?;
@@ -685,6 +703,7 @@ pub fn submit_mint(
         CHIA_MINT_OPTION,
         minted.spends,
         &intent,
+        false,
     )?;
     Ok(with_launcher(&submitted.to_json(), minted.launcher_id))
 }
@@ -710,7 +729,7 @@ fn loan_requested(
             asset_info.insert_cat(asset_id, CatAssetInfo::new(None))?;
             requested.cats.entry(asset_id).or_default().push(payment);
         }
-        AssetId::Option(_) => return Err(chia_wallet_sdk::driver::DriverError::InvalidAssetId),
+        _ => return Err(chia_wallet_sdk::driver::DriverError::InvalidAssetId),
     }
     Ok((requested, asset_info))
 }
@@ -719,6 +738,13 @@ fn loan_requested(
 struct OfferOnly;
 
 impl Broadcaster for OfferOnly {
+    /// Nothing is broadcast. The request's signatures are released (the offer goes back
+    /// to the website), and the borrower's coins in it are written into the record before
+    /// the answer leaves (`requests::record_released`).
+    fn record(&self, _record: &kit::BroadcastRecord) -> Result<(), String> {
+        Ok(())
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
         Ok(Broadcast {
             transaction_id: hex0x(bundle.name()),
@@ -792,6 +818,8 @@ pub fn submit_loan_request(
         CHIA_MINT_OPTION,
         built.spends,
         &intent,
+        // The signed spends go to the lender as an offer: released (spec 11.2).
+        true,
     )?;
     let offer = finish_loan_offer(submitted.bundle, built.nonce, built.receive, principal)
         .ok_or_else(|| invalid("offer"))?;
@@ -955,20 +983,24 @@ pub fn exercise_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let now = ctx.now;
     let spends = on_sage(state, async move |sage| {
         Ok(build_exercise(&*sage.wallet()?, launcher_id, fee, now).await?)
     })
     .map_err(|e| build_failed(CHIA_EXERCISE_OPTION, ctx, &e))?
     .map_err(Refusal::rpc)?;
-    let spends = bind_user_spends(spends, ctx.ownership)?;
+    // Sage's spends as Sage builds them: nothing is added (Sage is the source of truth).
     let summary = sage_view(state, &spends)?;
     submit_exercise(ctx, signer, approver, broadcaster, &summary, spends, fee)
 }
 
-/// After the build: wallet-kit requires the user's spends to be bound to the collateral the
-/// exercise releases (spec 11.1.1, `unbound_exercise`), and verifies the kind.
+/// After the build: wallet-kit requires the user's spends to require one another and the
+/// user's guaranteed outcome to cover the collateral less the strike and the fee (spec
+/// 11.1.1, `BindingReport::exercises_covered`), and verifies the kind. Sage's
+/// `exercise_options` links its spends by `ASSERT_CONCURRENT_SPEND`, which wallet-kit counts
+/// in a sealed request (Klimper broadcasts it and keeps the signatures, spec 11.2), so Sage's
+/// spends pass as Sage builds them. Klimper does not add links to Sage's spends.
 pub fn submit_exercise(
     ctx: &RequestContext<'_>,
     signer: &dyn kit::Signer,
@@ -988,6 +1020,7 @@ pub fn submit_exercise(
         CHIA_EXERCISE_OPTION,
         spends,
         &intent,
+        false,
     )?;
     Ok(submitted.to_json())
 }
@@ -1084,7 +1117,7 @@ pub fn claim_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let now = ctx.now;
     let owned = ctx.ownership.p2_puzzle_hashes.clone();
     let spends = on_sage(state, async move |sage| {
@@ -1126,6 +1159,7 @@ pub fn submit_claim(
         CHIA_CLAIM_OPTION,
         spends,
         &intent,
+        false,
     )?;
     Ok(submitted.to_json())
 }
@@ -1162,7 +1196,7 @@ pub fn transfer_option(
     too_many_failed(ctx)?;
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
     let launcher_id = launcher_param(&params)?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let address = params
         .get("address")
         .and_then(Value::as_str)
@@ -1225,6 +1259,7 @@ pub fn submit_transfer(
         CHIA_TRANSFER_OPTION,
         spends,
         &intent,
+        false,
     )?;
     Ok(submitted.to_json())
 }

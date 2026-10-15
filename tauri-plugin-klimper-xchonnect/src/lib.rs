@@ -64,6 +64,8 @@ pub mod push;
 pub mod relay;
 pub mod requests;
 pub mod session_loop;
+pub mod sign_guard;
+pub mod signed_coins;
 pub mod store;
 mod testing;
 pub mod trade;
@@ -219,7 +221,10 @@ pub struct SessionSummary {
     pub developer_mode: bool,
     pub methods: Vec<String>,
     pub exposed_keys: Vec<String>,
-    pub limits: BTreeMap<String, StoredLimit>,
+    pub limits: BTreeMap<String, LimitView>,
+    /// How many options may leave the user, per request and per day (the default unless
+    /// the user changed it; an empty side is no limit).
+    pub option_limit: LimitView,
     pub allow_agg_sig_unsafe: bool,
     pub allow_unknown_contracts: bool,
     /// The website sees every receive address, not only its own (the user allowed it, or it
@@ -229,13 +234,63 @@ pub struct SessionSummary {
     pub connected: bool,
 }
 
+/// One limit as the webview reads and writes it (`perRequest`, `perDay`, in the asset's
+/// smallest unit; absent or `null` is no limit).
+///
+/// The stored form, [`StoredLimit`], keeps its `snake_case` field names: records in the
+/// keyring are written with them. Before this type the webview's `perRequest` / `perDay`
+/// were read as `StoredLimit`, whose unknown fields serde skips, so every limit the user
+/// set was stored as no limit. A field this does not know is now an error, never a missing
+/// limit.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LimitView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per_request: Option<u128>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per_day: Option<u128>,
+}
+
+impl From<StoredLimit> for LimitView {
+    fn from(limit: StoredLimit) -> Self {
+        LimitView {
+            per_request: limit.per_request,
+            per_day: limit.per_day,
+        }
+    }
+}
+
+impl From<LimitView> for StoredLimit {
+    fn from(limit: LimitView) -> Self {
+        StoredLimit {
+            per_request: limit.per_request,
+            per_day: limit.per_day,
+        }
+    }
+}
+
+/// The stored limits in the webview's words.
+pub fn limit_views(limits: &BTreeMap<String, StoredLimit>) -> BTreeMap<String, LimitView> {
+    limits
+        .iter()
+        .map(|(key, limit)| (key.clone(), LimitView::from(*limit)))
+        .collect()
+}
+
 /// Changes a user can make to one dApp's permissions (the full screen is TASK-083).
+///
+/// Read strictly: a field the webview names differently from this is refused, so a naming
+/// mismatch fails the save instead of silently loosening a permission.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DappPolicy {
     /// Replace the per-asset limits. Keys are `xch` or `cat:<64 hex>`.
     #[serde(default)]
-    pub limits: Option<BTreeMap<String, StoredLimit>>,
+    pub limits: Option<BTreeMap<String, LimitView>>,
+    /// Replace the option limit: how many options may leave the user per request and per
+    /// day (xchonnect spec 11.1 item 5). An empty side is no limit.
+    #[serde(default)]
+    pub option_limit: Option<LimitView>,
     /// Allow `AGG_SIG_UNSAFE` for this dApp. Off by default and a scary confirmation in
     /// the UI: such a signature is valid in any spend context.
     #[serde(default)]
@@ -250,6 +305,18 @@ pub struct DappPolicy {
     /// user's coins, and link them), or only its own. On by default on the pairing screen.
     #[serde(default)]
     pub all_receive_keys: Option<bool>,
+}
+
+impl DappPolicy {
+    /// The limits to store, if this change replaces them.
+    pub fn stored_limits(&self) -> Option<BTreeMap<String, StoredLimit>> {
+        self.limits.as_ref().map(|limits| {
+            limits
+                .iter()
+                .map(|(key, limit)| (key.clone(), StoredLimit::from(*limit)))
+                .collect()
+        })
+    }
 }
 
 /// Describe one stored session for the webview.
@@ -276,7 +343,8 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         developer_mode: stored.record.developer_mode,
         methods: stored.record.permissions.methods.clone(),
         exposed_keys: stored.record.permissions.exposed_keys.clone(),
-        limits: stored.record.permissions.limits.clone(),
+        limits: limit_views(&stored.record.permissions.limits),
+        option_limit: stored.record.permissions.option_limit().into(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
         all_receive_keys: stored.record.permissions.exposed_keys.len() > 1,
@@ -716,6 +784,20 @@ async fn push_status<R: Runtime>(
     })
 }
 
+/// The wallet's default fee, in mojos, as the user set it in the wallet's settings: the fee
+/// of every request Klimper builds and broadcasts itself (`chia_send`, offer takes, the
+/// option methods), never a website's `fee` (xchonnect spec 11.1.1, 11.2). Capped at
+/// `execute::MAX_FEE`.
+#[command]
+async fn set_own_fee(fee: String) -> Result<()> {
+    let mojos: u64 = fee
+        .trim()
+        .parse()
+        .map_err(|_| Error::Protocol(format!("not a fee in mojos: {fee}")))?;
+    execute::set_own_fee(mojos);
+    Ok(())
+}
+
 /// The connected dApps of the active wallet. Also resumes the message loop of every
 /// session that is not already running, which is how sessions come back after a restart
 /// or after a wallet was opened.
@@ -909,6 +991,7 @@ async fn set_dapp_policy<R: Runtime>(
         }
     };
     let keys_changed = keys.is_some();
+    let limits = policy.stored_limits();
     let stored = state
         .store
         .update_policy(snapshot.fingerprint, &session_id, |record| {
@@ -916,8 +999,11 @@ async fn set_dapp_policy<R: Runtime>(
                 record.own_key = own;
                 record.permissions.exposed_keys = exposed;
             }
-            if let Some(limits) = policy.limits {
+            if let Some(limits) = limits {
                 record.permissions.limits = limits;
+            }
+            if let Some(limit) = policy.option_limit {
+                record.permissions.options = Some(limit.into());
             }
             if let Some(methods) = policy.methods {
                 record.permissions.methods = methods;
@@ -1047,7 +1133,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             pending_approvals,
             resolve_approval,
             cancel_approval,
-            push_status
+            push_status,
+            set_own_fee
         ])
         .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;
@@ -1064,6 +1151,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     tracing::warn!("could not emit {event}: {error}");
                 }
             });
+            // What Sage signs through its own screens goes into the record of signed coins
+            // (xchonnect spec 11.2).
+            signed_coins::spawn_sweeper(app.clone(), store.clone());
             app.manage(Xchonnect {
                 app: app.clone(),
                 store,
@@ -1093,6 +1183,86 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 #[cfg(test)]
 mod lib_tests {
     use super::*;
+
+    /// The limits exactly as the website-settings screen sends them (the same file is
+    /// checked against the screen's payload in `XchonnectDappSettings.test.tsx`).
+    const WEBVIEW_LIMITS: &str = include_str!("../tests/fixtures/webview_limits.json");
+    const CAT: &str = "cat:abababababababababababababababababababababababababababababababab";
+
+    /// The webview's `perRequest` / `perDay` reach the stored form, and the summary hands
+    /// them back in the same words. Before `LimitView` they were read as the stored form's
+    /// `per_request` / `per_day`, skipped as unknown, and every limit meant no limit.
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    fn the_webviews_limits_are_read_as_sent() {
+        let limits: serde_json::Value = serde_json::from_str(WEBVIEW_LIMITS).unwrap();
+        let policy: DappPolicy = serde_json::from_value(json!({ "limits": limits })).unwrap();
+        let stored = policy.stored_limits().unwrap();
+        assert_eq!(
+            stored["xch"],
+            StoredLimit {
+                per_request: Some(100),
+                per_day: Some(1000),
+            }
+        );
+        assert_eq!(
+            stored[CAT],
+            StoredLimit {
+                per_request: None,
+                per_day: Some(5000),
+            }
+        );
+        assert_eq!(serde_json::to_value(limit_views(&stored)).unwrap(), limits);
+    }
+
+    /// A limit in any other words is refused at the boundary, never read as no limit.
+    #[test]
+    fn a_limit_the_screen_names_differently_is_refused() {
+        for wrong in [
+            json!({ "limits": { "xch": { "per_request": 100 } } }),
+            json!({ "limits": { "xch": { "perRequest": 100, "perWeek": 1 } } }),
+            json!({ "limits": { "xch": { "perRequest": "100" } } }),
+            json!({ "limit": { "xch": { "perRequest": 100 } } }),
+        ] {
+            assert!(
+                serde_json::from_value::<DappPolicy>(wrong.clone()).is_err(),
+                "{wrong}"
+            );
+        }
+        // Every field the screen sends is still read.
+        assert!(
+            serde_json::from_value::<DappPolicy>(json!({
+                "limits": {},
+                "methods": ["chip0002_chainId"],
+                "allowAggSigUnsafe": false,
+                "allowUnknownContracts": false,
+                "allReceiveKeys": true,
+            }))
+            .is_ok()
+        );
+    }
+
+    /// The limits the webview sends (`perRequest`, `perDay`) reach the stored record, and
+    /// the summary hands them back in the same words. Before `LimitView`, the stored form's
+    /// `per_request` was expected and the webview's limits were read as no limit.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_option_limit_is_read_as_sent() {
+        let policy: DappPolicy = serde_json::from_value(serde_json::json!({
+            "limits": { "xch": { "perRequest": 250, "perDay": 1000 } },
+            "optionLimit": { "perRequest": 2 },
+        }))
+        .unwrap();
+        let xch = StoredLimit::from(policy.limits.unwrap()["xch"]);
+        assert_eq!((xch.per_request, xch.per_day), (Some(250), Some(1000)));
+        let options = StoredLimit::from(policy.option_limit.unwrap());
+        assert_eq!((options.per_request, options.per_day), (Some(2), None));
+        let shown = serde_json::to_value(LimitView::from(xch)).unwrap();
+        assert_eq!(
+            shown,
+            serde_json::json!({ "perRequest": 250, "perDay": 1000 })
+        );
+    }
 
     #[test]
     fn a_release_build_never_accepts_a_developer_mode_uri() {

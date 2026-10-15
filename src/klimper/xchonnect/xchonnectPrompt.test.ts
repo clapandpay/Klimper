@@ -156,6 +156,48 @@ describe('readPrompt', () => {
     expect(needsSecondConfirmation(view)).toBe(true);
   });
 
+  it('reads spends Klimper cannot account for strictly, and asks twice', () => {
+    const COIN = 'd'.repeat(64);
+    const output = (unaccounted: unknown) => ({
+      asset: { type: 'xch' },
+      amount: 1,
+      puzzle_hash: PUZZLE,
+      recipient: PUZZLE,
+      to_user: true,
+      option: null,
+      unaccounted,
+    });
+    const view = readPrompt({
+      ...simpleSend,
+      summary: {
+        ...simpleSend.summary,
+        unknown_puzzles: [PUZZLE],
+        unaccounted_spends: [COIN],
+        outputs: [output(true), output(false)],
+      },
+    });
+    if (view.kind !== 'spend') throw new Error('expected a spend');
+    expect(view.unaccountedSpends).toEqual([COIN]);
+    expect(view.outputs.map((o) => o.unaccounted)).toEqual([true, false]);
+    expect(needsSecondConfirmation(view)).toBe(true);
+
+    // Anything but a list of coin ids, or a flag that is not a boolean: unreadable.
+    for (const summary of [
+      { unaccounted_spends: ['not a coin'] },
+      { unaccounted_spends: COIN },
+      { unaccounted_spends: [COIN, null] },
+      { outputs: [output('yes')] },
+      { outputs: [output(null)] },
+    ]) {
+      expect(
+        readPrompt({
+          ...simpleSend,
+          summary: { ...simpleSend.summary, ...summary },
+        }).kind,
+      ).toBe('unreadable');
+    }
+  });
+
   it('flags an unsafe signature from either place it is written', () => {
     const fromFlag = readPrompt({
       ...simpleSend,
@@ -735,5 +777,27 @@ describe('option keys', () => {
     unreadable(f.loanRequest({ makes_offer: 'yes' }));
     const signOnly = { ...f.loanRequest(), type: 'sign_coin_spends' };
     expect(spend(signOnly).makesOffer).toBe(false);
+  });
+
+  it('reads linking strictly: sealed only on the wallet’s own build (spec 11.2)', () => {
+    expect(spend({ ...f.optionPrompt(), linking: 'sealed' }).sealed).toBe(true);
+    expect(spend({ ...f.optionPrompt(), linking: 'direct' }).sealed).toBe(
+      false,
+    );
+    expect(spend(f.optionPrompt()).sealed).toBe(false);
+    unreadable({ ...f.optionPrompt(), linking: 'Sealed' });
+    unreadable({ ...f.optionPrompt(), linking: true });
+    const website = {
+      ...f.optionPrompt(),
+      linking: 'sealed',
+      wallet_built: false,
+    };
+    expect(spend(website).sealed).toBe(false);
+    const signOnly = {
+      ...f.optionPrompt(),
+      linking: 'sealed',
+      type: 'sign_coin_spends',
+    };
+    expect(spend(signOnly).sealed).toBe(false);
   });
 });
