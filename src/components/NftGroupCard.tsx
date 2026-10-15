@@ -316,20 +316,25 @@ export function NftGroupCard({
                       <Trans>View Metadata</Trans>
                     </span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className='cursor-pointer'
-                    disabled={isPlaceHolder}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openUrl(mintGardenCollectionUrl(cardId, isTestnet));
-                    }}
-                    aria-label={t`View ${cardName} on Mintgarden`}
-                  >
-                    <ExternalLink className='mr-2 h-4 w-4' aria-hidden='true' />
-                    <span>
-                      <Trans>View on Mintgarden</Trans>
-                    </span>
-                  </DropdownMenuItem>
+                  {offersEnabled && (
+                    <DropdownMenuItem
+                      className='cursor-pointer'
+                      disabled={isPlaceHolder}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openUrl(mintGardenCollectionUrl(cardId, isTestnet));
+                      }}
+                      aria-label={t`View ${cardName} on Mintgarden`}
+                    >
+                      <ExternalLink
+                        className='mr-2 h-4 w-4'
+                        aria-hidden='true'
+                      />
+                      <span>
+                        <Trans>View on Mintgarden</Trans>
+                      </span>
+                    </DropdownMenuItem>
+                  )}
 
                   <DropdownMenuItem
                     className='cursor-pointer'
@@ -361,7 +366,7 @@ export function NftGroupCard({
                 </>
               )}
 
-              {!isCollection && (
+              {!isCollection && offersEnabled && (
                 <DropdownMenuItem
                   className='cursor-pointer'
                   onClick={(e) => {

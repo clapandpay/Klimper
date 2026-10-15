@@ -65,8 +65,10 @@ pub mod relay;
 pub mod requests;
 pub mod session_loop;
 pub mod sign_guard;
+pub mod signed_coins;
 pub mod store;
 mod testing;
+pub mod trade;
 pub mod wallet;
 
 use approval::{Approval, ApprovalBridge, Emitter};
@@ -220,6 +222,9 @@ pub struct SessionSummary {
     pub methods: Vec<String>,
     pub exposed_keys: Vec<String>,
     pub limits: BTreeMap<String, LimitView>,
+    /// How many options may leave the user, per request and per day (the default unless
+    /// the user changed it; an empty side is no limit).
+    pub option_limit: LimitView,
     pub allow_agg_sig_unsafe: bool,
     pub allow_unknown_contracts: bool,
     /// The website sees every receive address, not only its own (the user allowed it, or it
@@ -282,6 +287,10 @@ pub struct DappPolicy {
     /// Replace the per-asset limits. Keys are `xch` or `cat:<64 hex>`.
     #[serde(default)]
     pub limits: Option<BTreeMap<String, LimitView>>,
+    /// Replace the option limit: how many options may leave the user per request and per
+    /// day (xchonnect spec 11.1 item 5). An empty side is no limit.
+    #[serde(default)]
+    pub option_limit: Option<LimitView>,
     /// Allow `AGG_SIG_UNSAFE` for this dApp. Off by default and a scary confirmation in
     /// the UI: such a signature is valid in any spend context.
     #[serde(default)]
@@ -335,6 +344,7 @@ fn summary(stored: &StoredSession, keys: KeyState, connected: bool) -> SessionSu
         methods: stored.record.permissions.methods.clone(),
         exposed_keys: stored.record.permissions.exposed_keys.clone(),
         limits: limit_views(&stored.record.permissions.limits),
+        option_limit: stored.record.permissions.option_limit().into(),
         allow_agg_sig_unsafe: stored.record.allow_agg_sig_unsafe,
         allow_unknown_contracts: stored.record.allow_unknown_contracts,
         all_receive_keys: stored.record.permissions.exposed_keys.len() > 1,
@@ -695,6 +705,7 @@ async fn confirm_sas<R: Runtime>(
     pairing_id: String,
     matches: bool,
     all_receive_keys: Option<bool>,
+    option_contracts: Option<bool>,
 ) -> Result<Option<SessionSummary>> {
     let shared = state.attempt(&pairing_id).await?;
     let mut attempt = shared.lock().await;
@@ -724,6 +735,10 @@ async fn confirm_sas<R: Runtime>(
     attempt.own_key = own;
     attempt.permissions.exposed_keys =
         exposed_keys(own, all_receive_keys == Some(true), &snapshot.receive_keys);
+    // Option contracts only when the user turned them on for this website (TASK-140).
+    if option_contracts == Some(true) {
+        pairing::grant_option_methods(&mut attempt.permissions.methods);
+    }
     let stored = match pairing::confirm(&mut attempt, &state.store, now()).await {
         Ok(stored) => stored,
         Err(error) => {
@@ -767,6 +782,20 @@ async fn push_status<R: Runtime>(
         enabled: state.push.gateway().is_some(),
         permission: state.push.permission(),
     })
+}
+
+/// The wallet's default fee, in mojos, as the user set it in the wallet's settings: the fee
+/// of every request Klimper builds and broadcasts itself (`chia_send`, offer takes, the
+/// option methods), never a website's `fee` (xchonnect spec 11.1.1, 11.2). Capped at
+/// `execute::MAX_FEE`.
+#[command]
+async fn set_own_fee(fee: String) -> Result<()> {
+    let mojos: u64 = fee
+        .trim()
+        .parse()
+        .map_err(|_| Error::Protocol(format!("not a fee in mojos: {fee}")))?;
+    execute::set_own_fee(mojos);
+    Ok(())
 }
 
 /// The connected dApps of the active wallet. Also resumes the message loop of every
@@ -973,6 +1002,9 @@ async fn set_dapp_policy<R: Runtime>(
             if let Some(limits) = limits {
                 record.permissions.limits = limits;
             }
+            if let Some(limit) = policy.option_limit {
+                record.permissions.options = Some(limit.into());
+            }
             if let Some(methods) = policy.methods {
                 record.permissions.methods = methods;
             }
@@ -1101,7 +1133,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             pending_approvals,
             resolve_approval,
             cancel_approval,
-            push_status
+            push_status,
+            set_own_fee
         ])
         .setup(|app, api| {
             let data_dir = app.path().app_data_dir()?;
@@ -1118,6 +1151,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     tracing::warn!("could not emit {event}: {error}");
                 }
             });
+            // What Sage signs through its own screens goes into the record of signed coins
+            // (xchonnect spec 11.2).
+            signed_coins::spawn_sweeper(app.clone(), store.clone());
             app.manage(Xchonnect {
                 app: app.clone(),
                 store,
@@ -1203,6 +1239,28 @@ mod lib_tests {
                 "allReceiveKeys": true,
             }))
             .is_ok()
+        );
+    }
+
+    /// The limits the webview sends (`perRequest`, `perDay`) reach the stored record, and
+    /// the summary hands them back in the same words. Before `LimitView`, the stored form's
+    /// `per_request` was expected and the webview's limits were read as no limit.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_option_limit_is_read_as_sent() {
+        let policy: DappPolicy = serde_json::from_value(serde_json::json!({
+            "limits": { "xch": { "perRequest": 250, "perDay": 1000 } },
+            "optionLimit": { "perRequest": 2 },
+        }))
+        .unwrap();
+        let xch = StoredLimit::from(policy.limits.unwrap()["xch"]);
+        assert_eq!((xch.per_request, xch.per_day), (Some(250), Some(1000)));
+        let options = StoredLimit::from(policy.option_limit.unwrap());
+        assert_eq!((options.per_request, options.per_day), (Some(2), None));
+        let shown = serde_json::to_value(LimitView::from(xch)).unwrap();
+        assert_eq!(
+            shown,
+            serde_json::json!({ "perRequest": 250, "perDay": 1000 })
         );
     }
 

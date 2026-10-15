@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Option prompts as the plugin sends them (clapandpay TASK-140), for the tests and the
+// preview: wallet-kit's `summary.options`, `outputs[].option`, the option asset, and Klimper's
+// own `loan` and `makes_offer` keys.
+
+export type Asset =
+  | { type: 'xch' }
+  | { type: 'cat'; asset_id: string }
+  | { type: 'option'; asset_id: string };
+
+export const XCH: Asset = { type: 'xch' };
+export const cat = (byte: string): Asset => ({
+  type: 'cat',
+  asset_id: byte.repeat(64 / byte.length),
+});
+export const optionAsset = (launcherId: string): Asset => ({
+  type: 'option',
+  asset_id: launcherId,
+});
+
+/** One XCH in mojos. */
+export const ONE_XCH = 1_000_000_000_000;
+/** A CAT with three decimals: 1 whole token. */
+export const ONE_CAT = 1_000;
+
+export const LAUNCHER = '9c1f'.repeat(16);
+export const LAUNCHER_2 = '77a0'.repeat(16);
+export const ME = '4f45'.repeat(16);
+export const LENDER = 'ab12'.repeat(16);
+export const BORROWER = 'cd34'.repeat(16);
+export const STRANGER = 'e5e5'.repeat(16);
+export const COLLATERAL_COIN = 'e2d0'.repeat(16);
+export const SETTLEMENT =
+  'cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7';
+export const USDC = cat('3c');
+/** 13 Nov 2026 14:00 UTC. */
+export const EXPIRY = 1_794_578_400;
+
+export const leg = (asset: Asset, amount: number) => ({ asset, amount });
+
+export function terms({
+  creator = ME,
+  collateral = leg(XCH, 100 * ONE_XCH),
+  strike = leg(USDC, 500 * ONE_CAT),
+  expiresAt = EXPIRY,
+}: {
+  creator?: string;
+  collateral?: ReturnType<typeof leg>;
+  strike?: ReturnType<typeof leg>;
+  expiresAt?: number;
+} = {}) {
+  return {
+    creator_puzzle_hash: creator,
+    expiration_seconds: expiresAt,
+    collateral,
+    strike,
+  };
+}
+
+export function mint(overrides: Record<string, unknown> = {}) {
+  return {
+    action: 'mint',
+    launcher_id: LAUNCHER,
+    owner: ME,
+    owner_is_user: true,
+    creator_is_user: true,
+    funded_by_user: true,
+    guaranteed: true,
+    collateral_coin_id: COLLATERAL_COIN,
+    terms: terms(),
+    ...overrides,
+  };
+}
+
+export function exercise(overrides: Record<string, unknown> = {}) {
+  return {
+    action: 'exercise',
+    launcher_id: LAUNCHER,
+    by_user: true,
+    creator_is_user: false,
+    terms: terms({ creator: STRANGER }),
+    ...overrides,
+  };
+}
+
+export function clawback(overrides: Record<string, unknown> = {}) {
+  return {
+    action: 'clawback',
+    launcher_id: LAUNCHER,
+    creator: ME,
+    creator_is_user: true,
+    collateral: leg(XCH, 100 * ONE_XCH),
+    unlocks_at_seconds: EXPIRY,
+    ...overrides,
+  };
+}
+
+export function transfer(overrides: Record<string, unknown> = {}) {
+  return {
+    action: 'transfer',
+    launcher_id: LAUNCHER,
+    from_user: true,
+    to: STRANGER,
+    to_user: false,
+    ...overrides,
+  };
+}
+
+type Delta = [Asset, number, number, number?];
+
+/** A wallet-built request with option effects, as `UiApprover` hands it to the screen. */
+export function optionPrompt({
+  method = 'chia_mintOption',
+  options = [mint()],
+  assets = [
+    [XCH, 100 * ONE_XCH + 1_000_000 + 2, 0],
+    [optionAsset(LAUNCHER), 0, 1],
+  ] as Delta[],
+  outputs = [
+    {
+      asset: XCH,
+      amount: 100 * ONE_XCH,
+      puzzle_hash: 'f1'.repeat(32),
+      recipient: null,
+      to_user: false,
+      option: { launcher_id: LAUNCHER, role: 'collateral' },
+    },
+    {
+      asset: XCH,
+      amount: 1,
+      puzzle_hash: 'eff0'.repeat(16),
+      recipient: null,
+      to_user: false,
+      option: { launcher_id: LAUNCHER, role: 'launcher' },
+    },
+    {
+      asset: XCH,
+      amount: 4 * ONE_XCH,
+      puzzle_hash: ME,
+      recipient: ME,
+      to_user: true,
+      option: null,
+    },
+  ] as unknown[],
+  fee = 1_000_000,
+  kind = 'option.mint',
+  extra = {},
+}: {
+  method?: string;
+  options?: unknown[];
+  assets?: Delta[];
+  outputs?: unknown[];
+  fee?: number;
+  kind?: string | null;
+  extra?: Record<string, unknown>;
+} = {}) {
+  return {
+    type: 'submit_coin_spends',
+    dapp: 'options.example',
+    method,
+    wallet_built: true,
+    summary: {
+      assets: assets.map(([asset, sent, received, conditional = 0]) => ({
+        asset,
+        sent,
+        received,
+        conditional_received: conditional,
+        net: received - sent,
+      })),
+      implied_fee: fee,
+      reserve_fee: fee,
+      time_locks: {},
+      unknown_puzzles: [],
+      cost: 1,
+      spends: [],
+      outputs,
+      options,
+    },
+    plan: {
+      ours: [
+        {
+          spend: 0,
+          opcode: 50,
+          public_key: 'a'.repeat(96),
+          message: 'ff',
+          is_unsafe: false,
+        },
+      ],
+      foreign: [],
+      has_unsafe: false,
+    },
+    binding: null,
+    intent:
+      kind === null
+        ? null
+        : {
+            kind,
+            kind_verified: true,
+            verified: [{ type: 'fee', amount: fee }],
+            recipients_complete: true,
+          },
+    cross_checked: true,
+    ...extra,
+  };
+}
+
+/** The borrower's loan request: 300 wUSDC from the lender against 100 XCH, repay 315. */
+export function loanRequest(extra: Record<string, unknown> = {}) {
+  return optionPrompt({
+    options: [
+      mint({
+        terms: terms({ creator: LENDER, strike: leg(USDC, 315 * ONE_CAT) }),
+        creator_is_user: false,
+      }),
+    ],
+    outputs: [
+      {
+        asset: XCH,
+        amount: 100 * ONE_XCH,
+        puzzle_hash: 'f1'.repeat(32),
+        recipient: null,
+        to_user: false,
+        option: { launcher_id: LAUNCHER, role: 'collateral' },
+      },
+      {
+        asset: XCH,
+        amount: 1,
+        puzzle_hash: SETTLEMENT,
+        recipient: SETTLEMENT,
+        to_user: false,
+        option: null,
+      },
+    ],
+    kind: 'loan.request',
+    extra: {
+      makes_offer: true,
+      loan: {
+        role: 'borrower',
+        principal: leg(USDC, 300 * ONE_CAT),
+        counterparty: LENDER,
+        tie: leg(XCH, 1),
+      },
+      ...extra,
+    },
+  });
+}
+
+/** The lender taking it: pays 300 wUSDC, receives the 1-mojo tie. */
+export function loanTake(extra: Record<string, unknown> = {}) {
+  return optionPrompt({
+    method: 'chia_takeOffer',
+    options: [
+      mint({
+        owner: BORROWER,
+        owner_is_user: false,
+        creator_is_user: true,
+        funded_by_user: false,
+        guaranteed: false,
+        terms: terms({ creator: ME, strike: leg(USDC, 315 * ONE_CAT) }),
+      }),
+    ],
+    assets: [
+      [USDC, 300 * ONE_CAT, 0],
+      [XCH, 1_000_000, 0, 1],
+    ],
+    outputs: [],
+    kind: 'loan.take',
+    extra: {
+      binding: {
+        all_bound: true,
+        bound_payments: [{ asset: XCH, amount: 1 }],
+        bound_received: [{ asset: XCH, amount: 1 }],
+      },
+      trade: {
+        offers: 1,
+        pays: [{ asset: USDC, amount: String(300 * ONE_CAT) }],
+        receives: [{ asset: XCH, amount: '1' }],
+        fee: '1000000',
+        price: null,
+      },
+      loan: {
+        role: 'lender',
+        principal: leg(USDC, 300 * ONE_CAT),
+        counterparty: BORROWER,
+        tie: leg(XCH, 1),
+      },
+      ...extra,
+    },
+  });
+}

@@ -19,6 +19,7 @@ never reach this surface.
 - `allow-resolve-approval`
 - `allow-cancel-approval`
 - `allow-push-status`
+- `allow-set-own-fee`
 
 ## Permission Table
 
@@ -337,6 +338,32 @@ Enables the set_dapp_policy command without any pre-configured scope.
 <td>
 
 Denies the set_dapp_policy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-set-own-fee`
+
+</td>
+<td>
+
+Enables the set_own_fee command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-set-own-fee`
+
+</td>
+<td>
+
+Denies the set_own_fee command without any pre-configured scope.
 
 </td>
 </tr>

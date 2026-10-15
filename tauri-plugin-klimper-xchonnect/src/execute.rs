@@ -22,6 +22,7 @@
 //!   user is never asked to approve a figure one of the two engines contradicts.
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, CoinSpend, Program, SpendBundle};
@@ -50,10 +51,13 @@ pub const CHIA_TAKE_OFFER: &str = "chia_takeOffer";
 pub const WALLET_BUILT_METHODS: [&str; 2] = [CHIA_SEND, CHIA_TAKE_OFFER];
 
 /// Whether Klimper builds this request from the wallet's own coins (and so signs it with
-/// every key of the wallet, not only the ones the website was shown).
+/// every key of the wallet, not only the ones the website was shown): the methods above and
+/// the option methods ([`options::OPTION_METHODS`], TASK-140).
 pub fn is_wallet_built(method: &str) -> bool {
-    WALLET_BUILT_METHODS.contains(&method)
+    WALLET_BUILT_METHODS.contains(&method) || options::OPTION_METHODS.contains(&method)
 }
+
+pub mod options;
 
 /// The revision of [`WALLET_BUILT_METHODS`] a new pairing is granted. 1: `chia_takeOffer`.
 pub const METHODS_REVISION: u32 = 1;
@@ -141,60 +145,86 @@ fn from_json(cs: &CoinSpendJson) -> Option<CoinSpend> {
 // Broadcasting through Klimper's own peers.
 // ---------------------------------------------------------------------------------------
 
-/// Submits through Sage's peer connections and records the transaction as pending.
-pub struct SageBroadcaster {
+/// Submits through Sage's peer connections (Sage records the transaction as pending), after
+/// writing what wallet-kit reports into the wallet's record of signed coins (xchonnect spec
+/// 11.2, [`Broadcaster::record`]) and keeping a sealed bundle's bytes to send it again.
+pub struct SageBroadcaster<'a> {
     state: AppState,
+    recorder: crate::signed_coins::Recorder<'a>,
 }
 
-impl std::fmt::Debug for SageBroadcaster {
+impl std::fmt::Debug for SageBroadcaster<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SageBroadcaster").finish_non_exhaustive()
     }
 }
 
-impl SageBroadcaster {
-    pub fn new(state: AppState) -> Self {
-        SageBroadcaster { state }
+impl<'a> SageBroadcaster<'a> {
+    pub fn new(state: AppState, record: &'a crate::signed_coins::SignedCoinsHandle) -> Self {
+        SageBroadcaster {
+            state,
+            recorder: crate::signed_coins::Recorder::new(record),
+        }
     }
 }
 
-impl Broadcaster for SageBroadcaster {
+impl Broadcaster for SageBroadcaster<'_> {
+    fn record(&self, record: &kit::BroadcastRecord) -> Result<(), String> {
+        self.recorder.record(record)
+    }
+
     fn submit(&self, bundle: &SpendBundle) -> Result<Broadcast, String> {
-        let request = SendTransactionImmediately {
-            spend_bundle: sage_api::wallet_connect::SpendBundle {
-                coin_spends: bundle
-                    .coin_spends
-                    .iter()
-                    .map(|cs| sage_api::wallet_connect::CoinSpend {
-                        coin: sage_api::wallet_connect::Coin {
-                            parent_coin_info: hex0x(cs.coin.parent_coin_info),
-                            puzzle_hash: hex0x(cs.coin.puzzle_hash),
-                            amount: Amount::u64(cs.coin.amount),
-                        },
-                        puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
-                        solution: hex0x(cs.solution.as_ref()),
-                    })
-                    .collect(),
-                aggregated_signature: hex0x(bundle.aggregated_signature.to_bytes()),
-            },
-        };
-        let response = on_sage(&self.state, async move |sage| {
-            sage.send_transaction_immediately(request).await
-        })?;
-        let transaction_id = hex0x(bundle.name());
-        match response.status {
-            // In a peer's mempool, and recorded by the wallet as pending.
-            1 => Ok(Broadcast {
-                transaction_id,
-                status: "pending".to_owned(),
-            }),
-            // No peer said yes or no. It may still propagate; the dApp is told so.
-            3 => Ok(Broadcast {
-                transaction_id,
-                status: "unknown".to_owned(),
-            }),
-            status => Err(response.error.unwrap_or_else(|| format!("status {status}"))),
-        }
+        self.recorder.before_send(bundle);
+        send_to_sage(&self.state, bundle)
+    }
+}
+
+/// Send a sealed bundle Klimper already broadcast once again, byte for byte, through Sage's
+/// peers (xchonnect spec 11.2: never re-signed). `None`: no such bundle is kept.
+pub fn resend_sealed(
+    state: &AppState,
+    record: &crate::signed_coins::SignedCoinsHandle,
+    bundle_id: &Bytes32,
+) -> crate::error::Result<Option<Result<Broadcast, String>>> {
+    crate::signed_coins::resend(record, bundle_id, |bundle| send_to_sage(state, bundle))
+}
+
+/// Hand `bundle` to Sage's peers as it is.
+fn send_to_sage(state: &AppState, bundle: &SpendBundle) -> Result<Broadcast, String> {
+    let request = SendTransactionImmediately {
+        spend_bundle: sage_api::wallet_connect::SpendBundle {
+            coin_spends: bundle
+                .coin_spends
+                .iter()
+                .map(|cs| sage_api::wallet_connect::CoinSpend {
+                    coin: sage_api::wallet_connect::Coin {
+                        parent_coin_info: hex0x(cs.coin.parent_coin_info),
+                        puzzle_hash: hex0x(cs.coin.puzzle_hash),
+                        amount: Amount::u64(cs.coin.amount),
+                    },
+                    puzzle_reveal: hex0x(cs.puzzle_reveal.as_ref()),
+                    solution: hex0x(cs.solution.as_ref()),
+                })
+                .collect(),
+            aggregated_signature: hex0x(bundle.aggregated_signature.to_bytes()),
+        },
+    };
+    let response = on_sage(state, async move |sage| {
+        sage.send_transaction_immediately(request).await
+    })?;
+    let transaction_id = hex0x(bundle.name());
+    match response.status {
+        // In a peer's mempool, and recorded by the wallet as pending.
+        1 => Ok(Broadcast {
+            transaction_id,
+            status: "pending".to_owned(),
+        }),
+        // No peer said yes or no. It may still propagate; the dApp is told so.
+        3 => Ok(Broadcast {
+            transaction_id,
+            status: "unknown".to_owned(),
+        }),
+        status => Err(response.error.unwrap_or_else(|| format!("status {status}"))),
     }
 }
 
@@ -227,26 +257,47 @@ fn sage_asset(asset: Option<&sage_api::Asset>) -> Option<AssetId> {
 /// Refuse when the wallet database and the simulation disagree about what leaves the
 /// wallet. Only coins wallet-kit counts as the user's are compared — the other inputs of
 /// a multi-party bundle are someone else's — and only XCH and CATs, the assets both engines
-/// value.
+/// value. An option singleton is left out (TASK-140): Sage does not see the eve of an option a
+/// request mints as the wallet's coin, and where an option goes is checked by wallet-kit's own
+/// option effects and the request's verified intent instead.
+///
+/// Collateral its creator takes back was locked, not part of the balance: wallet-kit counts
+/// only what does not return to the user as sent (xchonnect rc.5, TASK-78), so the same is
+/// taken from Sage's summary for that input. What is paid to others is compared in full.
 pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(), RpcError> {
-    let owned: std::collections::HashSet<String> = kit_summary
+    let owned: std::collections::HashMap<&str, &kit::simulate::SpendKind> = kit_summary
         .spends
         .iter()
         .filter(|s| s.owned)
-        .map(|s| s.coin_id.clone())
+        .map(|s| (s.coin_id.as_str(), &s.kind))
         .collect();
 
     let mut from_sage = Outflow::default();
     for input in &sage.inputs {
         let id = input.coin_id.strip_prefix("0x").unwrap_or(&input.coin_id);
-        if !owned.contains(id) {
+        let Some(kind) = owned.get(id) else {
             continue;
-        }
+        };
         let Some(asset) = sage_asset(input.asset.as_ref()) else {
             continue;
         };
         let amount = u128::from(input.amount.to_u64().unwrap_or(u64::MAX));
-        *from_sage.spent.entry(asset).or_default() += amount;
+        let spent = match kind {
+            kit::simulate::SpendKind::OptionUnderlying {
+                path: kit::option::UnderlyingPath::Clawback,
+                ..
+            } => {
+                let returned: u128 = input
+                    .outputs
+                    .iter()
+                    .filter(|o| o.receiving)
+                    .map(|o| u128::from(o.amount.to_u64().unwrap_or(u64::MAX)))
+                    .sum();
+                amount.saturating_sub(returned)
+            }
+            _ => amount,
+        };
+        *from_sage.spent.entry(asset).or_default() += spent;
         for output in input.outputs.iter().filter(|o| !o.receiving) {
             let amount = u128::from(output.amount.to_u64().unwrap_or(u64::MAX));
             *from_sage.paid.entry(asset).or_default() += amount;
@@ -255,11 +306,15 @@ pub fn cross_check(sage: &TransactionSummary, kit_summary: &Summary) -> Result<(
 
     let mut from_kit = Outflow::default();
     for delta in &kit_summary.assets {
-        if delta.sent > 0 {
+        if delta.sent > 0 && !matches!(delta.asset, AssetId::Option(_)) {
             from_kit.spent.insert(delta.asset, delta.sent);
         }
     }
-    for output in kit_summary.outputs.iter().filter(|o| !o.to_user) {
+    for output in kit_summary
+        .outputs
+        .iter()
+        .filter(|o| !o.to_user && !matches!(o.asset, AssetId::Option(_)))
+    {
         *from_kit.paid.entry(output.asset).or_default() += u128::from(output.amount);
     }
     // Zero on either side is no amount at all: an offer take creates zero-amount coins (a
@@ -321,6 +376,47 @@ fn amount_param(params: &Value, key: &str) -> Result<Option<u64>, RpcError> {
     }
 }
 
+/// The most fee Klimper pays in a request it builds and broadcasts itself: 0.001 XCH
+/// (`1_000_000_000` mojos), well above what a Chia transaction needs to get in, even in a
+/// full mempool. A larger default fee set in the wallet is taken as this much.
+pub const MAX_FEE: u64 = 1_000_000_000;
+
+/// The fee of Klimper's own requests, in mojos: the wallet's default fee, as the user set it
+/// in the wallet's settings (the webview hands it over, [`set_own_fee`]). 0 until it has.
+static OWN_FEE: AtomicU64 = AtomicU64::new(0);
+
+/// The user's default fee, in mojos, for the requests Klimper builds itself; at most
+/// [`MAX_FEE`].
+pub fn set_own_fee(mojos: u64) {
+    OWN_FEE.store(capped_fee(mojos), Ordering::SeqCst);
+}
+
+fn capped_fee(mojos: u64) -> u64 {
+    mojos.min(MAX_FEE)
+}
+
+/// The fee of Klimper's own requests now ([`set_own_fee`]).
+pub fn own_fee() -> u64 {
+    OWN_FEE.load(Ordering::SeqCst)
+}
+
+/// The fee of a request Klimper builds and broadcasts sealed: Klimper's own choice, the
+/// user's default fee ([`set_own_fee`]), and never a figure a website picked (xchonnect spec
+/// 11.1.1 and 11.2: wallet-kit credits a sealed bundle's fee as the wallet's, and a host
+/// MUST NOT build a sealed bundle with a fee from a dApp's parameters). A website's `fee`
+/// is still read, so a malformed one is refused as before, and then ignored: not even a
+/// capped hint. It is passed to wallet-kit as `SubmitRequest::wallet_fee`, and the approval
+/// shows the fee the bundle pays.
+fn wallet_fee(params: &Value) -> Result<u64, RpcError> {
+    fee_of(params, own_fee())
+}
+
+/// [`wallet_fee`] with the wallet's fee given: the website's `fee` checked, then dropped.
+fn fee_of(params: &Value, own: u64) -> Result<u64, RpcError> {
+    amount_param(params, "fee")?;
+    Ok(own)
+}
+
 /// `chia_send { address, amount, fee?, assetId?, memos? }`: Sage builds the send from the
 /// wallet's own coins, Klimper checks, asks once, signs once and broadcasts.
 pub fn send(
@@ -341,7 +437,7 @@ pub fn send(
     if amount == 0 {
         return Err(invalid("amount"));
     }
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     // A send that cannot be built is answered without a prompt, which tells the dApp the
     // wallet cannot afford it. A few are normal; a run of them is a search for the balance.
     if failed_builds::too_many(ctx.dapp, ctx.now) {
@@ -371,8 +467,13 @@ pub fn send(
 
     // Build from the wallet's own coins; nothing is signed or submitted here.
     let to_address = address.clone();
-    let built = on_sage(state, async move |sage| match asset {
-        AssetId::Xch => {
+    let cat = match asset {
+        AssetId::Cat(id) => Some(id),
+        AssetId::Xch => None,
+        _ => return Err(invalid("assetId")),
+    };
+    let built = on_sage(state, async move |sage| match cat {
+        None => {
             sage.send_xch(SendXch {
                 address: to_address,
                 amount: Amount::u64(amount),
@@ -383,7 +484,7 @@ pub fn send(
             })
             .await
         }
-        AssetId::Cat(id) => {
+        Some(id) => {
             sage.send_cat(SendCat {
                 asset_id: hex::encode(id),
                 address: to_address,
@@ -443,6 +544,8 @@ pub fn send(
         .map_err(RpcError::from)?;
     cross_check(&built.summary, &kit_summary)?;
 
+    // Klimper broadcasts the bundle itself and answers only its id and status: sealed
+    // (xchonnect spec 11.2). The caller's broadcaster records its coins.
     let submitted = kit::submit(
         SubmitRequest {
             method: CHIA_SEND,
@@ -450,6 +553,9 @@ pub fn send(
             other_signature: None,
             intent: Some(&intent),
             wallet_built: true,
+            // Klimper's own fee ([`wallet_fee`]), which the bundle reserves.
+            wallet_fee: fee,
+            signatures_released: false,
         },
         ctx,
         signer,
@@ -477,6 +583,9 @@ const MAX_OFFER_SPENDS: usize = 64;
 /// What is checked about an offer before the wallet builds anything from it:
 ///
 /// * its size ([`MAX_OFFER_SPENDS`]);
+/// * that no coin of the maker's side is spent twice: an aggregate holding one offer twice
+///   (TASK-139) is a bundle the chain refuses, and the user would approve a take that
+///   cannot happen. (The asked-for placeholders share one coin id by design.);
 /// * that it asks for something: an offer with no requested payment (a gift) gives the user
 ///   no settlement payment to tie their spends to, so the take could never be signed safely;
 /// * the maker's spends run within wallet-kit's cost budget and are all puzzles wallet-kit
@@ -492,6 +601,13 @@ fn check_offer(offer: &SpendBundle, ctx: &RequestContext<'_>) -> Result<(), RpcE
         .iter()
         .cloned()
         .partition(|spend| spend.coin.parent_coin_info == Bytes32::default());
+    let mut coins = std::collections::HashSet::with_capacity(makers.len());
+    if !makers
+        .iter()
+        .all(|spend| coins.insert(spend.coin.coin_id()))
+    {
+        return Err(invalid("offer_duplicate_coin"));
+    }
     if placeholders.is_empty() {
         return Err(error(
             codes::UNSUPPORTED_CONTENT,
@@ -521,7 +637,9 @@ fn check_offer(offer: &SpendBundle, ctx: &RequestContext<'_>) -> Result<(), RpcE
 }
 
 /// `AGG_SIG` constants of the request's network, as wallet-kit's policy computes them.
-fn agg_sig_constants(network: &kit::Network) -> chia_wallet_sdk::signer::AggSigConstants {
+pub(crate) fn agg_sig_constants(
+    network: &kit::Network,
+) -> chia_wallet_sdk::signer::AggSigConstants {
     use chia_wallet_sdk::types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
     chia_wallet_sdk::signer::AggSigConstants::new(match network {
         kit::Network::Mainnet => MAINNET_CONSTANTS.agg_sig_me_additional_data,
@@ -580,13 +698,13 @@ fn check_maker_signature(offer: &SpendBundle, network: &kit::Network) -> Result<
     Ok(())
 }
 
-/// The message of the coin announcement Klimper adds to tie a spend, when the bound spend
-/// makes none of its own. Never starts with `0xcb`, the prefix a CAT reserves for its ring.
-const BIND_MESSAGE: &[u8] = b"klimper:bind";
-
 /// Change the conditions of one of the user's own, still unsigned spends: a plain standard
-/// spend (`(() (q . conditions) ())`, as Sage builds them) or a CAT whose inner puzzle is
-/// one. Returns `false`, leaving the spend as it was, for any other shape.
+/// spend (`(() (q . conditions) ())`, as Sage builds them), a CAT whose inner puzzle is one,
+/// or an option contract whose owner's puzzle is one (TASK-140: the option an exercise melts).
+/// Returns `false`, leaving the spend as it was, for any other shape. Only the tests use it,
+/// to make a website's tampered spend: Klimper hands Sage's spends to wallet-kit as Sage
+/// builds them (xchonnect spec 11.2, sealed requests).
+#[cfg(test)]
 fn edit_user_conditions(
     allocator: &mut chia_wallet_sdk::prelude::Allocator,
     spend: &mut CoinSpend,
@@ -640,6 +758,22 @@ fn edit_user_conditions(
         };
         cat.inner_puzzle_solution = inner;
         cat.to_clvm(allocator).ok()
+    } else if let Ok(Some((_, p2, _))) =
+        chia_wallet_sdk::driver::OptionContract::parse(allocator, spend.coin, puzzle, solution)
+        && matches!(StandardLayer::parse_puzzle(allocator, p2), Ok(Some(_)))
+    {
+        use chia_puzzle_types::singleton::SingletonSolution;
+        use chia_wallet_sdk::types::puzzles::OptionContractSolution;
+        let Ok(mut option) =
+            SingletonSolution::<OptionContractSolution<NodePtr>>::from_clvm(allocator, solution)
+        else {
+            return false;
+        };
+        let Some(inner) = edited(allocator, option.inner_solution.inner_solution, edit) else {
+            return false;
+        };
+        option.inner_solution.inner_solution = inner;
+        option.to_clvm(allocator).ok()
     } else {
         None
     };
@@ -648,88 +782,6 @@ fn edit_user_conditions(
     };
     spend.solution = rebuilt;
     true
-}
-
-/// Tie every one of the user's spends to the maker's payment before anything is signed.
-///
-/// Wallet-kit signs a two-party bundle only if each user spend is *bound* (spec 11.2): it
-/// asserts the settlement announcement of the payment the user expects, or a coin
-/// announcement of a user spend that does. Otherwise that spend could be taken out of the
-/// bundle and sent alone. Sage's take can leave one of the user's spends loose (with a fee,
-/// the assertions sit on one coin and the user's other coin asserts none of them). Such a
-/// spend is tied here: it asserts a coin announcement of a bound user spend (one that spend
-/// makes anyway, or one added to it). Both are the user's own, still unsigned spends, and
-/// both changes only add conditions: an assertion narrows when a coin can be spent, an
-/// announcement gives nothing away. A spend of any other shape is left as it is, and
-/// wallet-kit then refuses the take as `unbound_partial`.
-fn bind_user_spends(
-    mut spends: Vec<CoinSpend>,
-    ownership: &kit::Ownership,
-) -> Result<Vec<CoinSpend>, RpcError> {
-    use chia_wallet_sdk::prelude::{Allocator, Condition};
-    use chia_wallet_sdk::types::{
-        announcement_id,
-        conditions::{AssertCoinAnnouncement, CreateCoinAnnouncement},
-    };
-
-    let max_cost = kit::simulate::DEFAULT_MAX_COST;
-    let report = kit::verify_binding(&spends, ownership, max_cost).map_err(RpcError::from)?;
-    if report.all_bound {
-        return Ok(spends);
-    }
-    // One run for which spends are the user's and what each announces.
-    let mut allocator = Allocator::new();
-    let (executed, _) = kit::simulate::execute(&mut allocator, &spends, ownership, max_cost)
-        .map_err(RpcError::from)?;
-    let bound: Vec<usize> = executed
-        .iter()
-        .enumerate()
-        .filter(|(index, spend)| spend.owned && !report.unbound_user_spends.contains(index))
-        .map(|(index, _)| index)
-        .collect();
-
-    // The anchor: a coin announcement a bound user spend makes in this bundle.
-    let mut anchor = bound.iter().find_map(|&index| {
-        let spend = &executed[index];
-        spend
-            .conditions
-            .iter()
-            .find_map(|condition| match condition {
-                Condition::CreateCoinAnnouncement(created) => {
-                    Some(announcement_id(spend.coin.coin_id(), &created.message))
-                }
-                _ => None,
-            })
-    });
-    // None made: give a bound spend one.
-    if anchor.is_none() {
-        for &index in &bound {
-            let spend = &mut spends[index];
-            let coin_id = spend.coin.coin_id();
-            if edit_user_conditions(&mut allocator, spend, |conditions| {
-                conditions.push(Condition::CreateCoinAnnouncement(
-                    CreateCoinAnnouncement::new(BIND_MESSAGE.to_vec().into()),
-                ));
-            }) {
-                anchor = Some(announcement_id(coin_id, BIND_MESSAGE));
-                break;
-            }
-        }
-    }
-    let Some(anchor) = anchor else {
-        return Ok(spends);
-    };
-
-    for &index in &report.unbound_user_spends {
-        if let Some(spend) = spends.get_mut(index) {
-            edit_user_conditions(&mut allocator, spend, |conditions| {
-                conditions.push(Condition::AssertCoinAnnouncement(
-                    AssertCoinAnnouncement::new(anchor),
-                ));
-            });
-        }
-    }
-    Ok(spends)
 }
 
 /// The take, built from the wallet's own coins with Sage's offer code and **no key**: the
@@ -755,6 +807,13 @@ async fn build_take(
 /// the same code as `WalletConnect` (`auto_submit: false`, so nothing leaves the wallet
 /// here), Klimper checks, asks once, signs once and broadcasts. The website never builds
 /// the user's side and never sees which coins pay for it.
+///
+/// The offer may be several makers' offers aggregated into one (TASK-139): their spends
+/// together and their signatures summed, as Sage's `aggregate_offers` makes it. It is
+/// checked, built and taken the same way, all or nothing; `offers_taken` is told how many
+/// offers it holds, for the approval screen, once the offer passed its checks, and `on_loan`
+/// the loan the user lends, if the offer is a loan request (TASK-140).
+#[allow(clippy::too_many_arguments)]
 pub fn take_offer(
     state: &AppState,
     ctx: &RequestContext<'_>,
@@ -762,6 +821,8 @@ pub fn take_offer(
     approver: &dyn kit::Approver,
     broadcaster: &dyn Broadcaster,
     params_json: &str,
+    offers_taken: &dyn Fn(usize),
+    on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
     // As for a send: a take that cannot be built tells the website the wallet cannot pay
     // for it, so a run of them is a search for the balance. Checked first, so a website
@@ -774,7 +835,7 @@ pub fn take_offer(
         ));
     }
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
-    let fee = amount_param(&params, "fee")?.unwrap_or(0);
+    let fee = wallet_fee(&params)?;
     let offer = params
         .get("offer")
         .and_then(Value::as_str)
@@ -786,6 +847,7 @@ pub fn take_offer(
     let offer = decode_offer_bundle(offer)
         .and_then(|offer| check_offer(&offer, ctx).map(|()| offer))
         .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
+    offers_taken(crate::trade::offers_in(&offer));
     let maker_coins = maker_coins(&offer);
 
     let (spends, maker_signature) = on_sage(state, async move |sage| {
@@ -801,7 +863,6 @@ pub fn take_offer(
             Some("build_failed"),
         )
     })?;
-    let spends = bind_user_spends(spends, ctx.ownership)?;
     // Sage's own reading of the whole bundle, from the wallet database, for the
     // cross-check: the same summary its take_offer endpoint returns. A failure here is
     // not about the balance, and is answered as `check_spends` answers it.
@@ -829,6 +890,8 @@ pub fn take_offer(
         spends,
         &maker_coins,
         maker_signature,
+        fee,
+        on_loan,
     )
 }
 
@@ -842,15 +905,17 @@ fn maker_coins(offer: &SpendBundle) -> HashSet<Bytes32> {
         .collect()
 }
 
-/// What a take claims: only that it is one. What the user pays and receives, the fee
+/// What a take claims: only that it is one (`offer.take`), or for a loan the user lends,
+/// `loan.take`, which wallet-kit verifies: the user is the option's creator, the collateral
+/// and the option are the borrower's (TASK-140). What the user pays and receives, the fee
 /// included, is shown from the simulation. No fee is claimed: wallet-kit checks a fee claim
 /// against the whole bundle's fee, and an offer's maker may pay a fee of their own in the
 /// same bundle, so the user's fee alone would never match ("unauthorized",
-/// `intent_mismatch`; TASK-137). The fee Sage built with is the one the website asked for,
+/// `intent_mismatch`; TASK-137). The fee Sage built with is Klimper's own ([`wallet_fee`]),
 /// and the cross-check holds both engines to the same total.
-fn take_intent() -> Intent {
+fn take_intent(loan: bool) -> Intent {
     Intent {
-        kind: Some("offer.take".to_owned()),
+        kind: Some(if loan { "loan.take" } else { "offer.take" }.to_owned()),
         recipients: None,
         fee: None,
         net: None,
@@ -872,8 +937,9 @@ fn submit_take(
     spends: Vec<CoinSpend>,
     maker_coins: &HashSet<Bytes32>,
     maker_signature: Signature,
+    fee: u64,
+    on_loan: &dyn Fn(&options::LoanView, bool),
 ) -> Result<String, RpcError> {
-    let intent = take_intent();
     // Sage spends the wallet's coins with quoted conditions; held to it all the same. Only
     // the spends Sage built for the user: the offer's own spends are the website's, and a
     // refusal of one of them would say which keys the wallet holds. Nothing in them is
@@ -888,6 +954,11 @@ fn submit_take(
 
     let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
         .map_err(RpcError::from)?;
+    let loan = options::take_loan(&kit_summary, &spends, ctx.ownership)?;
+    if let Some(loan) = &loan {
+        on_loan(loan, false);
+    }
+    let intent = take_intent(loan.is_some());
     // Whatever the website's "unknown contracts" setting: a take moves assets between two
     // parties, and the approval must be able to say which.
     if !kit_summary.unknown_puzzles.is_empty() {
@@ -906,6 +977,11 @@ fn submit_take(
             other_signature: Some(maker_signature),
             intent: Some(&intent),
             wallet_built: true,
+            // The fee Klimper built the take with ([`wallet_fee`]): the user's spends
+            // reserve it (a maker's own fee is reserved by the maker's spends).
+            wallet_fee: fee,
+            // Sealed, as for a send: only the transaction id goes back to the website.
+            signatures_released: false,
         },
         ctx,
         signer,
@@ -915,6 +991,22 @@ fn submit_take(
     Ok(submitted.to_json())
 }
 
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod aggregate_tests;
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod option_tests;
 #[cfg(test)]
 mod sage_sim;
 #[cfg(test)]
@@ -927,51 +1019,46 @@ mod tests {
     use super::*;
     use sage_api::{TransactionInput, TransactionOutput};
     use xchonnect_wallet_kit::simulate::{OutputInfo, SpendInfo};
-    use xchonnect_wallet_kit::{AssetDelta, SpendKind, TimeLocks};
+    use xchonnect_wallet_kit::{AssetDelta, SpendKind};
 
     const COIN: &str = "11";
 
+    fn output(amount: u64, puzzle_hash: &str, to_user: bool) -> OutputInfo {
+        let mut output = OutputInfo::default();
+        output.asset = AssetId::Xch;
+        output.amount = amount;
+        output.puzzle_hash = puzzle_hash.to_owned();
+        output.recipient = Some(puzzle_hash.to_owned());
+        output.to_user = to_user;
+        output
+    }
+
     fn kit_summary(sent: u128, paid: u64, change: u64, fee: u64) -> Summary {
-        Summary {
-            assets: vec![AssetDelta {
-                asset: AssetId::Xch,
-                sent,
-                received: u128::from(change),
-                conditional_received: 0,
-                net: i128::from(change) - i128::try_from(sent).unwrap(),
-            }],
-            implied_fee: Some(fee),
-            reserve_fee: fee,
-            owned_reserve_fee: fee,
-            time_locks: TimeLocks::default(),
-            unknown_puzzles: vec![],
+        let mut summary = Summary::default();
+        summary.assets = vec![AssetDelta {
+            asset: AssetId::Xch,
+            sent,
+            received: u128::from(change),
+            conditional_received: 0,
+            net: i128::from(change) - i128::try_from(sent).unwrap(),
+        }];
+        summary.implied_fee = Some(fee);
+        summary.reserve_fee = fee;
+        summary.owned_reserve_fee = fee;
+        summary.spends = vec![SpendInfo {
+            coin_id: COIN.repeat(32),
+            puzzle_hash: "22".repeat(32),
+            amount: u64::try_from(sent).unwrap(),
+            kind: SpendKind::Standard,
+            owned: true,
+            agg_sigs: vec![],
             cost: 0,
-            spends: vec![SpendInfo {
-                coin_id: COIN.repeat(32),
-                puzzle_hash: "22".repeat(32),
-                amount: u64::try_from(sent).unwrap(),
-                kind: SpendKind::Standard,
-                owned: true,
-                agg_sigs: vec![],
-                cost: 0,
-            }],
-            outputs: vec![
-                OutputInfo {
-                    asset: AssetId::Xch,
-                    amount: paid,
-                    puzzle_hash: "33".repeat(32),
-                    recipient: Some("33".repeat(32)),
-                    to_user: false,
-                },
-                OutputInfo {
-                    asset: AssetId::Xch,
-                    amount: change,
-                    puzzle_hash: "22".repeat(32),
-                    recipient: Some("22".repeat(32)),
-                    to_user: true,
-                },
-            ],
-        }
+        }];
+        summary.outputs = vec![
+            output(paid, &"33".repeat(32), false),
+            output(change, &"22".repeat(32), true),
+        ];
+        summary
     }
 
     fn xch() -> sage_api::Asset {
@@ -1040,6 +1127,26 @@ mod tests {
         }
     }
 
+    /// The fee of a sealed request is Klimper's own, the user's default fee: a website's
+    /// `fee` is read (a malformed one is refused) and ignored, whatever it is (xchonnect
+    /// spec 11.1.1, 11.2). The default fee is capped at `MAX_FEE`.
+    #[test]
+    fn a_websites_fee_is_ignored_for_klimpers_own() {
+        let fee = |params: Value| fee_of(&params, 2_000_000).unwrap();
+        assert_eq!(fee(serde_json::json!({})), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": 0 })), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": 50_000_000 })), 2_000_000);
+        assert_eq!(fee(serde_json::json!({ "fee": "1000000000" })), 2_000_000);
+        assert!(fee_of(&serde_json::json!({ "fee": -1 }), 0).is_err());
+        assert_eq!(
+            fee_of(&serde_json::json!({ "fee": 50_000_000 }), 0).unwrap(),
+            0
+        );
+        // The default fee as the webview hands it over: capped.
+        assert_eq!(capped_fee(10_000_000_000_000), MAX_FEE);
+        assert_eq!(capped_fee(2_000_000), 2_000_000);
+    }
+
     /// The shape of a real offer take (found by taking an offer Sage built between two
     /// simulator wallets, TASK-137): the user's 1000-CAT coin creates a 0-amount coin and
     /// the CAT ring moves the value on to the maker's settlement payment. Sage leaves the
@@ -1050,7 +1157,7 @@ mod tests {
     /// is what every offer with a maker fee got.
     #[test]
     fn a_take_claims_no_fee_of_its_own() {
-        let intent = take_intent();
+        let intent = take_intent(false);
         assert_eq!(intent.kind.as_deref(), Some("offer.take"));
         assert_eq!(intent.fee, None);
         assert!(intent.recipients.is_none() && intent.net.is_none());
@@ -1061,13 +1168,10 @@ mod tests {
         let cat = Bytes32::new([0x75; 32]);
         let mut kit = kit_summary(1_000, 0, 0, 0);
         kit.assets[0].asset = AssetId::Cat(cat);
-        kit.outputs = vec![OutputInfo {
-            asset: AssetId::Cat(cat),
-            amount: 0,
-            puzzle_hash: "21".repeat(32),
-            recipient: None,
-            to_user: false,
-        }];
+        let mut zero = output(0, &"21".repeat(32), false);
+        zero.asset = AssetId::Cat(cat);
+        zero.recipient = None;
+        kit.outputs = vec![zero];
         let mut sage = sage_summary(1_000, 0, 0, 0);
         sage.inputs[0].asset = Some(sage_api::Asset {
             asset_id: Some(hex::encode(cat)),

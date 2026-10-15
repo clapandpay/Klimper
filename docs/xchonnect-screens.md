@@ -149,6 +149,85 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
 └──────────────────────────────────────────┘
 ```
 
+**A trade** (TASK-139): any spend that both pays and receives (an offer take, several taken
+together, a swap a website built) opens with the trade card, computed by the wallet and sent as
+the prompt's `trade` (`src/trade.rs`, read by `readPrompt`, drawn by `XchonnectTrade.tsx`):
+
+```
+┌──────────────────────────────────────────┐
+│ (p) pengui.space                   Later │
+│     [Take 3 offers together] ⏱ 4:30  ⓘ  │  the count of offers, never an amount
+├──────────────────────────────────────────┤
+│ [Simulated by Klimper ⓘ] [Built by Klimper ⓘ] [Checked twice ⓘ]
+│ ┌ YOU PAY ─────────────────────────────┐ │
+│ │ (X) −1.5 XCH               ≈ $18.60  │ │  display face, tabular, thousands set apart
+│ │  ↓                                   │ │
+│ │ YOU RECEIVE                          │ │
+│ │ (S) +3 000 SBX                       │ │  the wallet's ticker and icon, no dollars …
+│ │     Spacebucks  CAT 5b5b5b5b…5b5b5b  │ │  … with the asset id, always
+│ │     Two tokens in your wallet use    │ │  only when another CAT's ticker reads
+│ │     the ticker SBX. Check the id.    │ │  the same
+│ │ ──────────────────────────────────── │ │
+│ │ Price  1 SBX 5b5b5b5b = 0.0005 XCH [⇄] │  ticker and id; the flip turns it round
+│ │ ≋ 3 separate offers taken together — all or nothing ⓘ
+│ │ Your network fee   0.0001 XCH        │ │  the user's own; the whole trade's is below
+│ └──────────────────────────────────────┘ │
+│ One half of a trade …                    │  the binding panel, as before
+│ ▸ Each asset, as simulated               │  the per-asset verdict lines, folded
+│ Network fee of the whole trade …         │
+├──────────────────────────────────────────┤
+│ ( ⟫  Slide to approve and send      )    │
+└──────────────────────────────────────────┘
+```
+
+- **What is paid and what is received** are the wallet's figures for the bundle it signs. The
+  user's fee is taken out of the XCH paid and shown on its own line; it is the `RESERVE_FEE`
+  of the user's spends only as far as the user's own XCH paid for it (at most the XCH that left
+  the user's coins). A fee the user's spend declares but another party's coin funds (a
+  settlement coin needs no signature) is not the user's and is never counted as XCH received
+  (TASK-139 audit, H1). So when Sage pays the fee of a sale out of the XCH the offer pays the
+  user, the card shows the XCH that arrives, already less the fee, and no fee line. Received counts what the
+  user's own spends create and what the user's spends are bound to receive from the other side
+  (`binding.bound_received`): a settlement payment the user's spends assert cannot be left out
+  without the user's spends failing, so it is as certain as change. Anything conditional and
+  not bound is not in the card; it keeps its own line in the per-asset verdict.
+- **Many assets.** A side shows its first three assets and "and N more" (a side one over shows
+  in full); the button expands and folds again. The binding panel folds a list of more than
+  three payments under "Depends on N payments to you". The card never pushes the slider away:
+  the body scrolls, the actions stay. Nothing is cut at 320px; a long amount wraps.
+- **Names and icons** come from the wallet's own records (`getToken`, `getCats`), never from
+  the website. A CAT's id (`CAT 1a2b3c4d…9f8e7d`) is under every CAT, ticker or not, and a CAT
+  the wallet has never held says "new to your wallet". (Audit of TASK-139, M2 and L3.)
+  - A ticker is used only when it is plain ASCII (`A–Z a–z 0–9 . $ _ -`, at most 12) after
+    NFKC, and its skeleton (look-alike Cyrillic and Greek letters and digits mapped to the
+    Latin letter they imitate, separators dropped, upper case; `ticker.ts`) holds neither
+    `XCH` nor `CHIA`: "ХСН", "ΧCΗ", "ＸＣＨ", "XCH.", "X-CH", "wXCH", "CH1A" are refused.
+    A refused ticker shows "CAT" as the unit and loses its icon too: a monogram of the id.
+  - A CAT's **name** gets the same check (TASK-140, from the TASK-139 audit; `safeName`): a
+    CAT named "Totally XCH", "Chia", "Chia Network" or "Сhia" (Cyrillic С) reads as the
+    network's coin, so the card says "Unnamed token" in its place, its id beside it as always.
+    The per-asset verdict shows the wallet's ticker only when it passes the ticker check.
+  - When another CAT the wallet knows has a ticker with the same skeleton, the leg says "Two
+    tokens in your wallet use the ticker SBX. Check the id."
+  - A CAT's icon is loaded only for a CAT the wallet holds and shows (its token list loads
+    that icon anyway) and only from `https:`; XCH is always the screen's own blue coin. So
+    an approval never asks an icon host about a CAT the user has never had: that request
+    would tell it the user's IP address and the trade before the user decided. Otherwise a
+    monogram coin in one of six warm Klimper colours chosen by its id.
+- **Dollars** for XCH only, from the last price fetch. A CAT shows none (M1): its last price
+  on a market is whatever its maker last traded it at, with themselves if they like.
+- **Price** only for one asset for one asset: a CAT priced in XCH, otherwise what is received
+  priced in what is paid; six significant digits, cut, never rounded up. A CAT's unit in the
+  price always carries the start of its id (`SBX 5b5b5b5b`, or `CAT 5b5b5b5b`).
+- **Offers**: "N separate offers taken together — all or nothing" when a take holds more than
+  one offer, counted by the wallet from the offer itself (L1): the smaller of the distinct
+  nonces of its requested payments and the groups of maker coins not tied to each other by an
+  announcement, a concurrent-spend assertion or a shared puzzle hash. A maker chooses nonces
+  freely, so one offer notarized five times still counts as one. One transaction, so either
+  every offer goes through or none does.
+- Danger panels (unknown contract, unsafe signature) stay above the card; the binding panel,
+  destinations, the whole trade's fee, the intent and time locks follow it unchanged.
+
 - **Slide to approve.** Approving is a slide, not a tap (`SlideToApprove.tsx`): the knob has
   to travel nearly the whole track, a short or abandoned slide springs back, and no tap, long
   press or slow click on the knob approves. One finger at a time, and a slide counts only for
@@ -169,7 +248,9 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
   only beside it, small ("your wallet: USDC.b"), and a CAT gets no picture and no price here,
   only a lettered coin; one the wallet holds none of says "not in your wallet". The id shows
   both ends (`CAT 1a2b3c4d…9f8e7d`), since matching the first 32 bits is cheap. A
-  CAT whose id did not parse gets none of this. None of it comes from the website.
+  CAT whose id did not parse gets none of this. None of it comes from the website. (This is
+  the per-asset verdict; the trade card above shows the wallet's ticker and icon for a CAT
+  when they pass its checks, with its id beside them, and no dollars, as described there.)
 - **Approve** on a prompt that carries an unknown puzzle opens the second confirmation,
   which shows the puzzle hash and has its own Approve. Going back puts the slider back.
 - **Doing nothing is a rejection.** The plugin treats five minutes of silence as one;
@@ -179,6 +260,50 @@ One view of a waiting request, `XchonnectApprovalDetail`, shown in two places:
   wallet's own coins, or the website), that Klimper sends it, "checked twice" when the
   wallet database and the simulation agreed, and the website's declared intent as verified
   facts only: its `kind` label as "described by the website", each claim with a tick.
+
+**An option contract** (TASK-140): when `summary.options` has an entry, the option card opens
+the screen (`XchonnectOption.tsx`), in the trade card's panel, one card per option, every
+figure from wallet-kit's own reading of the spends (spec 11.1.1). Amounts name a CAT by the
+wallet's ticker with the start of its id (`500 wUSDC.b 3c3c3c3c`), or `CAT 3c3c3c3c`; a few
+mojos read as "1 mojo". Dates are the phone's local time, `13 Nov 14:00`.
+
+| Effect                               | Title        | Lines                                                                                                                                                                                                |
+| ------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mint`, the user writes and funds it | Write option | "Lock 100 XCH until 13 Nov 14:00" · "Whoever holds it can buy it for 500 wUSDC.b 3c3c3c3c, paid to you" · "After that you can claim it back" · "You hold the option" (or "The option goes to xch1…") |
+| `mint`, someone else's               | New option   | "100 XCH locked until …" · "… paid to xch1…" · "After that xch1… can claim it back"                                                                                                                  |
+| `mint`, `guaranteed: false`          | —            | a warning: "The new option is only conditional: spends you do not sign decide whether it is made."                                                                                                   |
+| `exercise` by the user               | Use option   | "Pay 500 wUSDC.b 3c3c3c3c, receive 100 XCH" · "Paid to the option's writer, xch1…"; the binding panel says "Tied to what you receive"                                                                |
+| `clawback` by the user               | Claim back   | "Claim back 100 XCH (option expired 13 Nov)"                                                                                                                                                         |
+| `transfer` from the user             | Send option  | "Option 9c1f9c1f…1f9c1f to xch1…"; its terms are not part of a transfer and are not shown                                                                                                            |
+
+Every card ends with the option's id (`Option 9c1f9c1f…1f9c1f`; a clawback that does not name
+its option says "not named by this request"). Headlines: "Write an option" ("Write N
+options"), "Use an option" ("Use N options"), "Claim back", "Send an option", "New option".
+
+**Locked is not paid.** An output with `option.role == "collateral"` is listed apart, on a
+saffron panel: "100 XCH locked under Option 9c1f…"; the launcher's mojo "becomes Option …".
+Neither has an address and neither is counted as sending to others. With an option card on
+top, the per-asset verdict folds under "Each asset, as simulated", as for a trade: its "You pay
+100 XCH" would read the locked collateral as a payment.
+
+**A loan** (Klimper's own `loan` key, with the one mint it is made of):
+
+- Borrower (`chia_mintOption` with a lender): title "Request a loan"; "Borrow 300 wUSDC.b
+  3c3c3c3c from xch1…ab"; "Lock 100 XCH until 13 Nov 14:00" · "Repay 315 wUSDC.b 3c3c3c3c to
+  get it back" · "Otherwise the lender keeps it"; "1 mojo to the lender, to tie the loan
+  together" (the mojo the request offers whoever takes it, so the lender's payment is bound to
+  the borrower's lock); and, since Klimper signs an offer and sends nothing (`makes_offer`):
+  "Klimper signs a loan request. Nothing moves until a lender takes it." The badge says
+  "Signed by Klimper, not sent", the slider "Slide to approve", and the tie's output goes to
+  "whoever takes the request" instead of the settlement puzzle's address.
+- Lender (`chia_takeOffer` of a loan request): title "Lend"; "Lend 300 wUSDC.b 3c3c3c3c to
+  xch1…cd"; "They lock 100 XCH until …" · "If they repay 315 wUSDC.b 3c3c3c3c by then, they get
+  it back" · "Otherwise you can claim it". The loan card replaces the trade card.
+
+A verified intent kind (`intent.kind_verified`) shows as "option.mint — verified by your
+wallet" with a tick, instead of "The website says".
+
+Preview: `?option=mint|exercise|claim|send|loan|lend` on the approvals preview.
 
 ### 4. Lock screen and notifications
 
@@ -233,6 +358,16 @@ brings the same address and limits back and does not reset the day's budget. A d
 day. After three sends it asked for could not be built within ten minutes, a website's
 further sends are refused without building, so the refusals stop telling it the balance.
 
+**Option contracts** (TASK-140). Pairing has a second switch, **Option contracts**, **off by
+default**: "Let this website ask to write, use, claim back or send option contracts, and to
+request or take loans. Each one still asks you first; they lock funds until a date." On, the
+website is granted `chia_mintOption`, `chia_exerciseOption`, `chia_claimOption` and
+`chia_transferOption` (`confirm_sas` `optionContracts`). The same switch is in the website's
+settings: on adds the four methods, off removes them, every other method kept
+(`set_dapp_policy` `methods`); it shows on only when all four are granted, so a connection
+made before TASK-140 shows it off until the user turns it on. No dialog: every request still
+asks.
+
 Each dangerous switch opens its own confirmation dialog, which names the consequence in
 one sentence and requires the explicit button; cancelling leaves the switch off. Turning
 one **off** is immediate.
@@ -247,30 +382,40 @@ Every field the view may read, and nothing else. `src/klimper/xchonnect/xchonnec
 exactly this list by explicit key and validated type; any other key in the prompt JSON —
 including anything a dApp managed to influence — is dropped before the view sees it.
 
-| Prompt field                                                    | Shown as                                                                                                                                                                                                                                                                                                                        | Copy                                      |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `summary.assets[].asset`                                        | asset name: `XCH`, or `CAT <first 8 hex of asset_id>…`; never a dApp-supplied name                                                                                                                                                                                                                                              | —                                         |
-| `summary.assets[].net` < 0                                      | the verdict line, `text-destructive`, absolute value                                                                                                                                                                                                                                                                            | "You pay"                                 |
-| `summary.assets[].net` > 0                                      | the verdict line                                                                                                                                                                                                                                                                                                                | "You receive"                             |
-| `summary.assets[].net` = 0                                      | one line, soft                                                                                                                                                                                                                                                                                                                  | "No change"                               |
-| `summary.assets[].conditional_received`                         | its own soft line under the asset, **never summed into `net`** and never called received                                                                                                                                                                                                                                        | "Only if the counterparty completes"      |
-| `summary.assets[].sent` / `received`                            | inside the disclosure only — the gross figures mislead on their own                                                                                                                                                                                                                                                             | —                                         |
-| `summary.outputs[]` (`amount`, `asset`, `recipient`, `to_user`) | "Sending": each output that is not `to_user`, amount in the display face → the address Klimper encodes itself from `recipient` (network prefix, shortened, whole address on hover); `to_user` outputs as one "Change back to you" line; when every output is `to_user`, the teal "Only to your own addresses" note listing them | "Sending", "Only to your own addresses"   |
-| `summary.implied_fee`                                           | a line under the assets                                                                                                                                                                                                                                                                                                         | "Network fee"                             |
-| `summary.reserve_fee`                                           | a line under the assets, when non-zero                                                                                                                                                                                                                                                                                          | "Fee reserved by the spend"               |
-| `summary.unknown_puzzles[]`                                     | danger panel, every puzzle hash in full and selectable; gates a second confirmation                                                                                                                                                                                                                                             | "Unknown contract"                        |
-| `summary.time_locks`                                            | one line per lock, with the absolute time                                                                                                                                                                                                                                                                                       | "Not spendable before" / "Expires"        |
-| `plan.ours[].is_unsafe` or `plan.has_unsafe`                    | the loudest danger panel on the screen, red, icon, never collapsed                                                                                                                                                                                                                                                              | "Unsafe signature"                        |
-| `plan.ours.length`                                              | a soft line inside "Details"                                                                                                                                                                                                                                                                                                    | "Signatures you would produce"            |
-| `plan.foreign`                                                  | count only, inside the disclosure                                                                                                                                                                                                                                                                                               | —                                         |
-| `partial`                                                       | a panel explaining that this is one side of a multi-party spend                                                                                                                                                                                                                                                                 | "This is one half of a trade"             |
-| `binding.all_bound` = true                                      | inside that panel                                                                                                                                                                                                                                                                                                               | "Klimper checked the other side is bound" |
-| `binding.all_bound` = false                                     | danger panel — this should have been refused upstream                                                                                                                                                                                                                                                                           | "Not bound — do not sign"                 |
-| `binding.bound_payments[]`                                      | what the signature depends on receiving, per payment                                                                                                                                                                                                                                                                            | "Your signature only pays out if…"        |
-| `message_text` (signMessage)                                    | a labelled quoted block, monospace, control characters escaped, length shown                                                                                                                                                                                                                                                    | "The website asks you to sign this text"  |
-| `message_hex` (signMessage)                                     | the same block when there is no text form                                                                                                                                                                                                                                                                                       | "…this data"                              |
-| `public_key` (signMessage)                                      | monospace, full                                                                                                                                                                                                                                                                                                                 | "With this key"                           |
-| anything else                                                   | **dropped**                                                                                                                                                                                                                                                                                                                     | —                                         |
+| Prompt field                                                                                  | Shown as                                                                                                                                                                                                                                                                                                                        | Copy                                                      |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `summary.assets[].asset`                                                                      | asset name: `XCH`, or `CAT <first 8 hex of asset_id>…`; never a dApp-supplied name                                                                                                                                                                                                                                              | —                                                         |
+| `summary.assets[].net` < 0                                                                    | the verdict line, `text-destructive`, absolute value                                                                                                                                                                                                                                                                            | "You pay"                                                 |
+| `summary.assets[].net` > 0                                                                    | the verdict line                                                                                                                                                                                                                                                                                                                | "You receive"                                             |
+| `summary.assets[].net` = 0                                                                    | one line, soft                                                                                                                                                                                                                                                                                                                  | "No change"                                               |
+| `summary.assets[].conditional_received`                                                       | its own soft line under the asset, **never summed into `net`** and never called received                                                                                                                                                                                                                                        | "Only if the counterparty completes"                      |
+| `summary.assets[].sent` / `received`                                                          | inside the disclosure only — the gross figures mislead on their own                                                                                                                                                                                                                                                             | —                                                         |
+| `summary.outputs[]` (`amount`, `asset`, `recipient`, `to_user`)                               | "Sending": each output that is not `to_user`, amount in the display face → the address Klimper encodes itself from `recipient` (network prefix, shortened, whole address on hover); `to_user` outputs as one "Change back to you" line; when every output is `to_user`, the teal "Only to your own addresses" note listing them | "Sending", "Only to your own addresses"                   |
+| `summary.implied_fee`                                                                         | a line under the assets                                                                                                                                                                                                                                                                                                         | "Network fee"                                             |
+| `summary.reserve_fee`                                                                         | a line under the assets, when non-zero                                                                                                                                                                                                                                                                                          | "Fee reserved by the spend"                               |
+| `summary.unknown_puzzles[]`                                                                   | danger panel, every puzzle hash in full and selectable; gates a second confirmation                                                                                                                                                                                                                                             | "Unknown contract"                                        |
+| `summary.time_locks`                                                                          | one line per lock, with the absolute time                                                                                                                                                                                                                                                                                       | "Not spendable before" / "Expires"                        |
+| `plan.ours[].is_unsafe` or `plan.has_unsafe`                                                  | the loudest danger panel on the screen, red, icon, never collapsed                                                                                                                                                                                                                                                              | "Unsafe signature"                                        |
+| `plan.ours.length`                                                                            | a soft line inside "Details"                                                                                                                                                                                                                                                                                                    | "Signatures you would produce"                            |
+| `plan.foreign`                                                                                | count only, inside the disclosure                                                                                                                                                                                                                                                                                               | —                                                         |
+| `partial`                                                                                     | a panel explaining that this is one side of a multi-party spend                                                                                                                                                                                                                                                                 | "This is one half of a trade"                             |
+| `binding.all_bound` = true                                                                    | inside that panel                                                                                                                                                                                                                                                                                                               | "Klimper checked the other side is bound"                 |
+| `binding.all_bound` = false                                                                   | danger panel — this should have been refused upstream                                                                                                                                                                                                                                                                           | "Not bound — do not sign"                                 |
+| `binding.bound_payments[]`                                                                    | what the signature depends on receiving, per payment                                                                                                                                                                                                                                                                            | "Your signature only pays out if…"                        |
+| `trade.pays[]`, `trade.receives[]` (`asset`, `amount`)                                        | the trade card at the top: you pay, you receive, per asset; a malformed leg makes the prompt unreadable                                                                                                                                                                                                                         |
+| `trade.fee`                                                                                   | "Your network fee" in the trade card: the part of the user's `RESERVE_FEE` the user's own XCH funds                                                                                                                                                                                                                             |
+| `trade.price` (`base`, `quote`, `quote_per_base`, `base_per_quote`)                           | "Price: 1 base = x quote" with a flip; dropped unless both are plain decimals                                                                                                                                                                                                                                                   |
+| `trade.offers`                                                                                | "N separate offers taken together — all or nothing" when above 1, and the headline "Take N offers together"; dropped unless a whole number 1–10000                                                                                                                                                                              |
+| `summary.options[]` (`action` `mint` / `exercise` / `clawback` / `transfer`, by explicit key) | the option card (above); an unknown action, a missing flag, a malformed id, time or term makes the prompt unreadable; absent is none                                                                                                                                                                                            | "Write option", "Use option", "Claim back", "Send option" |
+| `summary.outputs[].option` (`launcher_id`, `role` `collateral` / `launcher`)                  | listed as locked under the option, never as a payment; its `recipient` is dropped; malformed is unreadable                                                                                                                                                                                                                      | "locked under Option …"                                   |
+| `asset.type == "option"` (`asset_id`)                                                         | `Option <8 hex>…<6 hex>`, counted whole (one mojo, one option); never XCH; an option as collateral or strike is unreadable                                                                                                                                                                                                      | —                                                         |
+| `intent.kind_verified`                                                                        | "verified by your wallet" next to the kind; must be a boolean, and true only for one of the six verified kinds, else unreadable                                                                                                                                                                                                 | "verified by your wallet"                                 |
+| `loan` (`role`, `principal`, `counterparty`, `tie`)                                           | the loan card; must match the one mint in `summary.options` (the borrower holds and funded it, the lender created it, the counterparty is the other side), else unreadable                                                                                                                                                      | "Request a loan", "Lend"                                  |
+| `makes_offer`                                                                                 | the request is signed, not sent: badge, slider and note say so; must be a boolean                                                                                                                                                                                                                                               | "Signed by Klimper, not sent"                             |
+| `message_text` (signMessage)                                                                  | a labelled quoted block, monospace, control characters escaped, length shown                                                                                                                                                                                                                                                    | "The website asks you to sign this text"                  |
+| `message_hex` (signMessage)                                                                   | the same block when there is no text form                                                                                                                                                                                                                                                                                       | "…this data"                                              |
+| `public_key` (signMessage)                                                                    | monospace, full                                                                                                                                                                                                                                                                                                                 | "With this key"                                           |
+| anything else                                                                                 | **dropped**                                                                                                                                                                                                                                                                                                                     | —                                                         |
 
 The "Everything Klimper computed" disclosure prints the **parsed** view, not the prompt
 JSON. Printing the JSON would put every key the prompt happens to carry on the screen,

@@ -26,7 +26,7 @@
 //! conditions the signature would not fix is refused ([`crate::sign_guard`], TASK-141).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use serde_json::Value;
 use xchonnect_core::rpc::{canonical_method, codes};
@@ -36,6 +36,7 @@ use crate::approval::{Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
 use crate::error::Error;
 use crate::execute::{self, SageBroadcaster};
 use crate::sign_guard;
+use crate::signed_coins::{self, SignedCoinsHandle};
 use crate::store::{PersistentLimits, SessionRecord, SessionStore};
 use crate::wallet::{AppState, KlimperSigner, WalletSnapshot};
 
@@ -134,6 +135,12 @@ pub struct UiApprover {
     /// Sage's summary and wallet-kit's simulation were compared and agree; the screen says
     /// so.
     cross_checked: AtomicBool,
+    /// For a take: how many offers its bundle takes together (0: not a take). Counted by
+    /// the wallet from the decoded offer (TASK-139).
+    offers: AtomicUsize,
+    /// For a loan: who lends what to whom, and whether the request only signs an offer
+    /// (a borrower's loan request) instead of sending (TASK-140). Computed by the wallet.
+    loan: std::sync::Mutex<Option<(Value, bool)>>,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -150,7 +157,21 @@ impl UiApprover {
             bridge,
             meta,
             cross_checked: AtomicBool::new(false),
+            offers: AtomicUsize::new(0),
+            loan: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Record the loan on screen; `makes_offer`: nothing is sent, an offer is signed.
+    pub fn mark_loan(&self, loan: &execute::options::LoanView, makes_offer: bool) {
+        if let (Ok(value), Ok(mut slot)) = (serde_json::to_value(loan), self.loan.lock()) {
+            *slot = Some((value, makes_offer));
+        }
+    }
+
+    /// Record how many offers the take on screen takes together.
+    pub fn mark_offers(&self, count: usize) {
+        self.offers.store(count, Ordering::SeqCst);
     }
 
     /// Record that the two engines agreed on this request.
@@ -171,6 +192,27 @@ impl Approver for UiApprover {
             && let Some(fields) = payload.as_object_mut()
         {
             fields.insert("cross_checked".to_owned(), Value::Bool(true));
+        }
+        // The trade overview, computed here from the same simulation (TASK-139): what is
+        // paid, what is received, the user's fee, the price, how many offers. Klimper's
+        // own key next to `cross_checked`; nothing in it comes from the website.
+        let offers = Some(self.offers.load(Ordering::SeqCst)).filter(|n| *n > 0);
+        if let Some(trade) = crate::trade::of_prompt(prompt, offers)
+            && let Ok(trade) = serde_json::to_value(trade)
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("trade".to_owned(), trade);
+        }
+        // A loan (TASK-140), Klimper's own key like `trade`: the principal and the other
+        // side, from the wallet's own build or the simulation, never from the website.
+        if let Ok(slot) = self.loan.lock()
+            && let Some((loan, makes_offer)) = slot.as_ref()
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("loan".to_owned(), loan.clone());
+            if *makes_offer {
+                fields.insert("makes_offer".to_owned(), Value::Bool(true));
+            }
         }
         let approved = self.bridge.ask_with(
             Approval {
@@ -310,7 +352,6 @@ fn run(
     let approver = UiApprover::new(approvals.clone(), meta.clone());
     // One approval per request, one key unlock per request (xchonnect-wiki 04).
     let signer = KlimperSigner::new(state.clone(), snapshot);
-    let broadcaster = SageBroadcaster::new(state.clone());
     // The optional reads and broadcast (TASK-082), scoped by wallet-kit to the keys this
     // dApp was given.
     let chain = crate::chain::KlimperChain::new(state.clone());
@@ -326,6 +367,36 @@ fn run(
         .copied()
         .collect();
     let wallet_built = execute::is_wallet_built(canonical_method(&meta.method));
+    // The record of the signatures outside the wallet (xchonnect spec 11.2): what decides
+    // whether a request Klimper builds and broadcasts is sealed, and which signatures the
+    // wallet never makes again. Requests that sign coin spends run one at a time, from
+    // reading the record to writing what they release.
+    let signs = wallet_built
+        || matches!(
+            canonical_method(&meta.method),
+            kit::SUBMIT_COIN_SPENDS | SIGN_COIN_SPENDS | SIGN_MESSAGE
+        );
+    let record_of_signed = SignedCoinsHandle::new(
+        store.clone(),
+        record.fingerprint,
+        snapshot.network.chain_id(),
+    );
+    // Held until this function returns: across wallet-kit's check of the record, the
+    // approval prompt, the signature and what is recorded of it.
+    let (_one_at_a_time, signed) =
+        signed_coins::checked_record(&record_of_signed, signs, |handle| {
+            signed_coins::refresh(state, handle)
+        })
+        .map_err(|error| {
+            tracing::error!("xchonnect: the record of signed coins could not be read: {error}");
+            rpc_error(
+                codes::INVALID_PARAMS,
+                "the wallet could not run this request",
+            )
+        })?;
+    // Whatever Klimper broadcasts, wallet-kit first reports what goes into the record
+    // (Broadcaster::record): written before anything is sent, or nothing is sent.
+    let broadcaster = SageBroadcaster::new(state.clone(), &record_of_signed);
     let context = RequestContext {
         dapp: &record.dapp,
         network: snapshot.network.clone(),
@@ -342,6 +413,7 @@ fn run(
         limits: &limits,
         now,
         chain: Some(&chain),
+        signed_coins: &signed,
     };
     let host = Host {
         signer: &signer,
@@ -350,10 +422,11 @@ fn run(
     };
     let outcome = match canonical_method(&meta.method) {
         // The requests Klimper builds from its own coins: one gate for all of them.
-        method @ (execute::CHIA_SEND | execute::CHIA_TAKE_OFFER) => {
+        method if execute::is_wallet_built(method) => {
             if !permissions.allows_method(method) {
-                // Most often a connection paired before the method existed: the reason lets
-                // the website say "pair again" instead of a bare refusal.
+                // Most often a connection paired before the method existed, or one the user
+                // never turned option contracts on for: the reason lets the website say "pair
+                // again" or "allow it in Klimper" instead of a bare refusal.
                 Err(RpcError {
                     code: codes::UNAUTHORIZED,
                     message: "this connection may not use this request; pair again".to_owned(),
@@ -365,12 +438,57 @@ fn run(
                 Err(rejected())
             } else {
                 approver.mark_cross_checked();
-                let build = if method == execute::CHIA_SEND {
-                    execute::send
-                } else {
-                    execute::take_offer
+                let on_loan = |loan: &execute::options::LoanView, makes_offer: bool| {
+                    approver.mark_loan(loan, makes_offer);
                 };
-                build(state, &context, &signer, &approver, &broadcaster, params)
+                match method {
+                    execute::CHIA_SEND => {
+                        execute::send(state, &context, &signer, &approver, &broadcaster, params)
+                    }
+                    execute::CHIA_TAKE_OFFER => execute::take_offer(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                        &|count| approver.mark_offers(count),
+                        &on_loan,
+                    ),
+                    execute::options::CHIA_MINT_OPTION => execute::options::mint_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                        &on_loan,
+                    ),
+                    execute::options::CHIA_EXERCISE_OPTION => execute::options::exercise_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
+                    execute::options::CHIA_CLAIM_OPTION => execute::options::claim_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
+                    _ => execute::options::transfer_option(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                    ),
+                }
             }
         }
         kit::SUBMIT_COIN_SPENDS => {
@@ -385,6 +503,18 @@ fn run(
         }
         _ => handle_dapp_built(&meta.method, params, &context, &host),
     };
+    // Signatures that go back to the website are recorded before they leave: if that fails,
+    // they do not leave.
+    let outcome = outcome.and_then(|result| {
+        record_released(
+            canonical_method(&meta.method),
+            &result,
+            &snapshot.ownership,
+            &record_of_signed,
+        )
+        .map(|()| result)
+    });
+    let outcome = outcome.map_err(explain);
     // A transaction Klimper broadcast: the webview shows where to look it up.
     if let Ok(result) = &outcome
         && matches!(
@@ -423,6 +553,90 @@ fn run(
         ),
     }
     outcome
+}
+
+/// What a website is told for the refusals of the record of signed coins (xchonnect spec
+/// 11.2), of a contract in a multi-party request Klimper cannot read, and of the option
+/// limit (spec 11.1 item 5), in words it can show its user. The code and reason stay
+/// wallet-kit's.
+pub fn explain(mut error: RpcError) -> RpcError {
+    let reason = error
+        .data
+        .as_deref()
+        .and_then(|data| serde_json::from_str::<Value>(data).ok())
+        .and_then(|data| Some(data.get("reason")?.as_str()?.to_owned()));
+    match reason.as_deref() {
+        Some("sealed_signature") => {
+            "Klimper already signed this exact spend for a transaction it sent, and never \
+             signs it again. Wait for that transaction to confirm, or build a new one."
+                .clone_into(&mut error.message);
+        }
+        Some("record_failed") => {
+            "Klimper could not save its record of this transaction, so nothing was sent. \
+             Try again."
+                .clone_into(&mut error.message);
+        }
+        Some("unknown_partial") => {
+            "This trade has Klimper sign a contract it cannot read (an NFT, a vault or \
+             another wrapped coin), so it cannot check what the other side gets. Klimper \
+             does not sign it."
+                .clone_into(&mut error.message);
+        }
+        Some("options_per_request") => {
+            "This request sends more options out of the wallet than Klimper allows this \
+             website in one request. The user can change the option limit in the \
+             website's settings in Klimper."
+                .clone_into(&mut error.message);
+        }
+        Some("options_per_day") => {
+            "This request would send more options out of the wallet today than Klimper \
+             allows this website per day. Try again tomorrow (UTC), or the user can change \
+             the option limit in the website's settings in Klimper."
+                .clone_into(&mut error.message);
+        }
+        _ => {}
+    }
+    error
+}
+
+/// CHIP-0002 `signCoinSpends`, without the `chip0002_` prefix.
+const SIGN_COIN_SPENDS: &str = "signCoinSpends";
+
+/// CHIP-0002 `signMessage`, without the `chip0002_` prefix: checked against the record too.
+const SIGN_MESSAGE: &str = "signMessage";
+
+/// The coins whose signatures an answer hands to the website (xchonnect spec 11.2) that
+/// wallet-kit does not report itself: every coin of the user's in a signed offer Klimper
+/// built (a loan request). A `signCoinSpends` answer and every bundle Klimper broadcasts are
+/// recorded through its broadcaster ([`SageBroadcaster`], wallet-kit's
+/// `Broadcaster::record`) before the signature leaves.
+pub fn record_released(
+    method: &str,
+    result: &str,
+    ownership: &kit::Ownership,
+    record: &SignedCoinsHandle,
+) -> std::result::Result<(), RpcError> {
+    let spends = if execute::is_wallet_built(method) {
+        serde_json::from_str::<Value>(result)
+            .ok()
+            .and_then(|value| Some(value.get("offer")?.as_str()?.to_owned()))
+            .and_then(|offer| chia_wallet_sdk::driver::decode_offer(&offer).ok())
+            .map(|bundle| bundle.coin_spends)
+    } else {
+        None
+    };
+    let Some(spends) = spends else {
+        return Ok(());
+    };
+    record
+        .release(signed_coins::user_coins(&spends, ownership))
+        .map_err(|error| {
+            tracing::error!("xchonnect: the record of signed coins could not be written: {error}");
+            rpc_error(
+                codes::INVALID_PARAMS,
+                "the wallet could not run this request",
+            )
+        })
 }
 
 /// A request whose spends, if any, the website built: refused before the user is asked if
@@ -522,6 +736,27 @@ mod tests {
         }
     }
 
+    /// No connection is upgraded to the option methods, whatever it may do: they lock funds
+    /// until a date, so the user turns them on for a website (TASK-140).
+    #[test]
+    fn an_older_connection_never_gets_the_option_methods_by_itself() {
+        use crate::execute::options::OPTION_METHODS;
+        use crate::execute::{CHIA_SEND, CHIA_TAKE_OFFER, upgrade_methods};
+        let mut old = record();
+        old.permissions.methods = vec![CHIA_SEND.to_owned(), CHIA_TAKE_OFFER.to_owned()];
+        upgrade_methods(&mut old);
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| !old.permissions.methods.iter().any(|g| g == m))
+        );
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| crate::execute::is_wallet_built(m))
+        );
+    }
+
     /// A connection paired before `chia_takeOffer` existed gets it once, next to its
     /// `chia_send`; one whose `chia_send` was turned off gets nothing; a take the user turns
     /// off afterwards stays off (TASK-137).
@@ -609,6 +844,25 @@ mod tests {
         let old: SessionRecord = serde_json::from_value(value).unwrap();
         assert_eq!(old.origin_kid, None);
         assert!(!old.revoked);
+    }
+
+    /// The round-5 refusals reach the website in words it can show, code and reason kept.
+    #[test]
+    fn the_new_refusals_are_explained() {
+        for (code, reason, words) in [
+            (codes::UNAUTHORIZED, "unknown_partial", "cannot read"),
+            (codes::LIMIT_EXCEEDED, "options_per_request", "option limit"),
+            (codes::LIMIT_EXCEEDED, "options_per_day", "option limit"),
+        ] {
+            let data = serde_json::json!({ "reason": reason }).to_string();
+            let error = explain(RpcError {
+                code,
+                message: "x".to_owned(),
+                data: Some(data.clone()),
+            });
+            assert!(error.message.contains(words), "{reason}: {}", error.message);
+            assert_eq!((error.code, error.data), (code, Some(data)));
+        }
     }
 
     #[test]

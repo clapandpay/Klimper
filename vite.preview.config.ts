@@ -5,6 +5,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react({ plugins: [['@lingui/swc-plugin', {}]] }), lingui()],
   server: { port: 5199, strictPort: true },
+  // The preview is of the Xchonnect screens: on whatever the shell's environment says.
+  define: { 'import.meta.env.VITE_ENABLE_XCHONNECT': JSON.stringify('true') },
   resolve: {
     alias: [
       {
@@ -14,6 +16,10 @@ export default defineConfig({
       {
         find: '@/components/Header',
         replacement: path.resolve(__dirname, './src/preview/Header.tsx'),
+      },
+      {
+        find: '@/hooks/useBiometric',
+        replacement: path.resolve(__dirname, './src/preview/useBiometric.ts'),
       },
       { find: '@', replacement: path.resolve(__dirname, './src') },
     ],

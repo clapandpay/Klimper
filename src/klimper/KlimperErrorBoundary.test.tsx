@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/features', () => ({
   clapAndPayConnectEnabled: false,
   klimperCoinsEnabled: false,
+  nftMintingEnabled: true,
   nftsEnabled: true,
   offersEnabled: true,
   optionsEnabled: true,

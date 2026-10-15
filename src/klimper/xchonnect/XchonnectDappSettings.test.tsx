@@ -66,6 +66,7 @@ const fresh: SessionSummary = {
   methods: [...DEFAULT_METHODS],
   exposedKeys: [`0x${'a'.repeat(96)}`],
   limits: {},
+  optionLimit: { perRequest: 1, perDay: 5 },
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
   allReceiveKeys: false,
@@ -176,6 +177,52 @@ describe('the addresses the website sees', () => {
   });
 });
 
+describe('option contracts (TASK-140)', () => {
+  const OPTIONS = [
+    'chia_mintOption',
+    'chia_exerciseOption',
+    'chia_claimOption',
+    'chia_transferOption',
+  ];
+
+  it('is off for a connection without the four methods, and turning it on adds them', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: [...DEFAULT_METHODS, ...OPTIONS],
+      }),
+    );
+  });
+
+  it('is on when all four are granted, and turning it off removes only them', async () => {
+    openSettings({
+      ...fresh,
+      methods: ['chainId', 'connect', ...OPTIONS, 'chia_send'],
+    });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('checked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: ['chainId', 'connect', 'chia_send'],
+      }),
+    );
+  });
+
+  it('shows off when only some of the four are granted', async () => {
+    openSettings({ ...fresh, methods: [...DEFAULT_METHODS, OPTIONS[0] ?? ''] });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    expect(
+      screen.getByLabelText('Option contracts').getAttribute('data-state'),
+    ).toBe('unchecked');
+  });
+});
+
 describe('a dangerous permission needs its own confirmation', () => {
   it('does not turn on unsafe signatures until the dialog is accepted', async () => {
     openSettings();
@@ -280,6 +327,7 @@ describe('limits', () => {
       expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
         limits: { xch: { perRequest: 250_000_000_000 } },
         methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 1, perDay: 5 },
       }),
     );
   });
@@ -304,6 +352,50 @@ describe('limits', () => {
         expect(['perRequest', 'perDay']).toContain(field);
       }
     }
+  });
+
+  it('shows the option limit next to the others and writes it as a count', async () => {
+    openSettings();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Options per request')).toHaveProperty(
+        'value',
+        '1',
+      ),
+    );
+    expect(screen.getByLabelText('Options per day')).toHaveProperty(
+      'value',
+      '5',
+    );
+
+    fireEvent.change(screen.getByLabelText('Options per day'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        limits: {},
+        methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 2 },
+      }),
+    );
+  });
+
+  it('refuses an option limit that is not a whole number', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Options per request'));
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '1.5' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('An option limit has to be a whole number, like 2.'),
+      ).toBeTruthy(),
+    );
+    expect(setDappPolicy).not.toHaveBeenCalled();
   });
 
   it('refuses a limit it cannot store exactly instead of rounding it', async () => {

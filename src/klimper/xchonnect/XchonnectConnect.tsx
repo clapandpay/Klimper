@@ -52,6 +52,7 @@ import { XchonnectDomain } from './XchonnectDomain';
 import { Hint } from '../Hint';
 import {
   AddressSwitch,
+  OptionSwitch,
   ConnectSteps,
   Fact,
   SasDigits,
@@ -112,6 +113,8 @@ export default function XchonnectConnect() {
   // Whether the website sees the receive addresses (on by default); applied when the digits
   // match.
   const [allAddresses, setAllAddresses] = useState(true);
+  // Off unless the user turns it on: option contracts lock funds (TASK-140).
+  const [optionContracts, setOptionContracts] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   // Read by listeners that outlive a render: which pairing is on screen, and whether one is
   // under way (a link arriving then must not replace it under the user's thumb).
@@ -270,6 +273,7 @@ export default function XchonnectConnect() {
         preview.pairingId,
         matches,
         allAddresses, // on unless the user turned the switch off
+        optionContracts, // off unless the user turned it on
       );
       // The list opens on the new connection, so the user sees what they just made.
       navigate(XCHONNECT_ROUTES.dapps, {
@@ -483,6 +487,10 @@ export default function XchonnectConnect() {
             </CardHeader>
             <CardContent className='space-y-4 text-sm'>
               <AddressSwitch all={allAddresses} onChange={setAllAddresses} />
+              <OptionSwitch
+                on={optionContracts}
+                onChange={setOptionContracts}
+              />
               {preview.developerMode && (
                 <p
                   className='flex items-start gap-2 text-destructive'

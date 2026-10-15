@@ -32,6 +32,10 @@ vi.mock('@/hooks/useBiometric', () => ({
   useBiometric: () => ({ promptIfEnabled: () => promptIfEnabled() }),
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
+// The wallet's default fee, as the user set it in the wallet's settings.
+vi.mock('@/hooks/useDefaultFee', () => ({
+  useDefaultFee: () => ({ fee: '0.0001', setFee: () => undefined }),
+}));
 vi.mock('../useTicker', () => ({ useTicker: () => 'XCH' }));
 const openUrl = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
@@ -56,6 +60,7 @@ vi.mock('theme-o-rama', () => ({
 const pendingApprovals = vi.fn();
 const resolveApproval = vi.fn().mockResolvedValue(null);
 const listSessions = vi.fn().mockResolvedValue([]);
+const setOwnFee = vi.fn().mockResolvedValue(null);
 const handlers = new Map<string, (payload: unknown) => void>();
 
 vi.mock('./xchonnect', () => ({
@@ -64,6 +69,7 @@ vi.mock('./xchonnect', () => ({
     resolveApproval: (id: string, approved: boolean) =>
       resolveApproval(id, approved),
     listSessions: () => listSessions(),
+    setOwnFee: (mojos: string) => setOwnFee(mojos),
   },
   XCHONNECT_EVENTS: {
     approval: 'approval',
@@ -148,6 +154,11 @@ describe('the overlay', () => {
   it('starts fetching requests when the app starts', async () => {
     renderScreen(<XchonnectApprovalHost />);
     await waitFor(() => expect(listSessions).toHaveBeenCalled());
+  });
+
+  it("hands Klimper the wallet's default fee, in mojos, for what it builds itself", async () => {
+    renderScreen(<XchonnectApprovalHost />);
+    await waitFor(() => expect(setOwnFee).toHaveBeenCalledWith('100000000'));
   });
 
   it('shows a request that arrives, over any screen, in the full view', async () => {

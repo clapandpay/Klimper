@@ -305,23 +305,25 @@ export default function Nft() {
                 )}
 
                 <LabeledItem label={t`External Links`} content={null}>
-                  <Button
-                    variant='outline'
-                    className='w-full'
-                    onClick={() => {
-                      openUrl(
-                        mintGardenNftUrl(nft?.launcher_id ?? '', isTestnet),
-                      );
-                    }}
-                  >
-                    <img
-                      src='https://mintgarden.io/mint-logo.svg'
-                      className='h-4 w-4 mr-2'
-                      alt='MintGarden logo'
-                      aria-hidden='true'
-                    />
-                    View on MintGarden
-                  </Button>
+                  {offersEnabled && (
+                    <Button
+                      variant='outline'
+                      className='w-full'
+                      onClick={() => {
+                        openUrl(
+                          mintGardenNftUrl(nft?.launcher_id ?? '', isTestnet),
+                        );
+                      }}
+                    >
+                      <img
+                        src='https://mintgarden.io/mint-logo.svg'
+                        className='h-4 w-4 mr-2'
+                        alt='MintGarden logo'
+                        aria-hidden='true'
+                      />
+                      View on MintGarden
+                    </Button>
+                  )}
 
                   <Button
                     variant='outline'

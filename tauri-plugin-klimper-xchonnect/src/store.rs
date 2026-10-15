@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use xchonnect_wallet_kit::{AssetId, AssetLimit, DailySpend, DappPermissions, PermissionError};
 
 use crate::error::{Error, Result};
+pub use crate::signed_coins::{SealedBundles, SignedCoinsRecord};
 
 /// Keyring service name. Deliberately distinct from anything Sage uses: Klimper's signing
 /// keys are Sage's own file (`keys.bin`), and no Xchonnect secret may ever be
@@ -304,15 +305,25 @@ pub struct StoredLimit {
     pub per_day: Option<u128>,
 }
 
-/// `AssetId` as a storage key: `xch`, or `cat:<64 hex>`.
-pub fn asset_key(asset: AssetId) -> String {
+/// `AssetId` as a storage key: `xch`, `cat:<64 hex>`, or `option:<launcher id>`. An option
+/// never reaches a limit (wallet-kit counts the collateral and the strike in their own
+/// assets, TASK-140), so the last only exists to keep the match whole. `None` for an asset
+/// this version does not know: the caller refuses rather than forget a limit or a total.
+pub fn asset_key(asset: AssetId) -> Option<String> {
     match asset {
-        AssetId::Xch => "xch".to_owned(),
-        AssetId::Cat(tail) => format!("cat:{}", hex::encode(tail)),
+        AssetId::Xch => Some("xch".to_owned()),
+        AssetId::Cat(tail) => Some(format!("cat:{}", hex::encode(tail))),
+        AssetId::Option(launcher_id) => Some(format!("option:{}", hex::encode(launcher_id))),
+        _ => None,
     }
 }
 
-/// Inverse of [`asset_key`]; unknown keys are dropped rather than failing a load.
+fn known_asset_key(asset: AssetId) -> Result<String> {
+    asset_key(asset).ok_or_else(|| Error::internal(format!("no storage key for {asset:?}")))
+}
+
+/// Inverse of [`asset_key`] for the assets a limit can be set on (XCH and CATs); unknown
+/// keys, an option's among them, are dropped rather than failing a load.
 pub fn parse_asset_key(key: &str) -> Option<AssetId> {
     if key == "xch" {
         return Some(AssetId::Xch);
@@ -341,11 +352,23 @@ pub struct StoredPermissions {
     pub exposed_keys: Vec<String>,
     #[serde(default)]
     pub limits: BTreeMap<String, StoredLimit>,
+    /// How many options may leave the user ([`DappPermissions::options`]); absent: the
+    /// default, [`xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT`] (one per request, five a day).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<StoredLimit>,
 }
 
 impl StoredPermissions {
-    pub fn from_kit(perms: &DappPermissions) -> Self {
-        StoredPermissions {
+    /// The option limit in force ([`Self::options`], else the default).
+    pub fn option_limit(&self) -> StoredLimit {
+        self.options.unwrap_or(StoredLimit {
+            per_request: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT.per_request,
+            per_day: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT.per_day,
+        })
+    }
+
+    pub fn from_kit(perms: &DappPermissions) -> Result<Self> {
+        Ok(StoredPermissions {
             methods: perms.methods.clone(),
             exposed_keys: perms
                 .exposed_keys
@@ -356,16 +379,22 @@ impl StoredPermissions {
                 .limits
                 .iter()
                 .map(|(asset, limit)| {
-                    (
-                        asset_key(*asset),
+                    Ok((
+                        known_asset_key(*asset)?,
                         StoredLimit {
                             per_request: limit.per_request,
                             per_day: limit.per_day,
                         },
-                    )
+                    ))
                 })
-                .collect(),
-        }
+                .collect::<Result<_>>()?,
+            options: (perms.options != xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT).then_some(
+                StoredLimit {
+                    per_request: perms.options.per_request,
+                    per_day: perms.options.per_day,
+                },
+            ),
+        })
     }
 
     /// Rebuild the wallet-kit permissions. A stored key that no longer parses is dropped:
@@ -392,6 +421,13 @@ impl StoredPermissions {
                     ))
                 })
                 .collect(),
+            options: {
+                let limit = self.option_limit();
+                AssetLimit {
+                    per_request: limit.per_request,
+                    per_day: limit.per_day,
+                }
+            },
         }
     }
 }
@@ -786,6 +822,92 @@ impl SessionStore {
         Ok(ids)
     }
 
+    /// The record of the wallet's coins with signatures outside it (xchonnect spec 11.2), per
+    /// wallet and network: one keyring entry, `signed:<fingerprint>:<chain id>`.
+    fn signed_coins_key(fingerprint: u32, chain_id: &str) -> String {
+        format!("signed:{fingerprint}:{chain_id}")
+    }
+
+    /// The sealed bundles Klimper broadcast, kept to send again ([`SealedBundles`]): one
+    /// keyring entry per wallet and network, `bundles:<fingerprint>:<chain id>`.
+    fn sealed_bundles_key(fingerprint: u32, chain_id: &str) -> String {
+        format!("bundles:{fingerprint}:{chain_id}")
+    }
+
+    fn load_entry<T: Default + serde::de::DeserializeOwned>(&self, key: &str) -> Result<T> {
+        match self.secrets.get(key)? {
+            Some(blob) => serde_json::from_slice(&blob).map_err(Error::internal),
+            None => Ok(T::default()),
+        }
+    }
+
+    /// Read-modify-write of one JSON entry under the store's write lock; written back only
+    /// if it changed. Returns the entry as stored.
+    fn update_entry<T>(&self, key: &str, change: impl FnOnce(&mut T)) -> Result<T>
+    where
+        T: Default + Clone + PartialEq + Serialize + serde::de::DeserializeOwned,
+    {
+        let _write = self.writes.lock().map_err(Error::internal)?;
+        let mut entry: T = self.load_entry(key)?;
+        let before = entry.clone();
+        change(&mut entry);
+        if entry != before {
+            let blob = serde_json::to_vec(&entry).map_err(Error::internal)?;
+            self.secrets.put(key, &blob)?;
+        }
+        Ok(entry)
+    }
+
+    /// The wallet's record of signed coins ([`SignedCoinsRecord`]); empty when the wallet
+    /// never let a signature leave it. An unreadable record is an error, never an empty one:
+    /// forgetting a sealed signature would let its bundle be split.
+    pub fn load_signed_coins(&self, fingerprint: u32, chain_id: &str) -> Result<SignedCoinsRecord> {
+        self.load_entry::<SignedCoinsRecord>(&Self::signed_coins_key(fingerprint, chain_id))
+            .and_then(SignedCoinsRecord::migrated)
+    }
+
+    /// Change the record of signed coins under the store's write lock, and write it back if
+    /// it changed. Returns the record as stored.
+    pub fn update_signed_coins(
+        &self,
+        fingerprint: u32,
+        chain_id: &str,
+        change: impl FnOnce(&mut SignedCoinsRecord),
+    ) -> Result<SignedCoinsRecord> {
+        // A record that does not migrate is left as stored (nothing changes, nothing is
+        // written) and refused.
+        let mut refused = None;
+        let stored = self.update_entry(
+            &Self::signed_coins_key(fingerprint, chain_id),
+            |record: &mut SignedCoinsRecord| match record.clone().migrated() {
+                Ok(migrated) => {
+                    *record = migrated;
+                    change(record);
+                }
+                Err(error) => refused = Some(error),
+            },
+        )?;
+        match refused {
+            Some(error) => Err(error),
+            None => Ok(stored),
+        }
+    }
+
+    /// The sealed bundles kept to send again ([`SealedBundles`]).
+    pub fn load_sealed_bundles(&self, fingerprint: u32, chain_id: &str) -> Result<SealedBundles> {
+        self.load_entry(&Self::sealed_bundles_key(fingerprint, chain_id))
+    }
+
+    /// Change the kept sealed bundles under the store's write lock.
+    pub fn update_sealed_bundles(
+        &self,
+        fingerprint: u32,
+        chain_id: &str,
+        change: impl FnOnce(&mut SealedBundles),
+    ) -> Result<SealedBundles> {
+        self.update_entry(&Self::sealed_bundles_key(fingerprint, chain_id), change)
+    }
+
     fn load_limits(&self, fingerprint: u32, dapp: &str, id: &str) -> Result<DailySpend> {
         // The session's own totals from before they moved to the domain still count.
         let blob = match self
@@ -807,6 +929,7 @@ impl SessionStore {
                 .iter()
                 .filter_map(|(key, amount)| Some((parse_asset_key(key)?, *amount)))
                 .collect(),
+            options: stored.options,
         })
     }
 
@@ -816,8 +939,9 @@ impl SessionStore {
             spent: record
                 .spent
                 .iter()
-                .map(|(asset, amount)| (asset_key(*asset), *amount))
-                .collect(),
+                .map(|(asset, amount)| Ok((known_asset_key(*asset)?, *amount)))
+                .collect::<Result<_>>()?,
+            options: record.options,
         };
         let blob = serde_json::to_vec(&stored).map_err(Error::internal)?;
         self.secrets
@@ -830,6 +954,10 @@ struct StoredDailySpend {
     day: u64,
     #[serde(default)]
     spent: BTreeMap<String, u128>,
+    /// Options that left the user that day ([`DailySpend::options`]). Absent in totals
+    /// written before options had a limit: none was counted then.
+    #[serde(default)]
+    options: u128,
 }
 
 /// wallet-kit's [`xchonnect_wallet_kit::LimitStore`] backed by the keyring, so daily
@@ -1112,6 +1240,7 @@ mod tests {
         let mut record = DailySpend {
             day: 20_000,
             spent: BTreeMap::new(),
+            options: 3,
         };
         record.spent.insert(AssetId::Xch, 500);
         limits.save(&record).unwrap();
@@ -1120,6 +1249,8 @@ mod tests {
         let after_restart = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "four".into());
         let loaded = after_restart.load().unwrap();
         assert_eq!(loaded.day, 20_000);
+        // The day's option count too: a restart does not hand out a fresh option budget.
+        assert_eq!(loaded.options, 3);
         assert_eq!(loaded.spent.get(&AssetId::Xch), Some(&500));
         // Connecting the same website again (a new session) does not reset its budget.
         let again = PersistentLimits::new(open(), 1234, "pengui.xyz".into(), "five".into());
@@ -1140,7 +1271,15 @@ mod tests {
                 per_day: Some(5_000),
             },
         );
-        let back = StoredPermissions::from_kit(&perms).to_kit();
+        let back = StoredPermissions::from_kit(&perms).unwrap().to_kit();
+        assert_eq!(back, perms);
+        // The default option limit is not written; a record without one reads as the default.
+        let stored = StoredPermissions::from_kit(&perms).unwrap();
+        assert!(stored.options.is_none());
+        assert_eq!(back.options, xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT);
+        // Another option limit (here: none) is kept.
+        perms.options = AssetLimit::default();
+        let back = StoredPermissions::from_kit(&perms).unwrap().to_kit();
         assert_eq!(back, perms);
     }
 }

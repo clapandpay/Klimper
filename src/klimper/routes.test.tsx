@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Klimper's one hook into Sage's router (docs/UPSTREAM.md, "Hook points"): Sage's routes
 // pass through untouched except where a feature is switched off, and Klimper's screens are
-// added. The flags are mocked: offers and token issuing off, NFTs on.
+// added. The flags are mocked: offers, token issuing and NFT minting off, NFTs on.
 
 import { isValidElement } from 'react';
 import {
@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
   clapAndPayConnectEnabled: true,
+  nftMintingEnabled: false,
   nftsEnabled: true,
   offersEnabled: false,
   optionsEnabled: true,
@@ -46,7 +47,10 @@ const sage = () =>
         <Route path='' element={<Page />} />
         <Route path='issue-token' element={<Page />} />
       </Route>
-      <Route path='/nfts' element={<Page />} />
+      <Route path='/nfts' element={<Page />}>
+        <Route path='' element={<Page />} />
+        <Route path='mint' element={<Page />} />
+      </Route>
       <Route path='/offers' element={<Page />}>
         <Route path='make' element={<Page />} />
       </Route>
@@ -65,6 +69,16 @@ describe('withKlimper', () => {
       .get('/wallet')
       ?.children?.find((c) => c.path === 'issue-token');
     expect(redirects(issue?.element)).toBe(true);
+  });
+
+  it('shows the NFT gallery but not minting (TASK-138)', () => {
+    const nfts = new Map(
+      withKlimper(sage())
+        .find((r) => r.path === '/nfts')
+        ?.children?.map((c) => [c.path, c]),
+    );
+    expect(redirects(nfts.get('')?.element)).toBe(false);
+    expect(redirects(nfts.get('mint')?.element)).toBe(true);
   });
 
   it('leaves everything else exactly as Sage declared it', () => {

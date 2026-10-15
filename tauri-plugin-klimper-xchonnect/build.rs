@@ -15,6 +15,7 @@ const COMMANDS: &[&str] = &[
     "resolve_approval",
     "cancel_approval",
     "push_status",
+    "set_own_fee",
 ];
 
 /// The push gateway's wake URL and public key, compiled in (src/push.rs). Read from the
