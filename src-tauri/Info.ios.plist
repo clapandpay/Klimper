@@ -9,6 +9,20 @@
              export documentation is approved and its code is in ITSEncryptionExportComplianceCode;
              `false` claims an exemption nobody has confirmed. Until TASK-090 decides, each build
              answers the export question in App Store Connect. -->
+        <!-- The name under the home-screen icon (decision-004: Klimper; App Review 2.3.8 wants it
+             to match the store name). Without it iOS shows CFBundleName, the product name. -->
+        <key>CFBundleDisplayName</key>
+        <string>Klimper</string>
+        <!-- Sage's "Require biometrics" (TASK-109, owner's note of 2026-10-09). Kept here, not only
+             in gen/apple, so a regenerated project keeps it. -->
+        <key>NSFaceIDUsageDescription</key>
+        <string>Klimper uses Face ID to confirm payments and to show your recovery words.</string>
+        <!-- Sage's plugin still links CoreNFC for reading offers from NFC tags; the Offers page
+             is off in release builds and the NFC entitlement is gone, so nothing reads a tag.
+             The string stays because App Store Connect checks purpose strings for linked
+             frameworks, not for calls. -->
+        <key>NFCReaderUsageDescription</key>
+        <string>Klimper reads NFC tags that carry a Chia offer.</string>
         <!-- The Xchonnect pairing URI (`xchonnect:v1?r=…&s=…`, spec 6.2) opens Klimper from any
              website, with no hosting on our side; a dApp's SDK uses it before a wallet has
              announced a link base. Universal links (applinks:clapandpay.com) are in the
