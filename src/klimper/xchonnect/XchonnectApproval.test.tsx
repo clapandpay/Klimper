@@ -330,6 +330,44 @@ describe('a conditional receipt never looks received', () => {
 });
 
 describe('the dangerous cases', () => {
+  it('shows coins Klimper cannot account for as a danger, never as change', async () => {
+    const COIN = 'd'.repeat(64);
+    pendingApprovals.mockResolvedValue([
+      request(
+        spendPrompt({
+          summary: {
+            ...spendPrompt().summary,
+            unknown_puzzles: [PUZZLE],
+            unaccounted_spends: [COIN],
+            outputs: [
+              {
+                asset: { type: 'xch' },
+                amount: 1,
+                puzzle_hash: PUZZLE,
+                recipient: PUZZLE,
+                to_user: true,
+                option: null,
+                unaccounted: true,
+              },
+            ],
+          },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    const danger = await waitFor(() =>
+      screen.getByTestId('prompt-unaccounted'),
+    );
+    expect(danger.textContent).toContain('can’t account for');
+    expect(danger.textContent).toContain(COIN);
+    expect(
+      screen.getByTestId('prompt-unaccounted-outputs').textContent,
+    ).toContain('Creates');
+    // Not shown as coming back to the user.
+    expect(screen.queryByTestId('prompt-only-own')).toBeNull();
+  });
+
   it('needs a second confirmation for an unknown contract, with the puzzle hash', async () => {
     pendingApprovals.mockResolvedValue([
       request(
@@ -446,6 +484,43 @@ describe('one decision per request, and the wallet sends', () => {
       /Built by Klimper/,
     );
     expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
+  });
+
+  it('names an offer Klimper takes itself as a trade, not a send', async () => {
+    pendingApprovals.mockResolvedValue([
+      request(
+        submitted({
+          wallet_built: true,
+          method: 'chia_takeOffer',
+          binding: {
+            all_bound: true,
+            unbound_user_spends: [],
+            bound_payments: [
+              {
+                user_spend: 0,
+                settlement_spend: 1,
+                asset: { type: 'cat', asset_id: TAIL },
+                amount: 1_000,
+              },
+            ],
+            bound_received: [],
+          },
+          intent: { kind: 'offer.take', verified: [] },
+        }),
+      ),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    await waitFor(() => screen.getByTestId('prompt-handling'));
+    expect(screen.getAllByText('Take an offer').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Send')).toBeNull();
+    expect(screen.getByTestId('prompt-handling').textContent).toMatch(
+      /Built by Klimper/,
+    );
+    // The fee shown is the whole trade's, and says so: the maker may pay one too.
+    expect(screen.getByTestId('prompt-implied-fee').textContent).toMatch(
+      /Network fee of the whole trade/,
+    );
   });
 
   it('shows the website’s claims only as facts the wallet verified', async () => {

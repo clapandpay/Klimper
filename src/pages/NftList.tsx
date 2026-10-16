@@ -12,6 +12,7 @@ import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { useNftData } from '@/hooks/useNftData';
 import { NftGroupMode, useNftParams } from '@/hooks/useNftParams';
 import { exportNfts } from '@/lib/exportNfts';
+import { nftMintingEnabled } from '@/lib/features';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { ImagePlusIcon } from 'lucide-react';
@@ -131,13 +132,15 @@ export function NftList() {
       </Header>
 
       <Container>
-        <ReadOnlyButton
-          onClick={() => navigate('/nfts/mint')}
-          aria-label={t`Create new NFT`}
-        >
-          <ImagePlusIcon className='h-4 w-4 mr-2' aria-hidden='true' />
-          <Trans>Mint NFT</Trans>
-        </ReadOnlyButton>
+        {nftMintingEnabled && (
+          <ReadOnlyButton
+            onClick={() => navigate('/nfts/mint')}
+            aria-label={t`Create new NFT`}
+          >
+            <ImagePlusIcon className='h-4 w-4 mr-2' aria-hidden='true' />
+            <Trans>Mint NFT</Trans>
+          </ReadOnlyButton>
+        )}
 
         <div ref={optionsRef}>
           <NftOptions

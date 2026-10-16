@@ -100,6 +100,8 @@ export interface SessionSummary {
   methods: string[];
   exposedKeys: string[];
   limits: Record<string, AssetLimit>;
+  /** How many options may leave the wallet, per request and per day (a count). */
+  optionLimit: AssetLimit;
   allowAggSigUnsafe: boolean;
   allowUnknownContracts: boolean;
   /** It sees every receive address, not only its own one. */
@@ -110,6 +112,8 @@ export interface SessionSummary {
 
 export interface DappPolicy {
   limits?: Record<string, AssetLimit>;
+  /** Replace the option limit (a count; an empty side is no limit). */
+  optionLimit?: AssetLimit;
   allowAggSigUnsafe?: boolean;
   allowUnknownContracts?: boolean;
   methods?: string[];
@@ -136,6 +140,12 @@ export const xchonnect = {
   status: () => call<XchonnectStatus>('status'),
 
   /**
+   * The wallet's default fee, in mojos: the fee of every request Klimper builds and sends
+   * itself for a website. A website's own `fee` is never used.
+   */
+  setOwnFee: (mojos: string) => call<null>('set_own_fee', { fee: mojos }),
+
+  /**
    * Verify a pairing URI: parse it, fetch the origin document fresh over HTTPS and check
    * the origin signature. Rejects on any failure — there is no way to continue anyway.
    * Nothing is created on the relay yet.
@@ -153,12 +163,19 @@ export const xchonnect = {
   /**
    * The user compared the six digits. `false` ends the session and deletes everything.
    * `allReceiveKeys`: the website sees every receive address, not only its own one.
+   * `optionContracts`: it may ask for the option methods (`OPTION_METHODS`, TASK-140).
    */
-  confirmSas: (pairingId: string, matches: boolean, allReceiveKeys = false) =>
+  confirmSas: (
+    pairingId: string,
+    matches: boolean,
+    allReceiveKeys = false,
+    optionContracts = false,
+  ) =>
     call<SessionSummary | null>('confirm_sas', {
       pairingId,
       matches,
       allReceiveKeys,
+      optionContracts,
     }),
 
   /** Connected dApps. Also resumes the message loop of every stored session. */

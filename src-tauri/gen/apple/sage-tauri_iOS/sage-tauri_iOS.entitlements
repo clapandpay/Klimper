@@ -2,10 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.developer.nfc.readersession.formats</key>
-	<array>
-		<string>TAG</string>
-	</array>
 	<!-- Push wake-ups (TASK-087). "development" here; distribution signing (TestFlight, App Store)
 	     takes the production value from the provisioning profile. The App ID needs Push
 	     Notifications, and Time Sensitive Notifications for the gateway's interruption level. -->
@@ -17,6 +13,9 @@
 	<array>
 		<string>applinks:clapandpay.com</string>
 	</array>
+	<!-- Group Activities: nothing in Klimper uses it. tauri-plugin-sharesheet's build script
+	     (the Share button) inserts it on every build on a Mac, so taking it out here would not
+	     take it out of the app (docs/UPSTREAM.md). -->
 	<key>com.apple.developer.group-session</key>
 	<true/>
 </dict>

@@ -45,8 +45,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { Hint } from '../Hint';
-import { AddressSwitch } from './XchonnectUi';
+import { AddressSwitch, OptionSwitch } from './XchonnectUi';
 import { AssetLimit, DappPolicy, SessionSummary, xchonnect } from './xchonnect';
+import { allowsOptions, withOptionMethods } from './optionMethods';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import {
   CAT_PRECISION,
@@ -70,6 +71,8 @@ export const DEFAULT_METHODS = [
   'signMessage',
   'xchonnect_submitCoinSpends',
   'chia_send',
+  'chia_takeOffer',
+  'chia_createOffer',
 ] as const;
 
 /** Methods that cannot be taken away: without them a session cannot even say hello. */
@@ -133,6 +136,8 @@ interface Draft {
   readonly methods: string[];
   /** Keyed by `<assetKey>` then per-request / per-day, as typed. */
   readonly limits: Record<string, { perRequest: string; perDay: string }>;
+  /** How many options may leave the wallet, as typed (a count). */
+  readonly options: { perRequest: string; perDay: string };
 }
 
 function draftOf(session: SessionSummary): Draft {
@@ -145,7 +150,17 @@ function draftOf(session: SessionSummary): Draft {
       perDay: limitText(limit.perDay, precisionOf(key)),
     };
   }
-  return { methods: [...session.methods], limits };
+  // Absent from an older plugin: the plugin's default applies, shown as empty here only
+  // until the screen reloads.
+  const option: AssetLimit = session.optionLimit ?? {};
+  return {
+    methods: [...session.methods],
+    limits,
+    options: {
+      perRequest: limitText(option.perRequest, 0),
+      perDay: limitText(option.perDay, 0),
+    },
+  };
 }
 
 type Dangerous = 'unsafe' | 'unknown';
@@ -295,7 +310,21 @@ export default function XchonnectDappSettings() {
         limits[key] = entry;
       }
     }
-    await apply({ limits, methods: draft.methods });
+    // The option limit is a count: whole numbers only.
+    const optionPerRequest = parseLimit(draft.options.perRequest, 0);
+    const optionPerDay = parseLimit(draft.options.perDay, 0);
+    const optionLimit: { perRequest?: number; perDay?: number } = {};
+    for (const [parsed, side] of [
+      [optionPerRequest, 'perRequest'],
+      [optionPerDay, 'perDay'],
+    ] as const) {
+      if (parsed.kind === 'invalid') {
+        setProblem(t`An option limit has to be a whole number, like 2.`);
+        return;
+      }
+      if (parsed.kind === 'amount') optionLimit[side] = parsed.mojos;
+    }
+    await apply({ limits, methods: draft.methods, optionLimit });
   };
 
   /** Turning a dangerous switch on is a separate decision; turning it off is not. */
@@ -389,6 +418,12 @@ export default function XchonnectDappSettings() {
             <AddressSwitch
               all={session.allReceiveKeys}
               onChange={(all) => void apply({ allReceiveKeys: all })}
+            />
+            <OptionSwitch
+              on={allowsOptions(session.methods)}
+              onChange={(on) =>
+                void apply({ methods: withOptionMethods(session.methods, on) })
+              }
             />
           </CardContent>
         </Card>
@@ -487,6 +522,57 @@ export default function XchonnectDappSettings() {
                 </div>
               </div>
             ))}
+            <div className='grid grid-cols-[1fr_5.5rem_5.5rem] items-center gap-2'>
+              <div className='min-w-0 text-sm font-medium flex items-center gap-1'>
+                <Trans>Options</Trans>
+                <Hint>
+                  <Trans>
+                    How many options may leave your wallet: sent to anyone else
+                    or offered. Using an option yourself does not count. Leave a
+                    field empty for no limit.
+                  </Trans>
+                </Hint>
+              </div>
+              <div>
+                <Label htmlFor='option-per-request' className='sr-only'>
+                  <Trans>Options per request</Trans>
+                </Label>
+                <Input
+                  className='h-9'
+                  id='option-per-request'
+                  inputMode='numeric'
+                  value={draft.options.perRequest}
+                  onChange={(event) => {
+                    setSaved(false);
+                    setDraft({
+                      ...draft,
+                      options: {
+                        ...draft.options,
+                        perRequest: event.target.value,
+                      },
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor='option-per-day' className='sr-only'>
+                  <Trans>Options per day</Trans>
+                </Label>
+                <Input
+                  className='h-9'
+                  id='option-per-day'
+                  inputMode='numeric'
+                  value={draft.options.perDay}
+                  onChange={(event) => {
+                    setSaved(false);
+                    setDraft({
+                      ...draft,
+                      options: { ...draft.options, perDay: event.target.value },
+                    });
+                  }}
+                />
+              </div>
+            </div>
             <div className='flex items-center gap-3'>
               <Button onClick={() => void saveLimits()}>
                 <Trans>Save</Trans>

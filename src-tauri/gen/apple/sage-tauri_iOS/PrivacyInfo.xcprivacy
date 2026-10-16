@@ -1,11 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Klimper's privacy manifest (App Store requirement since 2024-05). No tracking and no data
-  collected by the app's developer. The required-reason APIs are the ones the Rust core and the
-  bundled plugins call: file metadata (stat, the file picker), free disk space (statfs, before
-  writing the wallet database) and elapsed time (std::time::Instant). Keep this list in step with
-  `nm -u` on the iOS binary.
+  Klimper's privacy manifest (App Store requirement since 2024-05). No tracking.
+
+  Collected data: one item. With push on (TASK-087), the app's APNs device token goes to the
+  Xchonnect relay sealed to the push gateway's key; the relay keeps the sealed token (at most 90
+  days) and the gateway opens it to wake the app when a website sends a request. It is not
+  linked to a person and not used for anything else. Declared as a device ID, not linked, app
+  functionality; the App Privacy answers in App Store Connect must say the same, and the data
+  inventory of TASK-091 decides whether anything else belongs here.
+
+  Required-reason APIs: the ones the release binary imports. Checked on 0.2.4 (build 29864686)
+  with `nm -u` and a search of the binary's strings:
+  stat, fstat, fstatat, lstat (file timestamps: the app's own files, and a file the user picked),
+  statfs, fstatfs (free space before writing the wallet database) and clock_gettime for elapsed
+  time. No NSUserDefaults, no activeInputModes, no systemUptime or mach_absolute_time, no
+  sysctl kern.boottime. Check again after adding a plugin or SDK.
 -->
 <plist version="1.0">
 <dict>
@@ -14,7 +24,20 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

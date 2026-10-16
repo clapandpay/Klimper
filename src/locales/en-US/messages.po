@@ -113,7 +113,19 @@ msgstr "{coinCount, plural, one {Split # coin} other {Split # coins}}"
 msgid "{coinCount} coins"
 msgstr "{coinCount} coins"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:115
+#: src/klimper/xchonnect/XchonnectOption.tsx:287
+msgid "{collateral} claimed back by <0/> (option expired {date})"
+msgstr "{collateral} claimed back by <0/> (option expired {date})"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:172
+msgid "{collateral} locked until {until}"
+msgstr "{collateral} locked until {until}"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:303
+msgid "{count} assets"
+msgstr "{count} assets"
+
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:116
 msgid "{count} requests waiting · {time}"
 msgstr "{count} requests waiting · {time}"
 
@@ -133,11 +145,11 @@ msgstr "{createdOfferCount} offers have been created and imported successfully. 
 #~ msgid "{dapp} asks you to sign"
 #~ msgstr "{dapp} asks you to sign"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:189
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:192
 msgid "{dapp} ended the connection."
 msgstr "{dapp} ended the connection."
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:256
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:259
 msgid "{dapp} has your approval."
 msgstr "{dapp} has your approval."
 
@@ -165,6 +177,14 @@ msgstr "{label} copied to clipboard"
 msgid "{label} section"
 msgstr "{label} section"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:319
+msgid "{label} to <0/>"
+msgstr "{label} to <0/>"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:317
+msgid "{label} to your own address"
+msgstr "{label} to your own address"
+
 #: src/components/LabeledItem.tsx:75
 #~ msgid "{label}: {0} (navigate within app)"
 #~ msgstr "{label}: {0} (navigate within app)"
@@ -185,7 +205,7 @@ msgstr "{label}: {content} (opens in external application)"
 msgid "{label}: {contentText} (navigate within app)"
 msgstr "{label}: {contentText} (navigate within app)"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:729
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1053
 msgid "{length} characters"
 msgstr "{length} characters"
 
@@ -197,9 +217,21 @@ msgstr "{limits} set"
 msgid "{marketplaceName} link"
 msgstr "{marketplaceName} link"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:49
+msgid "{mojos} mojos"
+msgstr "{mojos} mojos"
+
 #: src/klimper/OfferCoinsWarning.tsx:93
 msgid "{offers, plural, one {This cancels an open offer that holds some of the selected coins.} other {This cancels # open offers that hold some of the selected coins.}}"
 msgstr "{offers, plural, one {This cancels an open offer that holds some of the selected coins.} other {This cancels # open offers that hold some of the selected coins.}}"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:358
+#~ msgid "{offers} offers taken together"
+#~ msgstr "{offers} offers taken together"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:420
+msgid "{offers} separate offers taken together"
+msgstr "{offers} separate offers taken together"
 
 #: src/components/confirmations/TokenConfirmation.tsx:294
 msgid "{outputCount} coins"
@@ -254,9 +286,21 @@ msgstr "{selectedCoinCount} {selectedCoinLabel} selected ({selectedCoinsTotal} {
 msgid "{selectedCount} selected"
 msgstr "{selectedCount} selected"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:246
+msgid "{strike} paid for {collateral}"
+msgstr "{strike} paid for {collateral}"
+
 #: src/components/Nav.tsx:137
 #~ msgid "{syncedCoins} / {totalCoins} coins synced"
 #~ msgstr "{syncedCoins} / {totalCoins} coins synced"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:431
+msgid "{tie} from the borrower ties your payment to their lock"
+msgstr "{tie} from the borrower ties your payment to their lock"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:429
+msgid "{tie} to the lender, to tie the loan together"
+msgstr "{tie} to the lender, to tie the loan together"
 
 #: src/pages/Transactions.tsx:190
 #~ msgid "{transactionCreatedCount} created"
@@ -282,9 +326,17 @@ msgstr "{waiting, plural, one {# request waiting} other {# requests waiting}}"
 msgid "{waiting} requests are waiting for you"
 msgstr "{waiting} requests are waiting for you"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:218
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:220
 msgid "+{waiting} waiting"
 msgstr "+{waiting} waiting"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:539
+msgid "<0>{amount}</0> becomes {option}"
+msgstr "<0>{amount}</0> becomes {option}"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:526
+msgid "<0>{amount}</0> locked under {option}"
+msgstr "<0>{amount}</0> locked under {option}"
 
 #: src/components/NftCard.tsx:361
 msgid "1 active offer"
@@ -294,7 +346,11 @@ msgstr "1 active offer"
 msgid "1 combined coin"
 msgstr "1 combined coin"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:113
+#: src/klimper/xchonnect/XchonnectOption.tsx:49
+msgid "1 mojo"
+msgstr "1 mojo"
+
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:114
 msgid "1 request waiting · {time}"
 msgstr "1 request waiting · {time}"
 
@@ -334,7 +390,7 @@ msgstr "A connected website can ask you to sign; you decide every time, and you 
 msgid "A handle is 3 to 63 letters and digits"
 msgstr "A handle is 3 to 63 letters and digits"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:286
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:301
 msgid "A limit has to be a plain amount, like 1.5."
 msgstr "A limit has to be a plain amount, like 1.5."
 
@@ -346,7 +402,7 @@ msgstr "A more lightweight sync that only checks unseen blocks"
 msgid "A request could not be shown. Open requests"
 msgstr "A request could not be shown. Open requests"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:408
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:443
 msgid "A request over a limit is refused before it reaches you — you will not see a signing prompt for it."
 msgstr "A request over a limit is refused before it reaches you — you will not see a signing prompt for it."
 
@@ -358,7 +414,7 @@ msgstr "A request over a limit is refused before it reaches you — you will not
 msgid "A request-only offer requires a network fee."
 msgstr "A request-only offer requires a network fee."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:574
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:660
 msgid "A signature this website asks for could then be reused in a completely different spend, including one that takes everything. Almost nothing needs this."
 msgstr "A signature this website asks for could then be reused in a completely different spend, including one that takes everything. Almost nothing needs this."
 
@@ -370,7 +426,7 @@ msgstr "A signature this website asks for could then be reused in a completely d
 msgid "A website asked for your signature, but nothing has arrived yet. Klimper is checking its mailbox; if nothing appears, ask the website to try again."
 msgstr "A website asked for your signature, but nothing has arrived yet. Klimper is checking its mailbox; if nothing appears, ask the website to try again."
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:295
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:298
 msgid "A website asks you to sign"
 msgstr "A website asks you to sign"
 
@@ -395,7 +451,7 @@ msgstr "Actions for {selectedCount} selected NFTs"
 msgid "Actions for {selectedCount} selected offers"
 msgstr "Actions for {selectedCount} selected offers"
 
-#: src/pages/NftList.tsx:198
+#: src/pages/NftList.tsx:201
 msgid "Actions for selected NFTs"
 msgstr "Actions for selected NFTs"
 
@@ -409,7 +465,7 @@ msgstr "Active"
 #~ msgid "Add {0} to offer"
 #~ msgstr "Add {0} to offer"
 
-#: src/components/NftCard.tsx:517
+#: src/components/NftCard.tsx:524
 msgid "Add {nftName} to offer"
 msgstr "Add {nftName} to offer"
 
@@ -417,16 +473,16 @@ msgstr "Add {nftName} to offer"
 msgid "Add {optionName} to offer"
 msgstr "Add {optionName} to offer"
 
-#: src/components/MultiSelectActions.tsx:270
+#: src/components/MultiSelectActions.tsx:272
 msgid "Add {selectedCount} selected NFTs to offer"
 msgstr "Add {selectedCount} selected NFTs to offer"
 
-#: src/components/NftGroupCard.tsx:491
-#: src/components/NftGroupCard.tsx:494
+#: src/components/NftGroupCard.tsx:496
+#: src/components/NftGroupCard.tsx:499
 msgid "Add all NFTs in {cardName} to an offer"
 msgstr "Add all NFTs in {cardName} to an offer"
 
-#: src/components/NftGroupCard.tsx:495
+#: src/components/NftGroupCard.tsx:500
 msgid "Add All to Offer"
 msgstr "Add All to Offer"
 
@@ -438,7 +494,7 @@ msgstr "Add All to Offer"
 msgid "Add new peers"
 msgstr "Add new peers"
 
-#: src/components/NftCard.tsx:609
+#: src/components/NftCard.tsx:616
 msgid "Add NFT URL"
 msgstr "Add NFT URL"
 
@@ -458,28 +514,28 @@ msgstr "Add the assets you are offering."
 msgid "Add the assets you are requesting."
 msgstr "Add the assets you are requesting."
 
-#: src/components/MultiSelectActions.tsx:274
-#: src/components/NftCard.tsx:521
+#: src/components/MultiSelectActions.tsx:276
+#: src/components/NftCard.tsx:528
 #: src/components/OptionCard.tsx:149
 msgid "Add to Offer"
 msgstr "Add to Offer"
 
 #: src/components/confirmations/AddUrlConfirmation.tsx:31
-#: src/components/NftCard.tsx:469
-#: src/components/NftCard.tsx:700
+#: src/components/NftCard.tsx:476
+#: src/components/NftCard.tsx:707
 msgid "Add URL"
 msgstr "Add URL"
 
-#: src/components/NftCard.tsx:465
+#: src/components/NftCard.tsx:472
 msgid "Add URL to {nftName}"
 msgstr "Add URL to {nftName}"
 
-#: src/components/NftCard.tsx:764
+#: src/components/NftCard.tsx:771
 msgid "Add URL to NFT"
 msgstr "Add URL to NFT"
 
-#: src/components/MultiSelectActions.tsx:262
-#: src/components/NftGroupCard.tsx:475
+#: src/components/MultiSelectActions.tsx:264
+#: src/components/NftGroupCard.tsx:480
 msgid "Added {addedCount} {nfts} to offer"
 msgstr "Added {addedCount} {nfts} to offer"
 
@@ -491,7 +547,7 @@ msgstr "Added {addedCount} {nfts} to offer"
 #: src/components/AddressList.tsx:23
 #: src/components/TransactionColumns.tsx:132
 #: src/components/TransferDialog.tsx:119
-#: src/pages/Nft.tsx:620
+#: src/pages/Nft.tsx:622
 #: src/pages/Option.tsx:284
 #: src/pages/Send.tsx:345
 msgid "Address"
@@ -555,6 +611,14 @@ msgstr "Advanced Feature"
 msgid "Advanced options"
 msgstr "Advanced options"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:192
+msgid "After that {creator} can claim it back"
+msgstr "After that {creator} can claim it back"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:190
+msgid "After that you can claim it back"
+msgstr "After that you can claim it back"
+
 #: src/klimper/XchonnectDappSettings.tsx:182
 #~ msgid "all {count} receive addresses"
 #~ msgstr "all {count} receive addresses"
@@ -563,13 +627,17 @@ msgstr "Advanced options"
 msgid "All Addresses"
 msgstr "All Addresses"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:512
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:598
 msgid "All are off for every new website. Turn one on only if you know exactly why this one needs it."
 msgstr "All are off for every new website. Turn one on only if you know exactly why this one needs it."
 
 #: src/pages/Settings.tsx:935
 msgid "All Levels"
 msgstr "All Levels"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:423
+msgid "all or nothing"
+msgstr "all or nothing"
 
 #: src/klimper/xchonnect/XchonnectApproval.tsx:228
 msgid "All requests"
@@ -579,19 +647,19 @@ msgstr "All requests"
 msgid "All Sources"
 msgstr "All Sources"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:541
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:627
 msgid "Allow contracts Klimper cannot read"
 msgstr "Allow contracts Klimper cannot read"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:569
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:655
 msgid "Allow unreadable contracts?"
 msgstr "Allow unreadable contracts?"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:523
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:609
 msgid "Allow unsafe signatures"
 msgstr "Allow unsafe signatures"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:567
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:653
 msgid "Allow unsafe signatures?"
 msgstr "Allow unsafe signatures?"
 
@@ -599,7 +667,7 @@ msgstr "Allow unsafe signatures?"
 msgid "Allow Unsigned Transactions"
 msgstr "Allow Unsigned Transactions"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:381
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:410
 msgid "always allowed"
 msgstr "always allowed"
 
@@ -624,7 +692,7 @@ msgstr "Amount copied to clipboard"
 msgid "Amount includes"
 msgstr "Amount includes"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:306
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:342
 msgid "an address Klimper cannot show"
 msgstr "an address Klimper cannot show"
 
@@ -632,7 +700,11 @@ msgstr "an address Klimper cannot show"
 msgid "An estimate from current prices. It does not account for liquidity."
 msgstr "An estimate from current prices. It does not account for liquidity."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:526
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:322
+msgid "An option limit has to be a whole number, like 2."
+msgstr "An option limit has to be a whole number, like 2."
+
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:612
 msgid "An unsafe signature is valid in any spend, not just the one you were shown."
 msgstr "An unsafe signature is valid in any spend, not just the one you were shown."
 
@@ -640,16 +712,20 @@ msgstr "An unsafe signature is valid in any spend, not just the one you were sho
 msgid "Analyze Duration"
 msgstr "Analyze Duration"
 
+#: src/klimper/xchonnect/XchonnectTrade.tsx:326
+msgid "and {hidden} more"
+msgstr "and {hidden} more"
+
 #: src/klimper/xchonnect/XchonnectApproval.tsx:155
 msgid "Answered"
 msgstr "Answered"
 
 #: src/contexts/WalletConnectContext.tsx:935
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:188
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:190
 msgid "Approve"
 msgstr "Approve"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:188
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:190
 msgid "Approve and send"
 msgstr "Approve and send"
 
@@ -693,7 +769,7 @@ msgstr "Ascending"
 msgid "Ask for Face ID before paying"
 msgstr "Ask for Face ID before paying"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:208
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:210
 msgid "asks you to sign"
 msgstr "asks you to sign"
 
@@ -736,16 +812,16 @@ msgstr "assets"
 msgid "Assets"
 msgstr "Assets"
 
-#: src/components/NftCard.tsx:444
+#: src/components/NftCard.tsx:446
 msgid "Assign profile"
 msgstr "Assign profile"
 
-#: src/components/NftCard.tsx:450
-#: src/components/NftCard.tsx:596
+#: src/components/NftCard.tsx:456
+#: src/components/NftCard.tsx:603
 msgid "Assign Profile"
 msgstr "Assign Profile"
 
-#: src/components/NftCard.tsx:600
+#: src/components/NftCard.tsx:607
 msgid "Assign profile for {nftName}"
 msgstr "Assign profile for {nftName}"
 
@@ -755,7 +831,7 @@ msgstr "Assign profile for {nftName}"
 #~ msgstr "at peak {peerMaxHeight}"
 
 #: src/pages/CollectionMetaData.tsx:311
-#: src/pages/Nft.tsx:350
+#: src/pages/Nft.tsx:352
 msgid "Attributes"
 msgstr "Attributes"
 
@@ -858,20 +934,28 @@ msgstr "Block Height"
 msgid "Border Radius"
 msgstr "Border Radius"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:370
+msgid "Borrow {principal} from {other}"
+msgstr "Borrow {principal} from {other}"
+
 #: src/klimper/XchonnectDappSettings.tsx:506
 #~ msgid "Both are off for every new website. Turn one on only if you know exactly why this one needs it."
 #~ msgstr "Both are off for every new website. Turn one on only if you know exactly why this one needs it."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:970
+msgid "Both sides' fees together. Your own part is in what you pay above."
+msgstr "Both sides' fees together. Your own part is in what you pay above."
 
 #: src/klimper/ClapAndPayConnect.tsx:295
 #: src/klimper/ClapAndPayConnect.tsx:330
 msgid "Bringing it in…"
 msgstr "Bringing it in…"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:446
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:662
 msgid "Built by Klimper"
 msgstr "Built by Klimper"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:458
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:674
 msgid "Built by the website"
 msgstr "Built by the website"
 
@@ -879,11 +963,11 @@ msgstr "Built by the website"
 #~ msgid "Bulk Assign Profile"
 #~ msgstr "Bulk Assign Profile"
 
-#: src/components/MultiSelectActions.tsx:307
+#: src/components/MultiSelectActions.tsx:309
 msgid "Bulk Burn NFTs"
 msgstr "Bulk Burn NFTs"
 
-#: src/components/MultiSelectActions.tsx:282
+#: src/components/MultiSelectActions.tsx:284
 msgid "Bulk Transfer NFTs"
 msgstr "Bulk Transfer NFTs"
 
@@ -891,10 +975,10 @@ msgstr "Bulk Transfer NFTs"
 #~ msgid "Bulk Unassign Profile"
 #~ msgstr "Bulk Unassign Profile"
 
-#: src/components/MultiSelectActions.tsx:226
-#: src/components/MultiSelectActions.tsx:311
-#: src/components/NftCard.tsx:484
-#: src/components/NftCard.tsx:713
+#: src/components/MultiSelectActions.tsx:228
+#: src/components/MultiSelectActions.tsx:313
+#: src/components/NftCard.tsx:491
+#: src/components/NftCard.tsx:720
 #: src/components/OptionCard.tsx:114
 #: src/components/OptionColumns.tsx:209
 #: src/hooks/useOptionActions.tsx:155
@@ -903,11 +987,11 @@ msgstr "Bulk Transfer NFTs"
 msgid "Burn"
 msgstr "Burn"
 
-#: src/components/NftCard.tsx:480
+#: src/components/NftCard.tsx:487
 msgid "Burn {nftName}"
 msgstr "Burn {nftName}"
 
-#: src/components/MultiSelectActions.tsx:222
+#: src/components/MultiSelectActions.tsx:224
 msgid "Burn {selectedCount} selected NFTs"
 msgstr "Burn {selectedCount} selected NFTs"
 
@@ -915,9 +999,9 @@ msgstr "Burn {selectedCount} selected NFTs"
 msgid "Burn DID"
 msgstr "Burn DID"
 
-#: src/components/MultiSelectActions.tsx:334
-#: src/components/NftCard.tsx:709
-#: src/components/NftCard.tsx:741
+#: src/components/MultiSelectActions.tsx:336
+#: src/components/NftCard.tsx:716
+#: src/components/NftCard.tsx:748
 msgid "Burn NFT"
 msgstr "Burn NFT"
 
@@ -946,7 +1030,7 @@ msgstr "By disabling this you are creating a cold wallet, with no ability to sig
 msgid "Camera view"
 msgstr "Camera view"
 
-#: src/klimper/xchonnect/XchonnectUi.tsx:166
+#: src/klimper/xchonnect/XchonnectUi.tsx:203
 msgid "Can see my receive addresses"
 msgstr "Can see my receive addresses"
 
@@ -961,7 +1045,7 @@ msgstr "Can see my receive addresses"
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:352
 #: src/components/dialogs/ResyncDialog.tsx:95
 #: src/components/FeeOnlyDialog.tsx:93
-#: src/components/NftCard.tsx:697
+#: src/components/NftCard.tsx:704
 #: src/components/OfferRowCard.tsx:107
 #: src/components/OwnedCoinsCard.tsx:594
 #: src/components/OwnedCoinsCard.tsx:662
@@ -971,8 +1055,8 @@ msgstr "Can see my receive addresses"
 #: src/components/TransferDialog.tsx:166
 #: src/components/WalletCard.tsx:394
 #: src/components/WalletCard.tsx:444
-#: src/klimper/xchonnect/XchonnectConnect.tsx:329
-#: src/klimper/xchonnect/XchonnectConnect.tsx:514
+#: src/klimper/xchonnect/XchonnectConnect.tsx:333
+#: src/klimper/xchonnect/XchonnectConnect.tsx:522
 #: src/pages/CreateWallet.tsx:312
 #: src/pages/DidList.tsx:374
 #: src/pages/PeerList.tsx:431
@@ -1064,11 +1148,11 @@ msgstr "Change"
 msgid "Change Address"
 msgstr "Change Address"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:404
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:490
 msgid "Change back to you:"
 msgstr "Change back to you:"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:421
+#: src/klimper/xchonnect/XchonnectConnect.tsx:425
 #: src/klimper/xchonnect/XchonnectUi.tsx:41
 msgid "Check"
 msgstr "Check"
@@ -1093,7 +1177,7 @@ msgstr "Check this domain carefully ({warning})."
 #~ msgid "Check this website"
 #~ msgstr "Check this website"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:473
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:690
 msgid "Checked twice"
 msgstr "Checked twice"
 
@@ -1101,7 +1185,7 @@ msgstr "Checked twice"
 #~ msgid "Checked twice: your wallet’s records and an independent simulation agree on what leaves your wallet."
 #~ msgstr "Checked twice: your wallet’s records and an independent simulation agree on what leaves your wallet."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:433
+#: src/klimper/xchonnect/XchonnectConnect.tsx:437
 msgid "Checking the website…"
 msgstr "Checking the website…"
 
@@ -1138,6 +1222,15 @@ msgstr "Choose your preferred theme"
 #: src/pages/Themes.tsx:125
 msgid "Choose Your Theme"
 msgstr "Choose Your Theme"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:279
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1197
+msgid "Claim back"
+msgstr "Claim back"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:283
+msgid "Claim back {collateral} (option expired {date})"
+msgstr "Claim back {collateral} (option expired {date})"
 
 #: src/klimper/ClapAndPayConnect.tsx:221
 #: src/klimper/ClapAndPayConnect.tsx:268
@@ -1196,7 +1289,7 @@ msgstr "Clear selection"
 msgid "Clear Selection"
 msgstr "Clear Selection"
 
-#: src/components/NftCard.tsx:506
+#: src/components/NftCard.tsx:513
 #: src/components/OptionCard.tsx:135
 msgid "Click here to go to offer."
 msgstr "Click here to go to offer."
@@ -1222,7 +1315,7 @@ msgstr "coin"
 
 #: src/components/AssetCoin.tsx:100
 #: src/components/CoinList.tsx:73
-#: src/pages/Nft.tsx:621
+#: src/pages/Nft.tsx:623
 #: src/pages/Option.tsx:283
 msgid "Coin ID"
 msgstr "Coin ID"
@@ -1245,6 +1338,10 @@ msgstr "coins"
 #: src/components/CoinsCard.tsx:361
 #~ msgid "Coins"
 #~ msgstr "Coins"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:448
+msgid "Coins Klimper can’t account for"
+msgstr "Coins Klimper can’t account for"
 
 #: src/pages/PeerList.tsx:569
 msgid "Coins Synced"
@@ -1296,7 +1393,7 @@ msgstr "Collection {cardName}"
 msgid "Collection ID"
 msgstr "Collection ID"
 
-#: src/components/NftGroupCard.tsx:387
+#: src/components/NftGroupCard.tsx:392
 msgid "Collection ID copied to clipboard"
 msgstr "Collection ID copied to clipboard"
 
@@ -1409,7 +1506,7 @@ msgstr "Confirm Transaction"
 msgid "Confirmed"
 msgstr "Confirmed"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:507
+#: src/klimper/xchonnect/XchonnectConnect.tsx:515
 #: src/pages/PeerList.tsx:512
 #: src/pages/Settings.tsx:554
 msgid "Connect"
@@ -1419,7 +1516,7 @@ msgstr "Connect"
 msgid "Connect a wallet to manage its settings"
 msgstr "Connect a wallet to manage its settings"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:296
+#: src/klimper/xchonnect/XchonnectConnect.tsx:300
 #: src/klimper/xchonnect/XchonnectDapps.tsx:308
 #: src/klimper/xchonnect/XchonnectDapps.tsx:397
 #: src/klimper/xchonnect/XchonnectSettings.tsx:64
@@ -1448,7 +1545,7 @@ msgstr "Connected to {totalPeersCount} peers"
 
 #: src/klimper/xchonnect/XchonnectApproval.tsx:193
 #: src/klimper/xchonnect/XchonnectDapps.tsx:305
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:245
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:260
 #: src/klimper/xchonnect/XchonnectSettings.tsx:32
 msgid "Connected websites"
 msgstr "Connected websites"
@@ -1470,7 +1567,7 @@ msgstr "Connection keys"
 msgid "Connection keys live in the system keychain under {keyringService}, separate from the keys that sign your money."
 msgstr "Connection keys live in the system keychain under {keyringService}, separate from the keys that sign your money."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:311
+#: src/klimper/xchonnect/XchonnectConnect.tsx:315
 msgid "Connection stopped"
 msgstr "Connection stopped"
 
@@ -1510,7 +1607,7 @@ msgstr "Copy"
 #~ msgid "Copy {0}"
 #~ msgstr "Copy {0}"
 
-#: src/components/NftGroupCard.tsx:393
+#: src/components/NftGroupCard.tsx:398
 msgid "Copy {cardName} ID to clipboard"
 msgstr "Copy {cardName} ID to clipboard"
 
@@ -1558,8 +1655,8 @@ msgstr "Copy Asset ID"
 msgid "Copy Balance"
 msgstr "Copy Balance"
 
-#: src/components/NftCard.tsx:576
-#: src/components/NftGroupCard.tsx:397
+#: src/components/NftCard.tsx:583
+#: src/components/NftGroupCard.tsx:402
 #: src/components/OfferRowCard.tsx:121
 #: src/components/OptionCard.tsx:163
 #: src/components/OptionColumns.tsx:222
@@ -1579,7 +1676,7 @@ msgstr "Copy JSON"
 msgid "Copy marketplace link"
 msgstr "Copy marketplace link"
 
-#: src/components/NftCard.tsx:572
+#: src/components/NftCard.tsx:579
 msgid "Copy NFT ID to clipboard"
 msgstr "Copy NFT ID to clipboard"
 
@@ -1607,7 +1704,7 @@ msgstr "Create an option?"
 msgid "Create individual offers for each NFT"
 msgstr "Create individual offers for each NFT"
 
-#: src/pages/NftList.tsx:136
+#: src/pages/NftList.tsx:138
 msgid "Create new NFT"
 msgstr "Create new NFT"
 
@@ -1639,10 +1736,14 @@ msgstr "Created"
 #~ msgid "Created: {0}"
 #~ msgstr "Created: {0}"
 
-#: src/pages/Nft.tsx:582
+#: src/pages/Nft.tsx:584
 #: src/pages/Option.tsx:246
 msgid "Created: {createdAt}"
 msgstr "Created: {createdAt}"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:474
+msgid "Creates {amount} {label}"
+msgstr "Creates {amount} {label}"
 
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:292
 msgid "Creating Offer"
@@ -1684,7 +1785,7 @@ msgstr "Current page {page} of {totalPages}"
 msgid "Current Theme: {currentThemeName}"
 msgstr "Current Theme: {currentThemeName}"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:510
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:596
 msgid "Dangerous permissions"
 msgstr "Dangerous permissions"
 
@@ -1692,11 +1793,11 @@ msgstr "Dangerous permissions"
 #~ msgid "Dark Mode"
 #~ msgstr "Dark Mode"
 
-#: src/components/NftCard.tsx:659
+#: src/components/NftCard.tsx:666
 msgid "Data"
 msgstr "Data"
 
-#: src/pages/Nft.tsx:635
+#: src/pages/Nft.tsx:637
 msgid "Data and License Details"
 msgstr "Data and License Details"
 
@@ -1704,7 +1805,7 @@ msgstr "Data and License Details"
 msgid "Data copied to clipboard"
 msgstr "Data copied to clipboard"
 
-#: src/pages/Nft.tsx:688
+#: src/pages/Nft.tsx:690
 msgid "Data Hash"
 msgstr "Data Hash"
 
@@ -1712,7 +1813,7 @@ msgstr "Data Hash"
 msgid "Data table"
 msgstr "Data table"
 
-#: src/pages/Nft.tsx:640
+#: src/pages/Nft.tsx:642
 msgid "Data URIs"
 msgstr "Data URIs"
 
@@ -1855,7 +1956,11 @@ msgstr "Deleting..."
 msgid "Delta Sync"
 msgstr "Delta Sync"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:285
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:304
+msgid "Depends on {payments} payments to you"
+msgstr "Depends on {payments} payments to you"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:323
 msgid "Depends on receiving"
 msgstr "Depends on receiving"
 
@@ -1904,11 +2009,11 @@ msgstr "Detailed View"
 
 #: src/components/ConfirmationDialog.tsx:233
 #: src/components/WalletCard.tsx:284
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:789
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1113
 msgid "Details"
 msgstr "Details"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:495
+#: src/klimper/xchonnect/XchonnectConnect.tsx:503
 msgid "Developer mode: this code uses a local relay without encryption in transit. Never for real money."
 msgstr "Developer mode: this code uses a local relay without encryption in transit. Never for real money."
 
@@ -1916,8 +2021,8 @@ msgstr "Developer mode: this code uses a local relay without encryption in trans
 msgid "Development build: local relays without encryption in transit are accepted."
 msgstr "Development build: local relays without encryption in transit are accepted."
 
-#: src/pages/Nft.tsx:492
-#: src/pages/Nft.tsx:544
+#: src/pages/Nft.tsx:494
+#: src/pages/Nft.tsx:546
 msgid "Dexie"
 msgstr "Dexie"
 
@@ -1968,7 +2073,7 @@ msgstr "Display name"
 #~ msgid "Do these six digits match?"
 #~ msgstr "Do these six digits match?"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:449
+#: src/klimper/xchonnect/XchonnectConnect.tsx:453
 msgid "Domain verified"
 msgstr "Domain verified"
 
@@ -1985,6 +2090,10 @@ msgstr "Downloading {checkedFiles} / {totalFiles}"
 msgid "e.g. ff00ab"
 msgstr "e.g. ff00ab"
 
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:935
+msgid "Each asset, as simulated"
+msgstr "Each asset, as simulated"
+
 #: src/klimper/pouch/CoinPouch.tsx:478
 #~ msgid "Each coin is one disc: the bigger, the more it holds. A payment spends whole coins and gives change back as a new coin. Tilt the phone to move them, tap coins to select them, then split or combine them below."
 #~ msgstr "Each coin is one disc: the bigger, the more it holds. A payment spends whole coins and gives change back as a new coin. Tilt the phone to move them, tap coins to select them, then split or combine them below."
@@ -1998,26 +2107,26 @@ msgstr "Each coin is one disc: the bigger, the more it holds. A payment spends w
 msgid "Edit"
 msgstr "Edit"
 
-#: src/components/NftCard.tsx:776
+#: src/components/NftCard.tsx:783
 msgid "Edit Nft Profile"
 msgstr "Edit Nft Profile"
 
-#: src/components/MultiSelectActions.tsx:357
+#: src/components/MultiSelectActions.tsx:359
 msgid "Edit NFT Profile"
 msgstr "Edit NFT Profile"
 
-#: src/components/NftCard.tsx:444
+#: src/components/NftCard.tsx:447
 msgid "Edit profile"
 msgstr "Edit profile"
 
 #: src/components/confirmations/NftConfirmation.tsx:58
-#: src/components/MultiSelectActions.tsx:211
-#: src/components/MultiSelectActions.tsx:296
-#: src/components/NftCard.tsx:452
+#: src/components/MultiSelectActions.tsx:212
+#: src/components/MultiSelectActions.tsx:298
+#: src/components/NftCard.tsx:458
 msgid "Edit Profile"
 msgstr "Edit Profile"
 
-#: src/components/MultiSelectActions.tsx:207
+#: src/components/MultiSelectActions.tsx:208
 msgid "Edit profile for {selectedCount} selected NFTs"
 msgstr "Edit profile for {selectedCount} selected NFTs"
 
@@ -2163,7 +2272,7 @@ msgstr "Enter the new display name for this wallet."
 msgid "Enter total (defaults to count)"
 msgstr "Enter total (defaults to count)"
 
-#: src/components/NftCard.tsx:633
+#: src/components/NftCard.tsx:640
 msgid "Enter URL"
 msgstr "Enter URL"
 
@@ -2262,11 +2371,11 @@ msgstr "Expired at:"
 msgid "Expires"
 msgstr "Expires"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:213
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:219
 msgid "Expires {when}"
 msgstr "Expires {when}"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:217
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:223
 msgid "Expires at block {height}"
 msgstr "Expires at block {height}"
 
@@ -2309,7 +2418,7 @@ msgstr "Export transactions"
 msgid "External Links"
 msgstr "External Links"
 
-#: src/components/NftGroupCard.tsx:487
+#: src/components/NftGroupCard.tsx:492
 msgid "Failed to add NFTs to offer"
 msgstr "Failed to add NFTs to offer"
 
@@ -2390,7 +2499,7 @@ msgstr "Fee exceeds recommended maximum of 0.001 {ticker}"
 msgid "Fee per offer:"
 msgstr "Fee per offer:"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:671
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:995
 msgid "Fee reserved by the spend"
 msgstr "Fee reserved by the spend"
 
@@ -2484,7 +2593,7 @@ msgstr "Give your wallet a memorable name"
 #~ msgid "Global"
 #~ msgstr "Global"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:342
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:344
 msgid "Go back"
 msgstr "Go back"
 
@@ -2581,8 +2690,8 @@ msgstr "Hex bytes"
 msgid "Hidden"
 msgstr "Hidden"
 
-#: src/components/NftCard.tsx:561
-#: src/components/NftGroupCard.tsx:349
+#: src/components/NftCard.tsx:568
+#: src/components/NftGroupCard.tsx:354
 #: src/components/OptionCard.tsx:183
 #: src/components/OptionColumns.tsx:234
 #: src/components/TokenCard.tsx:183
@@ -2596,11 +2705,11 @@ msgstr "Hide"
 #~ msgid "Hide {0}"
 #~ msgstr "Hide {0}"
 
-#: src/components/NftGroupCard.tsx:342
+#: src/components/NftGroupCard.tsx:347
 msgid "Hide {cardName}"
 msgstr "Hide {cardName}"
 
-#: src/components/NftCard.tsx:552
+#: src/components/NftCard.tsx:559
 msgid "Hide {nftName}"
 msgstr "Hide {nftName}"
 
@@ -2666,11 +2775,15 @@ msgstr "Hot"
 msgid "Hours"
 msgstr "Hours"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:399
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:529
+msgid "How many options may leave your wallet: sent to anyone else or offered. Using an option yourself does not count. Leave a field empty for no limit."
+msgstr "How many options may leave your wallet: sent to anyone else or offered. Using an option yourself does not count. Leave a field empty for no limit."
+
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:434
 msgid "How much it may cost"
 msgstr "How much it may cost"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:345
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:347
 msgid "I accept the unknown contract"
 msgstr "I accept the unknown contract"
 
@@ -2678,7 +2791,7 @@ msgstr "I accept the unknown contract"
 #~ msgid "I have my recovery words, create the passkey"
 #~ msgstr "I have my recovery words, create the passkey"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:593
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:679
 msgid "I understand, turn it on"
 msgstr "I understand, turn it on"
 
@@ -2694,15 +2807,19 @@ msgstr "Icon for {name}"
 msgid "ID: {cardId}"
 msgstr "ID: {cardId}"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:535
+#: src/klimper/xchonnect/XchonnectConnect.tsx:543
 msgid "If they are different, somebody is in the middle."
 msgstr "If they are different, somebody is in the middle."
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:228
+#: src/klimper/xchonnect/XchonnectOption.tsx:398
+msgid "If they repay {repay} by then, they get it back"
+msgstr "If they repay {repay} by then, they get it back"
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:230
 msgid "If you do nothing, this request is refused when the time runs out."
 msgstr "If you do nothing, this request is refused when the time runs out."
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:223
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:225
 msgid "If you do nothing, this request is refused when the time runs out. Approving signs it and Klimper sends it to the network."
 msgstr "If you do nothing, this request is refused when the time runs out. Approving signs it and Klimper sends it to the network."
 
@@ -2744,7 +2861,7 @@ msgstr "In order to proceed with the update, the wallet will be fully resynced. 
 msgid "In order to proceed with the update, the wallet will be fully resynced. This means custom asset names will be removed, but you can manually add them again after if needed."
 msgstr "In order to proceed with the update, the wallet will be fully resynced. This means custom asset names will be removed, but you can manually add them again after if needed."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:626
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:845
 msgid "In total, with the fee"
 msgstr "In total, with the fee"
 
@@ -2830,7 +2947,7 @@ msgstr "It is not a connect code, an offer or an address. Here is what it says."
 msgid "It is not something this version of Klimper can open."
 msgstr "It is not something this version of Klimper can open."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:455
+#: src/klimper/xchonnect/XchonnectConnect.tsx:459
 msgid "It may ask for"
 msgstr "It may ask for"
 
@@ -2863,7 +2980,7 @@ msgid "Keep the offers"
 msgstr "Keep the offers"
 
 #: src/components/confirmations/AddUrlConfirmation.tsx:69
-#: src/components/NftCard.tsx:646
+#: src/components/NftCard.tsx:653
 msgid "Kind"
 msgstr "Kind"
 
@@ -2871,32 +2988,60 @@ msgstr "Kind"
 msgid "Kind is required"
 msgstr "Kind is required"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:440
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:655
 msgid "Klimper built this from your own coins and sends it to the network itself."
 msgstr "Klimper built this from your own coins and sends it to the network itself."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:544
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:626
+msgid "Klimper built this offer from your own coins and signs it. It does not send it: the website publishes it, and nothing moves until someone takes it."
+msgstr "Klimper built this offer from your own coins and signs it. It does not send it: the website publishes it, and nothing moves until someone takes it."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:632
+msgid "Klimper built this request from your own coins and signs it. It does not send it: the website hands it to a lender, and nothing moves until one takes it."
+msgstr "Klimper built this request from your own coins and signs it. It does not send it: the website hands it to a lender, and nothing moves until one takes it."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:699
+msgid "Klimper built this transaction, sends it itself and keeps every signature: all of it reaches the network, or none of it."
+msgstr "Klimper built this transaction, sends it itself and keeps every signature: all of it reaches the network, or none of it."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:649
+msgid "Klimper built your side from your own coins, completes it with the other side's offer and sends the trade to the network itself."
+msgstr "Klimper built your side from your own coins, completes it with the other side's offer and sends the trade to the network itself."
+
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:630
 msgid "Klimper can still show you the net effect, but not what the contract does afterwards."
 msgstr "Klimper can still show you the net effect, but not what the contract does afterwards."
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:264
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:804
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:266
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1128
 msgid "Klimper cannot read this request"
 msgstr "Klimper cannot read this request"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:270
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:287
+msgid "Klimper checked that your payment only goes out if the collateral comes to you."
+msgstr "Klimper checked that your payment only goes out if the collateral comes to you."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:292
 msgid "Klimper checked that your signature only pays out if the other side pays you."
 msgstr "Klimper checked that your signature only pays out if the other side pays you."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:261
+#: src/klimper/xchonnect/XchonnectConnect.tsx:264
 msgid "Klimper could not read the clipboard."
 msgstr "Klimper could not read the clipboard."
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:426
+msgid "Klimper counted the offers in the offer itself: groups of coins that are not tied to each other, each asking for its own payment. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
+msgstr "Klimper counted the offers in the offer itself: groups of coins that are not tied to each other, each asking for its own payment. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:364
+#~ msgid "Klimper counted the offers in the offer itself. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
+#~ msgstr "Klimper counted the offers in the offer itself. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
 
 #: src/klimper/Scanner.tsx:140
 msgid "Klimper does not know this code"
 msgstr "Klimper does not know this code"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:588
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:892
 msgid "Klimper does not recognise this contract. Nobody can tell you what it does with your coins."
 msgstr "Klimper does not recognise this contract. Nobody can tell you what it does with your coins."
 
@@ -2904,7 +3049,7 @@ msgstr "Klimper does not recognise this contract. Nobody can tell you what it do
 msgid "Klimper ended this connection"
 msgstr "Klimper ended this connection"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:435
+#: src/klimper/xchonnect/XchonnectConnect.tsx:439
 msgid "Klimper is asking the domain to prove it signed this code."
 msgstr "Klimper is asking the domain to prove it signed this code."
 
@@ -2929,15 +3074,23 @@ msgstr "Klimper may not use the camera. Allow it in the system settings, then tr
 msgid "Klimper only sees a request from a website while it is open. To be told when one arrives, turn notifications on for Klimper in your phone's settings. Notifications never show amounts or addresses."
 msgstr "Klimper only sees a request from a website while it is open. To be told when one arrives, turn notifications on for Klimper in your phone's settings. Notifications never show amounts or addresses."
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:141
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:142
 msgid "Klimper sent the transaction for {dapp}."
 msgstr "Klimper sent the transaction for {dapp}."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:419
+msgid "Klimper signs a loan request. Nothing moves until a lender takes it."
+msgstr "Klimper signs a loan request. Nothing moves until a lender takes it."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:537
+msgid "Klimper signs an offer. Nothing moves until someone takes it."
+msgstr "Klimper signs an offer. Nothing moves until someone takes it."
 
 #: src/klimper/sound/KlimperSoundSettings.tsx:18
 #~ msgid "Klimper sound"
 #~ msgstr "Klimper sound"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:580
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:666
 msgid "Klimper will stop refusing spends whose contract it cannot read. Nobody can tell you what such a contract does with your coins."
 msgstr "Klimper will stop refusing spends whose contract it cannot read. Nobody can tell you what such a contract does with your coins."
 
@@ -2949,7 +3102,7 @@ msgstr "Language"
 msgid "Large Cards"
 msgstr "Large Cards"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:309
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:312
 msgid "Later"
 msgstr "Later"
 
@@ -2980,19 +3133,28 @@ msgstr "Launcher ID copied to clipboard"
 msgid "Learn more"
 msgstr "Learn more"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:401
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:436
 msgid "Leave a field empty for no limit. A token with no limit here is not limited, and NFTs never are. A day is a UTC day."
 msgstr "Leave a field empty for no limit. A token with no limit here is not limited, and NFTs never are. A day is a UTC day."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:590
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:676
 msgid "Leave it off"
 msgstr "Leave it off"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:257
+#: src/klimper/xchonnect/XchonnectOption.tsx:366
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1173
+msgid "Lend"
+msgstr "Lend"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:374
+msgid "Lend {principal} to {other}"
+msgstr "Lend {principal} to {other}"
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:259
 msgid "Let go to approve"
 msgstr "Let go to approve"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:255
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:257
 msgid "Let go to approve and send"
 msgstr "Let go to approve and send"
 
@@ -3000,15 +3162,19 @@ msgstr "Let go to approve and send"
 #~ msgid "Let it see all my receive addresses"
 #~ msgstr "Let it see all my receive addresses"
 
-#: src/components/NftCard.tsx:665
+#: src/klimper/xchonnect/XchonnectUi.tsx:177
+msgid "Let this website ask to write, use, claim back or send option contracts, and to request or take loans. Each one still asks you first; they lock funds until a date."
+msgstr "Let this website ask to write, use, claim back or send option contracts, and to request or take loans. Each one still asks you first; they lock funds until a date."
+
+#: src/components/NftCard.tsx:672
 msgid "License"
 msgstr "License"
 
-#: src/pages/Nft.tsx:700
+#: src/pages/Nft.tsx:702
 msgid "License Hash"
 msgstr "License Hash"
 
-#: src/pages/Nft.tsx:672
+#: src/pages/Nft.tsx:674
 msgid "License URIs"
 msgstr "License URIs"
 
@@ -3096,7 +3262,7 @@ msgstr "Loading transactions..."
 msgid "Loading..."
 msgstr "Loading..."
 
-#: src/pages/Nft.tsx:575
+#: src/pages/Nft.tsx:577
 #: src/pages/Option.tsx:239
 msgid "Local Offer"
 msgstr "Local Offer"
@@ -3104,6 +3270,11 @@ msgstr "Local Offer"
 #: src/pages/Option.tsx:217
 msgid "Local Offers"
 msgstr "Local Offers"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:168
+#: src/klimper/xchonnect/XchonnectOption.tsx:385
+msgid "Lock {collateral} until {until}"
+msgstr "Lock {collateral} until {until}"
 
 #: src/klimper/ClapAndPayConnect.tsx:204
 #~ msgid "Lock it with Face ID"
@@ -3155,6 +3326,11 @@ msgstr "Made on {sessionChain}"
 msgid "Main navigation"
 msgstr "Main navigation"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:478
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1168
+msgid "Make an offer"
+msgstr "Make an offer"
+
 #: src/pages/CreateWallet.tsx:302
 msgid "Make sure you have saved your mnemonic. You will not be able to access it later, since it will not be saved in the wallet. You will also not be able to make transactions with this wallet."
 msgstr "Make sure you have saved your mnemonic. You will not be able to access it later, since it will not be saved in the wallet. You will also not be able to make transactions with this wallet."
@@ -3201,7 +3377,7 @@ msgstr "Memo (optional)"
 msgid "Memo must be valid hex bytes (even length, 0-9, a-f)"
 msgstr "Memo must be valid hex bytes (even length, 0-9, a-f)"
 
-#: src/components/NftCard.tsx:662
+#: src/components/NftCard.tsx:669
 msgid "Metadata"
 msgstr "Metadata"
 
@@ -3214,11 +3390,11 @@ msgstr "Metadata Collection ID"
 #~ msgid "Metadata Collection ID copied to clipboard"
 #~ msgstr "Metadata Collection ID copied to clipboard"
 
-#: src/pages/Nft.tsx:694
+#: src/pages/Nft.tsx:696
 msgid "Metadata Hash"
 msgstr "Metadata Hash"
 
-#: src/pages/Nft.tsx:656
+#: src/pages/Nft.tsx:658
 msgid "Metadata URIs"
 msgstr "Metadata URIs"
 
@@ -3239,7 +3415,7 @@ msgid "Mint new option"
 msgstr "Mint new option"
 
 #: src/pages/MintNft.tsx:146
-#: src/pages/NftList.tsx:139
+#: src/pages/NftList.tsx:141
 msgid "Mint NFT"
 msgstr "Mint NFT"
 
@@ -3254,7 +3430,7 @@ msgid "Minter {cardName}"
 msgstr "Minter {cardName}"
 
 #: src/pages/CollectionMetaData.tsx:205
-#: src/pages/Nft.tsx:384
+#: src/pages/Nft.tsx:386
 msgid "Minter DID"
 msgstr "Minter DID"
 
@@ -3263,7 +3439,7 @@ msgstr "Minter DID"
 #~ msgid "Minter DID copied to clipboard"
 #~ msgstr "Minter DID copied to clipboard"
 
-#: src/components/NftGroupCard.tsx:390
+#: src/components/NftGroupCard.tsx:395
 msgid "Minter ID copied to clipboard"
 msgstr "Minter ID copied to clipboard"
 
@@ -3304,7 +3480,7 @@ msgstr "More options"
 msgid "More Themes..."
 msgstr "More Themes..."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:718
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1042
 msgid "moves no money"
 msgstr "moves no money"
 
@@ -3351,15 +3527,15 @@ msgid "Navigation menu"
 msgstr "Navigation menu"
 
 #: src/components/WalletCard.tsx:466
-#: src/klimper/xchonnect/XchonnectConnect.tsx:452
+#: src/klimper/xchonnect/XchonnectConnect.tsx:456
 #: src/klimper/xchonnect/XchonnectDapps.tsx:201
 #: src/pages/Settings.tsx:159
 #: src/pages/Settings.tsx:591
 msgid "Network"
 msgstr "Network"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:536
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:654
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:792
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:977
 msgid "Network fee"
 msgstr "Network fee"
 
@@ -3368,7 +3544,7 @@ msgstr "Network fee"
 #: src/components/ClawbackCoinsCard.tsx:438
 #: src/components/dialogs/CancelOfferDialog.tsx:68
 #: src/components/FeeOnlyDialog.tsx:78
-#: src/components/NftCard.tsx:681
+#: src/components/NftCard.tsx:688
 #: src/components/OwnedCoinsCard.tsx:579
 #: src/components/OwnedCoinsCard.tsx:647
 #: src/components/OwnedCoinsCard.tsx:697
@@ -3392,7 +3568,11 @@ msgstr "Network Fee (per offer)"
 msgid "Network fee amount"
 msgstr "Network fee amount"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:639
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:968
+msgid "Network fee of the whole trade"
+msgstr "Network fee of the whole trade"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:951
 msgid "Network fee unknown"
 msgstr "Network fee unknown"
 
@@ -3413,6 +3593,15 @@ msgstr "Network Fee:"
 msgid "New Offer"
 msgstr "New Offer"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:163
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1182
+msgid "New option"
+msgstr "New option"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:261
+msgid "new to your wallet"
+msgstr "new to your wallet"
+
 #: src/pages/CreateWallet.tsx:142
 msgid "New Wallet"
 msgstr "New Wallet"
@@ -3425,8 +3614,8 @@ msgstr "Next"
 msgid "Next page"
 msgstr "Next page"
 
-#: src/components/MultiSelectActions.tsx:259
-#: src/components/NftGroupCard.tsx:472
+#: src/components/MultiSelectActions.tsx:261
+#: src/components/NftGroupCard.tsx:477
 #: src/components/selectors/AssetSelector.tsx:212
 msgid "NFT"
 msgstr "NFT"
@@ -3441,7 +3630,7 @@ msgstr "NFT artwork for {nftName}"
 #~ msgid "NFT artwork for unnamed NFT"
 #~ msgstr "NFT artwork for unnamed NFT"
 
-#: src/pages/NftList.tsx:168
+#: src/pages/NftList.tsx:171
 msgid "NFT Collection"
 msgstr "NFT Collection"
 
@@ -3457,7 +3646,7 @@ msgstr "NFT filtering and sorting options"
 msgid "NFT Gallery"
 msgstr "NFT Gallery"
 
-#: src/components/NftCard.tsx:570
+#: src/components/NftCard.tsx:577
 msgid "NFT ID copied to clipboard"
 msgstr "NFT ID copied to clipboard"
 
@@ -3477,9 +3666,9 @@ msgstr "NFT Preview"
 msgid "NFT view options"
 msgstr "NFT view options"
 
-#: src/components/MultiSelectActions.tsx:259
+#: src/components/MultiSelectActions.tsx:261
 #: src/components/Nav.tsx:71
-#: src/components/NftGroupCard.tsx:472
+#: src/components/NftGroupCard.tsx:477
 #: src/components/NftPageTitle.tsx:44
 msgid "NFTs"
 msgstr "NFTs"
@@ -3512,11 +3701,11 @@ msgstr "No camera could be opened."
 msgid "No camera could be opened. Paste the code or choose a picture of it."
 msgstr "No camera could be opened. Paste the code or choose a picture of it."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:145
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:151
 msgid "No change"
 msgstr "No change"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:616
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:835
 msgid "No change to your assets."
 msgstr "No change to your assets."
 
@@ -3542,7 +3731,7 @@ msgstr "No Collection"
 msgid "No Collection Found"
 msgstr "No Collection Found"
 
-#: src/pages/Nft.tsx:448
+#: src/pages/Nft.tsx:450
 msgid "No Dexie offers requesting this NFT"
 msgstr "No Dexie offers requesting this NFT"
 
@@ -3625,7 +3814,11 @@ msgstr "No Wallet Connected"
 msgid "No websites are connected"
 msgstr "No websites are connected"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:318
+#: src/klimper/xchonnect/XchonnectOption.tsx:543
+msgid "Nobody can take it from {closes}, when the option expires."
+msgstr "Nobody can take it from {closes}, when the option expires."
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:320
 msgid "Nobody can tell you what it does with your coins. Approve only if you know this contract from somewhere other than this website."
 msgstr "Nobody can tell you what it does with your coins. Approve only if you know this contract from somewhere other than this website."
 
@@ -3666,7 +3859,7 @@ msgstr "Normalize Profiles"
 msgid "Not available for read-only wallets"
 msgstr "Not available for read-only wallets"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:251
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:264
 msgid "Not bound — do not sign"
 msgstr "Not bound — do not sign"
 
@@ -3687,7 +3880,7 @@ msgstr "Not checked"
 msgid "Not enough funds to cover the fee"
 msgstr "Not enough funds to cover the fee"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:169
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:175
 msgid "not in your wallet"
 msgstr "not in your wallet"
 
@@ -3695,15 +3888,19 @@ msgstr "not in your wallet"
 msgid "not listening"
 msgstr "not listening"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:123
+msgid "not named by this request"
+msgstr "not named by this request"
+
 #: src/klimper/ClapAndPayConnect.tsx:252
 msgid "Not now"
 msgstr "Not now"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:205
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:211
 msgid "Not valid before {when}"
 msgstr "Not valid before {when}"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:209
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:215
 msgid "Not valid before block {height}"
 msgstr "Not valid before block {height}"
 
@@ -3715,7 +3912,7 @@ msgstr "Not valid before block {height}"
 msgid "Note"
 msgstr "Note"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:517
+#: src/klimper/xchonnect/XchonnectConnect.tsx:525
 msgid "Nothing is signed automatically. Every request still asks you, and you can change what this website may do at any time."
 msgstr "Nothing is signed automatically. Every request still asks you, and you can change what this website may do at any time."
 
@@ -3723,7 +3920,7 @@ msgstr "Nothing is signed automatically. Every request still asks you, and you c
 msgid "Nothing is waiting for you"
 msgstr "Nothing is waiting for you"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:351
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:409
 msgid "Nothing leaves your wallet except the network fee."
 msgstr "Nothing leaves your wallet except the network fee."
 
@@ -3735,7 +3932,7 @@ msgstr "Nothing offered."
 msgid "Nothing requested."
 msgstr "Nothing requested."
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:244
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:247
 msgid "Nothing was signed. Approve again to confirm with Face ID."
 msgstr "Nothing was signed. Approve again to confirm with Face ID."
 
@@ -3794,7 +3991,7 @@ msgstr "Offered"
 #~ msgid "Offered {0} amount must be a positive number."
 #~ msgstr "Offered {0} amount must be a positive number."
 
-#: src/pages/Nft.tsx:457
+#: src/pages/Nft.tsx:459
 msgid "Offered in exchange:"
 msgstr "Offered in exchange:"
 
@@ -3819,7 +4016,7 @@ msgstr "Offers"
 msgid "Offers Created"
 msgstr "Offers Created"
 
-#: src/pages/Nft.tsx:443
+#: src/pages/Nft.tsx:445
 msgid "Offers Requesting This NFT"
 msgstr "Offers Requesting This NFT"
 
@@ -3831,7 +4028,7 @@ msgstr "Offers Requesting This NFT"
 msgid "OK"
 msgstr "OK"
 
-#: src/klimper/xchonnect/XchonnectUi.tsx:169
+#: src/klimper/xchonnect/XchonnectUi.tsx:206
 msgid "On: it can show your coins and build transfers and offers from them. Off: it sees one address of its own. Every request still needs your approval."
 msgstr "On: it can show your coins and build transfers and offers from them. Off: it sees one address of its own. Every request still needs your approval."
 
@@ -3847,11 +4044,11 @@ msgstr "Once issued, this token will appear in your wallet. You can then send it
 #~ msgid "One address of its own"
 #~ msgstr "One address of its own"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:266
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:282
 msgid "One half of a trade"
 msgstr "One half of a trade"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:188
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:194
 msgid "Only if the counterparty completes"
 msgstr "Only if the counterparty completes"
 
@@ -3860,11 +4057,11 @@ msgstr "Only if the counterparty completes"
 msgid "Only issue a revocable CAT if you understand the risks. Sage cannot revoke it; revocation currently requires external tools."
 msgstr "Only issue a revocable CAT if you understand the risks. Sage cannot revoke it; revocation currently requires external tools."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:479
+#: src/klimper/xchonnect/XchonnectConnect.tsx:483
 msgid "Only the domain is verified — the name is what it claims."
 msgstr "Only the domain is verified — the name is what it claims."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:349
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:407
 msgid "Only to your own addresses"
 msgstr "Only to your own addresses"
 
@@ -3883,7 +4080,7 @@ msgstr "Open actions menu"
 msgid "Open external link: {content}"
 msgstr "Open external link: {content}"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:322
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:325
 msgid "Open in requests"
 msgstr "Open in requests"
 
@@ -3911,12 +4108,19 @@ msgid "Optimizing..."
 msgstr "Optimizing..."
 
 #: src/components/OptionListView.tsx:25
+#: src/klimper/xchonnect/XchonnectTrade.tsx:212
 msgid "option"
 msgstr "option"
 
 #: src/components/selectors/AssetSelector.tsx:218
+#: src/klimper/xchonnect/XchonnectOption.tsx:115
+#: src/klimper/xchonnect/XchonnectOption.tsx:440
 msgid "Option"
 msgstr "Option"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:500
+msgid "Option {label}: whoever takes the offer may pay {strike} to {creator} for {collateral} until {until}. After that, {creator} takes the {collateral} back."
+msgstr "Option {label}: whoever takes the offer may pay {strike} to {creator} for {collateral} until {until}. After that, {creator} takes the {collateral} back."
 
 #: src/components/confirmations/MintOptionConfirmation.tsx.tsx:155
 #: src/pages/Option.tsx:95
@@ -3934,6 +4138,10 @@ msgstr "Option contract filtering and sorting options"
 #: src/pages/Option.tsx:99
 msgid "Option contract not found"
 msgstr "Option contract not found"
+
+#: src/klimper/xchonnect/XchonnectUi.tsx:167
+msgid "Option contracts"
+msgstr "Option contracts"
 
 #: src/pages/OptionList.tsx:84
 msgid "Option Contracts"
@@ -3977,11 +4185,17 @@ msgstr "Option List"
 msgid "Option Minting"
 msgstr "Option Minting"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:237
+msgid "Option used"
+msgstr "Option used"
+
 #: src/components/OptionListView.tsx:26
+#: src/klimper/xchonnect/XchonnectTrade.tsx:213
 msgid "options"
 msgstr "options"
 
 #: src/components/Nav.tsx:91
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:527
 msgid "Options"
 msgstr "Options"
 
@@ -3997,6 +4211,14 @@ msgstr "Options for {cardName}"
 msgid "Options for {nftName}"
 msgstr "Options for {nftName}"
 
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:559
+msgid "Options per day"
+msgstr "Options per day"
+
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:538
+msgid "Options per request"
+msgstr "Options per request"
+
 #: src/klimper/XchonnectConnect.tsx:381
 #~ msgid "Or type the code"
 #~ msgstr "Or type the code"
@@ -4008,6 +4230,14 @@ msgstr "Other"
 #: src/klimper/XchonnectDappSettings.tsx:594
 #~ msgid "Otherwise it sees one address of its own. Websites that build trades from your coins, like Pengui, need this."
 #~ msgstr "Otherwise it sees one address of its own. Websites that build trades from your coins, like Pengui, need this."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:403
+msgid "Otherwise the lender keeps it"
+msgstr "Otherwise the lender keeps it"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:405
+msgid "Otherwise you can claim it"
+msgstr "Otherwise you can claim it"
 
 #: src/pages/Themes.tsx:235
 msgid "Outline"
@@ -4038,7 +4268,7 @@ msgstr "Override the default network for this wallet"
 msgid "Owned Coins"
 msgstr "Owned Coins"
 
-#: src/pages/Nft.tsx:411
+#: src/pages/Nft.tsx:413
 msgid "Owner DID"
 msgstr "Owner DID"
 
@@ -4050,7 +4280,7 @@ msgstr "Owner DID"
 msgid "Owner Profiles"
 msgstr "Owner Profiles"
 
-#: src/pages/Nft.tsx:378
+#: src/pages/Nft.tsx:380
 msgid "Ownership"
 msgstr "Ownership"
 
@@ -4087,7 +4317,15 @@ msgstr "Pages Vacuumed"
 msgid "Pagination"
 msgstr "Pagination"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:409
+#: src/klimper/xchonnect/XchonnectOption.tsx:256
+msgid "Paid to the option's writer, <0/>"
+msgstr "Paid to the option's writer, <0/>"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:254
+msgid "Paid to you, the option's writer"
+msgstr "Paid to you, the option's writer"
+
+#: src/klimper/xchonnect/XchonnectConnect.tsx:413
 msgid "Pairing code"
 msgstr "Pairing code"
 
@@ -4095,7 +4333,7 @@ msgstr "Pairing code"
 #~ msgid "Passkey"
 #~ msgstr "Passkey"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:380
+#: src/klimper/xchonnect/XchonnectConnect.tsx:384
 msgid "Paste"
 msgstr "Paste"
 
@@ -4126,6 +4364,10 @@ msgstr "Paste from clipboard"
 #: src/components/dialogs/ViewOfferDialog.tsx:43
 msgid "Paste your offer string or URL here..."
 msgstr "Paste your offer string or URL here..."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:242
+msgid "Pay {strike}, receive {collateral}"
+msgstr "Pay {strike}, receive {collateral}"
 
 #: src/components/confirmations/TakeOfferConfirmation.tsx:45
 msgid "Paying"
@@ -4163,13 +4405,13 @@ msgstr "Pending confirmation"
 msgid "Pending..."
 msgstr "Pending..."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:424
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:466
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:459
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:501
 msgid "Per day"
 msgstr "Per day"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:421
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:442
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:456
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:477
 msgid "Per request"
 msgstr "Per request"
 
@@ -4187,11 +4429,11 @@ msgstr "Permanently Burned"
 msgid "Permanently Delete"
 msgstr "Permanently Delete"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:387
+#: src/klimper/xchonnect/XchonnectConnect.tsx:391
 msgid "Picture"
 msgstr "Picture"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:394
+#: src/klimper/xchonnect/XchonnectConnect.tsx:398
 msgid "Picture of the pairing code"
 msgstr "Picture of the pairing code"
 
@@ -4259,7 +4501,7 @@ msgstr "Position the QR code within the frame"
 msgid "Preferences"
 msgstr "Preferences"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:342
+#: src/klimper/xchonnect/XchonnectConnect.tsx:346
 msgid "Press connect on the website. It shows a QR code: point the camera at it, or paste the code under it."
 msgstr "Press connect on the website. It shows a QR code: point the camera at it, or paste the code under it."
 
@@ -4284,6 +4526,7 @@ msgid "Previous page"
 msgstr "Previous page"
 
 #: src/components/TokenColumns.tsx:140
+#: src/klimper/xchonnect/XchonnectTrade.tsx:357
 msgid "Price"
 msgstr "Price"
 
@@ -4332,7 +4575,7 @@ msgid "Profile ID"
 msgstr "Profile ID"
 
 #: src/components/confirmations/NftConfirmation.tsx:98
-#: src/components/NftGroupCard.tsx:389
+#: src/components/NftGroupCard.tsx:394
 msgid "Profile ID copied to clipboard"
 msgstr "Profile ID copied to clipboard"
 
@@ -4375,11 +4618,11 @@ msgstr "Public Key"
 msgid "QR Code"
 msgstr "QR Code"
 
-#: src/components/NftCard.tsx:535
+#: src/components/NftCard.tsx:542
 msgid "Re-downloading NFT data"
 msgstr "Re-downloading NFT data"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:326
+#: src/klimper/xchonnect/XchonnectConnect.tsx:330
 msgid "Read another code"
 msgstr "Read another code"
 
@@ -4416,6 +4659,10 @@ msgstr "Receive {ticker}"
 msgid "Receive Address"
 msgstr "Receive Address"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:312
+msgid "Receive option"
+msgstr "Receive option"
+
 #: src/pages/Transaction.tsx:159
 msgid "Received"
 msgstr "Received"
@@ -4434,11 +4681,11 @@ msgstr "Receiving"
 msgid "Recipient Address"
 msgstr "Recipient Address"
 
-#: src/components/NftCard.tsx:541
+#: src/components/NftCard.tsx:548
 msgid "Redownload"
 msgstr "Redownload"
 
-#: src/components/NftCard.tsx:537
+#: src/components/NftCard.tsx:544
 msgid "Redownload {nftName}"
 msgstr "Redownload {nftName}"
 
@@ -4472,11 +4719,11 @@ msgstr "refused by itself in"
 msgid "Refused by itself in {time}"
 msgstr "Refused by itself in {time}"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:280
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:282
 msgid "Reject"
 msgstr "Reject"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:458
+#: src/klimper/xchonnect/XchonnectConnect.tsx:462
 msgid "Relay"
 msgstr "Relay"
 
@@ -4520,6 +4767,15 @@ msgstr "Renew keys"
 msgid "renewed {epoch} times"
 msgstr "renewed {epoch} times"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:396
+msgid "Repay {repay} to get it back"
+msgstr "Repay {repay} to get it back"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:366
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1171
+msgid "Request a loan"
+msgstr "Request a loan"
+
 #: src/components/OfferCard.tsx:210
 #: src/pages/MakeOffer.tsx:157
 msgid "Requested"
@@ -4537,7 +4793,7 @@ msgstr "Requested"
 msgid "Requesting"
 msgstr "Requesting"
 
-#: src/pages/Nft.tsx:521
+#: src/pages/Nft.tsx:523
 msgid "Requesting in exchange:"
 msgstr "Requesting in exchange:"
 
@@ -4611,7 +4867,7 @@ msgstr "Revocable CAT"
 msgid "Revocable CAT Warning"
 msgstr "Revocable CAT Warning"
 
-#: src/pages/Nft.tsx:435
+#: src/pages/Nft.tsx:437
 msgid "Royalties {royaltyPercentage}%"
 msgstr "Royalties {royaltyPercentage}%"
 
@@ -4647,7 +4903,7 @@ msgstr "Run on startup"
 msgid "Running"
 msgstr "Running"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:532
+#: src/klimper/xchonnect/XchonnectConnect.tsx:540
 msgid "Same digits on the website?"
 msgstr "Same digits on the website?"
 
@@ -4659,7 +4915,7 @@ msgstr "Same digits on the website?"
 #~ msgid "Same number on the page, next to the answer?"
 #~ msgstr "Same number on the page, next to the answer?"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:492
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:578
 msgid "Save"
 msgstr "Save"
 
@@ -4675,7 +4931,7 @@ msgstr "Save mnemonic"
 msgid "Save Theme"
 msgstr "Save Theme"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:499
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:585
 msgid "Saved. It applies to the next request."
 msgstr "Saved. It applies to the next request."
 
@@ -4689,7 +4945,7 @@ msgstr "Say yes on the page with your face or fingerprint. It brings you back he
 
 #: src/klimper/KlimperNavLinks.tsx:36
 #: src/klimper/Scanner.tsx:115
-#: src/klimper/xchonnect/XchonnectConnect.tsx:375
+#: src/klimper/xchonnect/XchonnectConnect.tsx:379
 #: src/klimper/xchonnect/XchonnectUi.tsx:39
 msgid "Scan"
 msgstr "Scan"
@@ -4722,7 +4978,7 @@ msgstr "Scan QR code from an image"
 msgid "Scan QR code with the camera"
 msgstr "Scan QR code with the camera"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:340
+#: src/klimper/xchonnect/XchonnectConnect.tsx:344
 msgid "Scan the website's code"
 msgstr "Scan the website's code"
 
@@ -4737,6 +4993,10 @@ msgstr "Scan the website's code"
 #: src/klimper/Scanner.tsx:157
 msgid "Scanned text"
 msgstr "Scanned text"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:705
+msgid "Sealed by Klimper"
+msgstr "Sealed by Klimper"
 
 #: src/components/selectors/NftSelector.tsx:209
 msgid "Search by name or enter NFT ID"
@@ -4814,7 +5074,7 @@ msgstr "Secondary navigation"
 msgid "Secret Key"
 msgstr "Secret Key"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:320
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:323
 msgid "See all {total} requests"
 msgstr "See all {total} requests"
 
@@ -4872,8 +5132,8 @@ msgstr "Select from our collection of beautiful themes"
 msgid "Select item"
 msgstr "Select item"
 
-#: src/components/NftCard.tsx:654
-#: src/components/NftCard.tsx:655
+#: src/components/NftCard.tsx:661
+#: src/components/NftCard.tsx:662
 msgid "Select kind"
 msgstr "Select kind"
 
@@ -4954,8 +5214,8 @@ msgstr "Selected {selectedPeersCount} of {totalPeersCount} peers"
 msgid "Selected NFTs actions"
 msgstr "Selected NFTs actions"
 
-#: src/components/MultiSelectActions.tsx:263
-#: src/components/NftGroupCard.tsx:476
+#: src/components/MultiSelectActions.tsx:265
+#: src/components/NftGroupCard.tsx:481
 msgid "Selected NFTs are already in the offer"
 msgstr "Selected NFTs are already in the offer"
 
@@ -4972,9 +5232,13 @@ msgid "Selection options"
 msgstr "Selection options"
 
 #: src/components/TokenCard.tsx:149
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:824
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1157
 msgid "Send"
 msgstr "Send"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1201
+msgid "Send {count} options"
+msgstr "Send {count} options"
 
 #: src/pages/Send.tsx:308
 #: src/pages/Send.tsx:598
@@ -4982,9 +5246,17 @@ msgstr "Send"
 msgid "Send {ticker}"
 msgstr "Send {ticker}"
 
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1203
+msgid "Send an option"
+msgstr "Send an option"
+
 #: src/pages/Send.tsx:331
 msgid "Send in bulk (airdrop)"
 msgstr "Send in bulk (airdrop)"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:310
+msgid "Send option"
+msgstr "Send option"
 
 #: src/components/confirmations/TokenConfirmation.tsx:111
 msgid "Send Token"
@@ -5048,8 +5320,8 @@ msgstr "Share your offer on these marketplaces."
 #~ msgid "Shared keys"
 #~ msgstr "Shared keys"
 
-#: src/components/NftCard.tsx:561
-#: src/components/NftGroupCard.tsx:356
+#: src/components/NftCard.tsx:568
+#: src/components/NftGroupCard.tsx:361
 #: src/components/OptionCard.tsx:183
 #: src/components/OptionColumns.tsx:234
 #: src/components/TokenCard.tsx:183
@@ -5063,11 +5335,11 @@ msgstr "Show"
 #~ msgid "Show {0}"
 #~ msgstr "Show {0}"
 
-#: src/components/NftGroupCard.tsx:342
+#: src/components/NftGroupCard.tsx:347
 msgid "Show {cardName}"
 msgstr "Show {cardName}"
 
-#: src/components/NftCard.tsx:552
+#: src/components/NftCard.tsx:559
 msgid "Show {nftName}"
 msgstr "Show {nftName}"
 
@@ -5086,6 +5358,10 @@ msgstr "Show {size} items per page"
 #: src/components/NftGroupCard.tsx:220
 #~ msgid "Show collection"
 #~ msgstr "Show collection"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:326
+msgid "Show fewer"
+msgstr "Show fewer"
 
 #: src/pages/Addresses.tsx:161
 msgid "Show hardened addresses"
@@ -5115,6 +5391,10 @@ msgstr "Show hidden items"
 #: src/components/CoinList.tsx:319
 msgid "Show spent coins"
 msgstr "Show spent coins"
+
+#: src/klimper/xchonnect/XchonnectTrade.tsx:367
+msgid "Show the price the other way round"
+msgstr "Show the price the other way round"
 
 #: src/components/CoinList.tsx:267
 #~ msgid "Show unspent coins only"
@@ -5157,7 +5437,7 @@ msgstr "Showing {length} of {maxRows} {rowLabelPlural}"
 msgid "Showing {shownDerivations} of {totalDerivations} addresses"
 msgstr "Showing {shownDerivations} of {totalDerivations} addresses"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:733
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1057
 msgid "shown shortened"
 msgstr "shown shortened"
 
@@ -5165,19 +5445,19 @@ msgstr "shown shortened"
 msgid "Sidebar navigation"
 msgstr "Sidebar navigation"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:822
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1146
 msgid "Sign a message"
 msgstr "Sign a message"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:829
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1162
 msgid "Sign a spend"
 msgstr "Sign a spend"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:825
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1158
 msgid "Sign and send"
 msgstr "Sign and send"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:827
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1160
 msgid "Sign one half of a trade"
 msgstr "Sign one half of a trade"
 
@@ -5185,11 +5465,11 @@ msgstr "Sign one half of a trade"
 msgid "Sign Transaction"
 msgstr "Sign Transaction"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:764
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1088
 msgid "Signatures other people still owe: {foreign}"
 msgstr "Signatures other people still owe: {foreign}"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:760
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1084
 msgid "Signatures you would produce: {ours}"
 msgstr "Signatures you would produce: {ours}"
 
@@ -5197,19 +5477,23 @@ msgstr "Signatures you would produce: {ours}"
 msgid "Signed"
 msgstr "Signed"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:708
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:640
+msgid "Signed by Klimper, not sent"
+msgstr "Signed by Klimper, not sent"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1032
 msgid "Signing proves you hold the key. It moves no money."
 msgstr "Signing proves you hold the key. It moves no money."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:433
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:618
 msgid "Simulated by Klimper"
 msgstr "Simulated by Klimper"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:250
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:252
 msgid "Slide to approve"
 msgstr "Slide to approve"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:248
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:250
 msgid "Slide to approve and send"
 msgstr "Slide to approve and send"
 
@@ -5354,12 +5638,12 @@ msgstr "Status"
 #~ msgid "Status: {0}"
 #~ msgstr "Status: {0}"
 
-#: src/pages/Nft.tsx:578
+#: src/pages/Nft.tsx:580
 #: src/pages/Option.tsx:242
 msgid "Status: {offerStatus}"
 msgstr "Status: {offerStatus}"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:370
+#: src/klimper/xchonnect/XchonnectConnect.tsx:374
 #: src/pages/Settings.tsx:1148
 msgid "Stop"
 msgstr "Stop"
@@ -5495,6 +5779,14 @@ msgstr "Syncing in progress..."
 msgid "Tables"
 msgstr "Tables"
 
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1154
+msgid "Take {offers} offers together"
+msgstr "Take {offers} offers together"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1156
+msgid "Take an offer"
+msgstr "Take an offer"
+
 #: src/pages/Offer.tsx:166
 #: src/pages/Offer.tsx:180
 msgid "Take Offer"
@@ -5508,7 +5800,7 @@ msgstr "Take Offer"
 msgid "Taken"
 msgstr "Taken"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:355
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:384
 msgid "Taking a method away means the website is refused when it tries. Nothing here is approved automatically."
 msgstr "Taking a method away means the website is refused when it tries. Nothing here is approved automatically."
 
@@ -5524,7 +5816,7 @@ msgstr "Taking this offer will send the assets you are paying to the recipient."
 msgid "Target Peers"
 msgstr "Target Peers"
 
-#: src/pages/Nft.tsx:616
+#: src/pages/Nft.tsx:618
 #: src/pages/Option.tsx:275
 msgid "Technical Information"
 msgstr "Technical Information"
@@ -5545,7 +5837,7 @@ msgstr "That answer was for a request Klimper no longer has. Open \"Use my Clap 
 msgid "That answer was made for another request. Start again."
 msgstr "That answer was made for another request. Start again."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:240
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:255
 msgid "That connection no longer exists"
 msgstr "That connection no longer exists"
 
@@ -5565,23 +5857,23 @@ msgstr "That image is too large to scan."
 msgid "That is not an answer from {pageHost}. Start again."
 msgstr "That is not an answer from {pageHost}. Start again."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:94
+#: src/klimper/xchonnect/XchonnectConnect.tsx:95
 msgid "That is not an Xchonnect pairing code."
 msgstr "That is not an Xchonnect pairing code."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:85
+#: src/klimper/xchonnect/XchonnectConnect.tsx:86
 msgid "That is too long to be a pairing code."
 msgstr "That is too long to be a pairing code."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:89
+#: src/klimper/xchonnect/XchonnectConnect.tsx:90
 msgid "That Klimper link is not a pairing or request link."
 msgstr "That Klimper link is not a pairing or request link."
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:285
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:300
 msgid "That limit is too large for Klimper to store exactly. Use a smaller one."
 msgstr "That limit is too large for Klimper to store exactly. Use a smaller one."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:87
+#: src/klimper/xchonnect/XchonnectConnect.tsx:88
 msgid "That link does not belong to Klimper."
 msgstr "That link does not belong to Klimper."
 
@@ -5589,7 +5881,7 @@ msgstr "That link does not belong to Klimper."
 msgid "That money is on {theirNetwork}. Klimper switches over to bring it in; you can switch back in the settings."
 msgstr "That money is on {theirNetwork}. Klimper switches over to bring it in; you can switch back in the settings."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:91
+#: src/klimper/xchonnect/XchonnectConnect.tsx:92
 msgid "That pairing link is missing its code."
 msgstr "That pairing link is missing its code."
 
@@ -5629,7 +5921,7 @@ msgstr "The assets you are paying."
 msgid "The assets you will receive."
 msgstr "The assets you will receive."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:259
+#: src/klimper/xchonnect/XchonnectConnect.tsx:262
 msgid "The clipboard is empty."
 msgstr "The clipboard is empty."
 
@@ -5653,7 +5945,7 @@ msgstr "The initial derivation index to sync to (both hardened and unhardened ke
 #~ msgid "The label is the website’s own. Each line with a tick is checked by Klimper, and there are no other payments to anyone else."
 #~ msgstr "The label is the website’s own. Each line with a tick is checked by Klimper, and there are no other payments to anyone else."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:507
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:762
 msgid "The label is the website’s own. Each line with a tick is checked by Klimper."
 msgstr "The label is the website’s own. Each line with a tick is checked by Klimper."
 
@@ -5673,6 +5965,10 @@ msgstr "The money is in Klimper now. Right now anyone who has this phone unlocke
 #~ msgid "The network which this wallet will use"
 #~ msgstr "The network which this wallet will use"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:211
+msgid "The new option is only conditional: spends you do not sign decide whether it is made."
+msgstr "The new option is only conditional: spends you do not sign decide whether it is made."
+
 #: src/pages/Settings.tsx:1450
 msgid "The number of addresses managed by this wallet"
 msgstr "The number of addresses managed by this wallet"
@@ -5684,6 +5980,14 @@ msgstr "The number of addresses managed by this wallet"
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:330
 msgid "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 msgstr "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:202
+msgid "The option goes to <0/>"
+msgstr "The option goes to <0/>"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:411
+msgid "The option to repay is only conditional: spends you do not sign decide whether it is made."
+msgstr "The option to repay is only conditional: spends you do not sign decide whether it is made."
 
 #: src/klimper/ClapAndPayConnect.tsx:188
 #~ msgid "The page will show this number too"
@@ -5697,7 +6001,7 @@ msgstr "The offer to fulfill the swap has been created successfully. It will now
 #~ msgid "The recovery words and keys are encrypted with a key only your passkey can open, with Face ID each time Klimper opens."
 #~ msgstr "The recovery words and keys are encrypted with a key only your passkey can open, with Face ID each time Klimper opens."
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:250
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:253
 msgid "The request from {dapp} was no longer waiting. Nothing was signed."
 msgstr "The request from {dapp} was no longer waiting. Nothing was signed."
 
@@ -5725,27 +6029,31 @@ msgstr "The wallet generates a new address after each transaction. Old ones stay
 msgid "The wallet is still syncing. Balances may not be accurate until it completes."
 msgstr "The wallet is still syncing. Balances may not be accurate until it completes."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:712
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1036
 msgid "The website asks you to sign this data"
 msgstr "The website asks you to sign this data"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:714
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1038
 msgid "The website asks you to sign this text"
 msgstr "The website asks you to sign this text"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:452
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:668
 msgid "The website built this transaction. Klimper checks it, signs it and sends it to the network itself."
 msgstr "The website built this transaction. Klimper checks it, signs it and sends it to the network itself."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:205
+#: src/klimper/xchonnect/XchonnectConnect.tsx:208
 msgid "The website did not answer in time."
 msgstr "The website did not answer in time."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:184
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:745
+msgid "The website named what this request does, and Klimper checked in its own simulation that it does exactly that."
+msgstr "The website named what this request does, and Klimper checked in its own simulation that it does exactly that."
+
+#: src/klimper/xchonnect/XchonnectConnect.tsx:187
 msgid "The website never answered."
 msgstr "The website never answered."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:499
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:754
 msgid "The website says"
 msgstr "The website says"
 
@@ -5790,7 +6098,7 @@ msgstr "Theme selected"
 msgid "Themes"
 msgstr "Themes"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:177
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:183
 msgid "then {left}"
 msgstr "then {left}"
 
@@ -5798,11 +6106,11 @@ msgstr "then {left}"
 msgid "There aren't any wallets to log into yet. To get started, create a new wallet or import an existing one."
 msgstr "There aren't any wallets to log into yet. To get started, create a new wallet or import an existing one."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:319
+#: src/klimper/xchonnect/XchonnectConnect.tsx:323
 msgid "There is no way to continue past this. Ask the website for a new code."
 msgstr "There is no way to continue past this. Ask the website for a new code."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:83
+#: src/klimper/xchonnect/XchonnectConnect.tsx:84
 msgid "There was nothing to read."
 msgstr "There was nothing to read."
 
@@ -5842,11 +6150,15 @@ msgstr "These profiles will be permanently deleted by sending them to the burn a
 msgid "These profiles will be transferred to the address below."
 msgstr "These profiles will be transferred to the address below."
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:550
+#: src/klimper/xchonnect/XchonnectConnect.tsx:558
 msgid "They are different"
 msgstr "They are different"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:543
+#: src/klimper/xchonnect/XchonnectOption.tsx:389
+msgid "They lock {collateral} until {until}"
+msgstr "They lock {collateral} until {until}"
+
+#: src/klimper/xchonnect/XchonnectConnect.tsx:551
 msgid "They match"
 msgstr "They match"
 
@@ -5854,7 +6166,7 @@ msgstr "They match"
 msgid "This asset can be revoked by its issuer."
 msgstr "This asset can be revoked by its issuer."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:806
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1130
 msgid "This build does not understand what is being asked. Reject it: there is nothing here you could agree to."
 msgstr "This build does not understand what is being asked. Reject it: there is nothing here you could agree to."
 
@@ -5946,11 +6258,11 @@ msgstr "This is how a card component looks with the current theme."
 msgid "This is the raw JSON spend bundle for this transaction. If you sign it, the transaction can be submitted to the mempool externally."
 msgstr "This is the raw JSON spend bundle for this transaction. If you sign it, the transaction can be submitted to the mempool externally."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:427
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:612
 msgid "This is what Klimper worked out by running the spend itself, not what the website says it does."
 msgstr "This is what Klimper worked out by running the spend itself, not what the website says it does."
 
-#: src/pages/Nft.tsx:510
+#: src/pages/Nft.tsx:512
 msgid "This NFT is not currently offered for sale on Dexie"
 msgstr "This NFT is not currently offered for sale on Dexie"
 
@@ -5959,7 +6271,7 @@ msgstr "This NFT is not currently offered for sale on Dexie"
 msgid "This NFT is part of an open offer"
 msgstr "This NFT is part of an open offer"
 
-#: src/pages/Nft.tsx:505
+#: src/pages/Nft.tsx:507
 msgid "This NFT Offered For Sale"
 msgstr "This NFT Offered For Sale"
 
@@ -6020,19 +6332,23 @@ msgstr "This profile will be permanently deleted by sending it to the burn addre
 msgid "This profile will be transferred to the address below."
 msgstr "This profile will be transferred to the address below."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:641
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:953
 msgid "This request spends coins it does not include, so Klimper cannot work out the network fee."
 msgstr "This request spends coins it does not include, so Klimper cannot work out the network fee."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:451
+msgid "This request spends coins Klimper can’t account for: a contract around your key that Klimper cannot read, such as an NFT or a vault. Nobody can tell you what it moves, and nothing it creates is counted as yours."
+msgstr "This request spends coins Klimper can’t account for: a contract around your key that Klimper cannot read, such as an NFT or a vault. Nobody can tell you what it moves, and nothing it creates is counted as yours."
 
 #: src/klimper/KlimperErrorBoundary.tsx:49
 msgid "This screen could not be shown. Your wallet and your money are not affected."
 msgstr "This screen could not be shown. Your wallet and your money are not affected."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:606
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:912
 msgid "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
 msgstr "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:315
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:317
 msgid "This spend uses a contract Klimper cannot read"
 msgstr "This spend uses a contract Klimper cannot read"
 
@@ -6052,23 +6368,23 @@ msgstr "This wallet's change address will be used as the revocation address."
 #~ msgid "This website asks you to sign a message. Signing proves you hold the key; it moves no money."
 #~ msgstr "This website asks you to sign a message. Signing proves you hold the key; it moves no money."
 
-#: src/components/NftCard.tsx:612
+#: src/components/NftCard.tsx:619
 msgid "This will add an additional URL to the NFT. It is not possible to remove URLs later, so be careful with this and try to use permanent URLs if possible."
 msgstr "This will add an additional URL to the NFT. It is not possible to remove URLs later, so be careful with this and try to use permanent URLs if possible."
 
-#: src/components/NftCard.tsx:602
+#: src/components/NftCard.tsx:609
 msgid "This will assign the NFT to the selected profile."
 msgstr "This will assign the NFT to the selected profile."
 
-#: src/components/MultiSelectActions.tsx:303
+#: src/components/MultiSelectActions.tsx:305
 msgid "This will bulk assign the NFTs to the selected profile."
 msgstr "This will bulk assign the NFTs to the selected profile."
 
-#: src/components/MultiSelectActions.tsx:315
+#: src/components/MultiSelectActions.tsx:317
 msgid "This will bulk burn {selectedCount} NFTs. This cannot be undone. Are you sure you want to proceed?"
 msgstr "This will bulk burn {selectedCount} NFTs. This cannot be undone. Are you sure you want to proceed?"
 
-#: src/components/MultiSelectActions.tsx:289
+#: src/components/MultiSelectActions.tsx:291
 msgid "This will bulk transfer {selectedCount} NFTs to another wallet. Are you sure you want to proceed?"
 msgstr "This will bulk transfer {selectedCount} NFTs to another wallet. Are you sure you want to proceed?"
 
@@ -6132,7 +6448,7 @@ msgstr "This will make your offer(s) immediately public and takeable on {marketp
 msgid "This will modify the profile's recovery info to be compatible with the Chia reference wallet."
 msgstr "This will modify the profile's recovery info to be compatible with the Chia reference wallet."
 
-#: src/components/NftCard.tsx:715
+#: src/components/NftCard.tsx:722
 msgid "This will permanently delete the NFT by sending it to the burn address."
 msgstr "This will permanently delete the NFT by sending it to the burn address."
 
@@ -6152,7 +6468,7 @@ msgstr "This will permanently delete these NFTs by sending them to the burn addr
 msgid "This will permanently delete this NFT by sending it to the burn address."
 msgstr "This will permanently delete this NFT by sending it to the burn address."
 
-#: src/components/NftCard.tsx:592
+#: src/components/NftCard.tsx:599
 msgid "This will send the NFT to the provided address."
 msgstr "This will send the NFT to the provided address."
 
@@ -6186,15 +6502,19 @@ msgstr "Ticker for this token"
 msgid "Ticker is required"
 msgstr "Ticker is required"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:262
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:280
+msgid "Tied to what you receive"
+msgstr "Tied to what you receive"
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:264
 msgid "Time is up"
 msgstr "Time is up"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:220
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:226
 msgid "Time-limited"
 msgstr "Time-limited"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:531
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:787
 msgid "to"
 msgstr "to"
 
@@ -6399,7 +6719,7 @@ msgid "Transfer"
 msgstr "Transfer"
 
 #: src/components/NftCard.tsx:428
-#: src/components/NftCard.tsx:590
+#: src/components/NftCard.tsx:597
 msgid "Transfer {nftName}"
 msgstr "Transfer {nftName}"
 
@@ -6417,12 +6737,12 @@ msgstr "Transfer Details"
 msgid "Transfer DID"
 msgstr "Transfer DID"
 
-#: src/components/NftCard.tsx:752
+#: src/components/NftCard.tsx:759
 msgid "Transfer Nft"
 msgstr "Transfer Nft"
 
-#: src/components/MultiSelectActions.tsx:345
-#: src/components/NftCard.tsx:586
+#: src/components/MultiSelectActions.tsx:347
+#: src/components/NftCard.tsx:593
 msgid "Transfer NFT"
 msgstr "Transfer NFT"
 
@@ -6451,6 +6771,10 @@ msgstr "Try again"
 msgid "Turn on Face ID"
 msgstr "Turn on Face ID"
 
+#: src/klimper/xchonnect/XchonnectTrade.tsx:268
+msgid "Two tokens in your wallet use the ticker {ticker}. Check the id."
+msgstr "Two tokens in your wallet use the ticker {ticker}. Check the id."
+
 #: src/pages/PeerList.tsx:81
 msgid "Type"
 msgstr "Type"
@@ -6459,7 +6783,7 @@ msgstr "Type"
 #~ msgid "Type “{word}” to confirm"
 #~ msgstr "Type “{word}” to confirm"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:405
+#: src/klimper/xchonnect/XchonnectConnect.tsx:409
 msgid "Type the code"
 msgstr "Type the code"
 
@@ -6525,7 +6849,7 @@ msgstr "Unknown CAT"
 msgid "Unknown Collection"
 msgstr "Unknown Collection"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:585
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:889
 msgid "Unknown contract"
 msgstr "Unknown contract"
 
@@ -6582,11 +6906,15 @@ msgstr "Unnamed Option"
 #~ msgid "Unnamed Profile"
 #~ msgstr "Unnamed Profile"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:823
+#: src/klimper/xchonnect/XchonnectTrade.tsx:104
+msgid "Unnamed token"
+msgstr "Unnamed token"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1147
 msgid "Unreadable request"
 msgstr "Unreadable request"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:604
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:910
 msgid "Unsafe signature"
 msgstr "Unsafe signature"
 
@@ -6687,7 +7015,7 @@ msgstr "Uploading to {marketplaceName}..."
 #~ msgstr "Uploading to Dexie..."
 
 #: src/components/confirmations/AddUrlConfirmation.tsx:63
-#: src/components/NftCard.tsx:630
+#: src/components/NftCard.tsx:637
 msgid "URL"
 msgstr "URL"
 
@@ -6707,9 +7035,17 @@ msgstr "URL is required"
 msgid "USD Value: "
 msgstr "USD Value: "
 
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1192
+msgid "Use {count} options"
+msgstr "Use {count} options"
+
 #: src/pages/CreateWallet.tsx:210
 msgid "Use 24 words"
 msgstr "Use 24 words"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1194
+msgid "Use an option"
+msgstr "Use an option"
 
 #: src/contexts/WalletConnectContext.tsx:455
 msgid "Use default"
@@ -6729,6 +7065,10 @@ msgstr "Use maximum spendable balance"
 #: src/pages/Login.tsx:226
 msgid "Use my Clap and Pay money"
 msgstr "Use my Clap and Pay money"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:235
+msgid "Use option"
+msgstr "Use option"
 
 #: src/pages/Token.tsx:140
 #~ msgid "Use this address to receive {0}"
@@ -6754,9 +7094,13 @@ msgstr "Vacuum Duration"
 msgid "Value"
 msgstr "Value"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:556
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:812
 msgid "Verified by Klimper: these are the only payments to anyone else."
 msgstr "Verified by Klimper: these are the only payments to anyone else."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:742
+msgid "verified by your wallet"
+msgstr "verified by your wallet"
 
 #: src/pages/Settings.tsx:123
 msgid "Version {version}"
@@ -6770,8 +7114,8 @@ msgstr "Version {version}"
 msgid "View {cardName} Metadata"
 msgstr "View {cardName} Metadata"
 
-#: src/components/NftGroupCard.tsx:326
-#: src/components/NftGroupCard.tsx:371
+#: src/components/NftGroupCard.tsx:327
+#: src/components/NftGroupCard.tsx:376
 msgid "View {cardName} on Mintgarden"
 msgstr "View {cardName} on Mintgarden"
 
@@ -6816,8 +7160,8 @@ msgid "View Metadata"
 msgstr "View Metadata"
 
 #: src/components/dialogs/ViewOfferDialog.tsx:49
-#: src/pages/Nft.tsx:478
-#: src/pages/Nft.tsx:597
+#: src/pages/Nft.tsx:480
+#: src/pages/Nft.tsx:599
 #: src/pages/Offers.tsx:263
 msgid "View Offer"
 msgstr "View Offer"
@@ -6835,14 +7179,14 @@ msgstr "View on {marketplaceName}"
 msgid "View on dexie"
 msgstr "View on dexie"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:149
-#: src/pages/Nft.tsx:336
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:150
+#: src/pages/Nft.tsx:338
 #: src/pages/Transaction.tsx:101
 msgid "View on mempoolxch.space"
 msgstr "View on mempoolxch.space"
 
-#: src/components/NftGroupCard.tsx:330
-#: src/components/NftGroupCard.tsx:375
+#: src/components/NftGroupCard.tsx:334
+#: src/components/NftGroupCard.tsx:380
 msgid "View on Mintgarden"
 msgstr "View on Mintgarden"
 
@@ -6881,7 +7225,7 @@ msgstr "Waiting for Face ID…"
 #~ msgid "Waiting for the website… {remaining} seconds left"
 #~ msgstr "Waiting for the website… {remaining} seconds left"
 
-#: src/klimper/xchonnect/XchonnectConnect.tsx:555
+#: src/klimper/xchonnect/XchonnectConnect.tsx:563
 msgid "Waiting for the website… {remaining}s"
 msgstr "Waiting for the website… {remaining}s"
 
@@ -6976,7 +7320,7 @@ msgstr "Websites"
 #~ msgid "What does the website see?"
 #~ msgstr "What does the website see?"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:353
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:382
 msgid "What it may ask for"
 msgstr "What it may ask for"
 
@@ -6984,9 +7328,9 @@ msgstr "What it may ask for"
 msgid "What it may do"
 msgstr "What it may do"
 
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:221
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:233
-#: src/klimper/xchonnect/XchonnectDappSettings.tsx:324
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:236
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:248
+#: src/klimper/xchonnect/XchonnectDappSettings.tsx:353
 msgid "What this website may do"
 msgstr "What this website may do"
 
@@ -7006,25 +7350,53 @@ msgstr "When enabled, cold wallets can build transactions and export the unsigne
 msgid "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 msgstr "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:325
+msgid "Whoever holds an option may use it. Its terms are not part of this request."
+msgstr "Whoever holds an option may use it. Its terms are not part of this request."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:183
+msgid "Whoever holds it can buy it for {strike}, paid to {creator}"
+msgstr "Whoever holds it can buy it for {strike}, paid to {creator}"
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:179
+msgid "Whoever holds it can buy it for {strike}, paid to you"
+msgstr "Whoever holds it can buy it for {strike}, paid to you"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:586
+msgid "whoever takes the request"
+msgstr "whoever takes the request"
+
 #: src/components/Nav.tsx:213
 msgid "with {syncedCoins} / {totalCoins} coins synced"
 msgstr "with {syncedCoins} / {totalCoins} coins synced"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:741
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1065
 msgid "With this key"
 msgstr "With this key"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:291
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:293
 msgid "Withdraw"
 msgstr "Withdraw"
 
-#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:288
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:290
 msgid "Withdraw it without answering. The website is told it was cancelled."
 msgstr "Withdraw it without answering. The website is told it was cancelled."
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1185
+msgid "Write {count} options"
+msgstr "Write {count} options"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:1187
+msgid "Write an option"
+msgstr "Write an option"
 
 #: src/klimper/PasskeySettings.tsx:66
 #~ msgid "Write down your recovery words first. The passkey lives in your iCloud Keychain; if it is deleted or the account is lost, only the recovery words restore this wallet."
 #~ msgstr "Write down your recovery words first. The passkey lives in your iCloud Keychain; if it is deleted or the account is lost, only the recovery words restore this wallet."
+
+#: src/klimper/xchonnect/XchonnectOption.tsx:163
+msgid "Write option"
+msgstr "Write option"
 
 #: src/pages/Transaction.tsx:153
 #: src/components/OfferSummaryCard.tsx:73
@@ -7119,7 +7491,7 @@ msgstr "You Are Offering"
 msgid "You Are Requesting"
 msgstr "You Are Requesting"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:275
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:297
 msgid "You are signing your side."
 msgstr "You are signing your side."
 
@@ -7135,11 +7507,15 @@ msgstr "You are splitting coins into multiple coins of equal value. This can hel
 msgid "You are splitting coins into multiple coins of equal value. This can help with parallel transactions."
 msgstr "You are splitting coins into multiple coins of equal value. This can help with parallel transactions."
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:523
+msgid "You ask for"
+msgstr "You ask for"
+
 #: src/pages/Offers.tsx:252
 msgid "You can also paste an offer using"
 msgstr "You can also paste an offer using"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:268
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:271
 msgid "You cancelled the request from {dapp}."
 msgstr "You cancelled the request from {dapp}."
 
@@ -7147,11 +7523,20 @@ msgstr "You cancelled the request from {dapp}."
 #~ msgid "You do not currently have any NFTs. Would you like to mint one?"
 #~ msgstr "You do not currently have any NFTs. Would you like to mint one?"
 
+#: src/klimper/xchonnect/XchonnectOption.tsx:481
+msgid "You give"
+msgstr "You give"
+
 #: src/pages/Transactions.tsx:180
 msgid "You have not made any transactions yet."
 msgstr "You have not made any transactions yet."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:143
+#: src/klimper/xchonnect/XchonnectOption.tsx:200
+msgid "You hold the option"
+msgstr "You hold the option"
+
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:149
+#: src/klimper/xchonnect/XchonnectTrade.tsx:392
 msgid "You pay"
 msgstr "You pay"
 
@@ -7159,7 +7544,8 @@ msgstr "You pay"
 msgid "You Pay"
 msgstr "You Pay"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:147
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:153
+#: src/klimper/xchonnect/XchonnectTrade.tsx:402
 msgid "You receive"
 msgstr "You receive"
 
@@ -7167,7 +7553,7 @@ msgstr "You receive"
 msgid "You Receive"
 msgstr "You Receive"
 
-#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:258
+#: src/klimper/xchonnect/XchonnectApprovalHost.tsx:261
 msgid "You rejected the request from {dapp}."
 msgstr "You rejected the request from {dapp}."
 
@@ -7175,7 +7561,7 @@ msgstr "You rejected the request from {dapp}."
 #~ msgid "Your {keyCount} receive addresses, so it can show your balances"
 #~ msgstr "Your {keyCount} receive addresses, so it can show your balances"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:543
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:799
 msgid "Your balance changes by"
 msgstr "Your balance changes by"
 
@@ -7195,6 +7581,10 @@ msgstr "Your handles"
 #~ msgid "Your keys open with your passkey."
 #~ msgstr "Your keys open with your passkey."
 
+#: src/klimper/xchonnect/XchonnectTrade.tsx:440
+msgid "Your network fee"
+msgstr "Your network fee"
+
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:335
 msgid "Your offer has been created and imported successfully and uploaded to the selected marketplaces. You will now be redirected to the offers page where you can view its details."
 msgstr "Your offer has been created and imported successfully and uploaded to the selected marketplaces. You will now be redirected to the offers page where you can view its details."
@@ -7207,7 +7597,7 @@ msgstr "Your offer has been created and imported successfully. You will now be r
 #~ msgid "Your offer has been created and imported successfully{0}. You will now be redirected to the offers page where you can view its details."
 #~ msgstr "Your offer has been created and imported successfully{0}. You will now be redirected to the offers page where you can view its details."
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:253
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:266
 msgid "Your signature would not be tied to the payment you are expecting. Klimper refuses this; if you are seeing it, reject and tell us."
 msgstr "Your signature would not be tied to the payment you are expecting. Klimper refuses this; if you are seeing it, reject and tell us."
 
@@ -7215,11 +7605,11 @@ msgstr "Your signature would not be tied to the payment you are expecting. Klimp
 msgid "Your Themes"
 msgstr "Your Themes"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:166
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:172
 msgid "your wallet: {ticker}"
 msgstr "your wallet: {ticker}"
 
-#: src/klimper/xchonnect/XchonnectPromptView.tsx:467
+#: src/klimper/xchonnect/XchonnectPromptView.tsx:684
 msgid "Your wallet’s records and an independent simulation agree on what leaves your wallet."
 msgstr "Your wallet’s records and an independent simulation agree on what leaves your wallet."
 

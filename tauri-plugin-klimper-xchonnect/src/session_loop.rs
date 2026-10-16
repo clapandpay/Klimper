@@ -1299,6 +1299,7 @@ mod tests {
             "signMessage",
             "sendTransaction",
             "chia_send",
+            "chia_takeOffer",
             "xchonnect_submitCoinSpends",
         ] {
             assert!(!answers_without_prompt(method), "{method}");
@@ -1362,6 +1363,7 @@ mod tests {
             revoked: false,
             push: None,
             origin_checked_at: None,
+            methods_revision: 0,
             own_key: None,
         };
         assert!(requests::check_usable(&record).is_err());

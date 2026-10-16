@@ -17,9 +17,9 @@ TASK-129); the protocol is `src/lib/clapandpayHandoff.ts`, a byte-for-byte copy 
    the nonce, AES-256-GCM) and offers one link: `https://clapandpay.com/klimper/return#cp2.…`.
    No copy button, no codes to compare.
 4. The person taps it. `/klimper/return` is in the `applinks` of `clapandpay.com`
-   (`green-envelope/apps/site/.well-known/apple-app-site-association`) and in Klimper's
+   (`clapandpay-web/public/.well-known/apple-app-site-association`) and in Klimper's
    entitlements, so iOS gives the link to the signed Klimper app and to nothing else. Without
-   Klimper the browser shows `apps/site/klimper-return.html`, which can read nothing.
+   Klimper the browser shows `clapandpay-web/src/pages/klimper-return.html`, which can read nothing.
 5. The deep-link listener (`src/klimper/xchonnect/xchonnectDeepLink.ts`) routes the return path
    to `src/klimper/clapandpayReturn.ts`, where the waiting screen opens it: only with its own key
    and nonce, once, and within two minutes of the request. Then it is Sage's ordinary mnemonic

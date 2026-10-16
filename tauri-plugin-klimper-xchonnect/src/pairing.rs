@@ -192,7 +192,8 @@ impl Attempt {
 
 /// The methods a new connection is granted: wallet-kit's defaults (`signCoinSpends`,
 /// `xchonnect_submitCoinSpends`, …), the optional coin and balance reads, `sendTransaction`
-/// and `walletSwitchChain` (TASK-082), and the methods Klimper builds itself (`chia_send`).
+/// and `walletSwitchChain` (TASK-082), and the methods Klimper builds itself (`chia_send`,
+/// `chia_takeOffer`).
 /// The reads are scoped by wallet-kit to the exposed receive keys, whose coins the dApp
 /// can read from the chain anyway; `sendTransaction` only broadcasts a bundle that is
 /// already signed, and anything Klimper signs asks first. The pairing screen lists them,
@@ -205,6 +206,18 @@ pub fn granted_methods() -> Vec<String> {
         .chain(crate::execute::WALLET_BUILT_METHODS.iter())
         .map(|m| (*m).to_owned())
         .collect()
+}
+
+/// Add the option methods (`chia_mintOption`, …) to a connection's methods, once. They are
+/// never in [`granted_methods`]: they lock funds until a date, so a website gets them only
+/// when the user turns option contracts on for it, on the pairing screen or in its settings
+/// (TASK-140). A connection paired before they existed is not upgraded either.
+pub fn grant_option_methods(methods: &mut Vec<String>) {
+    for method in crate::execute::options::OPTION_METHODS {
+        if !methods.iter().any(|m| m == method) {
+            methods.push(method.to_owned());
+        }
+    }
 }
 
 /// Step 1 and 2: verify, then describe what the user has to agree to.
@@ -229,6 +242,8 @@ pub async fn inspect(
         methods: granted_methods(),
         exposed_keys: receive_keys,
         limits: std::collections::BTreeMap::new(),
+        // Options leaving the user: one per request, five a day, unless the user changes it.
+        options: xchonnect_wallet_kit::DEFAULT_OPTION_LIMIT,
     };
     Ok(Attempt {
         id: new_id(),
@@ -359,7 +374,7 @@ pub async fn confirm(
             developer_mode: attempt.developer_mode,
             sas_confirmed: true,
             needs_repair: false,
-            permissions: StoredPermissions::from_kit(&attempt.permissions),
+            permissions: StoredPermissions::from_kit(&attempt.permissions)?,
             allow_agg_sig_unsafe: false,
             allow_unknown_contracts: false,
             origin_kid: Some(uri.kid.clone()),
@@ -367,6 +382,7 @@ pub async fn confirm(
             push: None,
             // The origin document was fetched and verified for this pairing just now.
             origin_checked_at: Some(now),
+            methods_revision: crate::execute::METHODS_REVISION,
             own_key: attempt
                 .own_key
                 .as_ref()
@@ -493,6 +509,28 @@ mod tests {
             .copied()
             .collect();
         assert_eq!(granted, expected);
+    }
+
+    /// Option contracts lock funds until a date: never part of the default grant, added
+    /// once when the user turns them on (TASK-140).
+    #[test]
+    fn option_methods_are_granted_only_when_turned_on() {
+        use crate::execute::options::OPTION_METHODS;
+        let mut methods = granted_methods();
+        assert!(
+            OPTION_METHODS
+                .iter()
+                .all(|m| !methods.iter().any(|g| g == m))
+        );
+        grant_option_methods(&mut methods);
+        grant_option_methods(&mut methods);
+        for method in OPTION_METHODS {
+            assert_eq!(
+                methods.iter().filter(|m| *m == method).count(),
+                1,
+                "{method}"
+            );
+        }
     }
 
     /// A homograph domain must reach the screen with both forms and a warning.

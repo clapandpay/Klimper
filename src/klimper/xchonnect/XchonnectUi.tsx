@@ -147,6 +147,43 @@ export function LivePill({ live }: { readonly live: boolean }) {
  * its own and cannot link the user's addresses. Every request needs approval either way. The
  * same switch on the pairing screen and in a website's settings.
  */
+/**
+ * Whether a website may ask for option contracts and loans (TASK-140). Off by default, on the
+ * pairing screen and in a website's settings: each request still asks, but they lock funds.
+ */
+export function OptionSwitch({
+  on,
+  onChange,
+  disabled = false,
+}: {
+  readonly on: boolean;
+  readonly onChange: (on: boolean) => void;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <div className='space-y-1' data-testid='option-switch'>
+      <div className='flex items-center justify-between gap-3'>
+        <Label htmlFor='option-contracts' className='font-normal'>
+          <Trans>Option contracts</Trans>
+        </Label>
+        <Switch
+          id='option-contracts'
+          checked={on}
+          disabled={disabled}
+          onCheckedChange={onChange}
+        />
+      </div>
+      <p className='text-xs text-muted-foreground'>
+        <Trans>
+          Let this website ask to write, use, claim back or send option
+          contracts, and to request or take loans. Each one still asks you
+          first; they lock funds until a date.
+        </Trans>
+      </p>
+    </div>
+  );
+}
+
 export function AddressSwitch({
   all,
   onChange,

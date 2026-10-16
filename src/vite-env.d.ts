@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_DISABLE_OPTIONS?: string;
   readonly VITE_DISABLE_SWAP?: string;
   readonly VITE_DISABLE_NFTS?: string;
+  readonly VITE_DISABLE_NFT_MINTING?: string;
   readonly VITE_DISABLE_PROFILES?: string;
   readonly VITE_DISABLE_TOKEN_ISSUING?: string;
   readonly VITE_DISABLE_WALLETCONNECT?: string;

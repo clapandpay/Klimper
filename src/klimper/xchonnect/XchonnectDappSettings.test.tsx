@@ -8,7 +8,8 @@
 
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionSummary } from './xchonnect';
+import webviewLimits from '../../../tauri-plugin-klimper-xchonnect/tests/fixtures/webview_limits.json';
+import type { DappPolicy, SessionSummary } from './xchonnect';
 
 vi.mock('@/components/Layout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -65,6 +66,7 @@ const fresh: SessionSummary = {
   methods: [...DEFAULT_METHODS],
   exposedKeys: [`0x${'a'.repeat(96)}`],
   limits: {},
+  optionLimit: { perRequest: 1, perDay: 5 },
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
   allReceiveKeys: false,
@@ -94,7 +96,7 @@ describe('the defaults of a new connection', () => {
       expect(screen.getByLabelText('signCoinSpends')).toBeDefined(),
     );
 
-    // Spec 9.1's required set, plus the two methods where Klimper signs and sends
+    // Spec 9.1's required set, plus the methods Klimper builds, signs and sends
     // (xchonnect-wiki 04). Each still asks.
     expect([...DEFAULT_METHODS]).toEqual([
       'chainId',
@@ -104,6 +106,8 @@ describe('the defaults of a new connection', () => {
       'signMessage',
       'xchonnect_submitCoinSpends',
       'chia_send',
+      'chia_takeOffer',
+      'chia_createOffer',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(
@@ -171,6 +175,52 @@ describe('the addresses the website sees', () => {
         allReceiveKeys: true,
       }),
     );
+  });
+});
+
+describe('option contracts (TASK-140)', () => {
+  const OPTIONS = [
+    'chia_mintOption',
+    'chia_exerciseOption',
+    'chia_claimOption',
+    'chia_transferOption',
+  ];
+
+  it('is off for a connection without the four methods, and turning it on adds them', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: [...DEFAULT_METHODS, ...OPTIONS],
+      }),
+    );
+  });
+
+  it('is on when all four are granted, and turning it off removes only them', async () => {
+    openSettings({
+      ...fresh,
+      methods: ['chainId', 'connect', ...OPTIONS, 'chia_send'],
+    });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    const toggle = screen.getByLabelText('Option contracts');
+    expect(toggle.getAttribute('data-state')).toBe('checked');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        methods: ['chainId', 'connect', 'chia_send'],
+      }),
+    );
+  });
+
+  it('shows off when only some of the four are granted', async () => {
+    openSettings({ ...fresh, methods: [...DEFAULT_METHODS, OPTIONS[0] ?? ''] });
+    await waitFor(() => screen.getByLabelText('Option contracts'));
+    expect(
+      screen.getByLabelText('Option contracts').getAttribute('data-state'),
+    ).toBe('unchecked');
   });
 });
 
@@ -278,8 +328,75 @@ describe('limits', () => {
       expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
         limits: { xch: { perRequest: 250_000_000_000 } },
         methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 1, perDay: 5 },
       }),
     );
+  });
+
+  // The plugin reads exactly these words and refuses any other (TASK-141): before, the
+  // screen's `perRequest` / `perDay` were skipped as unknown and every limit meant none.
+  // The same file is what the plugin's own tests feed to `set_dapp_policy`'s `DappPolicy`.
+  it('sends limits in the shape the plugin reads, and reads back what it returns', async () => {
+    openSettings({ ...fresh, limits: webviewLimits });
+    await waitFor(() =>
+      expect(screen.getAllByLabelText('Per request')[0]).toHaveProperty(
+        'value',
+        '0.0000000001',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(setDappPolicy).toHaveBeenCalled());
+    const [, policy] = setDappPolicy.mock.calls[0] as [string, DappPolicy];
+    expect(policy.limits).toEqual(webviewLimits);
+    for (const limit of Object.values(policy.limits ?? {})) {
+      for (const field of Object.keys(limit)) {
+        expect(['perRequest', 'perDay']).toContain(field);
+      }
+    }
+  });
+
+  it('shows the option limit next to the others and writes it as a count', async () => {
+    openSettings();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Options per request')).toHaveProperty(
+        'value',
+        '1',
+      ),
+    );
+    expect(screen.getByLabelText('Options per day')).toHaveProperty(
+      'value',
+      '5',
+    );
+
+    fireEvent.change(screen.getByLabelText('Options per day'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(setDappPolicy).toHaveBeenCalledWith('sess-1', {
+        limits: {},
+        methods: [...DEFAULT_METHODS],
+        optionLimit: { perRequest: 2 },
+      }),
+    );
+  });
+
+  it('refuses an option limit that is not a whole number', async () => {
+    openSettings();
+    await waitFor(() => screen.getByLabelText('Options per request'));
+    fireEvent.change(screen.getByLabelText('Options per request'), {
+      target: { value: '1.5' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('An option limit has to be a whole number, like 2.'),
+      ).toBeTruthy(),
+    );
+    expect(setDappPolicy).not.toHaveBeenCalled();
   });
 
   it('refuses a limit it cannot store exactly instead of rounding it', async () => {
