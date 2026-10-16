@@ -117,7 +117,7 @@ pub struct LoanView {
     pub tie: Option<crate::trade::Leg>,
 }
 
-fn hex_bytes<S: serde::Serializer>(value: &Bytes32, s: S) -> Result<S::Ok, S::Error> {
+pub(super) fn hex_bytes<S: serde::Serializer>(value: &Bytes32, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&hex::encode(value))
 }
 
@@ -137,7 +137,7 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    fn rpc(self) -> RpcError {
+    pub(super) fn rpc(self) -> RpcError {
         match self {
             Refusal::UnknownOption => invalid("unknown_option"),
             Refusal::Fee => invalid("fee"),
@@ -251,7 +251,7 @@ pub fn mint_params(params_json: &str, now: u64) -> Result<MintParams, RpcError> 
 // Shared steps
 // ---------------------------------------------------------------------------------------
 
-fn build_failed(what: &str, ctx: &RequestContext<'_>, e: &str) -> RpcError {
+pub(super) fn build_failed(what: &str, ctx: &RequestContext<'_>, e: &str) -> RpcError {
     // Sage's own words stay here, as for a send: they name balances and coins.
     tracing::info!("xchonnect: {what} could not be built: {e}");
     failed_builds::record(ctx.dapp, ctx.now);
@@ -262,7 +262,7 @@ fn build_failed(what: &str, ctx: &RequestContext<'_>, e: &str) -> RpcError {
     )
 }
 
-fn too_many_failed(ctx: &RequestContext<'_>) -> Result<(), RpcError> {
+pub(super) fn too_many_failed(ctx: &RequestContext<'_>) -> Result<(), RpcError> {
     if failed_builds::too_many(ctx.dapp, ctx.now) {
         return Err(error(
             codes::SPENDABLE_BALANCE_EXCEEDED,
@@ -274,7 +274,10 @@ fn too_many_failed(ctx: &RequestContext<'_>) -> Result<(), RpcError> {
 }
 
 /// Sage's own summary of `spends`, for the cross-check.
-fn sage_view(state: &AppState, spends: &[CoinSpend]) -> Result<TransactionSummary, RpcError> {
+pub(super) fn sage_view(
+    state: &AppState,
+    spends: &[CoinSpend],
+) -> Result<TransactionSummary, RpcError> {
     let request = ViewCoinSpends {
         coin_spends: spends.iter().map(to_json).collect(),
     };
@@ -316,7 +319,7 @@ fn intent(kind: &str, recipients: Option<Vec<RecipientClaim>>, fee: u64) -> Inte
 /// bundle goes back to the website (a loan request's offer); otherwise Klimper broadcasts it
 /// and answers only its id and status, and the request is sealed (xchonnect spec 11.2).
 #[allow(clippy::too_many_arguments)]
-fn checked_submit(
+pub(super) fn checked_submit(
     ctx: &RequestContext<'_>,
     signer: &dyn kit::Signer,
     approver: &dyn kit::Approver,
@@ -735,7 +738,7 @@ fn loan_requested(
 }
 
 /// Signs without sending: a loan request goes to the lender as an offer.
-struct OfferOnly;
+pub(super) struct OfferOnly;
 
 impl Broadcaster for OfferOnly {
     /// Nothing is broadcast. The request's signatures are released (the offer goes back
