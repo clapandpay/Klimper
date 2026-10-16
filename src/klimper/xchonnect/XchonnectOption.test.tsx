@@ -301,6 +301,48 @@ describe('a loan', () => {
   });
 });
 
+describe('an open loan offer (TASK-142)', () => {
+  it('shows the option with its terms, what else is given and what is asked', async () => {
+    knowUsdc();
+    const prompt = f.openLoanOffer();
+    const view = show(prompt);
+    expect(view.kind === 'spend' && view.offer?.options.length).toBe(1);
+    const card = screen.getByTestId('prompt-offer');
+    await within(card).findAllByText(/wUSDC 3c3c3c3c/);
+    const option = text(screen.getByTestId('offer-option'));
+    expect(option).toContain(
+      'whoever takes the offer may pay 315 wUSDC 3c3c3c3c',
+    );
+    expect(option).toContain(`for 100 XCH until ${whenText(f.EXPIRY)}`);
+    expect(option).toContain('takes the 100 XCH back');
+    expect(text(screen.getByTestId('offer-give'))).toContain(
+      '300 wUSDC 3c3c3c3c',
+    );
+    expect(text(screen.getByTestId('offer-ask'))).toContain('100 XCH');
+    expect(text(screen.getByTestId('offer-note'))).toContain(
+      'Nothing moves until someone takes it',
+    );
+    expect(screen.getByTestId('prompt-makes-offer')).toBeTruthy();
+    expect(screen.queryByTestId('prompt-trade')).toBeNull();
+    expect(headline(prompt)).toBe('Make an offer');
+  });
+
+  it('is unreadable when an option it names does not leave for the settlement puzzle', () => {
+    const notOffered = f.openLoanOffer();
+    (notOffered.summary.options as unknown[])[0] = f.transfer();
+    expect(readPrompt(notOffered).kind).toBe('unreadable');
+    const asksNothing = f.openLoanOffer({
+      offer: {
+        gives: [f.leg(f.XCH, 1)],
+        options: [],
+        asks: [],
+        expires_at: null,
+      },
+    });
+    expect(readPrompt(asksNothing).kind).toBe('unreadable');
+  });
+});
+
 describe('an option asset', () => {
   it('is counted whole and named by its id, never as XCH', () => {
     const view = readPrompt(f.optionPrompt());

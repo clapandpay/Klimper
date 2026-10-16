@@ -107,6 +107,7 @@ describe('the defaults of a new connection', () => {
       'xchonnect_submitCoinSpends',
       'chia_send',
       'chia_takeOffer',
+      'chia_createOffer',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(

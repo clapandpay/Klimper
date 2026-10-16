@@ -288,3 +288,46 @@ export function loanTake(extra: Record<string, unknown> = {}) {
     },
   });
 }
+
+/**
+ * The lender's open loan offer (TASK-142): the option (100 XCH locked, strike 315 wUSDC) and
+ * 300 wUSDC given, 100 XCH asked; signed, not sent.
+ */
+export function openLoanOffer(extra: Record<string, unknown> = {}) {
+  return optionPrompt({
+    method: 'chia_createOffer',
+    options: [transfer({ to: SETTLEMENT, to_settlement: true })],
+    assets: [
+      [USDC, 300 * ONE_CAT, 0],
+      [optionAsset(LAUNCHER), 1, 0],
+    ],
+    outputs: [
+      {
+        asset: USDC,
+        amount: 300 * ONE_CAT,
+        puzzle_hash: SETTLEMENT,
+        recipient: SETTLEMENT,
+        to_user: false,
+        option: null,
+      },
+    ],
+    fee: 0,
+    kind: 'option.transfer',
+    extra: {
+      makes_offer: true,
+      linking: 'direct',
+      offer: {
+        gives: [leg(USDC, 300 * ONE_CAT)],
+        options: [
+          {
+            launcher_id: LAUNCHER,
+            terms: terms({ strike: leg(USDC, 315 * ONE_CAT) }),
+          },
+        ],
+        asks: [leg(XCH, 100 * ONE_XCH)],
+        expires_at: EXPIRY,
+      },
+      ...extra,
+    },
+  });
+}
