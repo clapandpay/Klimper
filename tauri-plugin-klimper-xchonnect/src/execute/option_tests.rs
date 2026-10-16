@@ -22,13 +22,13 @@ use super::take_tests::{
 use super::*;
 
 /// A wallet's keys and what wallet-kit counts as its own.
-struct Who {
+pub(super) struct Who {
     signer: TakerKeys,
     keys: HashSet<PublicKey>,
     ownership: kit::Ownership,
 }
 
-async fn who(wallet: &SimWallet) -> Who {
+pub(super) async fn who(wallet: &SimWallet) -> Who {
     let (signer, keys, ownership) = wallet_keys(wallet).await;
     Who {
         signer,
@@ -59,7 +59,7 @@ impl kit::Approver for Seen {
     }
 }
 
-fn granted(method: &str) -> DappPermissions {
+pub(super) fn granted(method: &str) -> DappPermissions {
     DappPermissions {
         methods: vec![method.to_owned()],
         exposed_keys: vec![],
@@ -69,50 +69,50 @@ fn granted(method: &str) -> DappPermissions {
 }
 
 /// How a request was answered.
-struct Run {
-    result: Result<String, RpcError>,
-    prompt: Option<Value>,
-    sent: Option<SpendBundle>,
-    loan: Option<(LoanView, bool)>,
+pub(super) struct Run {
+    pub(super) result: Result<String, RpcError>,
+    pub(super) prompt: Option<Value>,
+    pub(super) sent: Option<SpendBundle>,
+    pub(super) loan: Option<(LoanView, bool)>,
 }
 
 impl Run {
-    fn ok(&self) -> &str {
+    pub(super) fn ok(&self) -> &str {
         match &self.result {
             Ok(answer) => answer,
             Err(error) => panic!("refused: {error:?}"),
         }
     }
 
-    fn asked(&self) -> bool {
+    pub(super) fn asked(&self) -> bool {
         self.prompt.is_some()
     }
 
-    fn reason(&self) -> String {
+    pub(super) fn reason(&self) -> String {
         match &self.result {
             Ok(answer) => panic!("not refused: {answer}"),
             Err(error) => format!("{} {}", error.code, error.data.clone().unwrap_or_default()),
         }
     }
 
-    fn summary(&self) -> &Value {
+    pub(super) fn summary(&self) -> &Value {
         &self.prompt.as_ref().expect("never asked")["summary"]
     }
 }
 
 /// What a test varies about the request context.
-struct Setup {
-    permissions: DappPermissions,
-    session_chain_id: &'static str,
-    now: u64,
+pub(super) struct Setup {
+    pub(super) permissions: DappPermissions,
+    pub(super) session_chain_id: &'static str,
+    pub(super) now: u64,
     /// The wallet's record of signed coins (spec 11.2).
-    signed: kit::SignedCoins,
+    pub(super) signed: kit::SignedCoins,
     /// Options that already left the user today (`DailySpend::options`).
-    options_today: u128,
+    pub(super) options_today: u128,
 }
 
 impl Setup {
-    fn new(method: &str, now: u64) -> Self {
+    pub(super) fn new(method: &str, now: u64) -> Self {
         Setup {
             permissions: granted(method),
             session_chain_id: "testnet11",
@@ -125,7 +125,7 @@ impl Setup {
 
 /// Run `submit` with a context for `w`, a user who approves, and a broadcaster that keeps
 /// the bundle.
-fn run(
+pub(super) fn run(
     w: &Who,
     setup: &Setup,
     submit: impl FnOnce(
@@ -170,16 +170,16 @@ fn run(
     }
 }
 
-async fn chain_time(wallet: &SimWallet) -> u64 {
+pub(super) async fn chain_time(wallet: &SimWallet) -> u64 {
     wallet.sim.lock().await.next_timestamp()
 }
 
-async fn pass_time(wallet: &SimWallet, seconds: u64) {
+pub(super) async fn pass_time(wallet: &SimWallet, seconds: u64) {
     wallet.sim.lock().await.pass_time(seconds);
 }
 
 /// Send what was approved to the chain and wait for the wallet to see it.
-async fn settle(wallet: &mut SimWallet, run: &Run) {
+pub(super) async fn settle(wallet: &mut SimWallet, run: &Run) {
     let bundle = run.sent.clone().expect("nothing was sent");
     wallet
         .push_bundle(bundle)
@@ -188,16 +188,16 @@ async fn settle(wallet: &mut SimWallet, run: &Run) {
     wallet.wait_for_coins().await;
 }
 
-const TERM: u64 = 10_000;
+pub(super) const TERM: u64 = 10_000;
 
-fn xch(amount: u64) -> Part {
+pub(super) fn xch(amount: u64) -> Part {
     Part {
         asset: AssetId::Xch,
         amount,
     }
 }
 
-fn cat(asset_id: Bytes32, amount: u64) -> Part {
+pub(super) fn cat(asset_id: Bytes32, amount: u64) -> Part {
     Part {
         asset: AssetId::Cat(asset_id),
         amount,
@@ -244,7 +244,7 @@ async fn write(
 }
 
 /// The option effect on the prompt, the one with `action`.
-fn effect<'a>(run: &'a Run, action: &str) -> &'a Value {
+pub(super) fn effect<'a>(run: &'a Run, action: &str) -> &'a Value {
     run.summary()["options"]
         .as_array()
         .unwrap()
@@ -364,7 +364,7 @@ async fn writing_a_cat_option_with_an_xch_strike_settles() {
 }
 
 /// Write an option and wait for it on the chain: the writer holds it.
-async fn written(
+pub(super) async fn written(
     alice: &mut SimWallet,
     collateral: Part,
     strike: Part,

@@ -413,13 +413,7 @@ pub fn create_offer(
 ) -> Result<String, RpcError> {
     too_many_failed(ctx)?;
     let params = offer_params(params_json)?;
-    if !params.options.is_empty() && !ctx.permissions.allows_method(CHIA_TRANSFER_OPTION) {
-        return Err(error(
-            codes::UNAUTHORIZED,
-            "this connection may not offer option contracts; allow them in Klimper",
-            Some("not_granted"),
-        ));
-    }
+    offer_granted(&params, ctx.permissions)?;
     let now = ctx.now;
     let fee = params.fee;
     let built = on_sage(state, async move |sage| {
@@ -429,6 +423,22 @@ pub fn create_offer(
     .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
     let summary = sage_view(state, &built.spends)?;
     submit_offer(ctx, signer, approver, &summary, built, fee, on_offer)
+}
+
+/// Giving an option needs the connection's option contracts (the option leaves the wallet
+/// like a `chia_transferOption`); `chia_createOffer` itself was checked by the caller.
+pub fn offer_granted(
+    params: &OfferParams,
+    permissions: &kit::permissions::DappPermissions,
+) -> Result<(), RpcError> {
+    if !params.options.is_empty() && !permissions.allows_method(CHIA_TRANSFER_OPTION) {
+        return Err(error(
+            codes::UNAUTHORIZED,
+            "this connection may not offer option contracts; allow them in Klimper",
+            Some("not_granted"),
+        ));
+    }
+    Ok(())
 }
 
 /// What an offer claims: with options, `option.transfer`, which wallet-kit verifies (each
