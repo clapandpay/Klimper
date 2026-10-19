@@ -422,7 +422,27 @@ pub fn create_offer(
     .map_err(|e| build_failed(CHIA_CREATE_OFFER, ctx, &e))?
     .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
     let summary = sage_view(state, &built.spends)?;
-    submit_offer(ctx, signer, approver, &summary, built, fee, on_offer)
+    let answer = submit_offer(ctx, signer, approver, &summary, built, fee, on_offer)?;
+    keep_offer(state, &answer);
+    Ok(answer)
+}
+
+/// Keeps the signed offer in the wallet as Klimper's own make-offer does (Sage's
+/// `import_offer`, TASK-144): the offers tab lists it and its coins show locked until it is
+/// taken or cancelled. The agent already holds the offer, so a failure here is only logged.
+fn keep_offer(state: &AppState, answer: &str) {
+    let Some(offer) = serde_json::from_str::<serde_json::Value>(answer)
+        .ok()
+        .and_then(|answer| answer.get("offer")?.as_str().map(str::to_owned))
+    else {
+        return;
+    };
+    let kept = on_sage(state, async move |sage| {
+        sage.import_offer(sage_api::ImportOffer { offer }).await
+    });
+    if let Err(error) = kept {
+        tracing::warn!("xchonnect: the offer could not be kept in the wallet: {error}");
+    }
 }
 
 /// Giving an option needs the connection's option contracts (the option leaves the wallet
