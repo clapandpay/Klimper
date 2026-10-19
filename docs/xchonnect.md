@@ -26,18 +26,18 @@ approval UI, and signing.
 
 ## Modules
 
-| Module         | Task          | Does                                                                                                                                 |
-| -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `store`        | TASK-073      | session state in the OS keyring under `com.clapandpay.klimper.xchonnect`; per-wallet; rollback detection; the persistent limit store |
-| `relay`        | TASK-074      | mailbox creation (ticket or proof-of-work off the UI thread), long polling, ack, drain, delete                                       |
-| `origin`       | TASK-075      | the origin document: HTTPS, no redirects, no cookies, 16 KiB, 10 s, every pairing                                                    |
-| `pairing`      | TASK-075, 076 | verified domain in both forms, the default grant, the SAS, persist before posting `session.ready`                                    |
-| `session_loop` | TASK-077      | requests, rotation, ping, `session.end`; seal → persist → post → acknowledge                                                         |
-| `wallet`       | TASK-078      | ownership and the signable key set from the Sage database; signing through `sage-keychain`                                           |
-| `requests`     | TASK-079      | the request context, the approver bridge, the limit store, the response                                                              |
-| `sign_guard`   | TASK-141      | refuses spends whose conditions the signature does not fix, before wallet-kit or the user sees them                                  |
+| Module         | Task          | Does                                                                                                                                                                    |
+| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store`        | TASK-073      | session state in the OS keyring under `com.clapandpay.klimper.xchonnect`; per-wallet; rollback detection; the persistent limit store                                    |
+| `relay`        | TASK-074      | mailbox creation (ticket or proof-of-work off the UI thread), long polling, ack, drain, delete                                                                          |
+| `origin`       | TASK-075      | the origin document: HTTPS, no redirects, no cookies, 16 KiB, 10 s, every pairing                                                                                       |
+| `pairing`      | TASK-075, 076 | verified domain in both forms, the default grant, the SAS, persist before posting `session.ready`                                                                       |
+| `session_loop` | TASK-077      | requests, rotation, ping, `session.end`; seal → persist → post → acknowledge                                                                                            |
+| `wallet`       | TASK-078      | ownership and the signable key set from the Sage database; signing through `sage-keychain`                                                                              |
+| `requests`     | TASK-079      | the request context, the approver bridge, the limit store, the response                                                                                                 |
+| `sign_guard`   | TASK-141      | refuses spends whose conditions the signature does not fix, before wallet-kit or the user sees them                                                                     |
 | `signed_coins` | TASK-140      | the record of signatures outside the wallet (released coins, pruned per coin from the chain; sealed signatures per bundle, never pruned); sealed bundles kept to resend |
-| `approval`     | TASK-078, 079 | wallet-kit's synchronous hooks parked on a channel until the webview answers                                                         |
+| `approval`     | TASK-078, 079 | wallet-kit's synchronous hooks parked on a channel until the webview answers                                                                                            |
 
 ## Session storage
 
@@ -188,13 +188,12 @@ and is gone.
    **Option contracts** (TASK-140, `src/execute/options.rs`), built by the wallet like a send
    and shown from wallet-kit's own option facts (xchonnect spec 11.1.1):
 
-   | Method | Params | Intent kind (verified) |
-   | --- | --- | --- |
-   | `chia_mintOption` | `underlying: {assetId?, amount}`, `strike: {assetId?, amount}` (`assetId` absent or `"xch"`: XCH; else a CAT; not the same asset), `expiresAt` (unix seconds, 60 s to 10 years ahead), `creatorAddress?`, `loan?: {assetId?, amount}`, `fee?` | `option.mint`, or `loan.request` |
-   | `chia_exerciseOption` | `launcherId`, `fee?` | `option.exercise` |
-   | `chia_claimOption` | `launcherId`, `fee?` | `option.clawback` |
-   | `chia_transferOption` | `launcherId`, `address`, `fee?` | `option.transfer` |
-
+   | Method                | Params                                                                                                                                                                                                                                        | Intent kind (verified)           |
+   | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+   | `chia_mintOption`     | `underlying: {assetId?, amount}`, `strike: {assetId?, amount}` (`assetId` absent or `"xch"`: XCH; else a CAT; not the same asset), `expiresAt` (unix seconds, 60 s to 10 years ahead), `creatorAddress?`, `loan?: {assetId?, amount}`, `fee?` | `option.mint`, or `loan.request` |
+   | `chia_exerciseOption` | `launcherId`, `fee?`                                                                                                                                                                                                                          | `option.exercise`                |
+   | `chia_claimOption`    | `launcherId`, `fee?`                                                                                                                                                                                                                          | `option.clawback`                |
+   | `chia_transferOption` | `launcherId`, `address`, `fee?`                                                                                                                                                                                                               | `option.transfer`                |
    - **Write** (`chia_mintOption`, no `creatorAddress` or one of the wallet's own): the wallet
      locks the collateral, is the creator and holds the option. Sage's own `mint_option`, key-free,
      unchanged; sealed, so Sage's `ASSERT_CONCURRENT_SPEND` between the collateral and the launch
@@ -259,6 +258,58 @@ and is gone.
      the wrong network, and a website's mint with a fake collateral (an unknown contract).
    - **Dependency**: wallet-kit's option support is in xchonnect 0.1.0-rc.5, not yet on
      crates.io; `../Cargo.toml` patches both crates to the git revision until it is published.
+     **Making offers** (TASK-142, `src/execute/create_offer.rs`): `chia_createOffer` as Sage's
+     `WalletConnect` has it, so a website (Pengui's open loan offers: a lender writes an option,
+     then offers it with the principal for the collateral) needs no Klimper-only path.
+
+   | Method             | Params                                                                                                                    | Answer                                                                                                         | Intent kind                                                               |
+   | ------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+   | `chia_createOffer` | `offerAssets: [{assetId?, amount}]`, `requestAssets: [{assetId?, amount}]`, `fee?` (other keys, e.g. `walletId`, ignored) | `{ offer: "offer1…", id }` (`id`: Sage's offer id, plain hex of the sorted offer's name); nothing is broadcast | `option.transfer` (verified) when it gives an option, else `offer.create` |
+   - **Assets**: `assetId` absent, `null`, `""` or `"xch"` (any case) is XCH; 32 bytes of hex,
+     with or without `0x`, a CAT; an option is named as Sage names it, by its `option1…` id
+     (bech32m of the launcher id, prefix `option`) with `amount` 1. Amounts as Sage's
+     `safeAmount` (a non-negative integer or a decimal string), positive; one asset named twice
+     is added up, an option named twice is refused. At most 16 entries a side, at least one;
+     `requestAssets` only XCH and CATs; giving and asking for the same asset is refused.
+     NFTs (`nft1…`) and asking for an option are refused (`4101` `unsupported_asset`). `fee` is read and
+     ignored, as for every request Klimper builds (Klimper's own fee).
+   - **Build**: from the wallet's coins with Sage's offer code (`prepare_spends_for_selection`,
+     `select_spends`, the settlement payments, the requested payments to the change address
+     under the nonce of the coins spent, `complete_spends`), key-free, as Sage's `make_offer`
+     builds them. One difference: the offer's signatures go to the website, so they are
+     **released** and only direct assertions bind (spec 11.2). Sage gives the assertion of the
+     requested payments to one spend and ties the others by `ASSERT_CONCURRENT_SPEND`, which
+     does not bind a released offer; here every spend of the user's (XCH, CAT and option)
+     asserts every requested payment, and, when the offer gives options, `ASSERT_BEFORE_SECONDS_ABSOLUTE`
+     of the earliest option expiry, so nobody can take the offer once an option it sells can no
+     longer be used. Then the sign guard, Sage's summary against the simulation, wallet-kit's
+     submit (released, `linking: "direct"`), one approval; the signed spends and the
+     placeholders of what is asked become the offer. The coins of the offer go into the record
+     of signed coins as released before the answer leaves. The offer is not imported into
+     Sage's offer list (Sage's `WalletConnect` does not either), so Sage may spend its coins
+     later, which cancels it.
+   - **Refusals**: an option the wallet does not hold (`4000` `unknown_option`), an expired one
+     (`4001` `option_expired`), an option whose strike or collateral the card cannot show (a
+     revocable CAT, an NFT; `4101` `unsupported_asset`), more than the wallet holds or an asset it does
+     not have (`4003` `build_failed`, Sage's words never sent; these count towards the
+     failed-build limit, and so do the refusals above), malformed params (`4000` with the field
+     as reason: `offerAssets`, `requestAssets`, `fee`, `json`).
+   - **Permissions**: `chia_createOffer` is granted like `chia_takeOffer`: in a new connection's
+     default grant, and a connection paired before it existed is given it once if it may use
+     `chia_send` (`METHODS_REVISION` 2; a method the user turned off stays off). Giving an
+     **option** also needs the connection's option contracts (`chia_transferOption`), or it is
+     refused before anything is built (`4001` `not_granted`); the option-count limit applies
+     (an offered option leaves the user: `options_per_request` / `options_per_day`), and XCH and
+     CATs given count against the per-request and per-day limits.
+   - **Approval**: Klimper's prompt keys `offer` (`gives`, `options` with `launcher_id` and
+     `terms` from the wallet's database in wallet-kit's `terms` shape, `asks`, `expires_at`) and
+     `makes_offer`; the screen requires every option in `offer` to be a transfer from the user to
+     the settlement puzzle in wallet-kit's own option facts (`docs/xchonnect-screens.md`).
+   - **Tests**: `src/execute/create_offer_tests.rs`: an open loan offer (an option on a CAT and
+     XCH for the CAT) and an option with a CAT for XCH, made through Klimper's path and taken by a
+     second wallet with `chia_takeOffer` on the simulated chain (the taker holds the option and
+     the principal, the maker the asset asked), a plain XCH-for-CAT offer; the refusals above.
+
 4. **Sealed and released** (xchonnect spec 11.2, `src/signed_coins.rs`). Whether one of the
    user's spends could be taken out of a bundle and used without the others depends on who
    holds the user's signatures:
@@ -270,21 +321,21 @@ and is gone.
      them; Klimper adds nothing. The approval shows **Sealed by Klimper** (prompt key
      `linking: "sealed"`).
    - **Released**: everything else — a `signCoinSpends` (the signature goes to the
-     website), a website's own bundle (`xchonnect_submitCoinSpends`), a loan request (an
-     offer). Each of the user's spends must then itself assert what the user is paid, or the
+     website), a website's own bundle (`xchonnect_submitCoinSpends`), a loan request or any
+     offer the wallet makes (`chia_createOffer`). Each of the user's spends must then itself assert what the user is paid, or the
      request is refused.
-   A request is sealed only if no coin of the user's it spends has a signature outside the
-   wallet, and only while the wallet never makes one of a sealed bundle's signatures again
-   (the bundle's aggregate is public once sent, and BLS signatures are deterministic: one
-   more signature over the same message would let it be split). So Klimper keeps a
-   **record of signed coins**, per wallet and network, in the OS keyring next to the
-   sessions (`signed:<fingerprint>:<chain id>`), across restarts:
+     A request is sealed only if no coin of the user's it spends has a signature outside the
+     wallet, and only while the wallet never makes one of a sealed bundle's signatures again
+     (the bundle's aggregate is public once sent, and BLS signatures are deterministic: one
+     more signature over the same message would let it be split). So Klimper keeps a
+     **record of signed coins**, per wallet and network, in the OS keyring next to the
+     sessions (`signed:<fingerprint>:<chain id>`), across restarts:
    - **released** coins: every coin whose signature left the wallet — answered to a
      `signCoinSpends`, in a loan request's offer, or in any bundle sent (also one the network
      refused). A request spending one of the user's coins in it is never sealed.
    - **sealed signatures**: for each sealed bundle Klimper sent (or tried to: a bundle the
      network refused counts), the signatures it made in it, as `sha256(public key ||
-     message)`, each with the bundles it was made in, and the coins it signed for in it
+  message)`, each with the bundles it was made in, and the coins it signed for in it
      (stored as `sealed_digests` and `sealed_bundles`, record `format` 3; the per-coin
      record of the earlier builds is moved into one bundle holding every coin it named, and
      a record that does not read, or that a later version wrote, is refused, never read as
@@ -296,64 +347,64 @@ and is gone.
      the same coin signs a different message and is allowed, so a bundle that expired or was
      refused locks no coin. Sage's own coin selection leaves out the coins of a transaction
      it holds as pending; nothing else is excluded.
-   wallet-kit hands over what to record before every broadcast (`Broadcaster::record`, a
-   `BroadcastRecord`); Klimper's broadcaster (`SageBroadcaster`) writes it to the keyring
-   before it returns, and when that fails nothing is sent (`4000`, reason `record_failed`,
-   "Klimper could not save its record of this transaction, so nothing was sent. Try
-   again."). wallet-kit reports a `signCoinSpends` answer the same way, after signing and
-   before the signature is returned (every coin of the request goes into released; if the
-   write fails the website gets `record_failed`, no signature, and nothing counts against
-   its limit). A loan request's offer is recorded as released by Klimper before the answer
-   leaves; if that fails, it does not leave.
-   **Signatures Sage makes outside Xchonnect** go into released too, read from Sage's own
-   database without changing Sage (`signed_coins::signed_by_sage`): every coin a
-   transaction in Sage's mempool table spends (Sage's send screen, its offer takes,
-   anything Sage submitted) and every coin of an offer Sage made, whatever its status, as
-   long as the coin is unspent. This runs before every signing request and every 30 seconds
-   while the app runs. Not covered, since they leave nothing in Sage's database: a
-   signature Sage's own `WalletConnect` hands to a website (`signCoinSpends`) and a signed
-   transaction shown for copying instead of being sent.
-   **Sealed signatures are never pruned** (wallet-kit's recommended default; it would allow
-   dropping a bundle once every coin signed for in it is spent): a few dozen bytes per
-   signature. A **released** coin leaves the record once it is spent on chain, as the
-   wallet's own synced database says, at least 6 blocks below its synced peak
-   (`signed_coins::CONFIRMATIONS`; a shallower spend could be undone by a reorg). Klimper
-   checks this before every request that signs. No peer is asked: a coin Sage's database
-   does not hold (another party's, or one created and spent inside a bundle) stays in the
-   record for good, about 64 bytes each. wallet-kit's `host_checks` (`check_sealed_record`,
-   `check_one_at_a_time`) run in Klimper's tests against this storage, `SageBroadcaster`'s
-   record and the signing lock (`signed_coins.rs`).
-   Requests that sign — `signCoinSpends`, `xchonnect_submitCoinSpends`, `signMessage`
-   (with their `chip0002_` forms) and every request Klimper builds — run one at a time: the
-   lock is taken before the record is read and held across wallet-kit's check, the approval
-   prompt and the signature until what was signed is recorded, so a request that arrives
-   while another's prompt is open is checked against that request's record.
-   **Sending a sealed bundle again.** wallet-kit never signs its messages twice, not even
-   for the identical bundle, so Klimper keeps each sealed bundle's bytes (`bundles:<fingerprint>:<chain
-   id>` in the keyring, at most 16, each dropped once a coin it spends is spent on chain)
-   and `execute::resend_sealed` broadcasts them again unchanged (a bundle no peer took, or
-   one that fell out of the mempool). There is no screen for it yet.
-   For the user this means: a website can never take apart a transaction Klimper sends; a
-   coin the user signed for a website stays under the strict rule until it is spent; and the
-   exact same transaction is never signed twice. Signatures Sage makes outside Xchonnect
-   are in the record as far as Sage's database shows them (above).
-   **The fee of a sealed request is Klimper's** (spec 11.1.1, 11.2): wallet-kit credits a
-   sealed bundle's fee as the wallet's own choice (in an exercise, the fee can come out of
-   the released collateral), and reads a request whose user spends reserve any other fee
-   than `SubmitRequest::wallet_fee` as released. So a website's `fee` (`chia_send`,
-   `chia_takeOffer`, the option methods) is read (a malformed one is refused) and ignored:
-   Klimper builds with the wallet's **default fee**, the one the user sets in the wallet's
-   settings (the webview hands it to the plugin, `set_own_fee`; 0 until it has; at most
-   **0.001 XCH**, `execute::MAX_FEE`), and passes that fee as `wallet_fee`. The approval
-   shows the fee the bundle pays. A loan request uses it too, though its signatures are
-   released anyway. Passing `signatures_released: true` for every request with a website's
-   fee instead would make those requests strict and refuse Sage's own shapes that link the
-   fee coin only by `ASSERT_CONCURRENT_SPEND` (a take of CATs for a CAT with a fee).
-   **Spends Klimper signs but cannot read** (an unknown contract around the user's key: an
-   NFT, a vault) count as the user's for binding and limits; what they create is never
-   received (`outputs[].unaccounted`, `summary.unaccounted_spends`), and the approval shows
-   them as a danger ("Coins Klimper can’t account for"). A multi-party request with one is
-   refused (`4001` `unknown_partial`, explained to the website).
+     wallet-kit hands over what to record before every broadcast (`Broadcaster::record`, a
+     `BroadcastRecord`); Klimper's broadcaster (`SageBroadcaster`) writes it to the keyring
+     before it returns, and when that fails nothing is sent (`4000`, reason `record_failed`,
+     "Klimper could not save its record of this transaction, so nothing was sent. Try
+     again."). wallet-kit reports a `signCoinSpends` answer the same way, after signing and
+     before the signature is returned (every coin of the request goes into released; if the
+     write fails the website gets `record_failed`, no signature, and nothing counts against
+     its limit). A loan request's offer is recorded as released by Klimper before the answer
+     leaves; if that fails, it does not leave.
+     **Signatures Sage makes outside Xchonnect** go into released too, read from Sage's own
+     database without changing Sage (`signed_coins::signed_by_sage`): every coin a
+     transaction in Sage's mempool table spends (Sage's send screen, its offer takes,
+     anything Sage submitted) and every coin of an offer Sage made, whatever its status, as
+     long as the coin is unspent. This runs before every signing request and every 30 seconds
+     while the app runs. Not covered, since they leave nothing in Sage's database: a
+     signature Sage's own `WalletConnect` hands to a website (`signCoinSpends`) and a signed
+     transaction shown for copying instead of being sent.
+     **Sealed signatures are never pruned** (wallet-kit's recommended default; it would allow
+     dropping a bundle once every coin signed for in it is spent): a few dozen bytes per
+     signature. A **released** coin leaves the record once it is spent on chain, as the
+     wallet's own synced database says, at least 6 blocks below its synced peak
+     (`signed_coins::CONFIRMATIONS`; a shallower spend could be undone by a reorg). Klimper
+     checks this before every request that signs. No peer is asked: a coin Sage's database
+     does not hold (another party's, or one created and spent inside a bundle) stays in the
+     record for good, about 64 bytes each. wallet-kit's `host_checks` (`check_sealed_record`,
+     `check_one_at_a_time`) run in Klimper's tests against this storage, `SageBroadcaster`'s
+     record and the signing lock (`signed_coins.rs`).
+     Requests that sign — `signCoinSpends`, `xchonnect_submitCoinSpends`, `signMessage`
+     (with their `chip0002_` forms) and every request Klimper builds — run one at a time: the
+     lock is taken before the record is read and held across wallet-kit's check, the approval
+     prompt and the signature until what was signed is recorded, so a request that arrives
+     while another's prompt is open is checked against that request's record.
+     **Sending a sealed bundle again.** wallet-kit never signs its messages twice, not even
+     for the identical bundle, so Klimper keeps each sealed bundle's bytes (`bundles:<fingerprint>:<chain
+id>` in the keyring, at most 16, each dropped once a coin it spends is spent on chain)
+     and `execute::resend_sealed` broadcasts them again unchanged (a bundle no peer took, or
+     one that fell out of the mempool). There is no screen for it yet.
+     For the user this means: a website can never take apart a transaction Klimper sends; a
+     coin the user signed for a website stays under the strict rule until it is spent; and the
+     exact same transaction is never signed twice. Signatures Sage makes outside Xchonnect
+     are in the record as far as Sage's database shows them (above).
+     **The fee of a sealed request is Klimper's** (spec 11.1.1, 11.2): wallet-kit credits a
+     sealed bundle's fee as the wallet's own choice (in an exercise, the fee can come out of
+     the released collateral), and reads a request whose user spends reserve any other fee
+     than `SubmitRequest::wallet_fee` as released. So a website's `fee` (`chia_send`,
+     `chia_takeOffer`, the option methods) is read (a malformed one is refused) and ignored:
+     Klimper builds with the wallet's **default fee**, the one the user sets in the wallet's
+     settings (the webview hands it to the plugin, `set_own_fee`; 0 until it has; at most
+     **0.001 XCH**, `execute::MAX_FEE`), and passes that fee as `wallet_fee`. The approval
+     shows the fee the bundle pays. A loan request uses it too, though its signatures are
+     released anyway. Passing `signatures_released: true` for every request with a website's
+     fee instead would make those requests strict and refuse Sage's own shapes that link the
+     fee coin only by `ASSERT_CONCURRENT_SPEND` (a take of CATs for a CAT with a fee).
+     **Spends Klimper signs but cannot read** (an unknown contract around the user's key: an
+     NFT, a vault) count as the user's for binding and limits; what they create is never
+     received (`outputs[].unaccounted`, `summary.unaccounted_spends`), and the approval shows
+     them as a danger ("Coins Klimper can’t account for"). A multi-party request with one is
+     refused (`4001` `unknown_partial`, explained to the website).
 5. **Checked twice**: before the prompt, Sage's summary from the wallet database and
    wallet-kit's simulation must agree on the user's coins spent, the payments to others and
    the fee, or the request is refused (`crosscheck_mismatch`). A website's declared intent

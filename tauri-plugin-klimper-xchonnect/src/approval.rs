@@ -165,6 +165,13 @@ impl ApprovalBridge {
         (self.emit)(EVENT_SENT, payload);
     }
 
+    /// Tell the webview the wallet's coins changed outside a sync (an agent's offer locked
+    /// some, TASK-144): Sage's `coin_state` event, so the offers tab and the coin pouch
+    /// read them again.
+    pub fn coins_changed(&self) {
+        (self.emit)("sync-event", serde_json::json!({ "type": "coin_state" }));
+    }
+
     /// [`ApprovalBridge::ask_with`] without a callback.
     #[cfg(test)]
     pub fn ask(&self, approval: Approval) -> bool {
@@ -385,6 +392,20 @@ impl ApprovalBridge {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_agents_offer_tells_the_webview_its_coins_changed() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let emit: Emitter = Arc::new(move |event, payload| {
+            sink.lock().unwrap().push((event.to_owned(), payload));
+        });
+        ApprovalBridge::new(emit).coins_changed();
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0, "sync-event");
+        assert_eq!(seen[0].1, serde_json::json!({ "type": "coin_state" }));
+    }
 
     fn bridge() -> (Arc<ApprovalBridge>, Arc<Mutex<Vec<String>>>) {
         let seen = Arc::new(Mutex::new(Vec::new()));

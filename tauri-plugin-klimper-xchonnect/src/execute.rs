@@ -46,9 +46,11 @@ pub const CHIA_SEND: &str = "chia_send";
 /// The method name, as Sage's `WalletConnect` handler knows it.
 pub const CHIA_TAKE_OFFER: &str = "chia_takeOffer";
 
+pub use create_offer::CHIA_CREATE_OFFER;
+
 /// Methods Klimper builds itself, granted at pairing next to wallet-kit's defaults. Each
 /// still asks the user before anything is signed.
-pub const WALLET_BUILT_METHODS: [&str; 2] = [CHIA_SEND, CHIA_TAKE_OFFER];
+pub const WALLET_BUILT_METHODS: [&str; 3] = [CHIA_SEND, CHIA_TAKE_OFFER, CHIA_CREATE_OFFER];
 
 /// Whether Klimper builds this request from the wallet's own coins (and so signs it with
 /// every key of the wallet, not only the ones the website was shown): the methods above and
@@ -57,27 +59,37 @@ pub fn is_wallet_built(method: &str) -> bool {
     WALLET_BUILT_METHODS.contains(&method) || options::OPTION_METHODS.contains(&method)
 }
 
+pub mod create_offer;
 pub mod options;
 
-/// The revision of [`WALLET_BUILT_METHODS`] a new pairing is granted. 1: `chia_takeOffer`.
-pub const METHODS_REVISION: u32 = 1;
+/// The revision of [`WALLET_BUILT_METHODS`] a new pairing is granted. 1: `chia_takeOffer`;
+/// 2: `chia_createOffer` (TASK-142).
+pub const METHODS_REVISION: u32 = 2;
 
-/// Bring a connection paired under an older revision up to date, once: a connection that
-/// may use `chia_send` may also take offers, which ask the user the same way. Without this
-/// a take from such a connection is refused as `not_granted` until the user pairs again
-/// (TASK-137). A connection whose `chia_send` the user turned off gets nothing. Returns
-/// whether the methods changed, so the website can be told.
+/// Bring a connection paired under an older revision up to date, once per revision: a
+/// connection that may use `chia_send` may also take offers (revision 1, TASK-137) and make
+/// them (revision 2, TASK-142), which ask the user the same way. Without this such a request
+/// from it is refused as `not_granted` until the user pairs again. A connection whose
+/// `chia_send` the user turned off gets nothing, and a method the user turned off after its
+/// revision stays off. Returns whether the methods changed, so the website can be told.
 pub fn upgrade_methods(record: &mut crate::store::SessionRecord) -> bool {
     if record.methods_revision >= METHODS_REVISION {
         return false;
     }
+    let from = record.methods_revision;
     record.methods_revision = METHODS_REVISION;
     let methods = &mut record.permissions.methods;
-    if methods.iter().any(|m| m == CHIA_SEND) && !methods.iter().any(|m| m == CHIA_TAKE_OFFER) {
-        methods.push(CHIA_TAKE_OFFER.to_owned());
-        return true;
+    if !methods.iter().any(|m| m == CHIA_SEND) {
+        return false;
     }
-    false
+    let mut changed = false;
+    for (revision, method) in [(1, CHIA_TAKE_OFFER), (2, CHIA_CREATE_OFFER)] {
+        if from < revision && !methods.iter().any(|m| m == method) {
+            methods.push(method.to_owned());
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn error(code: i64, message: &str, reason: Option<&str>) -> RpcError {
@@ -999,6 +1011,14 @@ fn submit_take(
     clippy::indexing_slicing
 )]
 mod aggregate_tests;
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod create_offer_tests;
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

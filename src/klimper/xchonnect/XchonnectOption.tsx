@@ -29,6 +29,7 @@ import { groupedAmount, unitOf } from './XchonnectTrade';
 import {
   optionLabel,
   LoanView,
+  OfferView,
   OptionEffectView,
   SpendPromptView,
   TradeLegView,
@@ -451,6 +452,104 @@ function LoanCard({
   );
 }
 
+/**
+ * An offer the wallet makes (`chia_createOffer`, TASK-142), from Klimper's `offer` key: each
+ * option it gives with what it locks, its strike and expiry, each other asset it gives, and
+ * what whoever takes it pays. Nothing is sent: Klimper signs the offer.
+ */
+function OfferCard({
+  offer,
+  facts,
+  xchLabel,
+}: {
+  readonly offer: OfferView;
+  readonly facts: Facts;
+  readonly xchLabel: string;
+}) {
+  const prefix = xchLabel.toLowerCase();
+  const closes = offer.expiresAt === null ? '' : whenText(offer.expiresAt);
+  const amount = (leg: TradeLegView) => (
+    <strong>{amountText(leg, facts, xchLabel)}</strong>
+  );
+  return (
+    <div className='xc-trade xc-option' data-testid='prompt-offer'>
+      <div className='xc-option-title'>
+        <FileSignature className={ICON} aria-hidden='true' />
+        <Trans>Make an offer</Trans>
+      </div>
+      <div className='xc-option-lead'>
+        <Trans>You give</Trans>
+      </div>
+      <ul className='xc-option-lines' data-testid='offer-gives'>
+        {offer.options.map((option) => {
+          const collateral = amount(option.terms.collateral);
+          const strike = amount(option.terms.strike);
+          const until = whenText(option.terms.expiresAt);
+          const label = optionLabel(option.launcherId);
+          const creator = (
+            <Addr puzzleHash={option.terms.creator} prefix={prefix} />
+          );
+          return (
+            <li
+              key={option.launcherId}
+              className='xc-option-line'
+              data-testid='offer-option'
+            >
+              <Lock className={ICON} aria-hidden='true' />
+              <span>
+                <Trans>
+                  Option {label}: whoever takes the offer may pay {strike} to{' '}
+                  {creator} for {collateral} until {until}. After that,{' '}
+                  {creator} takes the {collateral} back.
+                </Trans>
+              </span>
+            </li>
+          );
+        })}
+        {offer.gives.map((leg) => (
+          <Line
+            key={leg.label + leg.amount.toFixed(0)}
+            icon={<Send className={ICON} aria-hidden='true' />}
+            testId='offer-give'
+          >
+            {amount(leg)}
+          </Line>
+        ))}
+      </ul>
+      <div className='xc-trade-turn' aria-hidden='true'>
+        <ArrowDown className='h-4 w-4' />
+      </div>
+      <div className='xc-option-lead'>
+        <Trans>You ask for</Trans>
+      </div>
+      <ul className='xc-option-lines' data-testid='offer-asks'>
+        {offer.asks.map((leg) => (
+          <Line
+            key={leg.label + leg.amount.toFixed(0)}
+            icon={<HandCoins className={ICON} aria-hidden='true' />}
+            testId='offer-ask'
+          >
+            {amount(leg)}
+          </Line>
+        ))}
+      </ul>
+      <div className='xc-option-note' data-testid='offer-note'>
+        <Trans>
+          Klimper signs an offer. Nothing moves until someone takes it.
+        </Trans>
+        {offer.expiresAt !== null && (
+          <>
+            {' '}
+            <Trans>
+              Nobody can take it from {closes}, when the option expires.
+            </Trans>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The option card(s) of a request: one loan, or one card per option effect. */
 export function OptionCards({
   view,
@@ -467,6 +566,11 @@ export function OptionCards({
         facts={facts}
         xchLabel={view.xchLabel}
       />
+    );
+  }
+  if (view.offer !== null) {
+    return (
+      <OfferCard offer={view.offer} facts={facts} xchLabel={view.xchLabel} />
     );
   }
   if (view.options.length === 0) return null;
@@ -497,6 +601,12 @@ export function optionAssets(view: SpendPromptView): AssetRef[] {
   if (view.loan !== null) {
     legs.push(view.loan.principal);
     if (view.loan.tie !== null) legs.push(view.loan.tie);
+  }
+  if (view.offer !== null) {
+    for (const option of view.offer.options) {
+      legs.push(option.terms.collateral, option.terms.strike);
+    }
+    legs.push(...view.offer.gives, ...view.offer.asks);
   }
   return legs;
 }

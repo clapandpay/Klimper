@@ -622,11 +622,19 @@ function Handling({ view }: { readonly view: SpendPromptView }) {
           icon={<PenLine className='h-3.5 w-3.5' aria-hidden='true' />}
           testId='prompt-makes-offer'
           hint={
-            <Trans>
-              Klimper built this request from your own coins and signs it. It
-              does not send it: the website hands it to a lender, and nothing
-              moves until one takes it.
-            </Trans>
+            view.offer !== null ? (
+              <Trans>
+                Klimper built this offer from your own coins and signs it. It
+                does not send it: the website publishes it, and nothing moves
+                until someone takes it.
+              </Trans>
+            ) : (
+              <Trans>
+                Klimper built this request from your own coins and signs it. It
+                does not send it: the website hands it to a lender, and nothing
+                moves until one takes it.
+              </Trans>
+            )
           }
         >
           <Trans>Signed by Klimper, not sent</Trans>
@@ -851,8 +859,9 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
     ...optionAssets(view),
   ]);
   // A loan's card says what the trade card would, in the loan's own words (TASK-140).
-  const trade = view.loan === null ? view.trade : null;
-  const hasOptions = view.options.length > 0 || view.loan !== null;
+  const trade = view.loan === null && view.offer === null ? view.trade : null;
+  const hasOptions =
+    view.options.length > 0 || view.loan !== null || view.offer !== null;
   const sendsToOthers = view.outputs.some(
     (output) => !output.toUser && output.option === null && !output.unaccounted,
   );
@@ -1156,6 +1165,7 @@ export function promptHeadline(view: PromptView): React.ReactNode {
 
 /** The headline of a request about option contracts or a loan (TASK-140), or null. */
 function optionHeadline(view: SpendPromptView): React.ReactNode {
+  if (view.offer !== null) return <Trans>Make an offer</Trans>;
   if (view.loan !== null) {
     return view.loan.role === 'borrower' ? (
       <Trans>Request a loan</Trans>

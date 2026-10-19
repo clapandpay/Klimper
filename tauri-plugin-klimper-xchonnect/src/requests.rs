@@ -141,6 +141,9 @@ pub struct UiApprover {
     /// For a loan: who lends what to whom, and whether the request only signs an offer
     /// (a borrower's loan request) instead of sending (TASK-140). Computed by the wallet.
     loan: std::sync::Mutex<Option<(Value, bool)>>,
+    /// For an offer the wallet makes (`chia_createOffer`, TASK-142): what it gives, options
+    /// with their terms, and what it asks. Computed by the wallet from its own build.
+    offer: std::sync::Mutex<Option<Value>>,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -159,6 +162,14 @@ impl UiApprover {
             cross_checked: AtomicBool::new(false),
             offers: AtomicUsize::new(0),
             loan: std::sync::Mutex::new(None),
+            offer: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// Record the offer on screen: nothing is sent, an offer is signed.
+    pub fn mark_offer(&self, offer: &execute::create_offer::OfferView) {
+        if let (Ok(value), Ok(mut slot)) = (serde_json::to_value(offer), self.offer.lock()) {
+            *slot = Some(value);
         }
     }
 
@@ -213,6 +224,14 @@ impl Approver for UiApprover {
             if *makes_offer {
                 fields.insert("makes_offer".to_owned(), Value::Bool(true));
             }
+        }
+        // An offer the wallet makes (TASK-142), Klimper's own key like `loan`.
+        if let Ok(slot) = self.offer.lock()
+            && let Some(offer) = slot.as_ref()
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("offer".to_owned(), offer.clone());
+            fields.insert("makes_offer".to_owned(), Value::Bool(true));
         }
         let approved = self.bridge.ask_with(
             Approval {
@@ -455,6 +474,14 @@ fn run(
                         &|count| approver.mark_offers(count),
                         &on_loan,
                     ),
+                    execute::CHIA_CREATE_OFFER => execute::create_offer::create_offer(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        params,
+                        &|offer| approver.mark_offer(offer),
+                    ),
                     execute::options::CHIA_MINT_OPTION => execute::options::mint_option(
                         state,
                         &context,
@@ -515,6 +542,10 @@ fn run(
         .map(|()| result)
     });
     let outcome = outcome.map_err(explain);
+    // An agent's offer is kept in the wallet (TASK-144): its coins are locked now.
+    if outcome.is_ok() && canonical_method(&meta.method) == execute::CHIA_CREATE_OFFER {
+        approvals.coins_changed();
+    }
     // A transaction Klimper broadcast: the webview shows where to look it up.
     if let Ok(result) = &outcome
         && matches!(
@@ -769,7 +800,12 @@ mod tests {
         assert_eq!(old.methods_revision, METHODS_REVISION);
         assert_eq!(
             old.permissions.methods,
-            ["signCoinSpends", CHIA_SEND, CHIA_TAKE_OFFER]
+            [
+                "signCoinSpends",
+                CHIA_SEND,
+                CHIA_TAKE_OFFER,
+                crate::execute::CHIA_CREATE_OFFER
+            ]
         );
         assert!(!upgrade_methods(&mut old), "only once");
 
@@ -782,6 +818,21 @@ mod tests {
         assert!(!upgrade_methods(&mut no_send));
         assert_eq!(no_send.permissions.methods, ["signCoinSpends"]);
         assert_eq!(no_send.methods_revision, METHODS_REVISION);
+    }
+
+    /// A connection that already had `chia_takeOffer` (revision 1) is given `chia_createOffer`
+    /// once, if it may send; a take the user turned off stays off (TASK-142).
+    #[test]
+    fn a_revision_one_connection_may_make_offers_once_if_it_may_send() {
+        use crate::execute::{CHIA_CREATE_OFFER, CHIA_SEND, CHIA_TAKE_OFFER, upgrade_methods};
+        let mut old = record();
+        old.methods_revision = 1;
+        old.permissions.methods = vec![CHIA_SEND.to_owned()];
+        assert!(upgrade_methods(&mut old));
+        assert_eq!(old.permissions.methods, [CHIA_SEND, CHIA_CREATE_OFFER]);
+        assert!(!old.permissions.methods.iter().any(|m| m == CHIA_TAKE_OFFER));
+        assert!(!upgrade_methods(&mut old), "only once");
+        assert!(crate::execute::is_wallet_built(CHIA_CREATE_OFFER));
     }
 
     /// A record stored before the revision was kept reads as revision 0.

@@ -208,6 +208,8 @@ export type OptionEffectView =
       readonly fromUser: boolean;
       readonly to: string;
       readonly toUser: boolean;
+      /** The new owner is the offer settlement puzzle: the option is offered (TASK-142). */
+      readonly toSettlement: boolean;
     }
   | {
       readonly action: 'exercise';
@@ -240,6 +242,25 @@ export interface LoanView {
   readonly tie: TradeLegView | null;
   /** The option the loan is made of: its mint, from `summary.options`. */
   readonly mint: Extract<OptionEffectView, { action: 'mint' }>;
+}
+
+/** An option an offer gives, with its terms as the wallet holds them (TASK-142). */
+export interface OfferedOptionView {
+  readonly launcherId: string;
+  readonly terms: OptionTermsView;
+}
+
+/**
+ * An offer the wallet makes (`chia_createOffer`, TASK-142): Klimper's own key, from the
+ * request it built itself. What it gives (options with their terms, XCH and CATs) and what
+ * whoever takes it pays the user.
+ */
+export interface OfferView {
+  readonly gives: readonly TradeLegView[];
+  readonly options: readonly OfferedOptionView[];
+  readonly asks: readonly TradeLegView[];
+  /** Unix seconds from which nobody can take it (the earliest expiry of its options). */
+  readonly expiresAt: number | null;
 }
 
 export interface SpendPromptView {
@@ -288,6 +309,8 @@ export interface SpendPromptView {
   readonly loan: LoanView | null;
   /** Klimper signs an offer (a loan request) and sends nothing to the network itself. */
   readonly makesOffer: boolean;
+  /** An offer the wallet makes, when the request is one; `null` otherwise. */
+  readonly offer: OfferView | null;
 }
 
 export interface MessagePromptView {
@@ -683,6 +706,11 @@ function optionsOf(value: unknown, xchLabel: string): OptionEffectView[] {
           fromUser: strictBool(entry.from_user),
           to: strictHex32(entry.to),
           toUser: strictBool(entry.to_user),
+          // Absent from an older wallet-kit: then not an offer.
+          toSettlement:
+            entry.to_settlement === undefined
+              ? false
+              : strictBool(entry.to_settlement),
         };
       case 'exercise':
         return {
@@ -744,6 +772,57 @@ function loanOf(
   const other = role === 'borrower' ? mint.terms.creator : mint.owner;
   if (!holds || other !== counterparty) throw new UnreadableAmount();
   return { role, principal, counterparty, tie, mint };
+}
+
+/**
+ * Klimper's `offer` key (TASK-142). Absent is `null`; present, it must be exact, it must ask
+ * for something and give something, and every option it gives must be one the simulation sees
+ * leaving the user for the settlement puzzle (`summary.options`), once. Anything else is
+ * unreadable.
+ */
+function offerOf(
+  value: unknown,
+  options: readonly OptionEffectView[],
+  xchLabel: string,
+): OfferView | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) throw new UnreadableAmount();
+  if (!Array.isArray(value.gives) || !Array.isArray(value.asks)) {
+    throw new UnreadableAmount();
+  }
+  if (!Array.isArray(value.options)) throw new UnreadableAmount();
+  const gives = value.gives.map((entry) => optionLegOf(entry, xchLabel));
+  const asks = value.asks.map((entry) => optionLegOf(entry, xchLabel));
+  const offered = value.options.map((entry): OfferedOptionView => {
+    if (!isRecord(entry)) throw new UnreadableAmount();
+    return {
+      launcherId: strictHex32(entry.launcher_id),
+      terms: termsOf(entry.terms, xchLabel),
+    };
+  });
+  if (asks.length === 0 || gives.length + offered.length === 0) {
+    throw new UnreadableAmount();
+  }
+  const transfers = options.filter(
+    (effect): effect is Extract<OptionEffectView, { action: 'transfer' }> =>
+      effect.action === 'transfer',
+  );
+  for (const option of offered) {
+    const seen = transfers.filter((t) => t.launcherId === option.launcherId);
+    if (
+      seen.length !== 1 ||
+      !seen[0].fromUser ||
+      !seen[0].toSettlement ||
+      offered.filter((o) => o.launcherId === option.launcherId).length !== 1
+    ) {
+      throw new UnreadableAmount();
+    }
+  }
+  const expiresAt =
+    value.expires_at === undefined || value.expires_at === null
+      ? null
+      : strictSeconds(value.expires_at);
+  return { gives, options: offered, asks, expiresAt };
 }
 
 /**
@@ -986,6 +1065,7 @@ function readPromptStrict(
     options,
     loan: loanOf(prompt.loan, options, xchLabel),
     makesOffer,
+    offer: makesOffer ? offerOf(prompt.offer, options, xchLabel) : null,
   };
 }
 
