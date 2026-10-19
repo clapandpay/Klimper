@@ -75,6 +75,7 @@ const session: SessionSummary = {
   methods: ['chainId', 'connect', 'signCoinSpends'],
   exposedKeys: [`0x${'a'.repeat(96)}`],
   limits: {},
+  optionLimit: { perRequest: 1, perDay: 5 },
   allowAggSigUnsafe: false,
   allowUnknownContracts: false,
   allReceiveKeys: false,
