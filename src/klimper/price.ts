@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where Klimper's prices come from (clapandpay TASK-113, owner's decision of 2026-10-07).
 //
-// One module fetches prices; nothing else does. Mainnet asks nodexch.space for everything
+// One module fetches prices; nothing else does. Mainnet asks nodexch.com for everything
 // (XCH in USD and every CAT's price; TASK-112 defines `GET /api/prices`), so phones do not
 // call third parties directly, and falls back to what Sage did before (CoinGecko for XCH,
 // dexie's tickers for CATs) while that endpoint is not answering. Testnet coins are worth
@@ -27,7 +27,9 @@ export interface Prices {
   at: number;
 }
 
-export const NODEXCH_PRICES_URL = 'https://nodexch.space/api/prices';
+export const NODEXCH_PRICES_URL = 'https://nodexch.com/api/prices';
+// nodexch's first domain (nodexch TASK-184): asked second while it still answers and the new one may not.
+export const NODEXCH_OLD_PRICES_URL = 'https://nodexch.space/api/prices';
 const COINGECKO_URL =
   'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd';
 const PRICE_TIMEOUT_MS = 5000;
@@ -139,20 +141,30 @@ export async function fetchPrices(
     }
     prices = { xchUsd: 0, cats, source: 'testnet', at: deps.now() };
   } else {
-    try {
-      const parsed = parseNodexch(await getJson(deps, NODEXCH_PRICES_URL));
-      if (parsed === null) throw new Error('malformed answer');
-      prices = { ...parsed, source: 'nodexch', at: deps.now() };
-    } catch (error) {
-      warnOnce('nodexch not answering, using CoinGecko and dexie', error);
-      prices = await fallback(deps);
-    }
+    prices = (await fromNodexch(deps)) ?? (await fallback(deps));
   }
   if (prices !== null) last = prices;
   return (
     prices ??
     last ?? { xchUsd: 0, cats: {}, source: 'fallback', at: deps.now() }
   );
+}
+
+async function fromNodexch(deps: PriceDeps): Promise<Prices | null> {
+  let failure: unknown;
+  for (const url of [NODEXCH_PRICES_URL, NODEXCH_OLD_PRICES_URL]) {
+    try {
+      const parsed = parseNodexch(await getJson(deps, url));
+      if (parsed !== null) {
+        return { ...parsed, source: 'nodexch', at: deps.now() };
+      }
+      failure = new Error('malformed answer');
+    } catch (error) {
+      failure = error;
+    }
+  }
+  warnOnce('nodexch not answering, using CoinGecko and dexie', failure);
+  return null;
 }
 
 async function fallback(deps: PriceDeps): Promise<Prices | null> {
