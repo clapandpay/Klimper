@@ -28,8 +28,6 @@ export interface Prices {
 }
 
 export const NODEXCH_PRICES_URL = 'https://nodexch.com/api/prices';
-// nodexch's first domain (nodexch TASK-184): asked second while it still answers and the new one may not.
-export const NODEXCH_OLD_PRICES_URL = 'https://nodexch.space/api/prices';
 const COINGECKO_URL =
   'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd';
 const PRICE_TIMEOUT_MS = 5000;
@@ -151,19 +149,18 @@ export async function fetchPrices(
 }
 
 async function fromNodexch(deps: PriceDeps): Promise<Prices | null> {
-  let failure: unknown;
-  for (const url of [NODEXCH_PRICES_URL, NODEXCH_OLD_PRICES_URL]) {
-    try {
-      const parsed = parseNodexch(await getJson(deps, url));
-      if (parsed !== null) {
-        return { ...parsed, source: 'nodexch', at: deps.now() };
-      }
-      failure = new Error('malformed answer');
-    } catch (error) {
-      failure = error;
+  try {
+    const parsed = parseNodexch(await getJson(deps, NODEXCH_PRICES_URL));
+    if (parsed !== null) {
+      return { ...parsed, source: 'nodexch', at: deps.now() };
     }
+    warnOnce(
+      'nodexch not answering, using CoinGecko and dexie',
+      new Error('malformed answer'),
+    );
+  } catch (error) {
+    warnOnce('nodexch not answering, using CoinGecko and dexie', error);
   }
-  warnOnce('nodexch not answering, using CoinGecko and dexie', failure);
   return null;
 }
 

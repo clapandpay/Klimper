@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchPrices,
   lastPrices,
-  NODEXCH_OLD_PRICES_URL,
   NODEXCH_PRICES_URL,
   parseNodexch,
   resetPrices,
@@ -53,17 +52,6 @@ describe('prices on mainnet', () => {
     expect(prices.cats[CAT]).toEqual({ lastPrice: 0.5, askPrice: 0.6 });
     expect(calls).toEqual([NODEXCH_PRICES_URL]);
     expect(lastPrices()).toBe(prices);
-    expect(console.warn).not.toHaveBeenCalled();
-  });
-
-  it('come from the old nodexch host while the new one does not answer', async () => {
-    const { deps, calls } = answers({
-      'nodexch.com': new Error('ENOTFOUND'),
-      'nodexch.space': nodexch,
-    });
-    const prices = await fetchPrices(false, deps);
-    expect(prices.source).toBe('nodexch');
-    expect(calls).toEqual([NODEXCH_PRICES_URL, NODEXCH_OLD_PRICES_URL]);
     expect(console.warn).not.toHaveBeenCalled();
   });
 
