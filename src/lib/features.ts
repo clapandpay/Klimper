@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Modified by Klimper (2026): see docs/UPSTREAM.md
 export const offersEnabled = import.meta.env.VITE_DISABLE_OFFERS !== 'true';
 export const optionsEnabled = import.meta.env.VITE_DISABLE_OPTIONS !== 'true';

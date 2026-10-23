@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # A local push stack for Klimper in the iOS simulator (clapandpay TASK-087, docs/push.md):
 # Xchonnect's reference relay and push gateway on loopback, the example website to pair
 # with, and the build settings that point a debug build at this gateway.
