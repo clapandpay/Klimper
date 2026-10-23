@@ -13,14 +13,15 @@
 # environment (XCHONNECT_GATEWAY_APNS_TEAM_ID, _KEY_ID, _KEY_FILE) the gateway talks to
 # Apple's sandbox itself, which a simulator on an Apple-silicon Mac receives for real.
 #
-# Settings: XCHONNECT_DIR (the xchonnect checkout), PUSH_DEV_SIM (simulator name, default
-# "iPhone 17"), PUSH_DEV_RELAY_PORT and PUSH_DEV_GATEWAY_PORT (18795, 18796).
+# Settings: XCHONNECT_DIR (required: a local clone of github.com/xchonnect/xchonnect),
+# PUSH_DEV_SIM (simulator name, default "iPhone 17"), PUSH_DEV_RELAY_PORT and
+# PUSH_DEV_GATEWAY_PORT (18795, 18796).
 # Development only: plain HTTP on loopback, development keys.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 KLIMPER=$PWD
 
-XCHONNECT_DIR=${XCHONNECT_DIR:-$KLIMPER/../../../xchonnect/xchonnect}
+: "${XCHONNECT_DIR:?set XCHONNECT_DIR to a local clone of https://github.com/xchonnect/xchonnect}"
 SIM=${PUSH_DEV_SIM:-iPhone 17}
 RELAY_PORT=${PUSH_DEV_RELAY_PORT:-18795}
 GATEWAY_PORT=${PUSH_DEV_GATEWAY_PORT:-18796}
@@ -31,7 +32,7 @@ DAPP=1
 [ "${1:-}" = --no-dapp ] && DAPP=0
 
 [ -d "$XCHONNECT_DIR/crates/gateway" ] || {
-  echo "no xchonnect checkout at $XCHONNECT_DIR; set XCHONNECT_DIR" >&2
+  echo "no xchonnect clone at $XCHONNECT_DIR; set XCHONNECT_DIR" >&2
   exit 1
 }
 
