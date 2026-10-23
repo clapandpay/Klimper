@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import {
   DidRecord,
   NftCollectionRecord,

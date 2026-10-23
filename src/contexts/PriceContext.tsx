@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { useNetwork } from '@/hooks/useNetwork';
 import { fetchPrices as fetchKlimperPrices } from '@/klimper/price';
 import {

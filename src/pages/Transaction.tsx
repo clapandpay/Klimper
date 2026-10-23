@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { commands, events, TransactionRecord } from '@/bindings';
 import { AssetCoin } from '@/components/AssetCoin';
 import Container from '@/components/Container';

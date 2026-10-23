@@ -189,6 +189,16 @@ upstream_ below, so they leave the diff once Sage takes the hiding points.
 
 New files never conflict. Files shared with Sage are kept to the lines listed here.
 
+Each shared file we changed also carries one line near its top, in its own comment syntax:
+`Modified by Klimper (2026): see docs/UPSTREAM.md` (Apache-2.0 §4(b)). That line and the
+tables below together are Klimper's record of its modifications. Files that cannot take a
+comment, or that a tool rewrites, are recorded by the tables alone: the `package.json`s,
+`Cargo.toml`s, `Cargo.lock`, `pnpm-lock.yaml`, `tauri*.conf.json`, the `Info.plist`s and
+entitlements, `project.pbxproj`, the `messages.po` catalogues and the images. A new edit to a
+shared file adds the line; a file that becomes upstream's again loses it. `--diff` also lists
+files that differ from the merged tag only because a hotfix merge brought upstream's own later
+commits (see the table at the top): those are not ours and carry no line.
+
 | File                                                                                                                                         | Ours                                                          | Note                                                                                                                                                                                                                                                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`, `LICENSE`                                                                                                                       | whole file                                                    | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
@@ -237,6 +247,14 @@ behaviour.
 | `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                                                                                                                                                                                     |
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                                                                                                                                                                                 |
 | `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                                                                                                                                                                                |
+
+### Coins (TASK-124)
+
+| File                                               | Ours                                    | Note                                                                                                    |
+| -------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/components/OwnedCoinsCard.tsx`                | imports, an effect, the submit handlers | coins locked in an offer can be combined and split after a warning; the coin pouch shares the selection |
+| `src/components/AmountCell.tsx`                    | one import, the label                   | privacy mode hides the amount from the accessibility label too                                          |
+| `crates/sage-wallet/src/wallet/coin_management.rs` | one test appended                       | combining a coin locked in an offer cancels the offer; a test only, no engine change                    |
 
 ### Phone data and push
 
@@ -348,7 +366,7 @@ kit requires the core at exactly its own version: bump both lines in
 `Cargo.lock`. The xchonnect checkout is still needed for the development relay and
 gateway (`scripts/push-dev.sh`, `docs/xchonnect.md`), not for building Klimper.
 
-Nothing under `crates/`, `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
+Nothing under `crates/` (one test aside, see "Coins"), `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
 plugin reads the Sage database through `sage-database`'s public API and signs through
 `sage-keychain`, the same way `crates/sage/src/endpoints/wallet_connect.rs` does.
 

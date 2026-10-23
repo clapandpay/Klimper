@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import CoinList from '@/components/CoinList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
