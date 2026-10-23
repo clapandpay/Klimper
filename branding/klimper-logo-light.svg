@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Klimper logo (light)</title>
+  <defs>
+    <!-- the four-cusp hole between the coins: four tangent lobes of radius 72 -->
+    <clipPath id="cut"><path clip-rule="evenodd" d="M0 0H1024V1024H0ZM510 470.5A72 72 0 0 1 438 542.5A72 72 0 0 1 510 614.5A72 72 0 0 1 582 542.5A72 72 0 0 1 510 470.5Z"/></clipPath>
+  </defs>
+  <rect id="background" width="1024" height="1024" fill="#F4F0E8"/>
+  <g id="mark" clip-path="url(#cut)">
+    <circle id="blue-coin" cx="656" cy="622" r="172" fill="#3B5AA8"/>
+    <!-- ink coin (cream in dark): its right edge on the blue coin is an arc of radius 172 between the cusps -->
+    <path id="ink-coin" d="M510 531.07A172 172 0 1 0 510 712.93A172 172 0 0 0 510 614.5Z" fill="#1F1D1B"/>
+    <circle id="tan-coin" cx="510" cy="379" r="175" fill="#C69C62"/>
+    <circle id="orange-dot" cx="589" cy="318" r="34.5" fill="#E45739"/>
+  </g>
+</svg>
