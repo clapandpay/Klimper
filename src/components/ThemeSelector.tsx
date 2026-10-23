@@ -155,7 +155,7 @@ export function ThemeSelectorSimple() {
   }
 
   const coreThemes = [lightTheme, darkTheme, thirdTheme].filter(
-    (theme): theme is NonNullable<typeof theme> => theme !== undefined,
+    (theme): theme is NonNullable<typeof theme> => theme != null,
   );
 
   return (
