@@ -18,6 +18,13 @@ const SEEDED_KEY = 'klimper-theme-seeded-v2';
 // the user's choice is kept.
 function seedDefaultTheme() {
   try {
+    // Colorful was removed: an install that had it gets the default again.
+    if (localStorage.getItem(THEME_KEY) === 'colorful') {
+      localStorage.removeItem(SEEDED_KEY);
+    }
+    if (localStorage.getItem(LAST_NON_CORE_KEY) === 'colorful') {
+      localStorage.removeItem(LAST_NON_CORE_KEY);
+    }
     if (localStorage.getItem(SEEDED_KEY)) return;
     const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
     const theme = dark ? 'dark' : 'light';

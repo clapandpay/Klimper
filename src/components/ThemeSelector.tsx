@@ -146,17 +146,12 @@ export function ThemeSelectorSimple() {
   const lightTheme = availableThemes.find((theme) => theme.name === 'light');
   const darkTheme = availableThemes.find((theme) => theme.name === 'dark');
 
-  // Get the third theme: last used non-core theme or colorful as fallback
+  // Get the third theme: the last used non-core theme, if any (Klimper has no Colorful fallback)
   let thirdTheme = null;
   if (lastUsedNonCoreTheme) {
     thirdTheme = availableThemes.find(
       (theme) => theme.name === lastUsedNonCoreTheme,
     );
-  }
-
-  // If no last used non-core theme or it's not available, use colorful as fallback
-  if (!thirdTheme) {
-    thirdTheme = availableThemes.find((theme) => theme.name === 'colorful');
   }
 
   const coreThemes = [lightTheme, darkTheme, thirdTheme].filter(
