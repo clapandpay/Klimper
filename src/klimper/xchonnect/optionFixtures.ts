@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Option prompts as the plugin sends them (clapandpay TASK-140), for the tests and the
 // preview: wallet-kit's `summary.options`, `outputs[].option`, the option asset, and Klimper's
-// own `loan` and `makes_offer` keys.
+// own `loan` and `makes_offer` keys. Wallet-kit writes every amount and Unix time as a decimal
+// string (Xchonnect 0.1.0); Klimper's own `offer` writes its times as numbers.
 
 export type Asset =
   | { type: 'xch' }
@@ -36,7 +37,10 @@ export const USDC = cat('3c');
 /** 13 Nov 2026 14:00 UTC. */
 export const EXPIRY = 1_794_578_400;
 
-export const leg = (asset: Asset, amount: number) => ({ asset, amount });
+export const leg = (asset: Asset, amount: number) => ({
+  asset,
+  amount: String(amount),
+});
 
 export function terms({
   creator = ME,
@@ -51,7 +55,7 @@ export function terms({
 } = {}) {
   return {
     creator_puzzle_hash: creator,
-    expiration_seconds: expiresAt,
+    expiration_seconds: String(expiresAt),
     collateral,
     strike,
   };
@@ -90,7 +94,7 @@ export function clawback(overrides: Record<string, unknown> = {}) {
     creator: ME,
     creator_is_user: true,
     collateral: leg(XCH, 100 * ONE_XCH),
-    unlocks_at_seconds: EXPIRY,
+    unlocks_at_seconds: String(EXPIRY),
     ...overrides,
   };
 }
@@ -119,7 +123,7 @@ export function optionPrompt({
   outputs = [
     {
       asset: XCH,
-      amount: 100 * ONE_XCH,
+      amount: String(100 * ONE_XCH),
       puzzle_hash: 'f1'.repeat(32),
       recipient: null,
       to_user: false,
@@ -127,7 +131,7 @@ export function optionPrompt({
     },
     {
       asset: XCH,
-      amount: 1,
+      amount: '1',
       puzzle_hash: 'eff0'.repeat(16),
       recipient: null,
       to_user: false,
@@ -135,7 +139,7 @@ export function optionPrompt({
     },
     {
       asset: XCH,
-      amount: 4 * ONE_XCH,
+      amount: String(4 * ONE_XCH),
       puzzle_hash: ME,
       recipient: ME,
       to_user: true,
@@ -162,13 +166,13 @@ export function optionPrompt({
     summary: {
       assets: assets.map(([asset, sent, received, conditional = 0]) => ({
         asset,
-        sent,
-        received,
-        conditional_received: conditional,
-        net: received - sent,
+        sent: String(sent),
+        received: String(received),
+        conditional_received: String(conditional),
+        net: String(received - sent),
       })),
-      implied_fee: fee,
-      reserve_fee: fee,
+      implied_fee: String(fee),
+      reserve_fee: String(fee),
       time_locks: {},
       unknown_puzzles: [],
       cost: 1,
@@ -196,7 +200,7 @@ export function optionPrompt({
         : {
             kind,
             kind_verified: true,
-            verified: [{ type: 'fee', amount: fee }],
+            verified: [{ type: 'fee', amount: String(fee) }],
             recipients_complete: true,
           },
     cross_checked: true,
@@ -216,7 +220,7 @@ export function loanRequest(extra: Record<string, unknown> = {}) {
     outputs: [
       {
         asset: XCH,
-        amount: 100 * ONE_XCH,
+        amount: String(100 * ONE_XCH),
         puzzle_hash: 'f1'.repeat(32),
         recipient: null,
         to_user: false,
@@ -224,7 +228,7 @@ export function loanRequest(extra: Record<string, unknown> = {}) {
       },
       {
         asset: XCH,
-        amount: 1,
+        amount: '1',
         puzzle_hash: SETTLEMENT,
         recipient: SETTLEMENT,
         to_user: false,
@@ -268,8 +272,8 @@ export function loanTake(extra: Record<string, unknown> = {}) {
     extra: {
       binding: {
         all_bound: true,
-        bound_payments: [{ asset: XCH, amount: 1 }],
-        bound_received: [{ asset: XCH, amount: 1 }],
+        bound_payments: [{ asset: XCH, amount: '1' }],
+        bound_received: [{ asset: XCH, amount: '1' }],
       },
       trade: {
         offers: 1,
@@ -304,7 +308,7 @@ export function openLoanOffer(extra: Record<string, unknown> = {}) {
     outputs: [
       {
         asset: USDC,
-        amount: 300 * ONE_CAT,
+        amount: String(300 * ONE_CAT),
         puzzle_hash: SETTLEMENT,
         recipient: SETTLEMENT,
         to_user: false,
@@ -321,7 +325,10 @@ export function openLoanOffer(extra: Record<string, unknown> = {}) {
         options: [
           {
             launcher_id: LAUNCHER,
-            terms: terms({ strike: leg(USDC, 315 * ONE_CAT) }),
+            terms: {
+              ...terms({ strike: leg(USDC, 315 * ONE_CAT) }),
+              expiration_seconds: EXPIRY,
+            },
           },
         ],
         asks: [leg(XCH, 100 * ONE_XCH)],

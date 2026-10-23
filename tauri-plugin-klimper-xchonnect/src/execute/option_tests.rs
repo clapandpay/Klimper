@@ -261,7 +261,7 @@ fn assert_collateral_is_locked(run: &Run, amount: u64) {
         .filter(|o| o["option"]["role"] == "collateral")
         .collect();
     assert_eq!(collateral.len(), 1, "{outputs:?}");
-    assert_eq!(collateral[0]["amount"], amount);
+    assert_eq!(collateral[0]["amount"], amount.to_string());
     assert!(collateral[0]["recipient"].is_null());
     assert!(
         outputs
@@ -286,9 +286,12 @@ async fn writing_an_xch_option_with_a_cat_strike_locks_the_collateral_and_settle
     assert_eq!(mint["owner_is_user"], true);
     assert_eq!(mint["funded_by_user"], true);
     assert_eq!(mint["guaranteed"], true);
-    assert_eq!(mint["terms"]["collateral"]["amount"], 1_000);
+    assert_eq!(mint["terms"]["collateral"]["amount"], "1000");
     assert_eq!(mint["terms"]["strike"]["asset"]["type"], "cat");
-    assert_eq!(mint["terms"]["expiration_seconds"], now + TERM);
+    assert_eq!(
+        mint["terms"]["expiration_seconds"],
+        (now + TERM).to_string()
+    );
     assert_eq!(
         run.prompt.as_ref().unwrap()["intent"]["kind_verified"],
         true
@@ -322,7 +325,7 @@ async fn writing_an_xch_option_with_a_cat_strike_locks_the_collateral_and_settle
         .find(|a| a["asset"]["type"] == "xch")
         .unwrap()["net"]
         .clone();
-    assert_eq!(xch_net, -1_008);
+    assert_eq!(xch_net, "-1008");
     // Sage still counts the locked collateral: the writer may claim it back.
     assert_eq!(alice.wallet.db.xch_balance().await.unwrap(), 5_000 - 1 - 7);
 }
@@ -537,7 +540,7 @@ async fn a_sent_option_is_used_by_its_new_holder_before_the_expiry() {
     used.ok();
     let effect = effect(&used, "exercise");
     assert_eq!(effect["by_user"], true);
-    assert_eq!(effect["terms"]["strike"]["amount"], 300);
+    assert_eq!(effect["terms"]["strike"]["amount"], "300");
     let prompt = used.prompt.as_ref().unwrap();
     assert_eq!(prompt["binding"]["all_bound"], true);
     assert_eq!(prompt["intent"]["kind_verified"], true);
@@ -591,7 +594,7 @@ async fn the_writer_claims_the_collateral_back_after_the_expiry() {
     back.ok();
     let clawback = effect(&back, "clawback");
     assert_eq!(clawback["creator_is_user"], true);
-    assert_eq!(clawback["collateral"]["amount"], 1_000);
+    assert_eq!(clawback["collateral"]["amount"], "1000");
     assert_eq!(
         back.prompt.as_ref().unwrap()["intent"]["kind_verified"],
         true
@@ -945,7 +948,7 @@ async fn a_loan_request_is_signed_as_an_offer_and_shows_the_loan() {
     assert_eq!(mint["creator_is_user"], false);
     assert_eq!(mint["owner_is_user"], true);
     assert_eq!(mint["terms"]["creator_puzzle_hash"], hex::encode(lender));
-    assert_eq!(mint["terms"]["strike"]["amount"], 315);
+    assert_eq!(mint["terms"]["strike"]["amount"], "315");
     assert_eq!(mint["launcher_id"], hex::encode(loan.launcher_id));
     assert!(loan.offer.starts_with("offer1"));
 }
@@ -1105,7 +1108,7 @@ async fn an_option_is_used_with_klimpers_fee() {
     used.ok();
     let prompt = used.prompt.as_ref().unwrap();
     assert_eq!(prompt["linking"], "sealed");
-    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    assert_eq!(prompt["summary"]["reserve_fee"], "100");
     settle(&mut alice, &used).await;
 }
 
@@ -1124,7 +1127,7 @@ async fn an_option_is_written_with_klimpers_fee() {
     run.ok();
     let prompt = run.prompt.as_ref().unwrap();
     assert_eq!(prompt["linking"], "sealed");
-    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    assert_eq!(prompt["summary"]["reserve_fee"], "100");
     settle(&mut alice, &run).await;
 }
 
@@ -1188,7 +1191,7 @@ async fn sending_options_is_limited() {
     sent.ok();
     let prompt = sent.prompt.as_ref().unwrap();
     assert_eq!(prompt["linking"], "sealed");
-    assert_eq!(prompt["summary"]["reserve_fee"], 100);
+    assert_eq!(prompt["summary"]["reserve_fee"], "100");
     // The chain takes it.
     alice
         .push_bundle(sent.sent.clone().unwrap())
