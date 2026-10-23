@@ -202,7 +202,7 @@ commits (see the table at the top): those are not ours and carry no line.
 | File                                                                                                                                         | Ours                                                          | Note                                                                                                                                                                                                                                                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`, `LICENSE`                                                                                                                       | whole file                                                    | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
-| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                           |                                                                                                                                                                                                                                                                                                      |
+| `LICENSE-APACHE`, `NOTICE`, `deny.toml`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                    | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/*.yml` (repository root)                         | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                           | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
 | `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                               | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
@@ -393,3 +393,19 @@ but they need Sage's runners and secrets and would publish to npm. Disable them 
 GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours are
 `.github/workflows/green-envelope.yml` and `clapandpay-web.yml`, named `Image …` so that command
 does not touch them.
+
+## After the split
+
+In the monorepo, GitHub does not run `klimper/.github/workflows/`. Once Klimper is its own
+repository, `.github/workflows/build.yml` and `npm.yml` sit where GitHub runs them, on every
+push, and `npm.yml` would publish Sage's packages. They stay in the tree (the sync merges them),
+so disable them in the new repository before its first push of a branch:
+
+```sh
+gh workflow disable Build
+gh workflow disable NPM
+```
+
+The sync script then merges Sage without `-X subtree=klimper` (it works out its folder from
+where it sits), and every path in this document is already relative to the repository root.
+The whole checklist is the monorepo's `docs/OPEN-SOURCE.md`.
