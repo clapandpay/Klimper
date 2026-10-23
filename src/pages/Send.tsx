@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { WalletAddressPicker } from '@/components/WalletAddressPicker';
 import { TokenConfirmation } from '@/components/confirmations/TokenConfirmation';

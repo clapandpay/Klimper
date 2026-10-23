@@ -4,8 +4,7 @@
 brings the wallet from the Green Envelope page into Klimper. A passkey belongs to a website, so
 the face or finger check happens on that page. This is handoff **version 2** (clapandpay
 TASK-129); the protocol is `src/lib/clapandpayHandoff.ts`, a byte-for-byte copy of
-`green-envelope/packages/handoff/src/receiver.ts`, and its background is the wiki's
-`architecture/passkey-handoff.md`.
+`green-envelope/packages/handoff/src/receiver.ts`.
 
 ## How it goes
 

@@ -2,7 +2,7 @@
 
 Klimper answers CHIP-0002 signing requests from outside websites over
 [Xchonnect](https://github.com/maximedogawa/xchonnect). Recorded as clapandpay
-**decision-008**; the wiki page is `architecture/xchonnect.md`. Normative behaviour is
+**decision-008**. Normative behaviour is
 xchonnect's `docs/spec/xchonnect-spec.md`; the wallet side is `docs/wallet-integration.md`.
 
 Everything lives in `tauri-plugin-klimper-xchonnect/` and `src/klimper/`, behind
@@ -130,7 +130,7 @@ What keeps a website's messages flowing when the browser and Klimper take turns 
 
 ## One decision per request; Klimper broadcasts
 
-Decided 2026-10-05 (xchonnect-wiki `04-wallet-side-execution.md`): spec 11.1 item 4 is one
+Decided 2026-10-05: spec 11.1 item 4 is one
 authentication per signing **request**, covering all of its signatures. The earlier
 desktop reading — one confirmation per signature — asked 1 + 5 times for a five-coin send
 and is gone.

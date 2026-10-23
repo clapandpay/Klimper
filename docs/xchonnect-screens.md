@@ -26,7 +26,7 @@ command surface is `src/klimper/xchonnect/xchonnect.ts`.
    are not evidence and are not rendered — the one exception is the message of a
    `signMessage` request, which _is_ the object being signed and is shown inside a labelled
    quoted block, never as an amount or a recipient.
-4. **One decision per request** (xchonnect-wiki 04). Approving answers the whole request:
+4. **One decision per request**. Approving answers the whole request:
    every signature it needs is made after one unlock, and a request Klimper broadcasts
    (`submit_coin_spends`) is sent by Klimper — the button says "Approve and send".
 

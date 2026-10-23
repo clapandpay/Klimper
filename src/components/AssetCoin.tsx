@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { Amount, Asset, AssetKind } from '@/bindings';
 import { AssetIcon } from '@/components/AssetIcon';
 import { CopyButton } from '@/components/CopyButton';

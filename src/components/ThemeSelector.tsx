@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { hasTag } from '@/lib/themes';
 import { Trans } from '@lingui/react/macro';
 import { Loader2 } from 'lucide-react';

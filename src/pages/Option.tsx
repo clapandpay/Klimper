@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { commands, events, OfferRecord, OptionRecord } from '@/bindings';
 import { AddressItem } from '@/components/AddressItem';
 import { AssetCoin } from '@/components/AssetCoin';

@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { mempoolCoinUrl } from '@/klimper/explorer';
 import { offersEnabled } from '@/lib/features';
 import { formatTimestamp, fromMojos } from '@/lib/utils';

@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Licences of the Rust dependencies: `cargo deny --locked check licenses`.
+# The allowlist is what Cargo.lock needs (from `cargo metadata`), nothing more: a dependency
+# under any other licence (GPL, AGPL, SSPL, ...) fails the check until someone looks at it.
+# Advisories are checked separately (`cargo audit`), not here.
+
+[graph]
+all-features = true
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception", # target-lexicon
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",          # icu_*, zerovec and friends, via url and idna
+  "MPL-2.0",              # cssparser, selectors (Tauri), colored, option-ext: file-level copyleft
+  "CC0-1.0",              # bip39, bitcoin_hashes, tiny-keccak
+  "BSL-1.0",              # clipboard-win, error-code
+  "CDLA-Permissive-2.0",  # webpki-roots (the Mozilla root list)
+  "bzip2-1.0.6",          # libbz2-rs-sys
+  "NCSA",                 # libfuzzer-sys
+]
+
+# Our own crates are AGPL-3.0-or-later and never published (`publish = []`).
+[licenses.private]
+ignore = true
+
+# Sage's workspace crates without a `license` field: Sage is Apache-2.0 (LICENSE-APACHE).
+[[licenses.clarify]]
+crate = "sage-apps"
+expression = "Apache-2.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "tauri-plugin-sage"
+expression = "Apache-2.0"
+license-files = []

@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import SafeAreaView from '@/components/SafeAreaView';
 import { WalletCard } from '@/components/WalletCard';
 import { Button } from '@/components/ui/button';

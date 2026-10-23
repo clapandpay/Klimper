@@ -189,10 +189,20 @@ upstream_ below, so they leave the diff once Sage takes the hiding points.
 
 New files never conflict. Files shared with Sage are kept to the lines listed here.
 
+Each shared file we changed also carries one line near its top, in its own comment syntax:
+`Modified by Klimper (2026): see docs/UPSTREAM.md` (Apache-2.0 §4(b)). That line and the
+tables below together are Klimper's record of its modifications. Files that cannot take a
+comment, or that a tool rewrites, are recorded by the tables alone: the `package.json`s,
+`Cargo.toml`s, `Cargo.lock`, `pnpm-lock.yaml`, `tauri*.conf.json`, the `Info.plist`s and
+entitlements, `project.pbxproj`, the `messages.po` catalogues and the images. A new edit to a
+shared file adds the line; a file that becomes upstream's again loses it. `--diff` also lists
+files that differ from the merged tag only because a hotfix merge brought upstream's own later
+commits (see the table at the top): those are not ours and carry no line.
+
 | File                                                                                                                                         | Ours                                                          | Note                                                                                                                                                                                                                                                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`, `LICENSE`                                                                                                                       | whole file                                                    | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
-| `LICENSE-APACHE`, `NOTICE`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                                 | new                                                           |                                                                                                                                                                                                                                                                                                      |
+| `LICENSE-APACHE`, `NOTICE`, `deny.toml`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                    | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/*.yml` (repository root)                         | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                           | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
 | `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                               | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
@@ -237,6 +247,14 @@ behaviour.
 | `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                                                                                                                                                                                     |
 | `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                                                                                                                                                                                 |
 | `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                                                                                                                                                                                |
+
+### Coins (TASK-124)
+
+| File                                               | Ours                                    | Note                                                                                                    |
+| -------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/components/OwnedCoinsCard.tsx`                | imports, an effect, the submit handlers | coins locked in an offer can be combined and split after a warning; the coin pouch shares the selection |
+| `src/components/AmountCell.tsx`                    | one import, the label                   | privacy mode hides the amount from the accessibility label too                                          |
+| `crates/sage-wallet/src/wallet/coin_management.rs` | one test appended                       | combining a coin locked in an offer cancels the offer; a test only, no engine change                    |
 
 ### Phone data and push
 
@@ -348,7 +366,7 @@ kit requires the core at exactly its own version: bump both lines in
 `Cargo.lock`. The xchonnect checkout is still needed for the development relay and
 gateway (`scripts/push-dev.sh`, `docs/xchonnect.md`), not for building Klimper.
 
-Nothing under `crates/`, `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
+Nothing under `crates/` (one test aside, see "Coins"), `crates/sage-apps` or `packages/sage-app-sdk` is touched. The
 plugin reads the Sage database through `sage-database`'s public API and signs through
 `sage-keychain`, the same way `crates/sage/src/endpoints/wallet_connect.rs` does.
 
@@ -375,3 +393,19 @@ but they need Sage's runners and secrets and would publish to npm. Disable them 
 GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours are
 `.github/workflows/green-envelope.yml` and `clapandpay-web.yml`, named `Image …` so that command
 does not touch them.
+
+## After the split
+
+In the monorepo, GitHub does not run `klimper/.github/workflows/`. Once Klimper is its own
+repository, `.github/workflows/build.yml` and `npm.yml` sit where GitHub runs them, on every
+push, and `npm.yml` would publish Sage's packages. They stay in the tree (the sync merges them),
+so disable them in the new repository before its first push of a branch:
+
+```sh
+gh workflow disable Build
+gh workflow disable NPM
+```
+
+The sync script then merges Sage without `-X subtree=klimper` (it works out its folder from
+where it sits), and every path in this document is already relative to the repository root.
+The whole checklist is the monorepo's `docs/OPEN-SOURCE.md`.
