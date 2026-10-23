@@ -542,6 +542,10 @@ fn run(
         .map(|()| result)
     });
     let outcome = outcome.map_err(explain);
+    // An agent's offer is kept in the wallet (TASK-144): its coins are locked now.
+    if outcome.is_ok() && canonical_method(&meta.method) == execute::CHIA_CREATE_OFFER {
+        approvals.coins_changed();
+    }
     // A transaction Klimper broadcast: the webview shows where to look it up.
     if let Ok(result) = &outcome
         && matches!(

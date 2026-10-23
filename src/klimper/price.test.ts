@@ -45,7 +45,7 @@ describe('prices on mainnet', () => {
   });
 
   it('come from nodexch, and nothing else is asked', async () => {
-    const { deps, calls } = answers({ 'nodexch.space': nodexch });
+    const { deps, calls } = answers({ 'nodexch.com': nodexch });
     const prices = await fetchPrices(false, deps);
     expect(prices.source).toBe('nodexch');
     expect(prices.xchUsd).toBe(10);
@@ -57,7 +57,7 @@ describe('prices on mainnet', () => {
 
   it('fall back to CoinGecko and dexie while nodexch does not answer, warning once', async () => {
     const { deps, calls } = answers({
-      'nodexch.space': new Error('ECONNREFUSED'),
+      nodexch: new Error('ECONNREFUSED'),
       coingecko: coingecko,
       'dexie.space': dexie,
     });
@@ -72,7 +72,7 @@ describe('prices on mainnet', () => {
 
   it('treat a malformed nodexch answer as no answer', async () => {
     const { deps } = answers({
-      'nodexch.space': { xch: { usd: 'ten' }, cats: {} },
+      nodexch: { xch: { usd: 'ten' }, cats: {} },
       coingecko: coingecko,
       'dexie.space': dexie,
     });
@@ -86,7 +86,7 @@ describe('prices on mainnet', () => {
   });
 
   it('keep the last prices when everything fails', async () => {
-    const good = answers({ 'nodexch.space': nodexch });
+    const good = answers({ 'nodexch.com': nodexch });
     await fetchPrices(false, good.deps);
     const bad = answers({});
     const prices = await fetchPrices(false, bad.deps);
