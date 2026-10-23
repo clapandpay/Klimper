@@ -11,12 +11,12 @@
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
 
-|                     |                                                    |
-| ------------------- | -------------------------------------------------- |
-| Merged version      | **v0.13.1**, merged 2026-09-20                     |
-| Hotfix merges since | none                                               |
-| Last checked        | 2026-10-08: `upstream/main` = v0.13.1, nothing new |
-| Klimper version     | **0.2.4**, its own (`scripts/set-version.sh`)      |
+|                     |                                                                                                                                                                                                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Merged version      | **v0.13.1**, merged 2026-09-20                                                                                                                                                                                                                                                                                       |
+| Hotfix merges since | 2026-10-23: `upstream/main` up to `63291148` (#888 sandbox tooltips, #893 WalletConnect `chia_updateCat`), an early merge of non-security commits by owner decision, before v0.13.2. `chia_updateCat` is unreachable in Klimper: WalletConnect is off (`VITE_DISABLE_WALLETCONNECT`) and Xchonnect does not grant it |
+| Last checked        | 2026-10-23: `upstream/main` = `63291148` (v0.13.1 + 5), merged                                                                                                                                                                                                                                                       |
+| Klimper version     | **0.2.6**, its own (`scripts/set-version.sh`)                                                                                                                                                                                                                                                                        |
 
 **Klimper numbers its own releases; the version is not Sage's** (TASK-106).
 `scripts/set-version.sh <major.minor.patch>` writes it to
