@@ -10,9 +10,8 @@ A minimal, fun, non-custodial Chia wallet for the phone, built on the
 everything else arrives as an app you install inside the wallet, with capabilities you grant.
 
 Status: Sage v0.13.0 merged as the engine (2026-09-17); the desktop build runs as Klimper, still with
-Sage's screens and icons. The vision is in
-[clap-and-pay-wiki](https://github.com/maximedogawa/clap-and-pay-wiki) (`product/vision.md`); tasks in
-[clapandpay-backlog](https://github.com/maximedogawa/clapandpay-backlog). Milestone 1 turns this
+Sage's screens and icons. The vision and the
+tasks are kept in a private wiki and backlog for now. Milestone 1 turns this
 fork into the wallet core for iOS, shipped as Klimper.
 
 ## The stack
@@ -21,15 +20,15 @@ fork into the wallet core for iOS, shipped as Klimper.
 | ---------------------------- | ----------------------------------------------------------------------------- |
 | Wallet                       | Klimper (this folder of the clapandpay monorepo)                              |
 | Explorer, also an in-app app | [mempool-xch](https://github.com/maximedogawa/mempool-xch) · mempoolxch.space |
-| Node provider                | [nodexch](https://github.com/maximedogawa/nodexch) · nodexch.com              |
+| Node provider                | nodexch · nodexch.com                                                         |
 
 ## How this repo will be shaped
 
 Fork of Sage (Apache-2.0), `upstream` merged at every Sage release. Our differences: a features
 config that hides offers, swaps, minting, options and DIDs from the GUI, a theme package, branding
 and identifiers, and first-party apps in their own repos. The app bridge is never changed, so every
-Sage app works here and every Klimper app works in Sage. Details: wiki
-`architecture/fork-strategy.md`; what we changed and how upstream is merged: [`docs/UPSTREAM.md`](docs/UPSTREAM.md).
+Sage app works here and every Klimper app works in Sage. What we changed and how
+upstream is merged: [`docs/UPSTREAM.md`](docs/UPSTREAM.md).
 
 ## Build
 

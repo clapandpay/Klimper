@@ -104,6 +104,36 @@ describe('readPrompt', () => {
     expect(needsSecondConfirmation(view)).toBe(false);
   });
 
+  it('reads time locks and amounts sent as decimal strings (Xchonnect 0.1.0)', () => {
+    const view = readPrompt({
+      ...simpleSend,
+      summary: {
+        ...simpleSend.summary,
+        assets: [
+          {
+            asset: { type: 'xch' },
+            sent: '1500000000000',
+            received: '0',
+            conditional_received: '0',
+            net: '-1500000000000',
+          },
+        ],
+        implied_fee: '500000',
+        reserve_fee: '0',
+        time_locks: {
+          ...simpleSend.summary.time_locks,
+          not_before_seconds: '1794578400',
+          expires_seconds: '1794582000',
+        },
+      },
+    });
+    expect(view.kind).toBe('spend');
+    if (view.kind !== 'spend') return;
+    expect(formatAmount(view.assets[0].net, 12)).toBe('-1.5');
+    expect(view.timeLocks.notBeforeSeconds).toBe(1_794_578_400);
+    expect(view.timeLocks.expiresSeconds).toBe(1_794_582_000);
+  });
+
   it('keeps a conditional receipt out of the net effect', () => {
     // The rule this whole module exists for: a receipt that depends on somebody else is
     // not income, and must never be folded into a figure the user reads as one.
@@ -578,6 +608,27 @@ describe('option keys', () => {
     );
   });
 
+  it('reads the expiry and amounts as Xchonnect 0.1.0 writes them, in strings', () => {
+    const terms = f.terms();
+    const view = spend(
+      withOptions([
+        f.mint({
+          terms: {
+            ...terms,
+            expiration_seconds: String(f.EXPIRY),
+            collateral: { ...terms.collateral, amount: String(100 * f.ONE_XCH) },
+          },
+        }),
+      ]),
+    );
+    const [mint] = view.options;
+    if (mint?.action !== 'mint') throw new Error('not a mint');
+    expect(mint.terms.expiresAt).toBe(f.EXPIRY);
+    expect(mint.terms.collateral.amount.toString()).toBe(
+      String(100 * f.ONE_XCH),
+    );
+  });
+
   it('reads every action', () => {
     const view = spend(
       withOptions([f.mint(), f.exercise(), f.clawback(), f.transfer()]),
@@ -612,7 +663,7 @@ describe('option keys', () => {
     unreadable(withOptions([{ ...f.mint(), terms: null }]));
     unreadable(
       withOptions([
-        f.mint({ terms: { ...f.terms(), expiration_seconds: '1794578400' } }),
+        f.mint({ terms: { ...f.terms(), expiration_seconds: '17945784e2' } }),
       ]),
     );
     unreadable(

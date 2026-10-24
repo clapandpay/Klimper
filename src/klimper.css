@@ -5,7 +5,7 @@
  * Klimper Coins (docs/design-guide.md). Colours, radii, buttons and the coins backdrop live in
  * src/themes/klimper-{light,dark}/theme.json; this file holds what a theme.json cannot say.
  * The Klimper themes are named "light" and "dark", so they replace Sage's core themes of the same
- * name; every rule is scoped to them, so any other Sage theme (Colorful, XCH, …) stays unchanged,
+ * name; every rule is scoped to them, so any other Sage theme (Glass, XCH, …) stays unchanged,
  * and no shared component is edited. Selectors lean on structure and Sage's own class hooks, never
  * on translated text.
  */

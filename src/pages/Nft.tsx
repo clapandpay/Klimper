@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { AddressItem } from '@/components/AddressItem';
 import Container from '@/components/Container';
 import Header from '@/components/Header';

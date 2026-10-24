@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { Amount, AssetKind } from '@/bindings';
 import { fromMojos } from '@/lib/utils';
 import { useMaskAmounts } from '@/klimper/privacy';

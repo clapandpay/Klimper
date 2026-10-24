@@ -462,7 +462,7 @@ fn an_approved_spend_is_signed_and_recorded() {
     assert!(matches!(prompts[0].kind, ApprovalKind::Request { .. }));
     let ApprovalKind::Request { ref prompt } = prompts[0].kind;
     let shown = prompt.to_string();
-    assert!(shown.contains("\"net\":-500"), "{shown}");
+    assert!(shown.contains("\"net\":\"-500\""), "{shown}");
 
     // The loss was committed to the persistent limit store.
     let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
@@ -633,10 +633,10 @@ fn an_unbound_partial_spend_is_refused_without_a_prompt() {
     let (sig_alice, prompt_alice) = sign_as(bound.alice.clone());
     let (sig_bob, prompt_bob) = sign_as(bound.bob.clone());
     assert!(
-        prompt_alice.contains("\"all_bound\":true") && prompt_alice.contains("\"amount\":500"),
+        prompt_alice.contains("\"all_bound\":true") && prompt_alice.contains("\"amount\":\"500\""),
         "{prompt_alice}"
     );
-    assert!(prompt_bob.contains("\"amount\":1000"), "{prompt_bob}");
+    assert!(prompt_bob.contains("\"amount\":\"1000\""), "{prompt_bob}");
     let mut aggregate = sig_alice;
     aggregate.aggregate(&sig_bob);
     sim.new_transaction(SpendBundle::new(bound.spends, aggregate))

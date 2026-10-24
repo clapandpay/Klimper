@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 // ── Private base helpers ──────────────────────────────────────────────────────
 
 function dexieBrowseBase(isTestnet: boolean): string {

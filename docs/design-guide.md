@@ -128,6 +128,7 @@ screen rather than more CSS.
 
 1. Replace `src/icon-light.png` (the logo on the light canvas; square, at least 1024px, opaque) and
    `src/icon-dark.png` (the same on the dark canvas). These two are the logo inside the app.
+   The vector sources are in `branding/` (its README says how each raster is made).
 2. Run `scripts/update-logo.sh` from `klimper/`. It rebuilds every app icon from
    `src/icon-light.png`: full bleed for iOS and Android, the macOS rounded square for the desktop,
    and the Android launcher background from the logo's corner colour. Pass another file to use

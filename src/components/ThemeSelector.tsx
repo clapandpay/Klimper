@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { hasTag } from '@/lib/themes';
 import { Trans } from '@lingui/react/macro';
 import { Loader2 } from 'lucide-react';
@@ -146,7 +147,7 @@ export function ThemeSelectorSimple() {
   const lightTheme = availableThemes.find((theme) => theme.name === 'light');
   const darkTheme = availableThemes.find((theme) => theme.name === 'dark');
 
-  // Get the third theme: last used non-core theme or colorful as fallback
+  // Get the third theme: the last used non-core theme, if any (Klimper has no Colorful fallback)
   let thirdTheme = null;
   if (lastUsedNonCoreTheme) {
     thirdTheme = availableThemes.find(
@@ -154,13 +155,8 @@ export function ThemeSelectorSimple() {
     );
   }
 
-  // If no last used non-core theme or it's not available, use colorful as fallback
-  if (!thirdTheme) {
-    thirdTheme = availableThemes.find((theme) => theme.name === 'colorful');
-  }
-
   const coreThemes = [lightTheme, darkTheme, thirdTheme].filter(
-    (theme): theme is NonNullable<typeof theme> => theme !== undefined,
+    (theme): theme is NonNullable<typeof theme> => theme != null,
   );
 
   return (

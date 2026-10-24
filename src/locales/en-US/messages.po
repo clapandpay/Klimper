@@ -720,7 +720,7 @@ msgstr "and {hidden} more"
 msgid "Answered"
 msgstr "Answered"
 
-#: src/contexts/WalletConnectContext.tsx:935
+#: src/contexts/WalletConnectContext.tsx:1013
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:190
 msgid "Approve"
 msgstr "Approve"
@@ -729,7 +729,7 @@ msgstr "Approve"
 msgid "Approve and send"
 msgstr "Approve and send"
 
-#: src/contexts/WalletConnectContext.tsx:925
+#: src/contexts/WalletConnectContext.tsx:1003
 msgid "Approving"
 msgstr "Approving"
 
@@ -2103,7 +2103,7 @@ msgid "Each coin is one disc: the bigger, the more it holds. A payment spends wh
 msgstr "Each coin is one disc: the bigger, the more it holds. A payment spends whole coins and gives change back as a new coin. Tilt the phone to move them, tap coins to select them, then split or combine them below. A coin with a lock is in an offer: combining or splitting it cancels the offer. A faded coin is being spent."
 
 #: src/components/TokenCard.tsx:169
-#: src/contexts/WalletConnectContext.tsx:446
+#: src/contexts/WalletConnectContext.tsx:447
 msgid "Edit"
 msgstr "Edit"
 
@@ -2486,8 +2486,8 @@ msgstr "Featured Themes"
 
 #: src/components/AdvancedTransactionSummary.tsx:89
 #: src/components/ConfirmationDialog.tsx:453
-#: src/contexts/WalletConnectContext.tsx:426
-#: src/contexts/WalletConnectContext.tsx:466
+#: src/contexts/WalletConnectContext.tsx:427
+#: src/contexts/WalletConnectContext.tsx:467
 msgid "Fee"
 msgstr "Fee"
 
@@ -3223,7 +3223,7 @@ msgstr "Loading Collection..."
 msgid "Loading NFT details..."
 msgstr "Loading NFT details..."
 
-#: src/contexts/WalletConnectContext.tsx:610
+#: src/contexts/WalletConnectContext.tsx:611
 msgid "Loading offer details..."
 msgstr "Loading offer details..."
 
@@ -4805,7 +4805,7 @@ msgstr "Requests"
 msgid "Require biometrics for sensitive actions"
 msgstr "Require biometrics for sensitive actions"
 
-#: src/contexts/WalletConnectContext.tsx:484
+#: src/contexts/WalletConnectContext.tsx:485
 msgid "Reset"
 msgstr "Reset"
 
@@ -5680,7 +5680,7 @@ msgstr "Submit"
 msgid "Submitting"
 msgstr "Submitting"
 
-#: src/contexts/WalletConnectContext.tsx:428
+#: src/contexts/WalletConnectContext.tsx:429
 msgid "suggested by dApp"
 msgstr "suggested by dApp"
 
@@ -6352,7 +6352,7 @@ msgstr "This signature would be valid in any spend, not just this one. Reject it
 msgid "This spend uses a contract Klimper cannot read"
 msgstr "This spend uses a contract Klimper cannot read"
 
-#: src/walletconnect/handler.ts:51
+#: src/walletconnect/handler.ts:52
 msgid "This wallet is read-only and cannot sign, so {command} is not available"
 msgstr "This wallet is read-only and cannot sign, so {command} is not available"
 
@@ -7047,7 +7047,7 @@ msgstr "Use 24 words"
 msgid "Use an option"
 msgstr "Use an option"
 
-#: src/contexts/WalletConnectContext.tsx:455
+#: src/contexts/WalletConnectContext.tsx:456
 msgid "Use default"
 msgstr "Use default"
 
