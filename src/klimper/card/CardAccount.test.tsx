@@ -8,6 +8,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Account, CardSummary } from './card';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
+const privacy = vi.hoisted(() => ({ on: false }));
+vi.mock('../privacy', () => ({
+  useMaskAmounts: () => privacy.on,
+  Masked: () => <span>•••••</span>,
+}));
 
 const api = vi.hoisted(() => ({
   account: vi.fn(),
@@ -96,6 +101,20 @@ it('shows the balance, the card and the payments', async () => {
   expect(screen.getByTestId('card-safe-address').textContent).toMatch(
     /^0x5afe/i,
   );
+});
+
+it('hides the amounts in privacy mode', async () => {
+  privacy.on = true;
+  api.account.mockResolvedValue(
+    account([plastic('active')], { pending: '5.00' }),
+  );
+  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  const spendable = await screen.findByTestId('card-spendable');
+  expect(spendable.textContent).not.toContain('123.45');
+  expect(screen.queryByTestId('card-pending')).toBeNull();
+  expect(document.body.textContent).not.toContain('4.20');
+  expect(screen.getByText('Bakery Example')).toBeTruthy();
+  privacy.on = false;
 });
 
 it('freezes at once', async () => {

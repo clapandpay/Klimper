@@ -2,7 +2,8 @@
 // The card account (TASK-151): is the card usable, how much can be spent, what was paid
 // where. Read from Gnosis Pay while the screen is open, every few seconds, and never kept.
 //
-// Freezing is the safe direction and needs no confirmation. Unfreezing asks once.
+// Freezing is the safe direction and needs no confirmation. Unfreezing asks once. Privacy
+// mode hides the amounts here as everywhere else in the wallet.
 
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +25,7 @@ import {
   isCardError,
   Payment,
 } from './card';
+import { Masked, useMaskAmounts } from '../privacy';
 import { CardOnboarding } from './CardOnboarding';
 
 export const ACCOUNT_POLL_MS = 15000;
@@ -123,6 +125,7 @@ function money(amount: string, currency: string) {
 function Balance({ account }: { readonly account: Account }) {
   const pending = Number(account.pending) > 0;
   const pendingText = money(account.pending, account.currency);
+  const mask = useMaskAmounts();
   return (
     <Card>
       <CardHeader>
@@ -130,9 +133,9 @@ function Balance({ account }: { readonly account: Account }) {
           <Trans>You can spend</Trans>
         </CardDescription>
         <CardTitle className='text-3xl' data-testid='card-spendable'>
-          {money(account.spendable, account.currency)}
+          {mask ? <Masked /> : money(account.spendable, account.currency)}
         </CardTitle>
-        {pending && (
+        {pending && !mask && (
           <div
             className='text-sm text-muted-foreground'
             data-testid='card-pending'
@@ -276,6 +279,7 @@ function Payments({
   readonly payments: Payment[];
   readonly currency: string;
 }) {
+  const mask = useMaskAmounts();
   return (
     <Card>
       <CardHeader>
@@ -309,7 +313,13 @@ function Payments({
                 <div
                   className={`shrink-0 text-sm tabular-nums ${p.status === 'declined' ? 'text-muted-foreground line-through' : ''}`}
                 >
-                  {p.amount ? money(p.amount, p.currency ?? currency) : ''}
+                  {mask ? (
+                    <Masked />
+                  ) : p.amount ? (
+                    money(p.amount, p.currency ?? currency)
+                  ) : (
+                    ''
+                  )}
                 </div>
               </li>
             ))}

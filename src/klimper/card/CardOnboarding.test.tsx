@@ -170,7 +170,7 @@ it('opens the account, verifies the phone, then shows the account', async () => 
   fireEvent.click(await screen.findByTestId('card-create-account'));
   fireEvent.change(
     await screen.findByLabelText('Phone, with the country code'),
-    { target: { value: '+43 123 4567890' } },
+    { target: { value: '+1 555 0100 123' } },
   );
   fireEvent.click(screen.getByTestId('card-send-phone-code'));
   fireEvent.change(
@@ -179,7 +179,7 @@ it('opens the account, verifies the phone, then shows the account', async () => 
   );
   fireEvent.click(screen.getByTestId('card-verify-phone'));
   await screen.findByTestId('card-account');
-  expect(api.sendPhoneCode).toHaveBeenCalledWith('+43 123 4567890');
+  expect(api.sendPhoneCode).toHaveBeenCalledWith('+1 555 0100 123');
   expect(api.verifyPhone).toHaveBeenCalledWith('123456');
 });
 
