@@ -30,8 +30,20 @@ sha2 = "0.10.9"
 hmac = "0.12.1"
 zeroize = "1.8.2"
 
+# The fake Gnosis Pay server (src/fake.rs), for the tests and for running the screens
+# locally: `--features fake --example fake-gnosis-pay`. Never in an app build.
+axum = { workspace = true, optional = true }
+
+[features]
+fake = ["dep:axum", "tokio/net", "tokio/rt-multi-thread", "tokio/macros", "tokio/signal"]
+
+[[example]]
+name = "fake-gnosis-pay"
+required-features = ["fake"]
+
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }
+axum = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 
 [build-dependencies]
 tauri-plugin = { workspace = true, features = ["build"] }

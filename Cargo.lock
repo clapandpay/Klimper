@@ -8369,6 +8369,7 @@ dependencies = [
 name = "tauri-plugin-klimper-card"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "bip39",
  "hex",
  "hmac 0.12.1",

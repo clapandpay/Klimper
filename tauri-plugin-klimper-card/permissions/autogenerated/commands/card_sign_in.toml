@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-sign-in"
+description = "Enables the card_sign_in command without any pre-configured scope."
+commands.allow = ["card_sign_in"]
+
+[[permission]]
+identifier = "deny-card-sign-in"
+description = "Denies the card_sign_in command without any pre-configured scope."
+commands.deny = ["card_sign_in"]

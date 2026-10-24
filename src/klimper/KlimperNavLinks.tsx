@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Klimper's own entries in the main navigation: Scan, and the connected websites.
+// Klimper's own entries in the main navigation: Scan, the connected websites, and the card.
 //
 // `Nav.tsx` is shared with upstream Sage, so it carries one element and no condition;
 // every flag is checked here (`docs/UPSTREAM.md`). Connecting a website used to be
@@ -11,9 +11,10 @@
 // background, is one tap away from every screen.
 
 import { NavLink } from '@/components/NavLink';
-import { scanEnabled, xchonnectEnabled } from '@/lib/features';
+import { cardEnabled, scanEnabled, xchonnectEnabled } from '@/lib/features';
 import { Plural, Trans } from '@lingui/react/macro';
-import { Globe, ScanLine } from 'lucide-react';
+import { CreditCard, Globe, ScanLine } from 'lucide-react';
+import { CARD_ROUTE } from './card/card';
 import { SCANNER_ROUTE } from './Scanner';
 import { useXchonnectApprovals } from './xchonnect/useXchonnectApprovals';
 import { XCHONNECT_ROUTES } from './xchonnect/xchonnectLinkHandoff';
@@ -40,6 +41,15 @@ export function KlimperNavLinks({
       )}
       {xchonnectEnabled && (
         <WebsitesLink isCollapsed={isCollapsed} className={className} />
+      )}
+      {cardEnabled && (
+        <NavLink
+          url={CARD_ROUTE}
+          isCollapsed={isCollapsed}
+          message={<Trans>Card</Trans>}
+        >
+          <CreditCard className={className} aria-hidden='true' />
+        </NavLink>
       )}
     </>
   );
