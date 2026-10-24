@@ -18,6 +18,7 @@
     "build:builtin-static": "node scripts/build-builtin-static.mjs",
     "build:builtin-apps": "pnpm run generate:app-docs && pnpm run build:packages && pnpm run build:system-apps && pnpm run build:builtin-static",
     "build:frontend": "tsc -b && vite build",
+    "build:desktop": "pnpm run build:builtin-apps && tsc -b && vite build --mode desktop",
     "build": "pnpm run build:builtin-apps && pnpm run build:frontend",
     "tauri:dev": "node scripts/tauri-dev.mjs",
     "tauri:build": "pnpm build && tauri build",
