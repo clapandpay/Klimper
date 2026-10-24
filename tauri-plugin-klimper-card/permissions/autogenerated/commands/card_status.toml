@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-status"
+description = "Enables the card_status command without any pre-configured scope."
+commands.allow = ["card_status"]
+
+[[permission]]
+identifier = "deny-card-status"
+description = "Denies the card_status command without any pre-configured scope."
+commands.deny = ["card_status"]

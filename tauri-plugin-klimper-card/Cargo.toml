@@ -1,0 +1,37 @@
+[package]
+name = "tauri-plugin-klimper-card"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Klimper: a payment card through Gnosis Pay, signed by a key derived from the wallet's own recovery words."
+publish = false
+links = "tauri-plugin-klimper-card"
+
+[lints]
+workspace = true
+
+[dependencies]
+sage = { workspace = true }
+tauri = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+reqwest = { workspace = true, features = ["rustls-tls", "json"] }
+hex = { workspace = true }
+tracing = { workspace = true }
+bip39 = { workspace = true }
+
+# The card signer (src/evm.rs). The same versions Cargo.lock already holds for the rest of
+# the workspace, so the plugin adds no new crate to the build.
+k256 = { version = "0.13.4", features = ["ecdsa", "arithmetic"] }
+sha3 = "0.10.8"
+sha2 = "0.10.9"
+hmac = "0.12.1"
+zeroize = "1.8.2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }

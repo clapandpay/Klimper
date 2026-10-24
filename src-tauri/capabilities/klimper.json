@@ -6,6 +6,7 @@
   "permissions": [
     "klimper-xchonnect:default",
     "klimper-jingle:default",
+    "klimper-card:default",
     "deep-link:default",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",

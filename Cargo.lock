@@ -7067,6 +7067,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-klimper-card",
  "tauri-plugin-klimper-jingle",
  "tauri-plugin-klimper-storage",
  "tauri-plugin-klimper-xchonnect",
@@ -8362,6 +8363,28 @@ dependencies = [
  "thiserror 2.0.17",
  "toml 1.1.0+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-klimper-card"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "hex",
+ "hmac 0.12.1",
+ "k256",
+ "reqwest 0.12.24",
+ "sage",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sha3",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
