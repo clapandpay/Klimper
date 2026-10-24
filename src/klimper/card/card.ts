@@ -53,10 +53,63 @@ export function cardErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export interface Term {
+  type: string;
+  version: string;
+  name: string;
+  url: string | null;
+  accepted: boolean;
+}
+
+export interface Question {
+  id: string;
+  question: string;
+  answers: string[];
+}
+
+/** The one thing to do next in Gnosis Pay's onboarding. */
+export type Step =
+  | { step: 'register' }
+  | { step: 'acceptTerms'; terms: Term[] }
+  | { step: 'waitingKyc' }
+  /** `url` is an https link to Sumsub, or null when Gnosis Pay sent none (or another). */
+  | { step: 'completeKyc'; url: string | null; resubmission: boolean }
+  | { step: 'kycReview' }
+  | { step: 'sourceOfFunds'; questions: Question[] }
+  | { step: 'createAccount' }
+  | { step: 'waitingAccount' }
+  | { step: 'verifyPhone' }
+  | { step: 'completed' }
+  | { step: 'rejected' }
+  | { step: 'unknown'; status: string };
+
+/** Steps where Gnosis Pay is working and the screen polls. */
+export const WAITING_STEPS: ReadonlySet<Step['step']> = new Set([
+  'waitingKyc',
+  'completeKyc',
+  'kycReview',
+  'waitingAccount',
+  'unknown',
+]);
+
 export const card = {
   status: () => call<CardStatus>('card_status'),
   signIn: () => call<null>('card_sign_in'),
   signOut: () => call<null>('card_sign_out'),
+  onboarding: () => call<Step>('card_onboarding'),
+  /** Resolves `false` when this card programme needs no e-mail code. */
+  sendEmailCode: (email: string) =>
+    call<boolean>('card_send_email_code', { email }),
+  register: (email: string, code: string | null) =>
+    call<null>('card_register', { email, code }),
+  acceptTerms: (terms: Term[]) => call<null>('card_accept_terms', { terms }),
+  answerSourceOfFunds: (answers: { question: string; answer: string }[]) =>
+    call<null>('card_answer_source_of_funds', { answers }),
+  createAccount: () => call<null>('card_create_account'),
+  sendPhoneCode: (phone: string) =>
+    call<null>('card_send_phone_code', { phone }),
+  verifyPhone: (code: string) => call<null>('card_verify_phone', { code }),
+  orderCard: (name: string) => call<null>('card_order_card', { name }),
 };
 
 export const CARD_ROUTE = '/card';

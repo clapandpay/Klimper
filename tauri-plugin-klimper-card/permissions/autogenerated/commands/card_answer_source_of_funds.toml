@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-answer-source-of-funds"
+description = "Enables the card_answer_source_of_funds command without any pre-configured scope."
+commands.allow = ["card_answer_source_of_funds"]
+
+[[permission]]
+identifier = "deny-card-answer-source-of-funds"
+description = "Denies the card_answer_source_of_funds command without any pre-configured scope."
+commands.deny = ["card_answer_source_of_funds"]
