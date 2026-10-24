@@ -4,12 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/features', () => ({
-  xchonnectEnabled: true,
-  clapAndPayConnectEnabled: true,
-}));
-const offerClapAndPayReturn = vi.hoisted(() => vi.fn());
-vi.mock('../clapandpayReturn', () => ({ offerClapAndPayReturn }));
+vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: () => Promise.reject(new Error('no ipc')),
   getCurrent: () => Promise.reject(new Error('no ipc')),
@@ -115,15 +110,5 @@ describe('listenForXchonnectLinks', () => {
     const stop = await listenForXchonnectLinks(plugin.api);
     stop();
     expect(plugin.unlisten).toHaveBeenCalledOnce();
-  });
-
-  it('hands the Clap and Pay return link to the handoff, never to Xchonnect (TASK-129)', async () => {
-    const plugin = fakePlugin(null);
-    await listenForXchonnectLinks(plugin.api);
-    const link = 'https://clapandpay.com/klimper/return#cp2.answer';
-    plugin.fire([link]);
-    expect(offerClapAndPayReturn).toHaveBeenCalledWith(link);
-    expect(routes).toEqual([]);
-    expect(takeXchonnectLink()).toBeNull();
   });
 });

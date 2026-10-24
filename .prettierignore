@@ -13,5 +13,4 @@ tauri-plugin-sage/android
 tauri-plugin-klimper-jingle/permissions
 tauri-plugin-klimper-jingle/ios/.build
 tauri-plugin-klimper-xchonnect/permissions
-src/lib/clapandpayHandoff.ts
 vendor

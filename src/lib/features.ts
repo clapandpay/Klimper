@@ -19,21 +19,6 @@ export const themeGalleryEnabled =
   import.meta.env.VITE_DISABLE_THEME_GALLERY !== 'true';
 // Opt-in, unlike the flags above: "@handle" in the send screen, resolved through XCHandles.
 export const handlesEnabled = import.meta.env.VITE_ENABLE_HANDLES === 'true';
-// On by default, like the flags above: "Use my Clap and Pay money" on the start screen
-// (src/klimper/ClapAndPayConnect.tsx), release builds included (TASK-130). A passkey belongs to a website, so somebody who made their
-// wallet by opening a Green Envelope has no other way to bring it here; leaving this off meant
-// the one route from the page to the app was invisible in every build that did not ask for it.
-// `VITE_DISABLE_CLAPANDPAY_CONNECT=true` turns it off.
-export const clapAndPayConnectEnabled =
-  import.meta.env.VITE_DISABLE_CLAPANDPAY_CONNECT !== 'true';
-// A release build only ever talks to an https origin: a local development page left in a
-// developer's .env must not reach a phone.
-const configuredOrigin = import.meta.env.VITE_CLAPANDPAY_ORIGIN;
-export const clapAndPayOrigin =
-  configuredOrigin &&
-  (!import.meta.env.PROD || configuredOrigin.startsWith('https://'))
-    ? configuredOrigin
-    : 'https://envelope.clapandpay.com';
 // Opt-in: dApp connections over Xchonnect (decision-008, milestone m-4). Off unless set to
 // true, so a build that does not ask for it has no Xchonnect entry point at all — the
 // routes redirect and the navigation entry is absent. The Rust plugin is always compiled
