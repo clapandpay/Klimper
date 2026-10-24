@@ -18,10 +18,20 @@ partnership (see "What a build needs").
 | Sign in      | `src/siwe.rs`, `src/gnosis_pay.rs`                         | Gnosis Pay's SIWE message, checked before it is signed; session in memory                               |
 | Onboarding   | `src/onboarding.rs`, `src/klimper/card/CardOnboarding.tsx` | e-mail code, terms, identity check (Sumsub, in the browser), source of funds, Safe, phone, virtual card |
 | Account      | `src/account.rs`, `src/klimper/card/CardAccount.tsx`       | balance, the card, payments; freeze and unfreeze                                                        |
+| Wallet total | `src/klimper/WalletTotal.tsx`, `card/useCardBalance.ts`    | on top of Assets: wallet and card together, then each on its own line, top-ups on the way, "Top up"     |
 
-Not in the MVP: showing the card number (PCI endpoints or Gnosis Pay's secure elements),
-in-app 3-D Secure, withdrawals and top-ups from Chia, and keeping the sign-in across
-restarts.
+The card number, expiry and CVV are shown on the device (see "Card details and Apple
+Pay"). Not in the MVP: in-app 3-D Secure, withdrawals and top-ups from Chia, and keeping
+the sign-in across restarts.
+
+**The wallet's total** (TASK-158). The total on top of Assets adds what the card can spend
+to the wallet's value. The card's euros count at the current rate, taken from the same
+price source as XCH (nodexch's XCH in USD over XCH in EUR). Beneath the total, one line
+shows the wallet and one the card, in the card's own currency, with top-ups still on the
+way. "Top up" opens the card screen, where the card account's address is. With no euro
+rate, the total stays the wallet's. The total never signs in by itself: signed out, the
+card line only links to the card screen. It reads the card every 30 s while Assets is
+open, and when Klimper comes back to the front.
 
 ## Privacy and security rules
 

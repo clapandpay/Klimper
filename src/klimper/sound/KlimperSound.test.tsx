@@ -44,7 +44,7 @@ vi.mock('@/klimper/price', () => ({
   lastPrices: () =>
     price.usd === null
       ? null
-      : { xchUsd: price.usd, cats: {}, source: 'nodexch', at: 0 },
+      : { xchUsd: price.usd, eurUsd: null, cats: {}, source: 'nodexch', at: 0 },
 }));
 
 const ding = vi.hoisted(() => vi.fn(async () => undefined));

@@ -21,6 +21,8 @@ export interface CatPrice {
 
 export interface Prices {
   xchUsd: number;
+  /** One euro in USD, from the same source as XCH, or null when unknown. For the card. */
+  eurUsd: number | null;
   cats: Record<string, CatPrice>;
   source: 'nodexch' | 'fallback' | 'testnet';
   /** Unix milliseconds of the fetch. */
@@ -29,7 +31,7 @@ export interface Prices {
 
 export const NODEXCH_PRICES_URL = 'https://nodexch.com/api/prices';
 const COINGECKO_URL =
-  'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd';
+  'https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd,eur';
 const PRICE_TIMEOUT_MS = 5000;
 
 interface PriceDeps {
@@ -77,7 +79,8 @@ async function getJson(
 
 /**
  * nodexch's `/api/prices` (TASK-112): `{at, xch: {usd, eur}, cats: {<asset_id>: {xch, usd,
- * ask?}}}`. Anything malformed is a failure, and the caller falls back.
+ * ask?}}}`. Anything malformed is a failure, and the caller falls back. The euro rate is
+ * XCH in USD over XCH in EUR.
  */
 export function parseNodexch(
   body: unknown,
@@ -95,7 +98,12 @@ export function parseNodexch(
       askPrice: positive(entry.ask),
     };
   }
-  return { xchUsd, cats };
+  return { xchUsd, eurUsd: eurRate(xchUsd, body.xch.eur), cats };
+}
+
+function eurRate(xchUsd: number | null, xchEur: unknown): number | null {
+  const eur = positive(xchEur);
+  return xchUsd !== null && eur !== null ? xchUsd / eur : null;
 }
 
 /** dexie's `v3/prices/tickers`, as Sage read it. */
@@ -137,14 +145,26 @@ export async function fetchPrices(
     } catch (error) {
       warnOnce('dexie testnet', error);
     }
-    prices = { xchUsd: 0, cats, source: 'testnet', at: deps.now() };
+    prices = {
+      xchUsd: 0,
+      eurUsd: null,
+      cats,
+      source: 'testnet',
+      at: deps.now(),
+    };
   } else {
     prices = (await fromNodexch(deps)) ?? (await fallback(deps));
   }
   if (prices !== null) last = prices;
   return (
     prices ??
-    last ?? { xchUsd: 0, cats: {}, source: 'fallback', at: deps.now() }
+    last ?? {
+      xchUsd: 0,
+      eurUsd: null,
+      cats: {},
+      source: 'fallback',
+      at: deps.now(),
+    }
   );
 }
 
@@ -169,16 +189,18 @@ async function fallback(deps: PriceDeps): Promise<Prices | null> {
     getJson(deps, COINGECKO_URL),
     getJson(deps, dexieApiUrl('v3/prices/tickers', false)),
   ]);
-  const xchUsd =
+  const chia =
     xch.status === 'fulfilled' &&
     isRecord(xch.value) &&
     isRecord(xch.value.chia)
-      ? positive(xch.value.chia.usd)
+      ? xch.value.chia
       : null;
+  const xchUsd = chia ? positive(chia.usd) : null;
   if (xchUsd === null && cats.status === 'rejected') return null;
   return {
     // No XCH price: keep the last one we had rather than showing zeros for a blip.
     xchUsd: xchUsd ?? last?.xchUsd ?? 0,
+    eurUsd: (chia ? eurRate(xchUsd, chia.eur) : null) ?? last?.eurUsd ?? null,
     cats:
       cats.status === 'fulfilled' ? parseDexie(cats.value) : (last?.cats ?? {}),
     source: 'fallback',

@@ -31,7 +31,7 @@ const nodexch = {
   xch: { usd: 10, eur: 9 },
   cats: { [CAT]: { xch: 0.5, usd: 5, ask: 0.6 } },
 };
-const coingecko = { chia: { usd: 12 } };
+const coingecko = { chia: { usd: 12, eur: 10 } };
 const dexie = {
   tickers: [
     { base_currency: CAT.toUpperCase(), last_price: '0.25', ask: '0.3' },
@@ -49,6 +49,8 @@ describe('prices on mainnet', () => {
     const prices = await fetchPrices(false, deps);
     expect(prices.source).toBe('nodexch');
     expect(prices.xchUsd).toBe(10);
+    // One euro in dollars, for the card: XCH in USD over XCH in EUR.
+    expect(prices.eurUsd).toBeCloseTo(10 / 9);
     expect(prices.cats[CAT]).toEqual({ lastPrice: 0.5, askPrice: 0.6 });
     expect(calls).toEqual([NODEXCH_PRICES_URL]);
     expect(lastPrices()).toBe(prices);
@@ -64,6 +66,7 @@ describe('prices on mainnet', () => {
     const prices = await fetchPrices(false, deps);
     expect(prices.source).toBe('fallback');
     expect(prices.xchUsd).toBe(12);
+    expect(prices.eurUsd).toBeCloseTo(1.2);
     expect(prices.cats[CAT]).toEqual({ lastPrice: 0.25, askPrice: 0.3 });
     expect(calls.some((u) => u.includes('api.dexie.space'))).toBe(true);
     await fetchPrices(false, deps);
@@ -97,6 +100,7 @@ describe('prices on mainnet', () => {
   it('are zeros when nothing was ever known', async () => {
     const prices = await fetchPrices(false, answers({}).deps);
     expect(prices.xchUsd).toBe(0);
+    expect(prices.eurUsd).toBeNull();
     expect(prices.cats).toEqual({});
   });
 });

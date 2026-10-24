@@ -176,7 +176,10 @@ export function TokenList() {
         </div>
       </Header>
       <Container>
-        {pricedTokens.length > 0 && <WalletTotal usd={totalUsdBalance} />}
+        <WalletTotal
+          usd={totalUsdBalance}
+          hasTokens={pricedTokens.length > 0}
+        />
         <MyHandles />
         {tokenIssuingEnabled && (
           <ReadOnlyButton

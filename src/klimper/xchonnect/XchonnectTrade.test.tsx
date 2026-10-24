@@ -406,6 +406,7 @@ describe('the trade card', () => {
   it('shows dollars for XCH and never for a CAT, whatever its last price', async () => {
     prices.current = {
       xchUsd: 20,
+      eurUsd: null,
       cats: { ['5b'.repeat(32)]: { lastPrice: 1_000, askPrice: 1_000 } },
       source: 'nodexch',
       at: 0,
