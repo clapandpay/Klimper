@@ -712,7 +712,11 @@ msgstr "Cantidad incluye"
 msgid "an address Klimper cannot show"
 msgstr ""
 
-#: src/klimper/WalletTotal.tsx:21
+#: src/klimper/WalletTotal.tsx:65
+msgid "An estimate from current prices, with the card counted at the current euro rate. It does not account for liquidity."
+msgstr ""
+
+#: src/klimper/WalletTotal.tsx:70
 msgid "An estimate from current prices. It does not account for liquidity."
 msgstr ""
 
@@ -1151,7 +1155,16 @@ msgstr ""
 
 #: src/klimper/card/CardScreen.tsx:72
 #: src/klimper/KlimperNavLinks.tsx:49
+#: src/klimper/WalletTotal.tsx:160
 msgid "Card"
+msgstr ""
+
+#: src/klimper/WalletTotal.tsx:183
+msgid "Card ••{last4} · frozen"
+msgstr ""
+
+#: src/klimper/WalletTotal.tsx:185
+msgid "Card ••{last4} · you can spend"
 msgstr ""
 
 #: src/klimper/card/CardScreen.tsx:195
@@ -2621,6 +2634,10 @@ msgstr ""
 msgid "Finalize Clawback Details"
 msgstr ""
 
+#: src/klimper/WalletTotal.tsx:166
+msgid "Finish setting up the card"
+msgstr ""
+
 #: src/klimper/card/CardAccount.tsx:268
 msgid "Freeze the card"
 msgstr ""
@@ -2978,6 +2995,10 @@ msgstr ""
 msgid "In order to proceed with the update, the wallet will be fully resynced. This means custom asset names will be removed, but you can manually add them again after if needed."
 msgstr ""
 
+#: src/klimper/WalletTotal.tsx:94
+msgid "In the wallet"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:845
 msgid "In total, with the fee"
 msgstr ""
@@ -3038,13 +3059,13 @@ msgstr "Dirección IP"
 msgid "IP Addresses"
 msgstr "Direcciones IP"
 
-#: src/pages/TokenList.tsx:184
+#: src/pages/TokenList.tsx:187
 msgid "Issue new token"
 msgstr "Emisión de nuevo token"
 
 #: src/pages/IssueToken.tsx:72
 #: src/pages/IssueToken.tsx:203
-#: src/pages/TokenList.tsx:188
+#: src/pages/TokenList.tsx:191
 msgid "Issue Token"
 msgstr "Emisión de Token"
 
@@ -5680,6 +5701,10 @@ msgstr ""
 msgid "Sign in to Gnosis Pay"
 msgstr ""
 
+#: src/klimper/WalletTotal.tsx:164
+msgid "Sign in to see what you can spend"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:1160
 msgid "Sign one half of a trade"
 msgstr ""
@@ -6002,7 +6027,7 @@ msgstr "Sincronizando {syncedCoins} / {totalCoins}"
 msgid "Syncing Defaults"
 msgstr ""
 
-#: src/pages/TokenList.tsx:216
+#: src/pages/TokenList.tsx:219
 msgid "Syncing in progress..."
 msgstr "Sincronización en curso..."
 
@@ -6300,7 +6325,7 @@ msgstr ""
 msgid "The wallet generates a new address after each transaction. Old ones stay valid."
 msgstr "La billetera genera una nueva dirección después de cada transacción. Las antiguas siguen siendo válidas."
 
-#: src/pages/TokenList.tsx:219
+#: src/pages/TokenList.tsx:222
 msgid "The wallet is still syncing. Balances may not be accurate until it completes."
 msgstr "La billetera sigue sincronizando. Los saldos pueden no ser precisos hasta que se complete."
 
@@ -6875,15 +6900,27 @@ msgstr ""
 msgid "Tokens must have a positive amount."
 msgstr ""
 
+#: src/klimper/WalletTotal.tsx:218
+msgid "Top up"
+msgstr ""
+
+#: src/klimper/WalletTotal.tsx:216
+msgid "Top up the card"
+msgstr ""
+
 #: src/klimper/card/CardAccount.tsx:152
 msgid "Top up: send EURe on Gnosis Chain to the card account"
+msgstr ""
+
+#: src/klimper/WalletTotal.tsx:191
+msgid "Top-up on the way: <0/>"
 msgstr ""
 
 #: src/components/confirmations/TokenConfirmation.tsx:278
 msgid "Total Amount"
 msgstr "Cantidad total"
 
-#: src/klimper/WalletTotal.tsx:19
+#: src/klimper/WalletTotal.tsx:60
 msgid "Total balance"
 msgstr ""
 
