@@ -7,8 +7,8 @@
 //!
 //! The flag sits on the directory, so it also covers what Sage creates there later (each
 //! wallet's database, a `keys.bin` written for the first time). A new phone restores from the
-//! recovery words, or imports the Clap and Pay money again. Android needs nothing here: the
-//! manifest turns backup and device transfer off (`gen/android`, `data_extraction_rules.xml`).
+//! recovery words. Android needs nothing here: the manifest turns backup and device transfer off
+//! (`gen/android`, `data_extraction_rules.xml`).
 
 use tauri::{
     Manager, Runtime,

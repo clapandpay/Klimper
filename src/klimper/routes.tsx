@@ -15,7 +15,6 @@
 
 import { featureElement } from '@/lib/featureElement';
 import {
-  clapAndPayConnectEnabled,
   nftMintingEnabled,
   nftsEnabled,
   offersEnabled,
@@ -26,8 +25,7 @@ import {
   tokenIssuingEnabled,
 } from '@/lib/features';
 import { ReactElement } from 'react';
-import { createRoutesFromElements, Route, RouteObject } from 'react-router-dom';
-import ClapAndPayConnect from './ClapAndPayConnect';
+import { createRoutesFromElements, RouteObject } from 'react-router-dom';
 import { cardRoutes } from './card/CardRoutes';
 import { RouteRecovery } from './KlimperErrorBoundary';
 import { scannerRoutes } from './Scanner';
@@ -101,9 +99,6 @@ export function withKlimper(routes: RouteObject[]): RouteObject[] {
     ...routes.map(gate),
     ...createRoutesFromElements(
       <>
-        {clapAndPayConnectEnabled && (
-          <Route path='/clapandpay' element={<ClapAndPayConnect />} />
-        )}
         {xchonnectRoutes}
         {scannerRoutes}
         {cardRoutes}

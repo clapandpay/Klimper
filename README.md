@@ -9,10 +9,12 @@ A minimal, fun, non-custodial Chia wallet for the phone, built on the
 [Sage](https://github.com/xch-dev/sage) engine. It holds your assets and lets you pay with them;
 everything else arrives as an app you install inside the wallet, with capabilities you grant.
 
-Status: Sage v0.13.0 merged as the engine (2026-09-17); the desktop build runs as Klimper, still with
-Sage's screens and icons. The vision and the
-tasks are kept in a private wiki and backlog for now. Milestone 1 turns this
-fork into the wallet core for iOS, shipped as Klimper.
+Status: **Klimper 1.0.0**, the first public release (tag `klimper-v1.0.0`, notes in
+[`docs/releases/1.0.0.md`](docs/releases/1.0.0.md)), on the Sage v0.13.1 engine. The iPhone app
+is built and shipped through TestFlight from a Mac (`scripts/testflight.sh`); desktop and Android
+build from source. Klimper's own screens: the wallet's total, the Scan tab, website connections
+over [Xchonnect](https://github.com/xchonnect/xchonnect), push wake-ups, the coin sound and coin
+pouch, and privacy mode. Planning is kept in a private wiki and backlog for now.
 
 ## The stack
 

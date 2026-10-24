@@ -14,5 +14,4 @@ tauri-plugin-klimper-jingle/permissions
 tauri-plugin-klimper-jingle/ios/.build
 tauri-plugin-klimper-xchonnect/permissions
 tauri-plugin-klimper-card/permissions
-src/lib/clapandpayHandoff.ts
 vendor

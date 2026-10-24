@@ -14,7 +14,6 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
-  clapAndPayConnectEnabled: true,
   nftMintingEnabled: false,
   nftsEnabled: true,
   offersEnabled: false,
@@ -27,7 +26,6 @@ vi.mock('@/lib/features', () => ({
   scanEnabled: true,
   cardEnabled: true,
 }));
-vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({
   scannerRoutes: <Route path='/scanner' element={<div />} />,
 }));
@@ -101,12 +99,7 @@ describe('withKlimper', () => {
     const paths = withKlimper(sage()).map((r) => r.path);
     expect(paths.slice(0, 4)).toEqual(['/', '/wallet', '/nfts', '/offers']);
     expect(paths).toEqual(
-      expect.arrayContaining([
-        '/clapandpay',
-        '/xchonnect',
-        '/scanner',
-        '/card',
-      ]),
+      expect.arrayContaining(['/xchonnect', '/scanner', '/card']),
     );
   });
 
