@@ -288,7 +288,10 @@ async fn writing_an_xch_option_with_a_cat_strike_locks_the_collateral_and_settle
     assert_eq!(mint["guaranteed"], true);
     assert_eq!(mint["terms"]["collateral"]["amount"], "1000");
     assert_eq!(mint["terms"]["strike"]["asset"]["type"], "cat");
-    assert_eq!(mint["terms"]["expiration_seconds"], (now + TERM).to_string());
+    assert_eq!(
+        mint["terms"]["expiration_seconds"],
+        (now + TERM).to_string()
+    );
     assert_eq!(
         run.prompt.as_ref().unwrap()["intent"]["kind_verified"],
         true

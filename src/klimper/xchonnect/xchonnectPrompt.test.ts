@@ -26,14 +26,14 @@ const simpleSend = {
     assets: [
       {
         asset: { type: 'xch' },
-        sent: 1_500_000_000_000,
-        received: 0,
-        conditional_received: 0,
-        net: -1_500_000_000_000,
+        sent: '1500000000000',
+        received: '0',
+        conditional_received: '0',
+        net: '-1500000000000',
       },
     ],
-    implied_fee: 500_000,
-    reserve_fee: 0,
+    implied_fee: '500000',
+    reserve_fee: '0',
     time_locks: {
       not_before_seconds: null,
       not_before_height: null,
@@ -70,17 +70,17 @@ const swap = {
     assets: [
       {
         asset: { type: 'xch' },
-        sent: 1_000_000_000_000,
-        received: 0,
-        conditional_received: 0,
-        net: -1_000_000_000_000,
+        sent: '1000000000000',
+        received: '0',
+        conditional_received: '0',
+        net: '-1000000000000',
       },
       {
         asset: { type: 'cat', asset_id: TAIL },
-        sent: 0,
-        received: 0,
-        conditional_received: 250_000,
-        net: 0,
+        sent: '0',
+        received: '0',
+        conditional_received: '250000',
+        net: '0',
       },
     ],
   },
@@ -102,36 +102,6 @@ describe('readPrompt', () => {
     expect(view.hasUnsafe).toBe(false);
     expect(view.signatures).toHaveLength(1);
     expect(needsSecondConfirmation(view)).toBe(false);
-  });
-
-  it('reads time locks and amounts sent as decimal strings (Xchonnect 0.1.0)', () => {
-    const view = readPrompt({
-      ...simpleSend,
-      summary: {
-        ...simpleSend.summary,
-        assets: [
-          {
-            asset: { type: 'xch' },
-            sent: '1500000000000',
-            received: '0',
-            conditional_received: '0',
-            net: '-1500000000000',
-          },
-        ],
-        implied_fee: '500000',
-        reserve_fee: '0',
-        time_locks: {
-          ...simpleSend.summary.time_locks,
-          not_before_seconds: '1794578400',
-          expires_seconds: '1794582000',
-        },
-      },
-    });
-    expect(view.kind).toBe('spend');
-    if (view.kind !== 'spend') return;
-    expect(formatAmount(view.assets[0].net, 12)).toBe('-1.5');
-    expect(view.timeLocks.notBeforeSeconds).toBe(1_794_578_400);
-    expect(view.timeLocks.expiresSeconds).toBe(1_794_582_000);
   });
 
   it('keeps a conditional receipt out of the net effect', () => {
@@ -425,6 +395,50 @@ describe('readPrompt', () => {
       }
     });
 
+    it('reads time locks given as decimal strings or numbers', () => {
+      const view = readPrompt({
+        ...simpleSend,
+        summary: {
+          ...simpleSend.summary,
+          time_locks: {
+            not_before_seconds: '1794578400',
+            not_before_height: 6_000_000,
+            expires_seconds: 1_794_582_000,
+            expires_height: null,
+            has_relative: false,
+          },
+        },
+      });
+      if (view.kind !== 'spend') throw new Error('expected a spend');
+      expect(view.timeLocks).toMatchObject({
+        notBeforeSeconds: 1_794_578_400,
+        notBeforeHeight: 6_000_000,
+        expiresSeconds: 1_794_582_000,
+        expiresHeight: null,
+      });
+    });
+
+    it('refuses a time lock it cannot show exactly, rather than dropping it', () => {
+      for (const expires of [
+        'soon',
+        '1794578400.5',
+        '-1',
+        '9007199254740992',
+      ]) {
+        const view = readPrompt({
+          ...simpleSend,
+          summary: {
+            ...simpleSend.summary,
+            time_locks: {
+              ...simpleSend.summary.time_locks,
+              expires_seconds: expires,
+            },
+          },
+        });
+        expect(view.kind, expires).toBe('unreadable');
+      }
+    });
+
     it('reads large amounts given as decimal strings exactly', () => {
       const view = readPrompt({
         ...simpleSend,
@@ -608,27 +622,6 @@ describe('option keys', () => {
     );
   });
 
-  it('reads the expiry and amounts as Xchonnect 0.1.0 writes them, in strings', () => {
-    const terms = f.terms();
-    const view = spend(
-      withOptions([
-        f.mint({
-          terms: {
-            ...terms,
-            expiration_seconds: String(f.EXPIRY),
-            collateral: { ...terms.collateral, amount: String(100 * f.ONE_XCH) },
-          },
-        }),
-      ]),
-    );
-    const [mint] = view.options;
-    if (mint?.action !== 'mint') throw new Error('not a mint');
-    expect(mint.terms.expiresAt).toBe(f.EXPIRY);
-    expect(mint.terms.collateral.amount.toString()).toBe(
-      String(100 * f.ONE_XCH),
-    );
-  });
-
   it('reads every action', () => {
     const view = spend(
       withOptions([f.mint(), f.exercise(), f.clawback(), f.transfer()]),
@@ -663,7 +656,14 @@ describe('option keys', () => {
     unreadable(withOptions([{ ...f.mint(), terms: null }]));
     unreadable(
       withOptions([
-        f.mint({ terms: { ...f.terms(), expiration_seconds: '17945784e2' } }),
+        f.mint({ terms: { ...f.terms(), expiration_seconds: '1794578400.5' } }),
+      ]),
+    );
+    unreadable(
+      withOptions([
+        f.mint({
+          terms: { ...f.terms(), expiration_seconds: '9007199254740993' },
+        }),
       ]),
     );
     unreadable(
@@ -682,6 +682,7 @@ describe('option keys', () => {
     unreadable(withOptions([{ ...f.transfer(), to: null }]));
     unreadable(withOptions([{ ...f.exercise(), by_user: 1 }]));
     unreadable(withOptions([{ ...f.clawback(), unlocks_at_seconds: -1 }]));
+    unreadable(withOptions([{ ...f.clawback(), unlocks_at_seconds: '-1' }]));
     unreadable(withOptions([{ ...f.clawback(), launcher_id: 'zz' }]));
   });
 

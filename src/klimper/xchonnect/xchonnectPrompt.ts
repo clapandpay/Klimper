@@ -348,24 +348,8 @@ const arrayOf = (value: unknown): unknown[] =>
 
 const boolOf = (value: unknown): boolean => value === true;
 
-/**
- * A whole number that a JS number holds exactly, from a JSON number or a decimal string,
- * or null. Xchonnect 0.1.0 sends Unix times (`time_locks` seconds, option expiries) as
- * decimal strings, like amounts.
- */
-function safeIntOf(value: unknown): number | null {
-  const n =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && /^-?\d{1,16}$/.test(value)
-        ? Number(value)
-        : NaN;
-  return Number.isSafeInteger(n) ? n : null;
-}
-
 /** An integer that fits a JS number, or null. */
 function intOf(value: unknown): number | null {
-  if (typeof value === 'string') return safeIntOf(value);
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return Math.trunc(value);
 }
@@ -373,9 +357,9 @@ function intOf(value: unknown): number | null {
 /**
  * An amount in the smallest unit.
  *
- * A decimal string, which Xchonnect 0.1.0 sends because an amount above 2^53 mojos (about
- * 9007 XCH) has already lost precision by the time `JSON.parse` has run; a JSON number is
- * still read while it is exact.
+ * A decimal string, which is what wallet-kit writes since Xchonnect 0.1.0 (an amount above
+ * 2^53 mojos, about 9007 XCH, has already lost precision as a JSON number by the time
+ * `JSON.parse` has run), or a JSON number, as Klimper's own keys and older builds write it.
  */
 function amountOf(value: unknown): BigNumber {
   // Absent is zero (an optional field the simulation left out).
@@ -612,9 +596,9 @@ function timeLocksOf(value: unknown): TimeLockView {
     };
   }
   return {
-    notBeforeSeconds: intOf(value.not_before_seconds),
+    notBeforeSeconds: optionalSeconds(value.not_before_seconds),
     notBeforeHeight: intOf(value.not_before_height),
-    expiresSeconds: intOf(value.expires_seconds),
+    expiresSeconds: optionalSeconds(value.expires_seconds),
     expiresHeight: intOf(value.expires_height),
     hasRelative: boolOf(value.has_relative),
   };
@@ -667,11 +651,27 @@ function strictHex32(value: unknown): string {
   return hex;
 }
 
-/** Unix seconds: a whole, non-negative number. */
+/**
+ * Unix seconds: a decimal string (wallet-kit since Xchonnect 0.1.0) or a whole,
+ * non-negative number, either below 2^53. A time that cannot be shown exactly is unreadable.
+ */
 function strictSeconds(value: unknown): number {
-  const seconds = safeIntOf(value);
-  if (seconds === null || seconds < 0) throw new UnreadableAmount();
+  // A digit string past 2^53 rounds to at least 2^53, which is not a safe integer.
+  const seconds =
+    typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isSafeInteger(seconds) ||
+    seconds < 0
+  ) {
+    throw new UnreadableAmount();
+  }
   return seconds;
+}
+
+/** `strictSeconds`, absent or null being none (a time lock the request does not set). */
+function optionalSeconds(value: unknown): number | null {
+  return value === undefined || value === null ? null : strictSeconds(value);
 }
 
 /** An option leg: XCH or a CAT (an option backed by an option is not one this build reads). */

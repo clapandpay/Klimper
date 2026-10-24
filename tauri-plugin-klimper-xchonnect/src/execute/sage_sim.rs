@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Portions Apache-2.0 from Sage (see LICENSE-APACHE and NOTICE).
 //! Two Sage wallets on one simulated chain, for the take tests (TASK-137).
 //!
 //! Adapted from Sage's own test harness (`crates/sage-wallet/src/test.rs`, Apache-2.0,
