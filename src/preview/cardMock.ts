@@ -216,6 +216,9 @@ mockIPC(async (cmd, args) => {
         ],
         nextCursor: null,
       };
+    case 'card_details':
+      // The Visa test number: made up, works nowhere.
+      return { number: '4000000000004242', cvv: '737', expires: '10/29' };
     case 'card_set_frozen': {
       const frozen = (args as { frozen?: boolean } | undefined)?.frozen;
       state.cardStatus = frozen ? 'blocked' : 'active';

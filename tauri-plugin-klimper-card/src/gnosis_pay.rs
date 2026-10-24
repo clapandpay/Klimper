@@ -343,6 +343,17 @@ impl GnosisPay {
         path: &str,
         body: Option<&Value>,
     ) -> ApiResult<T> {
+        self.call_with_headers(method, path, body, &[]).await
+    }
+
+    /// [`Self::call`] with extra headers (the EIP-712 signature of a card challenge).
+    pub async fn call_with_headers<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        headers: &[(&str, &str)],
+    ) -> ApiResult<T> {
         for attempt in 0..2 {
             let access = match self.session.lock().await.as_ref() {
                 Some(session) => session.access.clone(),
@@ -354,6 +365,9 @@ impl GnosisPay {
                 .bearer_auth(access.expose());
             if let Some(body) = body {
                 request = request.json(body);
+            }
+            for (name, value) in headers {
+                request = request.header(*name, *value);
             }
             let response = request.send().await.map_err(|_| ApiError::Network)?;
             if response.status() == StatusCode::UNAUTHORIZED {

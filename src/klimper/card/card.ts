@@ -133,6 +133,14 @@ export interface Statement {
   nextCursor: string | null;
 }
 
+/** The card's details, for the screen only: never stored, never logged. */
+export interface CardDetails {
+  number: string;
+  cvv: string;
+  /** MM/YY */
+  expires: string;
+}
+
 export const card = {
   status: () => call<CardStatus>('card_status'),
   signIn: () => call<null>('card_sign_in'),
@@ -156,6 +164,7 @@ export const card = {
     call<Statement>('card_transactions', { cursor }),
   setFrozen: (cardId: string, frozen: boolean) =>
     call<null>('card_set_frozen', { cardId, frozen }),
+  details: (cardId: string) => call<CardDetails>('card_details', { cardId }),
 };
 
 export const CARD_ROUTE = '/card';

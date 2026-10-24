@@ -8,6 +8,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Account, CardSummary } from './card';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
+vi.mock('@/hooks/useBiometric', () => ({
+  useBiometric: () => ({ promptIfEnabled: () => Promise.resolve(true) }),
+}));
 const privacy = vi.hoisted(() => ({ on: false }));
 vi.mock('../privacy', () => ({
   useMaskAmounts: () => privacy.on,

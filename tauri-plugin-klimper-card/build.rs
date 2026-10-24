@@ -15,6 +15,7 @@ const COMMANDS: &[&str] = &[
     "card_account",
     "card_transactions",
     "card_set_frozen",
+    "card_details",
 ];
 
 /// The card settings are read with `option_env!` (`src/gnosis_pay.rs`, `Settings::from_build`):

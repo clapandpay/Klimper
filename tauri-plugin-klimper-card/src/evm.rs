@@ -112,6 +112,14 @@ impl EvmKey {
         Self::from_seed(&seed[..])
     }
 
+    /// A key from its 32 secret bytes (tests and test vectors).
+    pub fn from_secret(secret: &[u8; 32]) -> Result<Self, KeyError> {
+        let key = SecretKey::from_slice(secret).map_err(|_| KeyError::InvalidDerivation)?;
+        Ok(Self {
+            signing: SigningKey::from(key),
+        })
+    }
+
     pub fn from_seed(seed: &[u8]) -> Result<Self, KeyError> {
         let (mut key, mut chain) = master(seed)?;
         for index in PATH {

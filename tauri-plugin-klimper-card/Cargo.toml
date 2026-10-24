@@ -29,6 +29,12 @@ sha3 = "0.10.8"
 sha2 = "0.10.9"
 hmac = "0.12.1"
 zeroize = "1.8.2"
+# Card details (src/pci.rs): a one-time AES-256 key, wrapped for Gnosis Pay with RSA-OAEP.
+# Versions already in Cargo.lock.
+aes-gcm = { workspace = true }
+rsa = "0.9.9"
+base64 = { workspace = true }
+rand = { workspace = true }
 
 # The fake Gnosis Pay server (src/fake.rs), for the tests and for running the screens
 # locally: `--features fake --example fake-gnosis-pay`. Never in an app build.
