@@ -5,7 +5,7 @@
 //! ```sh
 //! cargo run -p tauri-plugin-klimper-card --features fake --example fake-gnosis-pay
 //! KLIMPER_CARD_API=http://127.0.0.1:8787/user-api KLIMPER_CARD_APP_NAME=klimper-dev \
-//!   KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_CARD=true pnpm tauri dev
+//!   KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_GNOSIS_PAY=true pnpm tauri dev
 //! ```
 //!
 //! It follows the documented shapes (`OpenAPI` of 2026-10, `docs/card.md`) closely enough to

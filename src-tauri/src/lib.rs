@@ -228,7 +228,7 @@ pub fn run() {
         // VITE_ENABLE_KLIMPER_COINS and the Settings switch, asks for a sound or a shake watch.
         .plugin(tauri_plugin_klimper_jingle::init())
         // Klimper: the card through Gnosis Pay (milestone gnosis-card-mvp, docs/card.md). Idle
-        // until the webview, behind VITE_ENABLE_CARD, asks for it.
+        // until the webview, behind VITE_ENABLE_GNOSIS_PAY, asks for it.
         .plugin(tauri_plugin_klimper_card::init())
         // Klimper: `xchonnect:` and clapandpay.com links reach the webview as
         // `deep-link://new-url` (docs/xchonnect-links.md). The OS registration is
