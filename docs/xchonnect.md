@@ -1,7 +1,7 @@
 # Xchonnect dApp connections
 
 Klimper answers CHIP-0002 signing requests from outside websites over
-[Xchonnect](https://github.com/maximedogawa/xchonnect). Recorded as clapandpay
+[Xchonnect](https://github.com/xchonnect/xchonnect). Recorded as clapandpay
 **decision-008**. Normative behaviour is
 xchonnect's `docs/spec/xchonnect-spec.md`; the wallet side is `docs/wallet-integration.md`.
 

@@ -2,7 +2,7 @@ Klimper
 Copyright 2026 the Klimper authors
 
 Klimper's own files are licensed under the GNU Affero General Public License, version 3 or
-later (see LICENSE), or under a commercial licence (see COMMERCIAL-LICENSE.md).
+later (see LICENSE), with the additional permission in LICENSE-APP-STORE-EXCEPTION.md.
 
 This product is a fork of Sage Wallet (https://github.com/xch-dev/sage).
 
@@ -37,6 +37,6 @@ Klimper (2026): see docs/UPSTREAM.md", and every changed file is listed in docs/
 the per-file line and that table together are Klimper's record of the modifications the Apache
 licence asks a fork to state. Every change is visible with
 
-  git diff <merged upstream tag> HEAD:klimper
+  git diff <merged upstream tag> HEAD
 
 Klimper is not affiliated with, or endorsed by, the Sage project or Chia Network, Inc.

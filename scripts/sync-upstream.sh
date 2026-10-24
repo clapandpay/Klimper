@@ -22,10 +22,10 @@
 #
 # Always a merge, never a rebase: shared history keeps later merges small.
 #
-# The wallet lives in klimper/ of the monorepo while upstream has it at the root, so the merge
-# uses git's subtree option: upstream's paths are shifted into klimper/ and nothing outside
-# that folder can be touched. The folder is worked out from where this script sits, so once
-# Klimper is a repository of its own (SPLITTING.md) SUBTREE is empty and the merge is a plain one.
+# Klimper has upstream's files at upstream's paths, so the merge is a plain one. The folder is
+# still worked out from where this script sits: in a checkout that keeps Klimper in a
+# subfolder, SUBTREE names it and the merge uses git's subtree option, so that nothing outside
+# that folder can be touched.
 set -euo pipefail
 SUBTREE="$(cd "$(dirname "$0")/.." && git rev-parse --show-prefix)"
 SUBTREE="${SUBTREE%/}"

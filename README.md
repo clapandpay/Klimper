@@ -18,7 +18,7 @@ fork into the wallet core for iOS, shipped as Klimper.
 
 | Layer                        | Project                                                                       |
 | ---------------------------- | ----------------------------------------------------------------------------- |
-| Wallet                       | Klimper (this folder of the clapandpay monorepo)                              |
+| Wallet                       | Klimper (this repository)                                                     |
 | Explorer, also an in-app app | [mempool-xch](https://github.com/maximedogawa/mempool-xch) · mempoolxch.space |
 | Node provider                | nodexch · nodexch.com                                                         |
 
@@ -44,8 +44,8 @@ pnpm tauri:build    # bundle: target/release/bundle/
 ## Licence
 
 AGPL-3.0-or-later for Klimper's own code, with an additional permission for distribution through
-app stores (`../LICENSE-APP-STORE-EXCEPTION.md`); the Sage engine keeps its Apache-2.0 licence (see
-`NOTICE` and `LICENSE-APACHE`). Commercial licences without the copyleft obligation are available,
-see `COMMERCIAL-LICENSE.md`; contributions require the CLA. "Klimper", the tagline "Clap and Pay" and the logo are
-trademarks and may not be used by forks (`TRADEMARK.md`). Not affiliated with Chia Network, Inc.
+app stores (`LICENSE-APP-STORE-EXCEPTION.md`); the Sage engine keeps its Apache-2.0 licence (see
+`NOTICE` and `LICENSE-APACHE`). Contributions are signed off under the DCO, no CLA
+(`CONTRIBUTING.md`); vulnerabilities are reported privately (`SECURITY.md`). "Klimper", the
+tagline "Clap and Pay" and the logo are trademarks and may not be used by forks (`TRADEMARK.md`). Not affiliated with Chia Network, Inc.
 or the Sage project.

@@ -1,12 +1,11 @@
 # Upstream
 
-> **Monorepo (2026-09-20).** This fork lives in `klimper/` of the clapandpay repository, while
-> upstream Sage has the same files at its root. Every path in this document is relative to
-> `klimper/`. The sync script merges with `git merge -X subtree=klimper`, which shifts upstream's
-> paths into this folder; a trial merge of `upstream/main` on the day of the move touched 103
-> files, all inside `klimper/`, with no conflicts. Never merge upstream by hand without that
-> option, and never relocate files inside `klimper/`. Upstream's own workflows sit in
-> `klimper/.github/`, where GitHub does not run them; ours are `/.github/workflows/green-envelope.yml` and `clapandpay-web.yml` (named `Image …`, so the disable command below leaves them alone; Klimper itself is not built in CI).
+> **Own repository (2026-10-24).** Klimper lived in `klimper/` of the clapandpay monorepo from
+> 2026-09-20 until it moved here, with Sage's commits and ours intact. Upstream Sage has the same
+> files at the same paths, so every path in this document is relative to the repository root
+> and the sync script merges with a plain `git merge`. Never relocate files away from where
+> upstream has them. Upstream's own workflows are in `.github/workflows/` and disabled here
+> ("Sage's workflows", below); Klimper itself is not built in CI.
 
 Klimper is a fork of Sage: https://github.com/xch-dev/sage (Apache-2.0, see `LICENSE-APACHE` and
 `NOTICE`). Remote name `upstream`. Upstream is merged, never rebased.
@@ -55,8 +54,8 @@ scripts/sync-upstream.sh --diff     # every file that differs from the merged ta
 scripts/sync-upstream.sh --export   # the flag work as a patch that applies to a clean Sage tree
 ```
 
-`--diff` compares upstream's tree with our `klimper/` subtree directly, so every path it prints
-is already spelled the way Sage spells it. If it lists a shared file that the table below does
+`--diff` compares upstream's tree with ours directly, so every path it prints is spelled the
+way Sage spells it. If it lists a shared file that the table below does
 not, either the table is stale or the change belongs behind a flag — settle it then, not at the
 next merge. `--export` writes the rows marked _propose upstream_ as one patch; it applies to a
 clean checkout of the merged tag with `git apply`.
@@ -109,8 +108,8 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
 2. **Know what it will cost.** `scripts/sync-upstream.sh --diff`. The size of the merge is the
    number of shared files we have touched, and nothing else.
 3. **Branch and merge.** `git switch -c upstream/sage-<tag>` then `scripts/sync-upstream.sh`,
-   or `scripts/sync-upstream.sh <tag>` for a particular one. It merges with
-   `-X subtree=klimper`; never merge upstream by hand without that.
+   or `scripts/sync-upstream.sh <tag>` for a particular one. Never merge upstream by hand: the
+   script also sets the `merge=ours` driver for the files that are wholly ours.
 4. **Resolve** by the playbook below. A conflict in a file this document lists is ours to keep,
    line by line; a conflict anywhere else means we edited a shared file, and upstream wins while
    our change moves behind a flag or into a file of our own.
@@ -202,7 +201,7 @@ commits (see the table at the top): those are not ours and carry no line.
 | File                                                                                                                                         | Ours                                                          | Note                                                                                                                                                                                                                                                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`, `LICENSE`                                                                                                                       | whole file                                                    | `.gitattributes` `merge=ours`; the script sets the driver                                                                                                                                                                                                                                            |
-| `LICENSE-APACHE`, `NOTICE`, `deny.toml`, `CLA.md`, `COMMERCIAL-LICENSE.md`, `TRADEMARK.md`, `CLAUDE.md`, `.gitattributes`                    | new                                                           |                                                                                                                                                                                                                                                                                                      |
+| `LICENSE-APACHE`, `NOTICE`, `deny.toml`, `LICENSE-APP-STORE-EXCEPTION.md`, `TRADEMARK.md`, `CONTRIBUTING.md`, `SECURITY.md`, `.gitattributes` | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `docs/UPSTREAM.md`, `scripts/sync-upstream.sh`, `scripts/testflight.sh`, `.github/workflows/*.yml` (repository root)                         | new                                                           |                                                                                                                                                                                                                                                                                                      |
 | `src-tauri/tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.windows.conf.json`                                                        | new                                                           | Tauri merges the platform file over `tauri.conf.json`: product name, identifier, version, window title. `tauri.conf.json` itself is untouched. The window block is a copy (JSON merge patch replaces arrays): compare it with upstream at each merge                                                 |
 | `src-tauri/tauri.ios.conf.json`, `tauri.android.conf.json`                                                                                   | 3 lines added, and `bundle.iOS`                               | product name, version, identifier; our Apple team `HTP35W93ZF` (`tauri.conf.json` keeps Sage's)                                                                                                                                                                                                      |
@@ -394,18 +393,14 @@ GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours 
 `.github/workflows/green-envelope.yml` and `clapandpay-web.yml`, named `Image …` so that command
 does not touch them.
 
-## After the split
+## Sage's workflows
 
-In the monorepo, GitHub does not run `klimper/.github/workflows/`. Once Klimper is its own
-repository, `.github/workflows/build.yml` and `npm.yml` sit where GitHub runs them, on every
-push, and `npm.yml` would publish Sage's packages. They stay in the tree (the sync merges them),
-so disable them in the new repository before its first push of a branch:
+`.github/workflows/build.yml` and `npm.yml` are Sage's. They stay in the tree, because the sync
+merges them, but GitHub would run them on every push, and `npm.yml` would publish Sage's
+packages. They are disabled in this repository; a fresh fork disables them before its first push
+of a branch:
 
 ```sh
 gh workflow disable Build
 gh workflow disable NPM
 ```
-
-The sync script then merges Sage without `-X subtree=klimper` (it works out its folder from
-where it sits), and every path in this document is already relative to the repository root.
-The whole checklist is the monorepo's `docs/OPEN-SOURCE.md`.
