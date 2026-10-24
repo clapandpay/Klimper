@@ -18,11 +18,13 @@ use tauri::{
 use tokio::sync::Mutex;
 
 pub mod account;
+pub mod eip712;
 pub mod evm;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
 pub mod gnosis_pay;
 pub mod onboarding;
+pub mod pci;
 pub mod siwe;
 
 use evm::{Address, EvmKey};
@@ -415,6 +417,28 @@ async fn card_set_frozen<R: Runtime>(
         .await?)
 }
 
+/// The card's number, expiry and CVV, for this screen only (TASK-153). The webview asks for
+/// Face ID or Touch ID first. The card key signs Gnosis Pay's challenge only after
+/// `check_card_challenge` has accepted it.
+#[command]
+async fn card_details<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    card_id: String,
+) -> Result<pci::CardDetails> {
+    let sage = app.state::<AppState>().inner().clone();
+    let api = session(&card, &sage).await?;
+    let typed = api.card_challenge(&card_id).await?;
+    let challenge =
+        eip712::check_card_challenge(&typed, api.settings().chain_id).map_err(|_| {
+            Error::Invalid("Gnosis Pay asked to sign something other than showing the card")
+        })?;
+    let (_, signature) = with_key(&sage, |key| Ok(key.sign_digest(&challenge.digest)?)).await?;
+    Ok(api
+        .card_details(&card_id, &signature, &challenge.nonce)
+        .await?)
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-card")
         .invoke_handler(tauri::generate_handler![
@@ -433,6 +457,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             card_account,
             card_transactions,
             card_set_frozen,
+            card_details,
         ])
         .setup(|app, _api| {
             app.manage(Card::new(Settings::from_build()));

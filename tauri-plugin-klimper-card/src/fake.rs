@@ -67,6 +67,10 @@ pub struct FakeState {
     /// Spendable `EURe` in wei (18 decimals).
     pub spendable: u128,
     pub statement: Vec<Value>,
+    /// Card-details challenges not yet used, by nonce.
+    challenges: HashSet<String>,
+    pub details_served: usize,
+    pci_key: Option<rsa::RsaPrivateKey>,
 }
 
 impl FakeState {
@@ -89,6 +93,9 @@ impl FakeState {
             cards: Vec::new(),
             spendable: 0,
             statement: Vec::new(),
+            challenges: HashSet::new(),
+            details_served: 0,
+            pci_key: None,
         }
     }
 
@@ -222,6 +229,9 @@ fn router(state: Shared) -> Router {
         .route("/user-api/cards/virtual", post(order_card))
         .route("/user-api/cards/:id/block", post(block))
         .route("/user-api/cards/:id/unblock", post(unblock))
+        .route("/user-api/pci/cards/:id/challenge", get(pci_challenge))
+        .route("/user-api/pci/public-key", get(pci_public_key))
+        .route("/user-api/pci/cards/:id/details", get(pci_details))
         // The fake's own controls (not Gnosis Pay's): finish KYC, pay with the card.
         .route("/fake/kyc-approved", post(fake_kyc_approved))
         .route("/fake/pay", post(fake_pay))
@@ -726,4 +736,133 @@ async fn fake_pay(State(state): State<Shared>, Json(body): Json<Pay>) -> Respons
         payment(&id, &rfc3339(now), &body.merchant, &body.amount, status),
     );
     Json(json!({ "status": status })).into_response()
+}
+
+// Card details (src/pci.rs). The fake makes its own RSA key the first time it is asked, and
+// answers with the made-up test number 4000 0000 0000 4242, encrypted to the caller's key.
+
+fn challenge_json(nonce: &str) -> Value {
+    json!({
+        "domain": { "name": "Gnosis Pay", "version": "1", "chainId": 100 },
+        "primaryType": "Message",
+        "types": { "Message": [
+            { "name": "authorization", "type": "string" },
+            { "name": "nonce", "type": "uint256" }
+        ] },
+        "message": { "authorization": "Display VISA Card Details", "nonce": nonce },
+    })
+}
+
+async fn pci_challenge(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(_id): Path<String>,
+) -> Response {
+    if let Err(response) = authed(&state, &headers).await {
+        return response;
+    }
+    let mut state = state.lock().await;
+    state.nonce += 1;
+    let nonce = format!("{}", 1_000_000_007_u64 * state.nonce);
+    state.challenges.insert(nonce.clone());
+    Json(challenge_json(&nonce)).into_response()
+}
+
+async fn pci_public_key(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    use base64::Engine;
+    use rsa::pkcs8::EncodePublicKey;
+    if let Err(response) = authed(&state, &headers).await {
+        return response;
+    }
+    let mut state = state.lock().await;
+    let key = state
+        .pci_key
+        .get_or_insert_with(|| {
+            rsa::RsaPrivateKey::new(&mut rand::rngs::OsRng, 1024).expect("an RSA key")
+        })
+        .to_public_key();
+    let der = key.to_public_key_der().expect("DER");
+    let encoded = base64::engine::general_purpose::STANDARD.encode(der.as_bytes());
+    Json(json!({
+        "publicKey": encoded,
+        "encryptionKeys": [{ "id": "fake-key-1", "algorithm": "RSA-OAEP-256", "publicKey": encoded }],
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DetailsQuery {
+    encrypted_key: String,
+    key_id: Option<String>,
+}
+
+async fn pci_details(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<DetailsQuery>,
+) -> Response {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use base64::Engine;
+    let engine = base64::engine::general_purpose::STANDARD;
+    if let Err(response) = authed(&state, &headers).await {
+        return response;
+    }
+    let header = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let (signature, nonce) = (header("x-eip712-signature"), header("x-eip712-nonce"));
+    let mut state = state.lock().await;
+    if !state.challenges.remove(&nonce) {
+        return error(StatusCode::FORBIDDEN, "INVALID_CHALLENGE");
+    }
+    let digest = crate::eip712::check_card_challenge(&challenge_json(&nonce), 100)
+        .expect("own challenge")
+        .digest;
+    let signer = signature
+        .strip_prefix("0x")
+        .and_then(|s| hex::decode(s).ok())
+        .and_then(|b| <[u8; 65]>::try_from(b).ok())
+        .and_then(|s| recover(&digest, &s));
+    if signer.is_none() || signer != state.address {
+        return error(StatusCode::FORBIDDEN, "INVALID_SIGNATURE");
+    }
+    if !state.cards.iter().any(|c| c["id"] == id.as_str())
+        || query.key_id.as_deref() != Some("fake-key-1")
+    {
+        return error(StatusCode::NOT_FOUND, "CARD_NOT_FOUND");
+    }
+    let Some(private) = state.pci_key.clone() else {
+        return error(StatusCode::BAD_REQUEST, "NO_KEY");
+    };
+    let Ok(wrapped) = engine.decode(&query.encrypted_key) else {
+        return error(StatusCode::BAD_REQUEST, "BAD_KEY");
+    };
+    let Ok(aes) = private.decrypt(rsa::Oaep::new::<sha2::Sha256>(), &wrapped) else {
+        return error(StatusCode::BAD_REQUEST, "BAD_KEY");
+    };
+    let Ok(cipher) = aes_gcm::Aes256Gcm::new_from_slice(&aes) else {
+        return error(StatusCode::BAD_REQUEST, "BAD_KEY");
+    };
+    let iv: [u8; 12] = rand::random();
+    let seal = |text: &str| {
+        engine.encode(
+            cipher
+                .encrypt(aes_gcm::Nonce::from_slice(&iv), text.as_bytes())
+                .expect("AES-GCM"),
+        )
+    };
+    state.details_served += 1;
+    Json(json!({
+        "cardNumber": seal("4000000000004242"),
+        "cvv": seal("737"),
+        "expirationDate": "10/29",
+        "iv": engine.encode(iv),
+    }))
+    .into_response()
 }

@@ -136,6 +136,15 @@ pub fn payment(entry: &Value) -> Option<Payment> {
     })
 }
 
+/// A card id is safe to put in a URL path.
+pub fn valid_card_id(card_id: &str) -> bool {
+    !card_id.is_empty()
+        && card_id.len() <= 64
+        && card_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 impl GnosisPay {
     pub async fn account(&self) -> ApiResult<Account> {
         let (account, balances, cards) = tokio::join!(
@@ -211,11 +220,7 @@ impl GnosisPay {
 
     /// Freezes (blocks) or unfreezes the card. Cancelling for good is not offered.
     pub async fn set_frozen(&self, card_id: &str, frozen: bool) -> ApiResult<()> {
-        if card_id.is_empty()
-            || !card_id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        {
+        if !valid_card_id(card_id) {
             return Err(ApiError::Unreadable);
         }
         let action = if frozen { "block" } else { "unblock" };

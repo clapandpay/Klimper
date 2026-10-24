@@ -26,6 +26,7 @@ import {
   Payment,
 } from './card';
 import { Masked, useMaskAmounts } from '../privacy';
+import { CardDetails } from './CardDetails';
 import { CardOnboarding } from './CardOnboarding';
 
 export const ACCOUNT_POLL_MS = 15000;
@@ -267,6 +268,7 @@ function PaymentCard({
             </Button>
           )
         )}
+        {summary.status === 'active' && <CardDetails cardId={summary.id} />}
       </CardContent>
     </Card>
   );

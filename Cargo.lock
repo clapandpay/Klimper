@@ -8369,12 +8369,16 @@ dependencies = [
 name = "tauri-plugin-klimper-card"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "axum",
+ "base64 0.22.1",
  "bip39",
  "hex",
  "hmac 0.12.1",
  "k256",
+ "rand 0.8.8",
  "reqwest 0.12.24",
+ "rsa 0.9.9",
  "sage",
  "serde",
  "serde_json",

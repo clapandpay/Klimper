@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the card_create_account command without any pre-configured scope."
         },
         {
+          "description": "Enables the card_details command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-details",
+          "markdownDescription": "Enables the card_details command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_details command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-details",
+          "markdownDescription": "Denies the card_details command without any pre-configured scope."
+        },
+        {
           "description": "Enables the card_onboarding command without any pre-configured scope.",
           "type": "string",
           "const": "allow-card-onboarding",
@@ -475,10 +487,10 @@
           "markdownDescription": "Denies the card_verify_phone command without any pre-configured scope."
         },
         {
-          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`\n- `allow-card-account`\n- `allow-card-transactions`\n- `allow-card-set-frozen`",
+          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card, and showing its details on the device.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`\n- `allow-card-account`\n- `allow-card-transactions`\n- `allow-card-set-frozen`\n- `allow-card-details`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`\n- `allow-card-account`\n- `allow-card-transactions`\n- `allow-card-set-frozen`"
+          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card, and showing its details on the device.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`\n- `allow-card-account`\n- `allow-card-transactions`\n- `allow-card-set-frozen`\n- `allow-card-details`"
         }
       ]
     }

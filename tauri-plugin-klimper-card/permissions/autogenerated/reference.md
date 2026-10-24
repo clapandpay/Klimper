@@ -1,6 +1,6 @@
 ## Default Permission
 
-The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card.
+The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card, and showing its details on the device.
 
 #### This default permission set includes the following:
 
@@ -19,6 +19,7 @@ The Klimper card through Gnosis Pay: the card address of the open wallet, signin
 - `allow-card-account`
 - `allow-card-transactions`
 - `allow-card-set-frozen`
+- `allow-card-details`
 
 ## Permission Table
 
@@ -129,6 +130,32 @@ Enables the card_create_account command without any pre-configured scope.
 <td>
 
 Denies the card_create_account command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:allow-card-details`
+
+</td>
+<td>
+
+Enables the card_details command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:deny-card-details`
+
+</td>
+<td>
+
+Denies the card_details command without any pre-configured scope.
 
 </td>
 </tr>
