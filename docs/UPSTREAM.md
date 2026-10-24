@@ -400,3 +400,8 @@ of a branch:
 gh workflow disable Build
 gh workflow disable NPM
 ```
+
+Klimper's own desktop installers come from `.github/workflows/klimper-desktop-release.yml`
+instead (TASK-161): it runs only when a `klimper-v*` release is published, builds macOS,
+Linux and Windows from the tag with `.env.desktop`, and attaches the installers to the release
+(macOS signed and notarized when the Apple secrets are set, Linux and Windows unsigned). It is ours, not Sage's, so the sync never touches it.
