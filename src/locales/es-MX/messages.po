@@ -720,7 +720,7 @@ msgstr ""
 msgid "Answered"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:935
+#: src/contexts/WalletConnectContext.tsx:1013
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:190
 msgid "Approve"
 msgstr ""
@@ -729,7 +729,7 @@ msgstr ""
 msgid "Approve and send"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:925
+#: src/contexts/WalletConnectContext.tsx:1003
 msgid "Approving"
 msgstr ""
 
@@ -2103,7 +2103,7 @@ msgid "Each coin is one disc: the bigger, the more it holds. A payment spends wh
 msgstr ""
 
 #: src/components/TokenCard.tsx:169
-#: src/contexts/WalletConnectContext.tsx:446
+#: src/contexts/WalletConnectContext.tsx:447
 msgid "Edit"
 msgstr "Editar"
 
@@ -2486,8 +2486,8 @@ msgstr ""
 
 #: src/components/AdvancedTransactionSummary.tsx:89
 #: src/components/ConfirmationDialog.tsx:453
-#: src/contexts/WalletConnectContext.tsx:426
-#: src/contexts/WalletConnectContext.tsx:466
+#: src/contexts/WalletConnectContext.tsx:427
+#: src/contexts/WalletConnectContext.tsx:467
 msgid "Fee"
 msgstr "Tarifa"
 
@@ -3223,7 +3223,7 @@ msgstr "Cargando Colección..."
 msgid "Loading NFT details..."
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:610
+#: src/contexts/WalletConnectContext.tsx:611
 msgid "Loading offer details..."
 msgstr ""
 
@@ -4805,7 +4805,7 @@ msgstr ""
 msgid "Require biometrics for sensitive actions"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:484
+#: src/contexts/WalletConnectContext.tsx:485
 msgid "Reset"
 msgstr ""
 
@@ -5680,7 +5680,7 @@ msgstr "Enviar"
 msgid "Submitting"
 msgstr "Enviando"
 
-#: src/contexts/WalletConnectContext.tsx:428
+#: src/contexts/WalletConnectContext.tsx:429
 msgid "suggested by dApp"
 msgstr ""
 
@@ -6352,7 +6352,7 @@ msgstr ""
 msgid "This spend uses a contract Klimper cannot read"
 msgstr ""
 
-#: src/walletconnect/handler.ts:51
+#: src/walletconnect/handler.ts:52
 msgid "This wallet is read-only and cannot sign, so {command} is not available"
 msgstr ""
 
@@ -7047,7 +7047,7 @@ msgstr "Usar 24 palabras"
 msgid "Use an option"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:455
+#: src/contexts/WalletConnectContext.tsx:456
 msgid "Use default"
 msgstr ""
 

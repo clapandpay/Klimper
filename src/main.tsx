@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { createRoot } from 'react-dom/client';
 
 import '@fontsource/roboto/300.css';

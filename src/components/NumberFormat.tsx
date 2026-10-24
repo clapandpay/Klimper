@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { Masked, useMaskAmounts } from '@/klimper/privacy';
 import BigNumber from 'bignumber.js';
 import { NumberFormatProps, formatNumber } from '../i18n';

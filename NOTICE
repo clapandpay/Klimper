@@ -32,8 +32,10 @@ for who wrote Sage — including anyone who arrived after this file was last wri
 
 Sage is licensed under the Apache License, Version 2.0; a copy is in LICENSE-APACHE. All files
 that come from Sage remain under that licence, including the ones Klimper changed: forking does
-not relicense them. Every changed file is listed in docs/UPSTREAM.md, which is Klimper's record
-of the modifications the Apache licence asks a fork to state, and every change is visible with
+not relicense them. Every changed file that takes a comment carries the line "Modified by
+Klimper (2026): see docs/UPSTREAM.md", and every changed file is listed in docs/UPSTREAM.md;
+the per-file line and that table together are Klimper's record of the modifications the Apache
+licence asks a fork to state. Every change is visible with
 
   git diff <merged upstream tag> HEAD:klimper
 

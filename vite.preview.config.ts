@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { lingui } from '@lingui/vite-plugin';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';

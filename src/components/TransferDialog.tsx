@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { HandleResolution, recheckHandle } from '@/components/HandleResolution';
 import { useHandle } from '@/hooks/useHandle';
 import { useNetwork } from '@/hooks/useNetwork';

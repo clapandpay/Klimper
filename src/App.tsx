@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { discoverThemes, resolveThemeImage } from '@/lib/themes';
 import { i18n } from '@lingui/core';
 import { I18nProvider } from '@lingui/react';
