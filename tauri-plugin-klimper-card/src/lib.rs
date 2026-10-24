@@ -21,10 +21,12 @@ pub mod evm;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
 pub mod gnosis_pay;
+pub mod onboarding;
 pub mod siwe;
 
 use evm::{Address, EvmKey};
 use gnosis_pay::{ApiError, GnosisPay, Settings};
+use onboarding::{Step, Term};
 
 /// What `src-tauri` manages (`src-tauri/src/app_state.rs`).
 pub type AppState = Arc<Mutex<Sage>>;
@@ -240,12 +242,155 @@ async fn card_sign_out(card: State<'_, Card>) -> Result<()> {
     Ok(())
 }
 
+// Onboarding (TASK-150). Each command needs the open wallet's session; the e-mail address and
+// the phone number pass through to Gnosis Pay and are not kept or logged.
+
+#[command]
+async fn card_onboarding<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<Step> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage).await?.onboarding().await?)
+}
+
+/// `true` when a code was sent, `false` when this card programme needs none.
+#[command]
+async fn card_send_email_code<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    email: String,
+) -> Result<bool> {
+    if !onboarding::valid_email(email.trim()) {
+        return Err(Error::Invalid("that does not look like an e-mail address"));
+    }
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .send_email_code(email.trim())
+        .await?)
+}
+
+#[command]
+async fn card_register<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    email: String,
+    code: Option<String>,
+) -> Result<()> {
+    if !onboarding::valid_email(email.trim()) {
+        return Err(Error::Invalid("that does not look like an e-mail address"));
+    }
+    if code.as_deref().is_some_and(|c| !onboarding::valid_code(c)) {
+        return Err(Error::Invalid("the code has six digits"));
+    }
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .register(email.trim(), code.as_deref())
+        .await?)
+}
+
+#[command]
+async fn card_accept_terms<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    terms: Vec<Term>,
+) -> Result<()> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage).await?.accept_terms(&terms).await?)
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct Answer {
+    question: String,
+    answer: String,
+}
+
+#[command]
+async fn card_answer_source_of_funds<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    answers: Vec<Answer>,
+) -> Result<()> {
+    let answers: Vec<(String, String)> = answers
+        .into_iter()
+        .map(|a| (a.question, a.answer))
+        .collect();
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .answer_source_of_funds(&answers)
+        .await?)
+}
+
+#[command]
+async fn card_create_account<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<()> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage).await?.create_account().await?)
+}
+
+#[command]
+async fn card_send_phone_code<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    phone: String,
+) -> Result<()> {
+    let phone: String = phone.chars().filter(|c| !c.is_whitespace()).collect();
+    if !onboarding::valid_phone(&phone) {
+        return Err(Error::Invalid(
+            "write the number with its country code, e.g. +43…",
+        ));
+    }
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage).await?.send_phone_code(&phone).await?)
+}
+
+#[command]
+async fn card_verify_phone<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    code: String,
+) -> Result<()> {
+    if !onboarding::valid_code(code.trim()) {
+        return Err(Error::Invalid("the code has six digits"));
+    }
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .verify_phone(code.trim())
+        .await?)
+}
+
+#[command]
+async fn card_order_card<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    name: String,
+) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 50 {
+        return Err(Error::Invalid("a card name has 1 to 50 characters"));
+    }
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .order_virtual_card(name)
+        .await?)
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-card")
         .invoke_handler(tauri::generate_handler![
             card_status,
             card_sign_in,
-            card_sign_out
+            card_sign_out,
+            card_onboarding,
+            card_send_email_code,
+            card_register,
+            card_accept_terms,
+            card_answer_source_of_funds,
+            card_create_account,
+            card_send_phone_code,
+            card_verify_phone,
+            card_order_card,
         ])
         .setup(|app, _api| {
             app.manage(Card::new(Settings::from_build()));

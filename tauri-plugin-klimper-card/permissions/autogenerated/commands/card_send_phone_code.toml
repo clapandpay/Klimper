@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-send-phone-code"
+description = "Enables the card_send_phone_code command without any pre-configured scope."
+commands.allow = ["card_send_phone_code"]
+
+[[permission]]
+identifier = "deny-card-send-phone-code"
+description = "Denies the card_send_phone_code command without any pre-configured scope."
+commands.deny = ["card_send_phone_code"]

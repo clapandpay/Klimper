@@ -295,6 +295,102 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the card_accept_terms command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-accept-terms",
+          "markdownDescription": "Enables the card_accept_terms command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_accept_terms command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-accept-terms",
+          "markdownDescription": "Denies the card_accept_terms command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_answer_source_of_funds command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-answer-source-of-funds",
+          "markdownDescription": "Enables the card_answer_source_of_funds command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_answer_source_of_funds command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-answer-source-of-funds",
+          "markdownDescription": "Denies the card_answer_source_of_funds command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_create_account command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-create-account",
+          "markdownDescription": "Enables the card_create_account command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_create_account command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-create-account",
+          "markdownDescription": "Denies the card_create_account command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_onboarding command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-onboarding",
+          "markdownDescription": "Enables the card_onboarding command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_onboarding command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-onboarding",
+          "markdownDescription": "Denies the card_onboarding command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_order_card command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-order-card",
+          "markdownDescription": "Enables the card_order_card command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_order_card command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-order-card",
+          "markdownDescription": "Denies the card_order_card command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_register command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-register",
+          "markdownDescription": "Enables the card_register command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_register command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-register",
+          "markdownDescription": "Denies the card_register command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_send_email_code command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-send-email-code",
+          "markdownDescription": "Enables the card_send_email_code command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_send_email_code command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-send-email-code",
+          "markdownDescription": "Denies the card_send_email_code command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_send_phone_code command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-send-phone-code",
+          "markdownDescription": "Enables the card_send_phone_code command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_send_phone_code command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-send-phone-code",
+          "markdownDescription": "Denies the card_send_phone_code command without any pre-configured scope."
+        },
+        {
           "description": "Enables the card_sign_in command without any pre-configured scope.",
           "type": "string",
           "const": "allow-card-sign-in",
@@ -331,10 +427,22 @@
           "markdownDescription": "Denies the card_status command without any pre-configured scope."
         },
         {
-          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`",
+          "description": "Enables the card_verify_phone command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-verify-phone",
+          "markdownDescription": "Enables the card_verify_phone command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_verify_phone command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-verify-phone",
+          "markdownDescription": "Denies the card_verify_phone command without any pre-configured scope."
+        },
+        {
+          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, and the onboarding steps.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`"
+          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, and the onboarding steps.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`\n- `allow-card-onboarding`\n- `allow-card-send-email-code`\n- `allow-card-register`\n- `allow-card-accept-terms`\n- `allow-card-answer-source-of-funds`\n- `allow-card-create-account`\n- `allow-card-send-phone-code`\n- `allow-card-verify-phone`\n- `allow-card-order-card`"
         }
       ]
     }

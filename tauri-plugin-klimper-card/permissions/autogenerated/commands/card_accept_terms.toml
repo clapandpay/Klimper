@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-accept-terms"
+description = "Enables the card_accept_terms command without any pre-configured scope."
+commands.allow = ["card_accept_terms"]
+
+[[permission]]
+identifier = "deny-card-accept-terms"
+description = "Denies the card_accept_terms command without any pre-configured scope."
+commands.deny = ["card_accept_terms"]
