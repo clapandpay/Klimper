@@ -3,7 +3,7 @@
 // the card plugin while the page is open and never kept. It never signs in by itself:
 // signing in is a signature and asks for Face ID, so it only happens on the card screen.
 
-import { cardEnabled } from '@/lib/features';
+import { gnosisPayEnabled } from '@/lib/features';
 import { useCallback, useEffect, useState } from 'react';
 import { card, isCardError } from './card';
 
@@ -66,7 +66,7 @@ export function useCardBalance(): CardBalance {
   }, []);
 
   useEffect(() => {
-    if (!cardEnabled) return;
+    if (!gnosisPayEnabled) return;
     void load();
     const timer = setInterval(() => void load(), CARD_BALANCE_POLL_MS);
     const onVisible = () => {

@@ -9,7 +9,7 @@ export default defineConfig({
   // The preview is of the Xchonnect and card screens: on whatever the shell's environment says.
   define: {
     'import.meta.env.VITE_ENABLE_XCHONNECT': JSON.stringify('true'),
-    'import.meta.env.VITE_ENABLE_CARD': JSON.stringify('true'),
+    'import.meta.env.VITE_ENABLE_GNOSIS_PAY': JSON.stringify('true'),
   },
   resolve: {
     alias: [

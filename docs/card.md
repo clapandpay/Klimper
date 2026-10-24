@@ -6,7 +6,8 @@ Chain, and only the wallet's recovery words control that Safe. Klimper is softwa
 Identity checks, card issuing and e-money stay with Gnosis Pay and its licensed partners,
 and the card contract is between the user and them.
 
-Status: MVP behind a build flag, off by default. It is tested against a fake Gnosis Pay.
+Status: MVP behind the build flag `VITE_ENABLE_GNOSIS_PAY`, off by default and set off in
+`.env.production`, so release and TestFlight builds have no card. It is tested against a fake Gnosis Pay.
 Using it against Gnosis Pay's sandbox needs a registration, and production needs a
 partnership (see "What a build needs").
 
@@ -113,9 +114,9 @@ to one partner, and forks need their own.
 | `KLIMPER_CARD_API`                | the user API; Gnosis Pay's sandbox if unset. Release builds take https only |
 | `KLIMPER_CARD_CHAIN_ID`           | the chain in the sign-in message; 100 (Gnosis Chain) if unset               |
 
-| Variable (webview, `.env`) | Meaning                                                                                    |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| `VITE_ENABLE_CARD=true`    | the `/card` route and the navigation entry. Off: no route, no entry, no call to the plugin |
+| Variable (webview, `.env`)    | Meaning                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `VITE_ENABLE_GNOSIS_PAY=true` | the `/card` route and the navigation entry. Off: no route, no entry, no call to the plugin |
 
 A build with the flag on but without the Rust settings shows "No card in this build".
 
@@ -150,7 +151,7 @@ The desktop app against the fake server:
 cargo run -p tauri-plugin-klimper-card --features fake --example fake-gnosis-pay
 # in another shell (debug builds accept http):
 KLIMPER_CARD_API=http://127.0.0.1:8787/user-api KLIMPER_CARD_APP_NAME=klimper-dev \
-  KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_CARD=true pnpm tauri dev
+  KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_GNOSIS_PAY=true pnpm tauri dev
 ```
 
 The fake's codes are always `123456`. To move it along:

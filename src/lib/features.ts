@@ -35,8 +35,11 @@ export const klimperCoinsEnabled =
 // On by default: the Scan tab (src/klimper/Scanner.tsx), one camera for every code — a
 // website's Xchonnect code, an offer, an address. `VITE_DISABLE_SCAN=true` turns it off.
 export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';
-// Opt-in: the Klimper card through Gnosis Pay (milestone gnosis-card-mvp, docs/card.md). Off
-// unless set to true, so a build that does not ask for it has no card route, no navigation
-// entry and no call to the card plugin. It also needs the build-time card settings
+// Opt-in: Gnosis Pay, the Klimper card (milestone gnosis-card-mvp, docs/card.md).
+// `VITE_ENABLE_GNOSIS_PAY=true` turns it on; anything else, or unset, is off. Off means no
+// card route, no navigation entry, no card line in the wallet's total and no call to the
+// card plugin: nothing reaches Gnosis Pay. Release builds set it off in .env.production
+// until Gnosis Pay has given access. On, it also needs the build-time card settings
 // (KLIMPER_CARD_APP_NAME, KLIMPER_CARD_DOMAIN); without them the screen says so.
-export const cardEnabled = import.meta.env.VITE_ENABLE_CARD === 'true';
+export const gnosisPayEnabled =
+  import.meta.env.VITE_ENABLE_GNOSIS_PAY === 'true';
