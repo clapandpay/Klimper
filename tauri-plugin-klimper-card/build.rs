@@ -17,7 +17,7 @@ const COMMANDS: &[&str] = &[
     "card_set_frozen",
 ];
 
-/// The card settings are read with `option_env!` (src/gnosis_pay.rs, `Settings::from_build`):
+/// The card settings are read with `option_env!` (`src/gnosis_pay.rs`, `Settings::from_build`):
 /// a change to any of them must rebuild the plugin.
 const SETTINGS: &[&str] = &[
     "KLIMPER_CARD_API",
