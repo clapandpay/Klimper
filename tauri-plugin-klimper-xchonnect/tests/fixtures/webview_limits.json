@@ -1,4 +1,6 @@
 {
   "xch": { "perRequest": 100, "perDay": 1000 },
-  "cat:abababababababababababababababababababababababababababababababab": { "perDay": 5000 }
+  "cat:abababababababababababababababababababababababababababababababab": {
+    "perDay": 5000
+  }
 }
