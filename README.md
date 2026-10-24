@@ -45,7 +45,8 @@ pnpm tauri:build    # bundle: target/release/bundle/
 
 ## Licence
 
-AGPL-3.0-or-later for Klimper's own code, with an additional permission for distribution through
+AGPL-3.0-or-later for Klimper's own code (the full GNU Affero General Public License v3 text is in
+`LICENSE`), with an additional permission for distribution through
 app stores (`LICENSE-APP-STORE-EXCEPTION.md`); the Sage engine keeps its Apache-2.0 licence (see
 `NOTICE` and `LICENSE-APACHE`). Contributions are signed off under the DCO, no CLA
 (`CONTRIBUTING.md`); vulnerabilities are reported privately (`SECURITY.md`). "Klimper", the
