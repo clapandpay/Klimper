@@ -18,8 +18,9 @@ React; pnpm 10. CI and git rules: below.
   for the engine `cargo fmt`, `cargo clippy` and `cargo test`, locally, and say so in the pull
   request, especially for a change under `crates/`, `src-tauri/`, `tauri-plugin-sage/`,
   `migrations/` or `Cargo.lock`.
-- Klimper is not built in CI: it is archived and uploaded to TestFlight and the App Store from a
-  Mac (`scripts/testflight.sh`). Release tags are `klimper-v*`; never a plain `v*` (upstream's).
+- The iPhone app is not built in CI: it is archived and uploaded to TestFlight and the App Store
+  from a Mac (`scripts/testflight.sh`). The desktop installers are built by one workflow when a
+  release is published (CI, below). Release tags are `klimper-v*`; never a plain `v*` (upstream's).
 - This file is ours, not upstream's: Sage has no AGENTS.md. If it ever adds one, keep ours.
 
 ## CI
@@ -29,7 +30,13 @@ React; pnpm 10. CI and git rules: below.
 Anything that wants to run periodically is a script run by hand; the upstream check is
 `scripts/sync-upstream.sh --check`.
 
-Nothing of ours runs in CI. `.github/workflows/build.yml` and `npm.yml` are Sage's: they stay in
+One workflow of ours runs in CI, and only when a person publishes a GitHub release:
+`.github/workflows/klimper-desktop-release.yml` builds the desktop installers (macOS, Linux, Windows) for a `klimper-v*`
+release and attaches them to it (TASK-161). It never runs on a push, a pull request or a clock.
+Its only secrets are the optional Apple ones that sign and notarize the macOS app (listed in
+the workflow); Linux and Windows are unsigned. Nothing else of ours runs in CI.
+
+`.github/workflows/build.yml` and `npm.yml` are Sage's: they stay in
 the tree so that upstream merges stay clean, and they are disabled in this repository
 (`docs/UPSTREAM.md`, "Sage's workflows"). Never enable them: `npm.yml` publishes Sage's packages.
 

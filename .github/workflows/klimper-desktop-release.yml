@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Klimper's desktop installers for a GitHub release (TASK-161).
+#
+# Runs only when a person publishes a release whose tag is klimper-v<version> (AGENTS.md, "CI"):
+# never on a push, a pull request or a schedule. It builds macOS (universal), Linux (x64) and
+# Windows (x64) with every feature on (.env.desktop, through the desktop configs'
+# `pnpm run build:desktop`) and attaches the installers to that release.
+#
+# macOS is signed with the Developer ID certificate and notarized when the repository has the
+# secrets for it (below); until then it gets an ad-hoc signature, so it runs on Apple silicon
+# but Gatekeeper asks before the first start. Windows and Linux are not signed (SmartScreen
+# asks on Windows).
+#
+# Repository secrets for macOS (Settings → Secrets and variables → Actions), all optional:
+#   APPLE_CERTIFICATE           the "Developer ID Application" certificate as a base64 .p12
+#   APPLE_CERTIFICATE_PASSWORD  the .p12's password
+#   APPLE_SIGNING_IDENTITY      "Developer ID Application: <name> (<team id>)"
+#   for notarization, either the same as pengine's app-release.yml:
+#   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+#                               the Apple ID, an app-specific password and the 10-character team id
+#   or an App Store Connect API key:
+#   APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_PRIVATE_KEY (the .p8's text)
+# No secret is ever written to the repository or printed.
+
+name: Klimper desktop release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: klimper-desktop-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    if: startsWith(github.event.release.tag_name, 'klimper-v')
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal)
+            runner: macos-15
+            bundle: target/universal-apple-darwin/release/bundle
+            files: dmg/*.dmg
+          - name: Linux (x64)
+            runner: ubuntu-22.04
+            bundle: target/release/bundle
+            files: deb/*.deb appimage/*.AppImage rpm/*.rpm
+          - name: Windows (x64)
+            runner: windows-2022
+            bundle: target/release/bundle
+            files: msi/*.msi nsis/*.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: The tag matches Klimper's version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(scripts/set-version.sh --check)"
+          if [ "$TAG" != "klimper-v$version" ]; then
+            echo "The tag is $TAG, but the files say Klimper $version (scripts/set-version.sh)." >&2
+            exit 1
+          fi
+
+      - name: Rust targets (macOS)
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Windows dependencies
+        if: runner.os == 'Windows'
+        run: |
+          choco install nasm
+          echo "C:\Program Files\NASM" >> "$GITHUB_PATH"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: klimper-desktop-${{ runner.os }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Node and the pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: bindgen
+        run: cargo install bindgen-cli --locked
+
+      - name: Build
+        env:
+          CI: true
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "$RUNNER_OS" != macOS ]; then
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+              APPLE_API_ISSUER APPLE_API_KEY APPLE_API_PRIVATE_KEY \
+              APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            pnpm tauri build
+          elif [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "macOS: signed with the Developer ID certificate."
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+              echo "macOS: notarized with the Apple ID."
+              unset APPLE_API_ISSUER APPLE_API_KEY
+            elif [ -n "$APPLE_API_ISSUER" ] && [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_PRIVATE_KEY" ]; then
+              echo "macOS: notarized with the App Store Connect API key."
+              unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+              export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+              printf '%s' "$APPLE_API_PRIVATE_KEY" > "$APPLE_API_KEY_PATH"
+            else
+              echo "macOS: no notarization secrets, so signed but not notarized." >&2
+              unset APPLE_API_ISSUER APPLE_API_KEY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            fi
+            unset APPLE_API_PRIVATE_KEY
+            pnpm tauri build --target universal-apple-darwin
+            rm -f "${APPLE_API_KEY_PATH:-}"
+          else
+            echo "macOS: no Developer ID secrets, so an ad-hoc signature only."
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+              APPLE_API_ISSUER APPLE_API_KEY APPLE_API_PRIVATE_KEY \
+              APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            pnpm tauri build --target universal-apple-darwin \
+              --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+          fi
+
+      - name: Attach the installers to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          BUNDLE: ${{ matrix.bundle }}
+          FILES: ${{ matrix.files }}
+        run: |
+          shopt -s nullglob
+          cd "$BUNDLE"
+          found=()
+          for pattern in $FILES; do
+            for file in $pattern; do found+=("$file"); done
+          done
+          if [ "${#found[@]}" -eq 0 ]; then
+            echo "No installers in $BUNDLE ($FILES)." >&2
+            exit 1
+          fi
+          printf 'Attaching %s\n' "${found[@]}"
+          gh release upload "$TAG" "${found[@]}" --clobber --repo "$GITHUB_REPOSITORY"
