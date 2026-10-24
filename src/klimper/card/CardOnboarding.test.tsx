@@ -32,7 +32,12 @@ vi.mock('./card', async (original) => ({
   card: api,
 }));
 
+vi.mock('./CardAccount', () => ({
+  CardAccount: () => <div data-testid='card-account' />,
+}));
+
 const { renderScreen } = await import('../testHarness');
+const { CardOnboarding } = await import('./CardOnboarding');
 const { CardHome, POLL_MS } = await import('./CardHome');
 
 const signedOut = vi.fn();
@@ -155,7 +160,7 @@ it('sends the source-of-funds answers by question text', async () => {
   ]);
 });
 
-it('opens the account, verifies the phone and orders the card', async () => {
+it('opens the account, verifies the phone, then shows the account', async () => {
   show(
     { step: 'createAccount' },
     { step: 'verifyPhone' },
@@ -165,9 +170,7 @@ it('opens the account, verifies the phone and orders the card', async () => {
   fireEvent.click(await screen.findByTestId('card-create-account'));
   fireEvent.change(
     await screen.findByLabelText('Phone, with the country code'),
-    {
-      target: { value: '+43 123 4567890' },
-    },
+    { target: { value: '+43 123 4567890' } },
   );
   fireEvent.click(screen.getByTestId('card-send-phone-code'));
   fireEvent.change(
@@ -175,10 +178,19 @@ it('opens the account, verifies the phone and orders the card', async () => {
     { target: { value: '123456' } },
   );
   fireEvent.click(screen.getByTestId('card-verify-phone'));
-  fireEvent.click(await screen.findByTestId('card-order'));
-  await waitFor(() => expect(api.orderCard).toHaveBeenCalledWith('Klimper'));
+  await screen.findByTestId('card-account');
   expect(api.sendPhoneCode).toHaveBeenCalledWith('+43 123 4567890');
   expect(api.verifyPhone).toHaveBeenCalledWith('123456');
+});
+
+it('orders the virtual card once the account is ready', async () => {
+  const changed = vi.fn().mockResolvedValue(undefined);
+  renderScreen(
+    <CardOnboarding step={{ step: 'completed' }} onChanged={changed} />,
+  );
+  fireEvent.click(await screen.findByTestId('card-order'));
+  await waitFor(() => expect(changed).toHaveBeenCalled());
+  expect(api.orderCard).toHaveBeenCalledWith('Klimper');
 });
 
 it('shows an error from Gnosis Pay and stays on the step', async () => {

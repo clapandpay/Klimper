@@ -92,6 +92,47 @@ export const WAITING_STEPS: ReadonlySet<Step['step']> = new Set([
   'unknown',
 ]);
 
+export interface CardSummary {
+  id: string;
+  status:
+    | 'provisioning'
+    | 'pending_activation'
+    | 'active'
+    | 'blocked'
+    | 'canceled'
+    | string;
+  kind: 'virtual' | 'plastic' | string;
+  last4: string | null;
+  brand: string | null;
+  expires: string | null;
+}
+
+export interface Account {
+  safeAddress: string | null;
+  ownerAddress: string | null;
+  status: string;
+  currency: string;
+  /** Decimal strings in `currency`. */
+  spendable: string;
+  pending: string;
+  cards: CardSummary[];
+}
+
+export interface Payment {
+  id: string;
+  kind: string;
+  createdAt: string | null;
+  status: string;
+  merchant: string | null;
+  amount: string | null;
+  currency: string | null;
+}
+
+export interface Statement {
+  items: Payment[];
+  nextCursor: string | null;
+}
+
 export const card = {
   status: () => call<CardStatus>('card_status'),
   signIn: () => call<null>('card_sign_in'),
@@ -110,6 +151,11 @@ export const card = {
     call<null>('card_send_phone_code', { phone }),
   verifyPhone: (code: string) => call<null>('card_verify_phone', { code }),
   orderCard: (name: string) => call<null>('card_order_card', { name }),
+  account: () => call<Account>('card_account'),
+  transactions: (cursor: string | null = null) =>
+    call<Statement>('card_transactions', { cursor }),
+  setFrozen: (cardId: string, frozen: boolean) =>
+    call<null>('card_set_frozen', { cardId, frozen }),
 };
 
 export const CARD_ROUTE = '/card';

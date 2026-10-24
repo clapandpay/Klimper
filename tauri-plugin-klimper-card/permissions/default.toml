@@ -1,5 +1,5 @@
 [default]
-description = "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, and the onboarding steps."
+description = "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card."
 permissions = [
   "allow-card-status",
   "allow-card-sign-in",
@@ -13,4 +13,7 @@ permissions = [
   "allow-card-send-phone-code",
   "allow-card-verify-phone",
   "allow-card-order-card",
+  "allow-card-account",
+  "allow-card-transactions",
+  "allow-card-set-frozen",
 ]

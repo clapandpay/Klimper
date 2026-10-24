@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-card-transactions"
+description = "Enables the card_transactions command without any pre-configured scope."
+commands.allow = ["card_transactions"]
+
+[[permission]]
+identifier = "deny-card-transactions"
+description = "Denies the card_transactions command without any pre-configured scope."
+commands.deny = ["card_transactions"]

@@ -12,6 +12,9 @@ const COMMANDS: &[&str] = &[
     "card_send_phone_code",
     "card_verify_phone",
     "card_order_card",
+    "card_account",
+    "card_transactions",
+    "card_set_frozen",
 ];
 
 fn main() {

@@ -17,6 +17,7 @@ import {
   Step,
   WAITING_STEPS,
 } from './card';
+import { CardAccount } from './CardAccount';
 import { CardOnboarding } from './CardOnboarding';
 
 export const POLL_MS = 5000;
@@ -81,6 +82,8 @@ export function CardHome({
             />
           </div>
         )
+      ) : step.step === 'completed' ? (
+        <CardAccount onSignedOut={onSignedOut} />
       ) : (
         <CardOnboarding step={step} onChanged={load} />
       )}
