@@ -518,6 +518,14 @@ msgstr "添加提供的资产."
 msgid "Add the assets you are requesting."
 msgstr "添加请求的资产."
 
+#: src/klimper/card/AddToWallet.tsx:61
+msgid "Add to Apple Pay"
+msgstr ""
+
+#: src/klimper/card/AddToWallet.tsx:59
+msgid "Add to Google Pay"
+msgstr ""
+
 #: src/components/MultiSelectActions.tsx:277
 #: src/components/NftCard.tsx:529
 #: src/components/OptionCard.tsx:149
@@ -904,7 +912,7 @@ msgstr ""
 msgid "Banner for {collectionName}"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:196
+#: src/klimper/card/CardAccount.tsx:198
 msgid "Being made"
 msgstr ""
 
@@ -1129,7 +1137,7 @@ msgstr ""
 msgid "Cancel selected offers?"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:340
+#: src/klimper/card/CardAccount.tsx:347
 msgid "cancelled"
 msgstr ""
 
@@ -1156,6 +1164,10 @@ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:433
 msgid "Card issuers must ask this. The answers go to Gnosis Pay."
+msgstr ""
+
+#: src/klimper/card/CardDetails.tsx:94
+msgid "Card number"
 msgstr ""
 
 #: src/components/OfferCard.tsx:127
@@ -1631,6 +1643,10 @@ msgstr ""
 msgid "Copied {name}"
 msgstr ""
 
+#: src/klimper/card/AddToWallet.tsx:108
+msgid "Copied; cleared again in a minute"
+msgstr ""
+
 #: src/components/CopyButton.tsx:36
 #: src/components/CopyButton.tsx:37
 #: src/components/QRCodeDialog.tsx:65
@@ -1721,6 +1737,14 @@ msgstr ""
 
 #: src/components/OfferCard.tsx:106
 msgid "Copy offer"
+msgstr ""
+
+#: src/klimper/card/AddToWallet.tsx:110
+msgid "Copy the card number"
+msgstr ""
+
+#: src/klimper/card/AddToWallet.tsx:66
+msgid "Copy the card number below, or keep this screen open."
 msgstr ""
 
 #: src/pages/Login.tsx:126
@@ -1888,7 +1912,7 @@ msgstr ""
 msgid "Days"
 msgstr "天"
 
-#: src/klimper/card/CardAccount.tsx:338
+#: src/klimper/card/CardAccount.tsx:345
 msgid "declined"
 msgstr ""
 
@@ -2414,6 +2438,7 @@ msgid "Expired at:"
 msgstr ""
 
 #: src/components/OfferCard.tsx:172
+#: src/klimper/card/CardDetails.tsx:105
 #: src/pages/Option.tsx:168
 msgid "Expires"
 msgstr ""
@@ -2596,7 +2621,7 @@ msgstr ""
 msgid "Finalize Clawback Details"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:266
+#: src/klimper/card/CardAccount.tsx:268
 msgid "Freeze the card"
 msgstr ""
 
@@ -2608,7 +2633,7 @@ msgstr "刷新地址"
 msgid "Frontend"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:194
+#: src/klimper/card/CardAccount.tsx:196
 msgid "Frozen"
 msgstr ""
 
@@ -2784,6 +2809,7 @@ msgstr ""
 #: src/components/TokenCard.tsx:183
 #: src/components/TokenColumns.tsx:198
 #: src/components/TokenGridView.tsx:72
+#: src/klimper/card/CardDetails.tsx:129
 #: src/pages/DidList.tsx:323
 msgid "Hide"
 msgstr "隐藏"
@@ -3066,7 +3092,7 @@ msgstr "JSON"
 msgid "JSON copied to clipboard"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:241
+#: src/klimper/card/CardAccount.tsx:243
 msgid "Keep frozen"
 msgstr ""
 
@@ -3884,7 +3910,7 @@ msgstr ""
 msgid "No options to export"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:293
+#: src/klimper/card/CardAccount.tsx:300
 msgid "No payments yet."
 msgstr ""
 
@@ -4132,7 +4158,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:143
+#: src/klimper/card/CardAccount.tsx:145
 msgid "On the way: {pendingText}"
 msgstr ""
 
@@ -4192,6 +4218,10 @@ msgstr ""
 msgid "Open external link: {content}"
 msgstr ""
 
+#: src/klimper/card/AddToWallet.tsx:70
+msgid "Open Google Wallet, tap Add to Wallet, then Payment card, and enter the details by hand."
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectApprovalHost.tsx:325
 msgid "Open in requests"
 msgstr ""
@@ -4213,6 +4243,10 @@ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:411
 msgid "Open the identity check"
+msgstr ""
+
+#: src/klimper/card/AddToWallet.tsx:77
+msgid "Open the Wallet app, tap +, then Debit or Credit Card, and choose to enter the details by hand."
 msgstr ""
 
 #: src/klimper/ClapAndPayConnect.tsx:276
@@ -4351,13 +4385,17 @@ msgstr ""
 #~ msgid "Or type the code"
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:562
+#: src/klimper/card/CardOnboarding.tsx:561
 msgid "Order a virtual card"
 msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:549
-msgid "Order a virtual card. It works as soon as it is made. Showing its number and adding it to Apple Pay or Google Pay come in a later version of Klimper."
+msgid "Order a virtual card. It works as soon as it is made: show its details to pay online or to add it to Apple Pay or Google Pay."
 msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:549
+#~ msgid "Order a virtual card. It works as soon as it is made. Showing its number and adding it to Apple Pay or Google Pay come in a later version of Klimper."
+#~ msgstr ""
 
 #: src/klimper/CoinAddress.tsx:21
 msgid "Other"
@@ -4481,6 +4519,10 @@ msgstr ""
 #~ msgid "Paste the code"
 #~ msgstr ""
 
+#: src/klimper/card/AddToWallet.tsx:84
+msgid "Paste the number, then type the expiry, the security code and your name as on your ID."
+msgstr ""
+
 #: src/pages/Settings.tsx:172
 #~ msgid "Paste WalletConnect URI"
 #~ msgstr "粘贴WalletConnect URI"
@@ -4513,7 +4555,7 @@ msgstr ""
 msgid "Paying"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:287
+#: src/klimper/card/CardAccount.tsx:294
 msgid "Payments"
 msgstr ""
 
@@ -4533,7 +4575,7 @@ msgstr "节点列表"
 msgid "peers"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:336
+#: src/klimper/card/CardAccount.tsx:343
 msgid "pending"
 msgstr ""
 
@@ -4790,7 +4832,7 @@ msgstr ""
 msgid "Read-only wallet — transactions require private keys"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:192
+#: src/klimper/card/CardAccount.tsx:194
 msgid "Ready to pay"
 msgstr ""
 
@@ -5234,6 +5276,10 @@ msgstr ""
 msgid "Secret Key"
 msgstr "私钥"
 
+#: src/klimper/card/CardDetails.tsx:113
+msgid "Security code"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectApprovalHost.tsx:323
 msgid "See all {total} requests"
 msgstr ""
@@ -5523,6 +5569,10 @@ msgstr ""
 #: src/components/CoinList.tsx:267
 #~ msgid "Show all coins"
 #~ msgstr "显示所有硬币"
+
+#: src/klimper/card/CardDetails.tsx:84
+msgid "Show card details"
+msgstr ""
 
 #: src/components/NftGroupCard.tsx:220
 #~ msgid "Show collection"
@@ -6116,6 +6166,10 @@ msgstr ""
 
 #: src/klimper/card/CardScreen.tsx:150
 msgid "The card is controlled by a key made from the wallet’s recovery words. This wallet was imported without them."
+msgstr ""
+
+#: src/klimper/card/AddToWallet.tsx:90
+msgid "The card issuer checks the card; it may send you a code by text message. Then pay by holding the phone to the card reader."
 msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:401
@@ -6820,7 +6874,7 @@ msgstr ""
 msgid "Tokens must have a positive amount."
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:150
+#: src/klimper/card/CardAccount.tsx:152
 msgid "Top up: send EURe on Gnosis Chain to the card account"
 msgstr ""
 
@@ -7044,15 +7098,15 @@ msgstr ""
 msgid "Underlying Asset (Locked)"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:234
+#: src/klimper/card/CardAccount.tsx:236
 msgid "Unfreeze"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:253
+#: src/klimper/card/CardAccount.tsx:255
 msgid "Unfreeze the card"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:226
+#: src/klimper/card/CardAccount.tsx:228
 msgid "Unfreeze? The card can pay again at once."
 msgstr ""
 
@@ -7762,7 +7816,7 @@ msgstr ""
 msgid "You can also paste an offer using"
 msgstr "也可以粘贴报价通过"
 
-#: src/klimper/card/CardAccount.tsx:133
+#: src/klimper/card/CardAccount.tsx:135
 msgid "You can spend"
 msgstr ""
 
