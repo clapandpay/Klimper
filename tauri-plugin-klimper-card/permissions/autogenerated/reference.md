@@ -1,6 +1,6 @@
 ## Default Permission
 
-The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, and the onboarding steps.
+The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out, the onboarding steps, and the account: balance, cards, payments, freezing and unfreezing a card.
 
 #### This default permission set includes the following:
 
@@ -16,6 +16,9 @@ The Klimper card through Gnosis Pay: the card address of the open wallet, signin
 - `allow-card-send-phone-code`
 - `allow-card-verify-phone`
 - `allow-card-order-card`
+- `allow-card-account`
+- `allow-card-transactions`
+- `allow-card-set-frozen`
 
 ## Permission Table
 
@@ -48,6 +51,32 @@ Enables the card_accept_terms command without any pre-configured scope.
 <td>
 
 Denies the card_accept_terms command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:allow-card-account`
+
+</td>
+<td>
+
+Enables the card_account command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:deny-card-account`
+
+</td>
+<td>
+
+Denies the card_account command without any pre-configured scope.
 
 </td>
 </tr>
@@ -237,6 +266,32 @@ Denies the card_send_phone_code command without any pre-configured scope.
 <tr>
 <td>
 
+`klimper-card:allow-card-set-frozen`
+
+</td>
+<td>
+
+Enables the card_set_frozen command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:deny-card-set-frozen`
+
+</td>
+<td>
+
+Denies the card_set_frozen command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `klimper-card:allow-card-sign-in`
 
 </td>
@@ -308,6 +363,32 @@ Enables the card_status command without any pre-configured scope.
 <td>
 
 Denies the card_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:allow-card-transactions`
+
+</td>
+<td>
+
+Enables the card_transactions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-card:deny-card-transactions`
+
+</td>
+<td>
+
+Denies the card_transactions command without any pre-configured scope.
 
 </td>
 </tr>

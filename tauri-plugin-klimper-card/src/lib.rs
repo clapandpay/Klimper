@@ -17,6 +17,7 @@ use tauri::{
 };
 use tokio::sync::Mutex;
 
+pub mod account;
 pub mod evm;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
@@ -376,6 +377,44 @@ async fn card_order_card<R: Runtime>(
         .await?)
 }
 
+// The account (TASK-151).
+
+#[command]
+async fn card_account<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+) -> Result<account::Account> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage).await?.account().await?)
+}
+
+#[command]
+async fn card_transactions<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    cursor: Option<String>,
+) -> Result<account::Statement> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .statement(cursor.as_deref())
+        .await?)
+}
+
+#[command]
+async fn card_set_frozen<R: Runtime>(
+    app: AppHandle<R>,
+    card: State<'_, Card>,
+    card_id: String,
+    frozen: bool,
+) -> Result<()> {
+    let sage = app.state::<AppState>().inner().clone();
+    Ok(session(&card, &sage)
+        .await?
+        .set_frozen(&card_id, frozen)
+        .await?)
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-card")
         .invoke_handler(tauri::generate_handler![
@@ -391,6 +430,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             card_send_phone_code,
             card_verify_phone,
             card_order_card,
+            card_account,
+            card_transactions,
+            card_set_frozen,
         ])
         .setup(|app, _api| {
             app.manage(Card::new(Settings::from_build()));
