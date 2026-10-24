@@ -493,7 +493,7 @@ function VerifyPhone({ act, busy }: StepProps) {
           id='card-phone'
           type='tel'
           autoComplete='tel'
-          placeholder='+43…'
+          placeholder='+1 555 …'
           value={phone}
           disabled={sent}
           onChange={(e) => setPhone(e.target.value)}

@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn input_shapes() {
-        assert!(valid_phone("+431234567890"));
+        assert!(valid_phone("+15550100123"));
         assert!(!valid_phone("0043 1234"));
         assert!(!valid_phone("+12"));
         assert!(valid_code("123456"));
@@ -332,7 +332,7 @@ mod tests {
         api.create_account().await.unwrap();
 
         assert_eq!(api.onboarding().await.unwrap(), Step::VerifyPhone);
-        api.send_phone_code("+431234567890").await.unwrap();
+        api.send_phone_code("+15550100123").await.unwrap();
         api.verify_phone("123456").await.unwrap();
 
         assert_eq!(api.onboarding().await.unwrap(), Step::Completed);

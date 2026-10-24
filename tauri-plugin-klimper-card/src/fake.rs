@@ -152,7 +152,7 @@ fn payment(id: &str, at: &str, merchant: &str, amount: &str, status: &str) -> Va
         "id": id, "type": "card_transaction", "createdAt": at, "status": status,
         "billingAmount": amount, "billingCurrency": "EUR",
         "transactionAmount": amount, "transactionCurrency": "EUR",
-        "merchant": { "name": merchant, "city": "Example City", "country": "AT" },
+        "merchant": { "name": merchant, "city": "Example City", "country": "XX" },
         "mcc": "5814",
     })
 }

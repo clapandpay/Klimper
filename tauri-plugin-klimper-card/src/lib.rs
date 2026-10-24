@@ -337,7 +337,7 @@ async fn card_send_phone_code<R: Runtime>(
     let phone: String = phone.chars().filter(|c| !c.is_whitespace()).collect();
     if !onboarding::valid_phone(&phone) {
         return Err(Error::Invalid(
-            "write the number with its country code, e.g. +43…",
+            "write the number with its country code, e.g. +1 555 …",
         ));
     }
     let sage = app.state::<AppState>().inner().clone();

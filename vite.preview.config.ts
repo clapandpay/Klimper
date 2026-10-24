@@ -6,8 +6,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react({ plugins: [['@lingui/swc-plugin', {}]] }), lingui()],
   server: { port: 5199, strictPort: true },
-  // The preview is of the Xchonnect screens: on whatever the shell's environment says.
-  define: { 'import.meta.env.VITE_ENABLE_XCHONNECT': JSON.stringify('true') },
+  // The preview is of the Xchonnect and card screens: on whatever the shell's environment says.
+  define: {
+    'import.meta.env.VITE_ENABLE_XCHONNECT': JSON.stringify('true'),
+    'import.meta.env.VITE_ENABLE_CARD': JSON.stringify('true'),
+  },
   resolve: {
     alias: [
       {
