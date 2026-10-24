@@ -547,9 +547,8 @@ function OrderCard({ act, busy }: StepProps) {
       title={<Trans>Your account is ready</Trans>}
       description={
         <Trans>
-          Order a virtual card. It works as soon as it is made. Showing its
-          number and adding it to Apple Pay or Google Pay come in a later
-          version of Klimper.
+          Order a virtual card. It works as soon as it is made: show its details
+          to pay online or to add it to Apple Pay or Google Pay.
         </Trans>
       }
     >

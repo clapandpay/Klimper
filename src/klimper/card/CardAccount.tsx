@@ -26,6 +26,7 @@ import {
   Payment,
 } from './card';
 import { Masked, useMaskAmounts } from '../privacy';
+import { AddToWallet } from './AddToWallet';
 import { CardDetails } from './CardDetails';
 import { CardOnboarding } from './CardOnboarding';
 
@@ -268,7 +269,11 @@ function PaymentCard({
             </Button>
           )
         )}
-        {summary.status === 'active' && <CardDetails cardId={summary.id} />}
+        {summary.status === 'active' && (
+          <CardDetails cardId={summary.id}>
+            {(details) => <AddToWallet details={details} />}
+          </CardDetails>
+        )}
       </CardContent>
     </Card>
   );

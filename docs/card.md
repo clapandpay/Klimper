@@ -53,6 +53,42 @@ restarts.
 - **The Safe's Delay module is never touched.** Gnosis Pay blocks the card on any use of
   it.
 
+## Card details and Apple Pay
+
+The number, expiry and CVV come through Gnosis Pay's direct PCI route. No backend is
+needed:
+
+1. `GET /pci/cards/{id}/challenge?action=view-details` returns EIP-712 typed data.
+   `eip712::check_card_challenge` accepts only a Gnosis Pay `Message` with an
+   authorization text and a nonce, on this build's chain, with no `verifyingContract` and
+   no `salt`. Nothing of that shape can move money. Only then does the card key sign it,
+   after the biometric prompt.
+2. Klimper makes a fresh AES-256 key and wraps it for `GET /pci/public-key`
+   (RSA-OAEP-SHA256).
+3. `GET /pci/cards/{id}/details` with `x-eip712-signature` and `x-eip712-nonce` returns
+   the number and CVV in AES-GCM under that key. They are decrypted in Rust and shown once.
+   They are hidden after 60 s, by hand, or when Klimper goes to the background.
+
+**Apple Pay today** is the route every Visa card has. The user opens the Wallet app, taps
++, chooses Debit or Credit Card, and enters the details shown in Klimper. The card issuer
+then verifies the card. Google Wallet works the same way on Android. Copying the number
+clears the clipboard after a minute.
+
+**One-tap "Add to Apple Wallet"** (in-app provisioning with
+`PKAddPaymentPassViewController`) needs, all from outside Klimper:
+
+- The `com.apple.developer.payment-pass-provisioning` entitlement. Apple grants it to the
+  card issuer's app, or to an app the issuer sponsors, after an application. It works
+  only in TestFlight and App Store builds.
+- An issuer API that takes Apple's certificates, nonce and nonce signature and returns
+  `encryptedPassData`, `activationData` and `ephemeralPublicKey`. Gnosis Pay documents no
+  such API (2026-10).
+- Apple's "Add to Apple Wallet" button guidelines, and App Review of the flow.
+
+Until then Klimper does not show Apple's badge, which is reserved for that button. The
+question is with Gnosis Pay (TASK-147). The Google Pay equivalent (Push Provisioning API)
+has the same shape.
+
 ## What a build needs
 
 The card settings are public, not secrets: the app name and the domain appear in every
@@ -125,6 +161,10 @@ These are written down where the code guesses. Each guess is marked in the code.
 - Which body `POST /user/account` takes on Gnosis Chain. Klimper sends `{}`.
 - The statement's amount fields. Klimper tries `billingAmount`, `amount` and
   `transactionAmount`.
-- Whether a wallet may use the direct `/pci` endpoints to show the card number.
+- Whether a wallet may use the direct `/pci` endpoints to show the card number, the
+  AES-GCM layout (tag appended assumed), and the status of a bad challenge (403 assumed:
+  a 401 reads as an expired session).
+- In-app provisioning to Apple Pay and Google Pay: whether Gnosis Pay or its issuer
+  (Monavate) offers the provisioning API and sponsors the Apple entitlement.
 - The withdrawal path (`/user/withdrawal` or `/user/withdrawals`), and the currency of the
   account limit.

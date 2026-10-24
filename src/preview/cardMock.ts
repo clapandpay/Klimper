@@ -227,6 +227,7 @@ mockIPC(async (cmd, args) => {
     default:
       // The opener: a link would open in the browser.
       if (cmd.startsWith('plugin:opener')) return null;
+      if (cmd.startsWith('plugin:clipboard-manager')) return null;
       throw new Error(`preview: no mock for ${cmd}`);
   }
 });
