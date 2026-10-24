@@ -28,6 +28,7 @@ import {
 import { ReactElement } from 'react';
 import { createRoutesFromElements, Route, RouteObject } from 'react-router-dom';
 import ClapAndPayConnect from './ClapAndPayConnect';
+import { cardRoutes } from './card/CardRoutes';
 import { RouteRecovery } from './KlimperErrorBoundary';
 import { scannerRoutes } from './Scanner';
 import { xchonnectRoutes } from './xchonnect/XchonnectRoutes';
@@ -105,6 +106,7 @@ export function withKlimper(routes: RouteObject[]): RouteObject[] {
         )}
         {xchonnectRoutes}
         {scannerRoutes}
+        {cardRoutes}
       </>,
     ),
   ]

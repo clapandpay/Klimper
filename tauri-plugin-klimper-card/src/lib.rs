@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use sage::Sage;
+use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use tauri::{
     AppHandle, Manager, Runtime, State, command,
@@ -17,13 +18,18 @@ use tauri::{
 use tokio::sync::Mutex;
 
 pub mod evm;
+#[cfg(any(test, feature = "fake"))]
+pub mod fake;
+pub mod gnosis_pay;
+pub mod siwe;
 
 use evm::{Address, EvmKey};
+use gnosis_pay::{ApiError, GnosisPay, Settings};
 
 /// What `src-tauri` manages (`src-tauri/src/app_state.rs`).
 pub type AppState = Arc<Mutex<Sage>>;
 
-#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
     #[error("no wallet is open")]
     NoWallet,
@@ -31,22 +37,70 @@ pub enum Error {
     NoRecoveryWords,
     #[error("the wallet's keys could not be read")]
     Keychain,
+    #[error("this build of Klimper has no card")]
+    NotConfigured,
+    #[error("{0}")]
+    Invalid(&'static str),
     #[error(transparent)]
     Key(#[from] evm::KeyError),
+    #[error(transparent)]
+    Api(#[from] ApiError),
 }
 
+impl Error {
+    /// A stable name for the webview to branch on.
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::NoWallet => "noWallet",
+            Self::NoRecoveryWords => "noRecoveryWords",
+            Self::Keychain | Self::Key(_) => "key",
+            Self::NotConfigured => "notConfigured",
+            Self::Invalid(_) => "invalid",
+            Self::Api(ApiError::SignedOut) => "signedOut",
+            Self::Api(ApiError::Siwe(_)) => "refusedMessage",
+            Self::Api(ApiError::Network) => "network",
+            Self::Api(ApiError::Status { .. } | ApiError::Unreadable) => "api",
+        }
+    }
+}
+
+/// `{ kind, message, code }`: what the webview's promise rejects with.
 impl Serialize for Error {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+        let mut s = serializer.serialize_struct("CardError", 3)?;
+        s.serialize_field("kind", self.kind())?;
+        s.serialize_field("message", &self.to_string())?;
+        s.serialize_field(
+            "code",
+            &match self {
+                Self::Api(api) => api.code(),
+                _ => None,
+            },
+        )?;
+        s.end()
     }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// The card's own state. The address per wallet is cached (it is public); the key is not.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Card {
     addresses: Mutex<HashMap<u32, Address>>,
+    api: Option<GnosisPay>,
+}
+
+impl Card {
+    pub fn new(settings: Option<Settings>) -> Self {
+        Self {
+            addresses: Mutex::new(HashMap::new()),
+            api: settings.map(GnosisPay::new),
+        }
+    }
+
+    pub fn api(&self) -> Result<&GnosisPay> {
+        self.api.as_ref().ok_or(Error::NotConfigured)
+    }
 }
 
 /// Opens the active wallet's card key for the length of `f`, then drops it.
@@ -94,45 +148,107 @@ pub async fn address(card: &Card, sage: &AppState) -> Result<(u32, Address)> {
     Ok((fingerprint, address))
 }
 
+/// The open wallet's session; `SignedOut` when it has none.
+pub async fn session<'a>(card: &'a Card, sage: &AppState) -> Result<&'a GnosisPay> {
+    let api = card.api()?;
+    let (fingerprint, address) = address(card, sage).await?;
+    if api.signed_in(fingerprint).await != Some(address) {
+        return Err(ApiError::SignedOut.into());
+    }
+    Ok(api)
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CardStatus {
+    /// Whether this build was made with a card registration (docs/card.md).
+    pub configured: bool,
+    /// `sandbox`, `production` or `custom`.
+    pub environment: Option<&'static str>,
     /// Whether this wallet can have a card at all.
     pub available: bool,
     /// Why not, when it cannot: `noWallet` or `noRecoveryWords`.
     pub unavailable: Option<&'static str>,
     /// The card address (EIP-55), when available.
     pub address: Option<String>,
+    pub signed_in: bool,
 }
 
 #[command]
 async fn card_status<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<CardStatus> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(match address(&card, &sage).await {
-        Ok((_, address)) => CardStatus {
-            available: true,
-            unavailable: None,
-            address: Some(address.checksummed()),
-        },
-        Err(Error::NoWallet) => CardStatus {
-            available: false,
-            unavailable: Some("noWallet"),
-            address: None,
-        },
-        Err(Error::NoRecoveryWords) => CardStatus {
-            available: false,
-            unavailable: Some("noRecoveryWords"),
-            address: None,
-        },
+    let configured = card.api.is_some();
+    let environment = card.api.as_ref().map(|api| api.settings().environment());
+    let (fingerprint, address) = match address(&card, &sage).await {
+        Ok(found) => found,
+        Err(error @ (Error::NoWallet | Error::NoRecoveryWords)) => {
+            return Ok(CardStatus {
+                configured,
+                environment,
+                available: false,
+                unavailable: Some(error.kind()),
+                address: None,
+                signed_in: false,
+            });
+        }
         Err(error) => return Err(error),
+    };
+    let signed_in = match &card.api {
+        Some(api) => api.signed_in(fingerprint).await == Some(address),
+        None => false,
+    };
+    Ok(CardStatus {
+        configured,
+        environment,
+        available: true,
+        unavailable: None,
+        address: Some(address.checksummed()),
+        signed_in,
     })
+}
+
+/// Signs in to Gnosis Pay with the card key. The webview asks for Face ID or Touch ID first
+/// (Sage's "Require biometrics"), as for any signature.
+#[command]
+async fn card_sign_in<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<()> {
+    let api = card.api()?;
+    let sage = app.state::<AppState>().inner().clone();
+    let (fingerprint, address) = address(&card, &sage).await?;
+    let message = api.challenge(address, now()).await?;
+    let (_, signature) = with_key(&sage, |key| {
+        // The wallet may have been switched between the two steps.
+        if key.address() != address {
+            return Err(Error::NoWallet);
+        }
+        Ok(key.personal_sign(message.as_bytes())?)
+    })
+    .await?;
+    api.verify(fingerprint, address, &message, &signature)
+        .await?;
+    Ok(())
+}
+
+#[command]
+async fn card_sign_out(card: State<'_, Card>) -> Result<()> {
+    card.api()?.sign_out().await;
+    Ok(())
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-card")
-        .invoke_handler(tauri::generate_handler![card_status])
+        .invoke_handler(tauri::generate_handler![
+            card_status,
+            card_sign_in,
+            card_sign_out
+        ])
         .setup(|app, _api| {
-            app.manage(Card::default());
+            app.manage(Card::new(Settings::from_build()));
             Ok(())
         })
         .build()

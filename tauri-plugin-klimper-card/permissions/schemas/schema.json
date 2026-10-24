@@ -295,6 +295,30 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the card_sign_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-sign-in",
+          "markdownDescription": "Enables the card_sign_in command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_sign_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-sign-in",
+          "markdownDescription": "Denies the card_sign_in command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the card_sign_out command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-card-sign-out",
+          "markdownDescription": "Enables the card_sign_out command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the card_sign_out command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-card-sign-out",
+          "markdownDescription": "Denies the card_sign_out command without any pre-configured scope."
+        },
+        {
           "description": "Enables the card_status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-card-status",
@@ -307,10 +331,10 @@
           "markdownDescription": "Denies the card_status command without any pre-configured scope."
         },
         {
-          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet.\n#### This default permission set includes:\n\n- `allow-card-status`",
+          "description": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet.\n#### This default permission set includes:\n\n- `allow-card-status`"
+          "markdownDescription": "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out.\n#### This default permission set includes:\n\n- `allow-card-status`\n- `allow-card-sign-in`\n- `allow-card-sign-out`"
         }
       ]
     }

@@ -1,3 +1,3 @@
 [default]
-description = "The Klimper card through Gnosis Pay: the card address of the open wallet."
-permissions = ["allow-card-status"]
+description = "The Klimper card through Gnosis Pay: the card address of the open wallet, signing in and out."
+permissions = ["allow-card-status", "allow-card-sign-in", "allow-card-sign-out"]

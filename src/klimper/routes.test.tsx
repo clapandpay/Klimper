@@ -25,6 +25,7 @@ vi.mock('@/lib/features', () => ({
   tokenIssuingEnabled: false,
   xchonnectEnabled: true,
   scanEnabled: true,
+  cardEnabled: true,
 }));
 vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({
@@ -32,6 +33,9 @@ vi.mock('./Scanner', () => ({
 }));
 vi.mock('./xchonnect/XchonnectRoutes', () => ({
   xchonnectRoutes: <Route path='/xchonnect' element={<div />} />,
+}));
+vi.mock('./card/CardRoutes', () => ({
+  cardRoutes: <Route path='/card' element={<div />} />,
 }));
 
 const { withKlimper } = await import('./routes');
@@ -97,7 +101,12 @@ describe('withKlimper', () => {
     const paths = withKlimper(sage()).map((r) => r.path);
     expect(paths.slice(0, 4)).toEqual(['/', '/wallet', '/nfts', '/offers']);
     expect(paths).toEqual(
-      expect.arrayContaining(['/clapandpay', '/xchonnect', '/scanner']),
+      expect.arrayContaining([
+        '/clapandpay',
+        '/xchonnect',
+        '/scanner',
+        '/card',
+      ]),
     );
   });
 
