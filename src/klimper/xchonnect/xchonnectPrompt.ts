@@ -348,8 +348,24 @@ const arrayOf = (value: unknown): unknown[] =>
 
 const boolOf = (value: unknown): boolean => value === true;
 
+/**
+ * A whole number that a JS number holds exactly, from a JSON number or a decimal string,
+ * or null. Xchonnect 0.1.0 sends Unix times (`time_locks` seconds, option expiries) as
+ * decimal strings, like amounts.
+ */
+function safeIntOf(value: unknown): number | null {
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^-?\d{1,16}$/.test(value)
+        ? Number(value)
+        : NaN;
+  return Number.isSafeInteger(n) ? n : null;
+}
+
 /** An integer that fits a JS number, or null. */
 function intOf(value: unknown): number | null {
+  if (typeof value === 'string') return safeIntOf(value);
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return Math.trunc(value);
 }
@@ -357,10 +373,9 @@ function intOf(value: unknown): number | null {
 /**
  * An amount in the smallest unit.
  *
- * Accepts a JSON number (what the plugin sends today) and a decimal string, so the
- * plugin can move to strings — which it should, because an amount above 2^53 mojos
- * (about 9007 XCH) has already lost precision by the time `JSON.parse` has run — without
- * the screens changing.
+ * A decimal string, which Xchonnect 0.1.0 sends because an amount above 2^53 mojos (about
+ * 9007 XCH) has already lost precision by the time `JSON.parse` has run; a JSON number is
+ * still read while it is exact.
  */
 function amountOf(value: unknown): BigNumber {
   // Absent is zero (an optional field the simulation left out).
@@ -654,10 +669,9 @@ function strictHex32(value: unknown): string {
 
 /** Unix seconds: a whole, non-negative number. */
 function strictSeconds(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new UnreadableAmount();
-  }
-  return value;
+  const seconds = safeIntOf(value);
+  if (seconds === null || seconds < 0) throw new UnreadableAmount();
+  return seconds;
 }
 
 /** An option leg: XCH or a CAT (an option backed by an option is not one this build reads). */
