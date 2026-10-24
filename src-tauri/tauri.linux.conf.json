@@ -2,6 +2,9 @@
   "productName": "Klimper",
   "version": "1.0.0",
   "identifier": "com.clapandpay.klimper",
+  "build": {
+    "beforeBuildCommand": "pnpm run build:desktop"
+  },
   "app": {
     "windows": [
       {
