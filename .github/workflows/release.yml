@@ -1,0 +1,170 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Release: builds Klimper for the desktop and attaches the installers to a GitHub release.
+#
+# When:  only when a person publishes a release with the tag klimper-v<version>,
+#        e.g. klimper-v1.0.0. Never on a push, a pull request or a schedule.
+# What:  macOS (Apple silicon + Intel), Linux (x64, ARM64), Windows (x64, ARM64),
+#        every feature on (.env.desktop). The iPhone app is built on a Mac instead
+#        (scripts/testflight.sh).
+# Signing: macOS is signed with the Developer ID certificate and notarized by Apple.
+#        Linux and Windows are not signed.
+#
+# Repository secrets for macOS (Settings → Secrets and variables → Actions):
+#   APPLE_CERTIFICATE           the Developer ID Application certificate, a .p12 in base64
+#   APPLE_CERTIFICATE_PASSWORD  the .p12's password
+#   APPLE_SIGNING_IDENTITY      "Developer ID Application: <name> (<team id>)"
+#   APPLE_ID                    the Apple ID email
+#   APPLE_PASSWORD              an app-specific password for that Apple ID
+#   APPLE_TEAM_ID               the 10-character team id
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # to attach the installers to the release
+
+jobs:
+  # 1. Stop early when the tag does not match the version in the files.
+  check:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Tag is klimper-v<version>
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(scripts/set-version.sh --check)"
+          if [ "$TAG" != "klimper-v$version" ]; then
+            echo "::error::The tag is '$TAG' but must be 'klimper-v$version'. Delete the release and its tag, then publish again."
+            exit 1
+          fi
+
+  # 2. Build every desktop target and attach its installers.
+  build:
+    name: ${{ matrix.name }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-15
+            target: universal-apple-darwin
+            installers: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+          - name: Linux x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            installers: >-
+              target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+              target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+              target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+
+          - name: Linux ARM64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            installers: >-
+              target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+              target/aarch64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+              target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+
+          - name: Windows x64
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            installers: >-
+              target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+              target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+
+          - name: Windows ARM64
+            runner: windows-2022
+            target: aarch64-pc-windows-msvc
+            installers: >-
+              target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
+              target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      # Tools
+      - name: Rust target
+        run: |
+          if [ "${{ matrix.target }}" = universal-apple-darwin ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          else
+            rustup target add "${{ matrix.target }}"
+          fi
+
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Windows assembler (NASM)
+        if: runner.os == 'Windows'
+        run: |
+          choco install nasm
+          echo "C:\Program Files\NASM" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          cargo install bindgen-cli --locked
+
+      # Build
+      - name: Build (Linux, Windows)
+        if: runner.os != 'macOS'
+        run: pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Build, sign and notarize (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The repository secret $name is missing (see the top of this file)."
+              exit 1
+            fi
+          done
+          pnpm tauri build --target ${{ matrix.target }}
+
+      # Publish
+      - name: Attach the installers to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # shellcheck disable=SC2086 # the list holds globs to expand
+          gh release upload "$TAG" ${{ matrix.installers }} --clobber

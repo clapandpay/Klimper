@@ -19,8 +19,8 @@ React; pnpm 10. CI and git rules: below.
   request, especially for a change under `crates/`, `src-tauri/`, `tauri-plugin-sage/`,
   `migrations/` or `Cargo.lock`.
 - The iPhone app is not built in CI: it is archived and uploaded to TestFlight and the App Store
-  from a Mac (`scripts/testflight.sh`). The desktop installers are built by one workflow when a
-  release is published (CI, below). Release tags are `klimper-v*`; never a plain `v*` (upstream's).
+  from a Mac (`scripts/testflight.sh`). The desktop installers are built by the Release workflow when
+  a release is published (CI, below). Release tags are `klimper-v*`; never a plain `v*` (upstream's).
 - This file is ours, not upstream's: Sage has no AGENTS.md. If it ever adds one, keep ours.
 
 ## CI
@@ -30,15 +30,16 @@ React; pnpm 10. CI and git rules: below.
 Anything that wants to run periodically is a script run by hand; the upstream check is
 `scripts/sync-upstream.sh --check`.
 
-One workflow of ours runs in CI, and only when a person publishes a GitHub release:
-`.github/workflows/klimper-desktop-release.yml` builds the desktop installers (macOS, Linux, Windows) for a `klimper-v*`
-release and attaches them to it (TASK-161). It never runs on a push, a pull request or a clock.
-Its only secrets are the optional Apple ones that sign and notarize the macOS app (listed in
-the workflow); Linux and Windows are unsigned. Nothing else of ours runs in CI.
+There is one workflow, `.github/workflows/release.yml` ("Release"), and it runs only when a person
+publishes a GitHub release tagged `klimper-v<version>`. It builds the desktop installers (macOS,
+Linux and Windows, x64 and ARM64) and attaches them to that release; macOS is signed and
+notarized with the Apple secrets listed at its top (TASK-161, TASK-163). It never runs on a push,
+a pull request or a clock. Keep it the only workflow, and keep it short enough to read top to
+bottom.
 
-`.github/workflows/build.yml` and `npm.yml` are Sage's: they stay in
-the tree so that upstream merges stay clean, and they are disabled in this repository
-(`docs/UPSTREAM.md`, "Sage's workflows"). Never enable them: `npm.yml` publishes Sage's packages.
+Sage's own workflows (`build.yml`, `npm.yml`) are deleted here: they need Sage's runners and
+secrets, and `npm.yml` publishes Sage's packages. `scripts/sync-upstream.sh` removes any Sage
+workflow a merge brings back.
 
 ## Git workflow
 

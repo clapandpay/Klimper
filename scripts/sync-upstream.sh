@@ -128,10 +128,31 @@ if git merge-base --is-ancestor "$target" HEAD; then
   exit 0
 fi
 
+# Klimper runs one workflow of its own, release.yml (AGENTS.md, "CI"). Sage's workflows are
+# deleted here, and a merge must not bring one back: one Sage changed is a modify/delete
+# conflict, one Sage added arrives as a new file. Both are removed again. Prints what it removed.
+drop_upstream_workflows() {
+  local dir="${IN}.github/workflows" file
+  git ls-files -- "$dir" | sort -u | while read -r file; do
+    [[ "$file" == "$dir/release.yml" ]] && continue
+    git rm -q -f -- "$file" && echo "  removed Sage's $file"
+  done
+}
+
 echo "merging $target (currently on $merged_tag)"
 merge_opts=()
 [[ -n "$SUBTREE" ]] && merge_opts=(-X "subtree=$SUBTREE")
-if ! git merge --no-ff ${merge_opts[@]+"${merge_opts[@]}"} -m "Merge Sage $target into ${IN:-the root}" "$target"; then
+if git merge --no-ff ${merge_opts[@]+"${merge_opts[@]}"} -m "Merge Sage $target into ${IN:-the root}" "$target"; then
+  if [[ -n "$(drop_upstream_workflows)" ]]; then
+    git commit -q --amend --no-edit
+    echo "Sage's workflows removed from the merge commit."
+  fi
+else
+  drop_upstream_workflows
+  if [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
+    git commit -q --no-edit
+    echo "The only conflicts were Sage's workflows; removed, and the merge is committed."
+  else
   cat >&2 <<MSG
 
 Conflicts. All paths are under ${IN:-the root}. Ours to keep: README.md, LICENSE,
@@ -142,7 +163,8 @@ Keychain password (crates/sage-keychain, crates/sage): take upstream, then pass
 self.keychain.password()? wherever Sage passes b"" (docs/UPSTREAM.md, "Staying current").
 Playbook: ${IN}docs/UPSTREAM.md. Finish with: git commit
 MSG
-  exit 1
+    exit 1
+  fi
 fi
 
 cat <<MSG

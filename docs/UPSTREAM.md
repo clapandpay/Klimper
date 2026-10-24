@@ -381,27 +381,15 @@ Known leftovers, deliberately not patched:
    upstream first.
 3. Never resolve anything under `crates/sage-apps` or `packages/sage-app-sdk` in our favour.
 
-## CI
-
-Upstream's workflows (`build.yml`, `npm.yml`) stay in the tree unchanged so they never conflict,
-but they need Sage's runners and secrets and would publish to npm. Disable them once in the
-GitHub repository: `gh workflow disable Build && gh workflow disable NPM`. Ours are
-`.github/workflows/green-envelope.yml` and `clapandpay-web.yml`, named `Image …` so that command
-does not touch them.
-
 ## Sage's workflows
 
-`.github/workflows/build.yml` and `npm.yml` are Sage's. They stay in the tree, because the sync
-merges them, but GitHub would run them on every push, and `npm.yml` would publish Sage's
-packages. They are disabled in this repository; a fresh fork disables them before its first push
-of a branch:
+Sage's `.github/workflows/build.yml` and `npm.yml` are deleted in Klimper (TASK-163): they need
+Sage's runners and secrets, they run on every push, and `npm.yml` publishes Sage's packages.
+`scripts/sync-upstream.sh` removes them, and any workflow Sage adds, from every upstream merge,
+so a Sage release that changes one merges without a conflict.
 
-```sh
-gh workflow disable Build
-gh workflow disable NPM
-```
-
-Klimper's own desktop installers come from `.github/workflows/klimper-desktop-release.yml`
-instead (TASK-161): it runs only when a `klimper-v*` release is published, builds macOS,
-Linux and Windows from the tag with `.env.desktop`, and attaches the installers to the release
-(macOS signed and notarized when the Apple secrets are set, Linux and Windows unsigned). It is ours, not Sage's, so the sync never touches it.
+Klimper's only workflow is `.github/workflows/release.yml` ("Release"): it runs when a
+`klimper-v*` release is published, builds the desktop installers from the tag with
+`.env.desktop` (macOS universal, Linux and Windows x64 and ARM64), and attaches them to the
+release. macOS is signed with the Developer ID certificate and notarized; Linux and Windows are
+unsigned.
