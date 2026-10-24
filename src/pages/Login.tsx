@@ -23,7 +23,6 @@ import {
 } from '@dnd-kit/sortable';
 import { Trans } from '@lingui/react/macro';
 import { platform } from '@tauri-apps/plugin-os';
-import { clapAndPayConnectEnabled } from '@/lib/features';
 import { CogIcon } from 'lucide-react';
 import type { MouseEvent, TouchEvent } from 'react';
 import { ForwardedRef, forwardRef, useEffect, useState } from 'react';
@@ -220,14 +219,6 @@ function Welcome() {
           <Trans>Create Wallet</Trans>
         </Button>
       </div>
-
-      {clapAndPayConnectEnabled && (
-        <div className='flex justify-center mt-4'>
-          <Button variant='link' onClick={() => navigate('/clapandpay')}>
-            <Trans>Use my Clap and Pay money</Trans>
-          </Button>
-        </div>
-      )}
     </Container>
   );
 }

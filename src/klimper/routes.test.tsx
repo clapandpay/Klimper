@@ -14,7 +14,6 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
-  clapAndPayConnectEnabled: true,
   nftMintingEnabled: false,
   nftsEnabled: true,
   offersEnabled: false,
@@ -26,7 +25,6 @@ vi.mock('@/lib/features', () => ({
   xchonnectEnabled: true,
   scanEnabled: true,
 }));
-vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({
   scannerRoutes: <Route path='/scanner' element={<div />} />,
 }));
@@ -96,9 +94,7 @@ describe('withKlimper', () => {
   it('adds Klimper’s own screens after Sage’s', () => {
     const paths = withKlimper(sage()).map((r) => r.path);
     expect(paths.slice(0, 4)).toEqual(['/', '/wallet', '/nfts', '/offers']);
-    expect(paths).toEqual(
-      expect.arrayContaining(['/clapandpay', '/xchonnect', '/scanner']),
-    );
+    expect(paths).toEqual(expect.arrayContaining(['/xchonnect', '/scanner']));
   });
 
   it('builds a data router: Sage’s and Klimper’s route ids never collide', () => {

@@ -22,7 +22,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/features', () => ({
-  clapAndPayConnectEnabled: false,
   klimperCoinsEnabled: false,
   nftMintingEnabled: true,
   nftsEnabled: true,
@@ -41,7 +40,6 @@ vi.mock('react-router-dom', async (original) => ({
   ...(await original<typeof import('react-router-dom')>()),
   useNavigate: () => navigate,
 }));
-vi.mock('./ClapAndPayConnect', () => ({ default: () => null }));
 vi.mock('./Scanner', () => ({ scannerRoutes: null }));
 vi.mock('./xchonnect/XchonnectRoutes', () => ({ xchonnectRoutes: null }));
 const overlayThrows = vi.hoisted(() => ({ value: false }));

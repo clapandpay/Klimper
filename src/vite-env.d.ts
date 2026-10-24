@@ -13,8 +13,6 @@ interface ImportMetaEnv {
   readonly VITE_DISABLE_RPC_SETTINGS?: string;
   readonly VITE_DISABLE_THEME_GALLERY?: string;
   readonly VITE_ENABLE_HANDLES?: string;
-  readonly VITE_DISABLE_CLAPANDPAY_CONNECT?: string;
-  readonly VITE_CLAPANDPAY_ORIGIN?: string;
   readonly VITE_ENABLE_XCHONNECT?: string;
   readonly VITE_ENABLE_KLIMPER_COINS?: string;
   readonly VITE_DISABLE_SCAN?: string;

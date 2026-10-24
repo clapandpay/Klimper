@@ -135,7 +135,7 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
    scripts/set-version.sh --check                   # Klimper's version, not the merged tag
    grep -c 'fn context' src-tauri/src/lib.rs        # 1: apps are told the Sage version
-   grep -c '^VITE_' .env.production                 # 13
+   grep -c '^VITE_' .env.production                 # 12
    grep -c 'klimperRouter\|KlimperRoot' src/App.tsx # 3: the import, the router, the root
    ```
 
@@ -162,7 +162,7 @@ const router = klimperRouter(createHashRouter)(   // was: createHashRouter(
 
 - `src/klimper/routes.tsx` — `withKlimper(routes)`: a feature switched off in `features.ts`
   turns its route into a redirect, looked up **by path** in one table (`GATED`,
-  `GATED_CHILDREN`); Klimper's own screens (`/clapandpay`, `/xchonnect/*`, `/scanner`) are
+  `GATED_CHILDREN`); Klimper's own screens (`/xchonnect/*`, `/scanner`) are
   appended. A new upstream route needs nothing; a new gated feature is one table line.
   `klimperRouter(create)` wraps Sage's own factory, so neither the indentation of the block
   nor Sage's imports change. Tested in `routes.test.tsx`.
@@ -228,24 +228,20 @@ behaviour.
 
 These seven files are what `scripts/sync-upstream.sh --export` writes out, and they are meant to
 stop being ours: propose them to Sage as one pull request ("more build-time feature flags, and
-gate the routes"). They are not the whole frontend diff — the two features below are ours to
-keep.
+gate the routes"). They are not the whole frontend diff — the feature below is ours to keep.
 
 ### Our own features, behind their own flags
 
-Added the same way and just as removable, but nothing Sage would want: they are Clap and Pay's,
-not a wallet primitive. Both default to off in `features.ts`, so a build without `.env` is Sage's
+Added the same way and just as removable, but nothing Sage would want: it is Clap and Pay's,
+not a wallet primitive. It defaults to off in `features.ts`, so a build without `.env` is Sage's
 behaviour.
 
-| File                                                                                  | Ours                                 | Note                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                                  | `@anna` instead of an address, through XCHandles (mainnet only). The address is taken from api.xchandles.com as it answers (owner, 2026-10-08): replace these with Sage's verified resolver when it lands upstream (xch-dev/sage #867, #870, #871) |
-| `src/pages/Send.tsx`                                                                  | +60 lines, `handlesEnabled`          | the largest edit to a shared file; the first thing to re-apply by hand on a conflict                                                                                                                                                               |
-| `src/components/TransferDialog.tsx`                                                   | +32 lines, `handlesEnabled`          | `@anna` for NFT, DID and option transfers; shares `recheckHandle` with Send. Sage plans it (#871)                                                                                                                                                  |
-| `src/klimper/ClapAndPayConnect.tsx`, `src/lib/clapandpayHandoff.ts`                   | new                                  | "Use my Clap and Pay money": the passkey wallet in one Face ID                                                                                                                                                                                     |
-| `src/pages/Login.tsx`                                                                 | +9 lines, `clapAndPayConnectEnabled` | one button on the start screen                                                                                                                                                                                                                     |
-| `.prettierignore`                                                                     | 1 line                               | `src/lib/clapandpayHandoff.ts`, which is generated                                                                                                                                                                                                 |
-| `package.json`                                                                        | `workspaces` array added             | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                                                                                                                                                                                |
+| File                                                                                  | Ours                        | Note                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/handles.ts`, `src/hooks/useHandle.ts`, `src/components/HandleResolution.tsx` | new                         | `@anna` instead of an address, through XCHandles (mainnet only). The address is taken from api.xchandles.com as it answers (owner, 2026-10-08): replace these with Sage's verified resolver when it lands upstream (xch-dev/sage #867, #870, #871) |
+| `src/pages/Send.tsx`                                                                  | +60 lines, `handlesEnabled` | the largest edit to a shared file; the first thing to re-apply by hand on a conflict                                                                                                                                                               |
+| `src/components/TransferDialog.tsx`                                                   | +32 lines, `handlesEnabled` | `@anna` for NFT, DID and option transfers; shares `recheckHandle` with Send. Sage plans it (#871)                                                                                                                                                  |
+| `package.json`                                                                        | `workspaces` array added    | for bun; pnpm reads `pnpm-workspace.yaml`. Drop it if bun goes away                                                                                                                                                                                |
 
 ### Coins (TASK-124)
 
