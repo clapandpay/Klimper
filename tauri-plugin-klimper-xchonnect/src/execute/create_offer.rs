@@ -60,6 +60,9 @@ pub struct OfferParams {
     pub requested: Vec<Part>,
     /// Klimper's own fee ([`wallet_fee`]); the website's is read and ignored.
     pub fee: u64,
+    /// When the offer stops being takeable (Unix seconds), as the website asks it: Sage's
+    /// `expires_at_second` of `make_offer`. `None`: open until taken or cancelled.
+    pub expires_at: Option<u64>,
 }
 
 /// An asset as an entry of `offerAssets` / `requestAssets` names it.
@@ -140,7 +143,7 @@ fn side(params: &Value, key: &str) -> Result<(Vec<Part>, Vec<Bytes32>), RpcError
     Ok((parts, options))
 }
 
-/// `chia_createOffer { offerAssets, requestAssets, fee? }`, read strictly. Other keys
+/// `chia_createOffer { offerAssets, requestAssets, fee?, expiresAt? }`, read strictly. Other keys
 /// (Pengui sends `walletId`) are ignored, as Sage's handler ignores them.
 pub fn offer_params(params_json: &str) -> Result<OfferParams, RpcError> {
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
@@ -163,6 +166,10 @@ pub fn offer_params(params_json: &str) -> Result<OfferParams, RpcError> {
         options,
         requested,
         fee: wallet_fee(&params)?,
+        expires_at: match amount_param(&params, "expiresAt")? {
+            Some(0) => return Err(invalid("expiresAt")),
+            at => at,
+        },
     })
 }
 
@@ -201,8 +208,9 @@ pub struct OfferView {
     pub options: Vec<OfferedOption>,
     /// What whoever takes the offer pays the user.
     pub asks: Vec<crate::trade::Leg>,
-    /// The offer cannot be taken from this time on (Unix seconds): the earliest expiry of
-    /// the options it gives, so nobody can buy an option that can no longer be used.
+    /// The offer cannot be taken from this time on (Unix seconds): the earliest of the
+    /// website's `expiresAt` and the expiries of the options it gives, so nobody can buy an
+    /// option that can no longer be used.
     pub expires_at: Option<u64>,
 }
 
@@ -297,7 +305,8 @@ fn add_to_every_spend(spends: &mut Spends, conditions: &Conditions) {
 /// Make the offer from the wallet's own coins, key-free, with Sage's offer code (see the
 /// module): the offered assets paid to the settlement puzzle, the fee, the requested
 /// payments to the wallet's change address under the nonce of the coins it spends, and
-/// every spend asserting every requested payment and the expiry.
+/// every spend asserting every requested payment and the expiry (the website's, or the
+/// earliest option's).
 ///
 /// Sage's coin selection leaves out the coins of a transaction Sage holds as pending. An
 /// asset the wallet does not hold enough of fails here (`build_failed`).
@@ -313,7 +322,15 @@ pub async fn build_offer(
             Err(refusal) => return Ok(Err(refusal)),
         }
     }
-    let expires_at = options.iter().map(|o| o.terms.expiration_seconds).min();
+    // An expiry already past would make an offer nobody can take.
+    if params.expires_at.is_some_and(|at| at <= now) {
+        return Ok(Err(invalid("expiresAt")));
+    }
+    let expires_at = options
+        .iter()
+        .map(|o| o.terms.expiration_seconds)
+        .chain(params.expires_at)
+        .min();
 
     let mut ctx = SpendContext::new();
     let receive = wallet.change_p2_puzzle_hash().await?;
@@ -399,7 +416,8 @@ pub async fn build_offer(
 // ---------------------------------------------------------------------------------------
 
 /// `chia_createOffer`: build, check, ask once, sign once; the signed offer goes back to the
-/// website as `{ offer, id }`, as Sage's `WalletConnect` answers it. Nothing is broadcast.
+/// website as `{ offer, id }`, as Sage's `WalletConnect` answers it, with `expiresAt` when the
+/// offer expires. Nothing is broadcast.
 ///
 /// Giving an option needs the connection's option contracts too (the option leaves the
 /// wallet like a `chia_transferOption`), or the request is refused as `not_granted`.
@@ -495,6 +513,7 @@ pub fn submit_offer(
 ) -> Result<String, RpcError> {
     crate::sign_guard::check_spends(&built.spends, ctx.keys, &ctx.network)?;
     on_offer(&built.view);
+    let expires_at = built.view.expires_at;
     let intent = offer_intent(!built.view.options.is_empty(), fee);
     let submitted = checked_submit(
         ctx,
@@ -511,5 +530,11 @@ pub fn submit_offer(
     let offer = SpendBundle::new(built.offer_spends, submitted.bundle.aggregated_signature);
     let id = hex::encode(sage_wallet::sort_offer(offer.clone()).name());
     let offer = chia_wallet_sdk::driver::encode_offer(&offer).map_err(|_| invalid("offer"))?;
-    Ok(serde_json::json!({ "offer": offer, "id": id }).to_string())
+    // `expiresAt` beyond Sage's answer: the time every spend of the offer asserts, so the
+    // website knows the chain enforces it.
+    let mut answer = serde_json::json!({ "offer": offer, "id": id });
+    if let Some(at) = expires_at {
+        answer["expiresAt"] = serde_json::json!(at);
+    }
+    Ok(answer.to_string())
 }
