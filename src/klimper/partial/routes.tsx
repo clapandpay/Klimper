@@ -22,7 +22,8 @@ const PartialOfferPage = lazy(() => import('./PartialOfferPage'));
 
 function OfferOrPartial({ sage }: { sage: ReactElement }) {
   const { offer } = useParams();
-  const text = offer ? decodeURIComponent(offer) : '';
+  // React Router has already decoded the parameter; decoding again throws on a stray '%'.
+  const text = offer ?? '';
   return isPartialOffer(text) ? (
     <Suspense fallback={null}>
       <PartialOfferPage />

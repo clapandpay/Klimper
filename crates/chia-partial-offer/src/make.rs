@@ -13,10 +13,10 @@ use chia_wallet_sdk::{
         },
     },
     driver::{Cat, CatSpend, Offer, Spend, SpendContext, StandardLayer, create_security_coin},
+    puzzles::SETTLEMENT_PAYMENT_HASH,
     signer::{AggSigConstants, RequiredSignature},
-    types::{Conditions, puzzles::SettlementPayment},
+    types::{Conditions, announcement_id, puzzles::SettlementPayment},
 };
-use clvmr::NodePtr;
 
 use crate::{
     PartialAsset, PartialOffer, PartialOfferError, PartialOfferInfo, PartialPriceData, Result,
@@ -166,17 +166,33 @@ pub fn make_partial_offer(
     } else {
         vec![security_payment]
     };
+    // The settlement coins can be spent by anyone, and the maker's signed spends create them.
+    // What makes them pay into the partial coin and nowhere else is the security coin: its
+    // spend asserts each settlement coin's announcement of exactly these payments, and its
+    // signature is aggregated with the maker's, so it can neither be dropped nor kept with
+    // the settlement coins spent another way. (The reference spends it to a bare remark,
+    // which leaves the maker's coins to whoever reads the offer first.)
+    let xch_notarized = NotarizedPayment::new(Bytes32::default(), xch_payments);
+    let xch_ptr = ctx.alloc(&xch_notarized)?;
+    let xch_announcement = announcement_id(
+        SETTLEMENT_PAYMENT_HASH.into(),
+        ctx.tree_hash(xch_ptr).to_vec(),
+    );
+    let mut assertions = Conditions::new().assert_puzzle_announcement(xch_announcement);
     let solution = ctx.alloc(&SettlementPaymentsSolution {
-        notarized_payments: vec![NotarizedPayment::new(Bytes32::default(), xch_payments)],
+        notarized_payments: vec![xch_notarized],
     })?;
     ctx.spend(xch_coin, Spend::new(settlement, solution))?;
 
     if let Some(cat_coin) = cat_coin {
+        let cat_notarized = NotarizedPayment::new(Bytes32::default(), vec![partial_payment]);
+        let cat_ptr = ctx.alloc(&cat_notarized)?;
+        assertions = assertions.assert_puzzle_announcement(announcement_id(
+            PartialOfferInfo::full_asset_puzzle_hash(terms.offered, SETTLEMENT_PAYMENT_HASH.into()),
+            ctx.tree_hash(cat_ptr).to_vec(),
+        ));
         let solution = ctx.alloc(&SettlementPaymentsSolution {
-            notarized_payments: vec![NotarizedPayment::new(
-                Bytes32::default(),
-                vec![partial_payment],
-            )],
+            notarized_payments: vec![cat_notarized],
         })?;
         let _ = Cat::spend_all(
             &mut ctx,
@@ -184,7 +200,8 @@ pub fn make_partial_offer(
         )?;
     }
 
-    let security_signature = spend_security_coin(&mut ctx, security_coin, &security_sk, agg_sig)?;
+    let security_signature =
+        spend_security_coin(&mut ctx, security_coin, assertions, &security_sk, agg_sig)?;
 
     let parent_coin_id = cat_coin.map_or(xch_coin.coin_id(), |cat| cat.coin.coin_id());
     let mut partial = PartialOffer::new(parent_coin_id, terms.offered_amount, info);
@@ -197,19 +214,16 @@ pub fn make_partial_offer(
     Ok(partial)
 }
 
-/// Spends the security coin to a remark and signs it with its one-time key.
+/// Spends the security coin with `conditions` and signs it with its one-time key.
 fn spend_security_coin(
     ctx: &mut SpendContext,
     security_coin: chia_wallet_sdk::chia::protocol::Coin,
+    conditions: Conditions,
     sk: &SecretKey,
     agg_sig: &AggSigConstants,
 ) -> Result<Signature> {
     let before = ctx.take();
-    StandardLayer::new(sk.public_key()).spend(
-        ctx,
-        security_coin,
-        Conditions::new().remark(NodePtr::NIL),
-    )?;
+    StandardLayer::new(sk.public_key()).spend(ctx, security_coin, conditions)?;
     let spends = ctx.take();
     let required = RequiredSignature::from_coin_spends(ctx, &spends, agg_sig)
         .map_err(|error| PartialOfferError::Invalid(error.to_string()))?;

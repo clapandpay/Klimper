@@ -2,6 +2,7 @@
 //! The partial offers this wallet made: kept in the store, followed on the chain when listed.
 
 use chia_partial_offer::PartialOffer;
+use tracing::warn;
 
 use crate::{
     Error,
@@ -24,22 +25,39 @@ pub fn remember(store: &Store, offer: &PartialOffer, now: u64) -> Result<String,
 }
 
 /// Every partial offer the wallet made, newest first, each still live followed to its newest
-/// coin first.
+/// coin first. One offer that cannot be read or followed does not hide the others: it is
+/// skipped (unreadable) or shown as it was last seen, with the status unknown.
 pub async fn list(ctx: &WalletCtx, store: &Store, now: u64) -> Result<Vec<MyPartialOffer>, Error> {
     let mut mine = Vec::new();
     for mut stored in store.list()? {
-        let offer = PartialOffer::from_text(&stored.latest)?;
-        let (offer, status) = if let Some(status) = stored.ended {
-            (offer, status)
-        } else {
-            let followed = follow(ctx, offer, now).await?;
-            stored.fills.extend(followed.fills);
-            stored.latest = followed.offer.to_text()?;
-            if matches!(followed.status, Status::Filled | Status::Cancelled) {
-                stored.ended = Some(followed.status);
+        let offer = match PartialOffer::from_text(&stored.latest) {
+            Ok(offer) => offer,
+            Err(error) => {
+                warn!("partial offer {} cannot be read: {error}", stored.id);
+                continue;
             }
-            store.put(stored.clone())?;
-            (followed.offer, followed.status)
+        };
+        let (offer, status) = match stored.ended {
+            Some(status) => (offer, status),
+            None => match follow(ctx, offer.clone(), now).await {
+                Ok(followed) => {
+                    let changed = !followed.fills.is_empty()
+                        || matches!(followed.status, Status::Filled | Status::Cancelled);
+                    stored.fills.extend(followed.fills);
+                    stored.latest = followed.offer.to_text()?;
+                    if matches!(followed.status, Status::Filled | Status::Cancelled) {
+                        stored.ended = Some(followed.status);
+                    }
+                    if changed {
+                        store.update(stored.clone())?;
+                    }
+                    (followed.offer, followed.status)
+                }
+                Err(error) => {
+                    warn!("partial offer {} cannot be followed: {error}", stored.id);
+                    (offer, Status::Unknown)
+                }
+            },
         };
         mine.push(MyPartialOffer {
             id: stored.id.clone(),

@@ -8,7 +8,7 @@ import { partialOffersEnabled } from '@/lib/features';
 import { Trans } from '@lingui/react/macro';
 import { Split } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { partialPair } from './MakePartialOffer';
+import { partialPair } from './pair';
 
 export function PartialFillsOption() {
   const [state] = useOfferStateWithDefault();

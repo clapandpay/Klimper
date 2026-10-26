@@ -76,7 +76,8 @@ export default function PartialOfferPage() {
   );
 
   useEffect(() => {
-    if (param) load(decodeURIComponent(param).trim());
+    // React Router has already decoded the parameter.
+    if (param) load(param.trim());
   }, [param, load]);
 
   return (

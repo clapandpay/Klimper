@@ -577,3 +577,120 @@ fn a_maker_cannot_ask_for_nothing_or_for_the_same_asset() {
     assert!(PartialOffer::from_text("offer1qqqq").is_err());
     assert!(!is_partial_offer("offer1qqqq"));
 }
+
+/// The maker's spends, with the settlement coins paid to `thief` instead of the partial coin:
+/// what anyone who reads a first partial offer could try before the first fill.
+fn stolen(
+    ctx: &mut SpendContext,
+    one_sided: &SpendBundle,
+    made: &PartialOffer,
+    thief: Bytes32,
+) -> Result<SpendBundle> {
+    use chia_wallet_sdk::{
+        chia::puzzle_types::offer::SettlementPaymentsSolution, types::puzzles::SettlementPayment,
+    };
+    let offer = Offer::from_spend_bundle(ctx, one_sided)?;
+    let xch_coin = offer.offered_coins().xch[0];
+    let cat = offer
+        .offered_coins()
+        .cats
+        .values()
+        .next()
+        .map(|cats| cats[0]);
+    let settlement = ctx.alloc_mod::<SettlementPayment>()?;
+    // Keep every spend but the settlement ones: the maker's signed spends and the security
+    // coin's, so the aggregate signature still verifies.
+    let mut spends: Vec<_> = made
+        .spend_bundle
+        .coin_spends
+        .iter()
+        .filter(|spend| {
+            spend.coin.coin_id() != xch_coin.coin_id()
+                && cat.is_none_or(|cat| spend.coin.coin_id() != cat.coin.coin_id())
+        })
+        .cloned()
+        .collect();
+    let security = made
+        .spend_bundle
+        .coin_spends
+        .iter()
+        .find(|spend| spend.coin.parent_coin_info == xch_coin.coin_id())
+        .expect("the security coin's spend")
+        .coin;
+    // The XCH settlement coin: the security coin as before, the rest to the thief.
+    let mut payments = vec![Payment::new(
+        security.puzzle_hash,
+        security.amount,
+        Memos::None,
+    )];
+    if xch_coin.amount > security.amount {
+        payments.push(Payment::new(
+            thief,
+            xch_coin.amount - security.amount,
+            Memos::None,
+        ));
+    }
+    let solution = ctx.alloc(&SettlementPaymentsSolution {
+        notarized_payments: vec![NotarizedPayment::new(Bytes32::new([66; 32]), payments)],
+    })?;
+    ctx.spend(xch_coin, Spend::new(settlement, solution))?;
+    if let Some(cat) = cat {
+        let solution = ctx.alloc(&SettlementPaymentsSolution {
+            notarized_payments: vec![NotarizedPayment::new(
+                Bytes32::new([66; 32]),
+                vec![Payment::new(thief, cat.coin.amount, Memos::None)],
+            )],
+        })?;
+        let _ = Cat::spend_all(ctx, &[CatSpend::new(cat, Spend::new(settlement, solution))])?;
+    }
+    spends.extend(ctx.take());
+    Ok(SpendBundle::new(
+        spends,
+        made.spend_bundle.aggregated_signature.clone(),
+    ))
+}
+
+#[test]
+fn nobody_can_take_the_makers_coins_before_the_first_fill() -> Result<()> {
+    for kind in [Kind::Xch, Kind::Cat, Kind::RevocableCat] {
+        let mut sim = Simulator::new();
+        let ctx = &mut SpendContext::new();
+        let maker = party(1);
+        let thief = party(3);
+        let taker = party(2);
+        let maker_cat = match kind {
+            Kind::Xch => None,
+            kind => Some(issue(&mut sim, ctx, &maker, kind, &[OFFERED])?[0]),
+        };
+        // XCH needs a CAT on the other side.
+        let requested = if kind == Kind::Xch {
+            let cats = issue(&mut sim, ctx, &taker, Kind::Cat, &[REQUESTED])?;
+            asset(Kind::Cat, Some(&cats[0]))
+        } else {
+            PartialAsset::xch()
+        };
+        let terms = PartialOfferTerms {
+            offered: asset(kind, maker_cat.as_ref()),
+            offered_amount: OFFERED,
+            requested,
+            requested_amount: REQUESTED,
+            min_fill_requested: MIN_FILL,
+            expiration: None,
+            required_fee: None,
+            maker_puzzle_hash: maker.puzzle_hash,
+        };
+        let one_sided = one_sided_offer(&mut sim, ctx, &maker, &terms, maker_cat)?;
+        let made = make_partial_offer(&one_sided, &terms, &agg_sig())?;
+
+        let theft = stolen(ctx, &one_sided, &made, thief.puzzle_hash)?;
+        assert!(
+            sim.new_transaction(theft).is_err(),
+            "{kind:?}: the settlement coins were paid to someone else"
+        );
+        // The maker's spends as made are valid: they create the partial coin.
+        sim.new_transaction(made.spend_bundle.clone())?;
+        assert!(sim.coin_state(made.coin.coin_id()).is_some(), "{kind:?}");
+        assert_eq!(balance(&sim, &thief, terms.offered), 0, "{kind:?}");
+    }
+    Ok(())
+}
