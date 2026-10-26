@@ -1183,6 +1183,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chia-partial-offer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia-wallet-sdk",
+ "clvm-traits 0.36.1",
+ "clvm-utils",
+ "clvmr",
+ "hex-literal",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "chia-protocol"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

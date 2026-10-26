@@ -1,0 +1,24 @@
+[package]
+name = "chia-partial-offer"
+version = "0.1.0"
+edition = "2024"
+# Apache-2.0 like chia-wallet-sdk and Sage, so this crate can go to either as it is.
+# Ported from github.com/Yakuhito/partial (MIT, see NOTICE.md).
+license = "Apache-2.0"
+description = "Partial offers (CHIP-0052): read, make, fill and cancel them."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# `action-layer` brings the CAT makers the partial puzzle is curried with.
+chia-wallet-sdk = { workspace = true, features = ["action-layer"] }
+clvm-traits = "0.36.1"
+clvm-utils = "0.36.1"
+clvmr = "0.16.4"
+hex-literal = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
