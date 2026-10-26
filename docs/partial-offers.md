@@ -156,10 +156,17 @@ with those, as the reference CLI does. Offer methods for apps wait for Sage.
 
 ### Status (2026-10-26)
 
-Done: driver, plugin, screens, flag, simulator tests (driver and two Sage wallets). AC #1–#5 are
-met in code and on the simulator. Open: a try on testnet11 (two wallets, a CAT, make, fill
-twice, cancel), checking that nodexch decodes a Klimper-made text the same way; Xchonnect's
-take; posting a made offer to nodexch from the make screen.
+Done: driver, plugin, screens, flag, simulator tests (driver and two Sage wallets), a code review
+with its fixes (among them the security coin, above), and a run on testnet11
+(`examples/testnet.rs`, two fresh Sage wallets): a test CAT issued; a partial offer of 1.000
+of it for 0.0001 TXCH made; viewed by the taker; filled a quarter, the next offer as built
+matching the coin on chain; the stale first text refused before signing; filled another
+quarter; listed by the maker with two fills; the rest clawed back; balances taker +500,
+maker −500 CAT mojos. AC #1–#5 are met.
+
+Open: tapping through the screens in the running app; Xchonnect's take; posting a made offer
+to nodexch from the make screen; nodexch's MCP `decode_offer` accepts only `offer1…`, so a
+`partial1…` cannot be cross-checked there yet (its indexer reads them).
 
 ## Screens
 

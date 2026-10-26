@@ -125,40 +125,43 @@ async fn cat_balance(state: &AppState, asset_id: &str) -> Result<u64> {
         .unwrap_or(0))
 }
 
-/// The maker's test CAT: one it holds at least `CAT_AMOUNT` of, or a new one.
+/// The maker's test CAT: one it holds at least `CAT_AMOUNT` of, or a new one; returned once
+/// it is spendable (confirmed), not while it is in the mempool.
 async fn test_cat(maker: &AppState) -> Result<String> {
-    let held = {
-        let sage = maker.lock().await;
-        sage.get_cats(GetCats {}).await?.cats
+    let held = |cats: &[sage_api::TokenRecord], spendable: bool| {
+        cats.iter()
+            .find(|cat| {
+                let amount = if spendable {
+                    &cat.selectable_balance
+                } else {
+                    &cat.balance
+                };
+                amount.to_u64().unwrap_or(0) >= CAT_AMOUNT
+            })
+            .and_then(|cat| cat.asset_id.clone())
     };
-    if let Some(cat) = held
-        .iter()
-        .find(|cat| cat.balance.to_u64().unwrap_or(0) >= CAT_AMOUNT)
-    {
-        return cat.asset_id.clone().context("a CAT without an id");
+    let cats = maker.lock().await.get_cats(GetCats {}).await?.cats;
+    if held(&cats, false).is_none() {
+        println!("maker: issuing a test CAT of {CAT_AMOUNT} mojos");
+        maker
+            .lock()
+            .await
+            .issue_cat(IssueCat {
+                name: "Partial offer test".to_string(),
+                ticker: "PART".to_string(),
+                amount: Amount::u64(CAT_AMOUNT),
+                revocable: false,
+                fee: Amount::u64(0),
+                auto_submit: true,
+            })
+            .await?;
     }
-    println!("maker: issuing a test CAT of {CAT_AMOUNT} mojos");
-    maker
-        .lock()
-        .await
-        .issue_cat(IssueCat {
-            name: "Partial offer test".to_string(),
-            ticker: "PART".to_string(),
-            amount: Amount::u64(CAT_AMOUNT),
-            revocable: false,
-            fee: Amount::u64(0),
-            auto_submit: true,
-        })
-        .await?;
     for _ in 0..120 {
-        sleep(Duration::from_secs(10)).await;
         let cats = maker.lock().await.get_cats(GetCats {}).await?.cats;
-        if let Some(cat) = cats
-            .iter()
-            .find(|cat| cat.balance.to_u64().unwrap_or(0) >= CAT_AMOUNT)
-        {
-            return cat.asset_id.clone().context("a CAT without an id");
+        if let Some(asset_id) = held(&cats, true) {
+            return Ok(asset_id);
         }
+        sleep(Duration::from_secs(10)).await;
     }
     bail!("the test CAT never confirmed")
 }
@@ -194,6 +197,13 @@ fn log_offer(dir: &Path, label: &str, text: &str) -> Result<()> {
 async fn run(dir: &Path, maker: &AppState, taker: &AppState) -> Result<()> {
     let asset_id = test_cat(maker).await?;
     println!("maker: CAT {asset_id}");
+    // The issuance spent the maker's XCH coin: wait for its change to confirm too.
+    for _ in 0..60 {
+        if xch(maker).await? > 1 {
+            break;
+        }
+        sleep(Duration::from_secs(10)).await;
+    }
     let maker_cat_before = cat_balance(maker, &asset_id).await?;
     let taker_cat_before = cat_balance(taker, &asset_id).await?;
 
@@ -335,6 +345,19 @@ async fn main() -> Result<()> {
     match step.as_str() {
         "setup" => Ok(()),
         "run" => {
+            // Right after the first peer the wallet reads 0 of 0 coins synced: wait for the
+            // funds themselves (up to five minutes) before deciding they are not there.
+            for _ in 0..60 {
+                if xch(&maker).await? > CAT_AMOUNT && xch(&taker).await? > PRICE_MOJOS {
+                    break;
+                }
+                sleep(Duration::from_secs(5)).await;
+            }
+            println!(
+                "maker: {} mojos, taker: {} mojos",
+                xch(&maker).await?,
+                xch(&taker).await?
+            );
             ensure!(xch(&maker).await? > CAT_AMOUNT, "fund the maker first");
             ensure!(xch(&taker).await? > PRICE_MOJOS, "fund the taker first");
             run(&dir, &maker, &taker).await
