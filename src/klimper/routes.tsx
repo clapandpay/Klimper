@@ -27,6 +27,7 @@ import {
 import { ReactElement } from 'react';
 import { createRoutesFromElements, RouteObject } from 'react-router-dom';
 import { RouteRecovery } from './KlimperErrorBoundary';
+import { withPartialOffers } from './partial/routes';
 import { scannerRoutes } from './Scanner';
 import { xchonnectRoutes } from './xchonnect/XchonnectRoutes';
 
@@ -95,7 +96,7 @@ function recoverable(route: RouteObject): RouteObject {
 /** Sage's routes, with Klimper's feature flags applied and Klimper's screens added. */
 export function withKlimper(routes: RouteObject[]): RouteObject[] {
   return [
-    ...routes.map(gate),
+    ...routes.map(gate).map(withPartialOffers),
     ...createRoutesFromElements(
       <>
         {xchonnectRoutes}

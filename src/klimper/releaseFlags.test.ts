@@ -51,6 +51,12 @@ describe('release flags', () => {
     }
   });
 
+  it('keep partial offers off until they have been tried on testnet', () => {
+    for (const mode of ['desktop', 'production']) {
+      expect(flags(mode).VITE_ENABLE_PARTIAL_OFFERS, mode).toBe('false');
+    }
+  });
+
   it('are picked per platform by the Tauri configs', () => {
     for (const p of ['macos', 'linux', 'windows']) {
       expect(json(`tauri.${p}.conf.json`).build?.beforeBuildCommand, p).toBe(

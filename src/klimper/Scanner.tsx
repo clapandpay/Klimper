@@ -21,7 +21,12 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { featureElement } from '@/lib/featureElement';
-import { offersEnabled, scanEnabled, xchonnectEnabled } from '@/lib/features';
+import {
+  offersEnabled,
+  partialOffersEnabled,
+  scanEnabled,
+  xchonnectEnabled,
+} from '@/lib/features';
 import { useNavigationStore } from '@/state';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -80,6 +85,7 @@ export default function Scanner() {
       const target = classifyScan(raw, {
         xchonnect: xchonnectEnabled,
         offers: offersEnabled,
+        partialOffers: partialOffersEnabled,
       });
       switch (target.kind) {
         case 'xchonnect':

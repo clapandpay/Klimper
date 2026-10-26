@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('@/lib/features', () => ({
   xchonnectEnabled: true,
   offersEnabled: true,
+  partialOffersEnabled: false,
   scanEnabled: true,
 }));
 vi.mock('@/components/Layout', () => ({

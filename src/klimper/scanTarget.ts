@@ -12,6 +12,7 @@
 // is claimed here rather than falling through to `unknown`.
 
 import { isValidAddress } from '@/lib/utils';
+import { isPartialOffer } from './partial/isPartialOffer';
 import { parseXchonnectLink } from './xchonnect/xchonnectLink';
 
 export type ScanTarget =
@@ -23,6 +24,8 @@ export type ScanTarget =
 export interface ScanFeatures {
   xchonnect: boolean;
   offers: boolean;
+  /** Partial offers (`partial1…`, TASK-164); they open on the same offer route. */
+  partialOffers?: boolean;
 }
 
 const XCHONNECT_SCHEME = 'xchonnect:';
@@ -46,6 +49,9 @@ export function classifyScan(raw: string, features: ScanFeatures): ScanTarget {
 
   if (features.offers && /^offer1[02-9ac-hj-np-z]+$/.test(text)) {
     return { kind: 'offer', offer: text };
+  }
+  if (features.partialOffers && isPartialOffer(text)) {
+    return { kind: 'offer', offer: text.toLowerCase() };
   }
 
   return { kind: 'unknown', text };

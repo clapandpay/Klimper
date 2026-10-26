@@ -161,6 +161,14 @@ msgstr ""
 msgid "{editionNumber} of {editionTotal}"
 msgstr ""
 
+#: src/klimper/partial/PartialOfferTerms.tsx:143
+msgid "{filled}% filled"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:147
+msgid "{fillsSeen} fills seen"
+msgstr ""
+
 #: src/klimper/XchonnectConnect.tsx:467
 #~ msgid "{keyCount} receive addresses"
 #~ msgstr ""
@@ -203,6 +211,10 @@ msgstr ""
 
 #: src/components/LabeledItem.tsx:76
 msgid "{label}: {contentText} (navigate within app)"
+msgstr ""
+
+#: src/klimper/partial/MyPartialOffers.tsx:179
+msgid "{leftText} comes back to you. Fills that already happened stay. Cancelling is a transaction, so it can pay a network fee."
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:1053
@@ -398,6 +410,14 @@ msgstr ""
 msgid "A more lightweight sync that only checks unseen blocks"
 msgstr ""
 
+#: src/klimper/partial/MakePartialOffer.tsx:214
+msgid "A network fee the taker pays on every fill, so fills confirm quickly."
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:67
+msgid "A partial offer gives exactly one token for one other token. Pick one of each, with amounts, on the offer screen."
+msgstr ""
+
 #: src/klimper/KlimperRoot.tsx:50
 msgid "A request could not be shown. Open requests"
 msgstr ""
@@ -410,7 +430,7 @@ msgstr ""
 #~ msgid "A request over a limit is refused before it reaches you — you will not see a signing prompt for it. Leave a field empty for no limit."
 #~ msgstr ""
 
-#: src/pages/MakeOffer.tsx:99
+#: src/pages/MakeOffer.tsx:101
 msgid "A request-only offer requires a network fee."
 msgstr ""
 
@@ -506,11 +526,11 @@ msgstr "Agregar URL de NFT"
 msgid "Add Peers"
 msgstr "Agregar nodos"
 
-#: src/pages/MakeOffer.tsx:138
+#: src/pages/MakeOffer.tsx:140
 msgid "Add the assets you are offering."
 msgstr "Agrega los activos que estás ofreciendo."
 
-#: src/pages/MakeOffer.tsx:162
+#: src/pages/MakeOffer.tsx:164
 msgid "Add the assets you are requesting."
 msgstr "Agrega los activos que estás solicitando."
 
@@ -651,6 +671,10 @@ msgstr ""
 msgid "Allow contracts Klimper cannot read"
 msgstr ""
 
+#: src/klimper/partial/PartialFillsOption.tsx:23
+msgid "Allow partial fills"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectDappSettings.tsx:655
 msgid "Allow unreadable contracts?"
 msgstr ""
@@ -675,6 +699,7 @@ msgstr ""
 #: src/components/confirmations/TokenConfirmation.tsx:193
 #: src/components/selectors/AssetSelector.tsx:266
 #: src/components/TransactionColumns.tsx:117
+#: src/klimper/partial/PartialOfferPage.tsx:273
 #: src/pages/IssueToken.tsx:118
 #: src/pages/MintOption.tsx:181
 #: src/pages/MintOption.tsx:233
@@ -858,6 +883,9 @@ msgid "Automatically start the RPC server when the app launches"
 msgstr "Iniciar automáticamente el servidor RPC cuando se inicia la aplicación"
 
 #: src/components/Header.tsx:50
+#: src/klimper/partial/MakePartialOffer.tsx:238
+#: src/klimper/partial/MyPartialOffers.tsx:197
+#: src/klimper/partial/PartialOfferPage.tsx:387
 msgid "Back"
 msgstr "Atrás"
 
@@ -869,6 +897,10 @@ msgstr "Volver a grupos"
 #: src/klimper/KlimperErrorBoundary.tsx:59
 #: src/klimper/xchonnect/XchonnectDapps.tsx:350
 msgid "Back to my wallet"
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:73
+msgid "Back to the offer"
 msgstr ""
 
 #: src/pages/Settings.tsx:971
@@ -894,6 +926,10 @@ msgstr "Banner para {collectionName}"
 
 #: src/klimper/xchonnect/XchonnectDapps.tsx:221
 msgid "being renewed"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:304
+msgid "Between {minText} and {maxText}."
 msgstr ""
 
 #: src/pages/Settings.tsx:323
@@ -1057,6 +1093,10 @@ msgstr ""
 msgid "Cancel"
 msgstr "Cancelar"
 
+#: src/klimper/partial/MyPartialOffers.tsx:156
+msgid "Cancel (claw back)"
+msgstr ""
+
 #: src/components/OffersMultiSelectActions.tsx:61
 msgid "Cancel {selectedCount} selected offers"
 msgstr ""
@@ -1078,8 +1118,12 @@ msgstr ""
 msgid "Cancel Details"
 msgstr "Cancelar detalles"
 
+#: src/klimper/partial/MyPartialOffers.tsx:200
+msgid "Cancel offer"
+msgstr ""
+
 #: src/components/dialogs/CancelOffersFlow.tsx:90
-#: src/pages/MakeOffer.tsx:309
+#: src/pages/MakeOffer.tsx:313
 msgid "Cancel Offer"
 msgstr "Cancelar oferta"
 
@@ -1108,9 +1152,18 @@ msgstr ""
 msgid "Cancel selected offers?"
 msgstr ""
 
+#: src/klimper/partial/MyPartialOffers.tsx:176
+msgid "Cancel this partial offer?"
+msgstr ""
+
 #: src/components/OfferCard.tsx:144
+#: src/klimper/partial/PartialOfferTerms.tsx:27
 msgid "Cancelled"
 msgstr "Cancelado"
+
+#: src/klimper/partial/MyPartialOffers.tsx:109
+msgid "Cancelled. The rest comes back once it is confirmed."
+msgstr ""
 
 #: src/pages/Settings.tsx:1295
 msgid "Cannot send change to external address. Setting not updated."
@@ -1290,9 +1343,9 @@ msgstr ""
 msgid "coin"
 msgstr "moneda"
 
-#: src/components/CoinList.tsx:109
-#~ msgid "Coin"
-#~ msgstr "Moneda"
+#: src/klimper/partial/PartialOfferTerms.tsx:215
+msgid "Coin"
+msgstr "Moneda"
 
 #: src/pages/Nft.tsx:382
 #: src/pages/Nft.tsx:385
@@ -1674,7 +1727,7 @@ msgstr ""
 msgid "Create"
 msgstr "Crear"
 
-#: src/pages/Offers.tsx:247
+#: src/pages/Offers.tsx:249
 msgid "Create a new offer to get started with peer-to-peer trading."
 msgstr "Crea una nueva oferta para empezar con el comercio entre nodos."
 
@@ -1694,10 +1747,14 @@ msgstr ""
 msgid "Create new NFT"
 msgstr "Crear nuevo NFT"
 
-#: src/pages/MakeOffer.tsx:316
-#: src/pages/Offers.tsx:278
+#: src/pages/MakeOffer.tsx:320
+#: src/pages/Offers.tsx:280
 msgid "Create Offer"
 msgstr "Crear Oferta"
+
+#: src/klimper/partial/MakePartialOffer.tsx:245
+msgid "Create partial offer"
+msgstr ""
 
 #: src/pages/CreateProfile.tsx:59
 #: src/pages/CreateProfile.tsx:101
@@ -1827,7 +1884,7 @@ msgstr ""
 msgid "Database Stats"
 msgstr ""
 
-#: src/pages/MakeOffer.tsx:245
+#: src/pages/MakeOffer.tsx:247
 #: src/pages/MintOption.tsx:260
 #: src/pages/Send.tsx:538
 #: src/pages/Settings.tsx:385
@@ -1876,7 +1933,7 @@ msgstr ""
 msgid "Delete {selectedPeersCount}"
 msgstr "Eliminar {selectedPeersCount}"
 
-#: src/pages/Offers.tsx:352
+#: src/pages/Offers.tsx:356
 msgid "Delete All"
 msgstr ""
 
@@ -1884,7 +1941,7 @@ msgstr ""
 msgid "Delete all cached data"
 msgstr ""
 
-#: src/pages/Offers.tsx:357
+#: src/pages/Offers.tsx:361
 msgid "Delete All Filtered Offers"
 msgstr ""
 
@@ -2065,6 +2122,8 @@ msgstr ""
 
 #: src/components/dialogs/OfferCreationProgressDialog.tsx:356
 #: src/components/WalletCard.tsx:509
+#: src/klimper/partial/MakePartialOffer.tsx:264
+#: src/klimper/partial/PartialOfferPage.tsx:229
 msgid "Done"
 msgstr "Listo"
 
@@ -2333,13 +2392,18 @@ msgid "Expiration"
 msgstr ""
 
 #: src/hooks/useOfferProcessor.ts:58
-#: src/pages/MakeOffer.tsx:48
+#: src/pages/MakeOffer.tsx:50
 msgid "Expiration must be at least 1 second in the future"
 msgstr "La expiración debe ser al menos 1 segundo en el futuro"
+
+#: src/klimper/partial/PartialOfferTerms.tsx:59
+msgid "expired"
+msgstr ""
 
 #: src/components/OfferCard.tsx:145
 #: src/components/OptionCard.tsx:201
 #: src/components/OptionColumns.tsx:120
+#: src/klimper/partial/PartialOfferTerms.tsx:29
 #: src/pages/Option.tsx:135
 msgid "Expired"
 msgstr "Caducado"
@@ -2353,6 +2417,7 @@ msgid "Expired at:"
 msgstr ""
 
 #: src/components/OfferCard.tsx:172
+#: src/klimper/partial/PartialOfferTerms.tsx:190
 #: src/pages/Option.tsx:168
 msgid "Expires"
 msgstr "Caduca"
@@ -2369,7 +2434,7 @@ msgstr ""
 msgid "Expires:"
 msgstr ""
 
-#: src/pages/MakeOffer.tsx:204
+#: src/pages/MakeOffer.tsx:206
 msgid "Expiring offer"
 msgstr "Oferta que caduca"
 
@@ -2477,9 +2542,21 @@ msgstr ""
 msgid "Fee"
 msgstr "Tarifa"
 
+#: src/klimper/partial/MakePartialOffer.tsx:206
+msgid "Fee each fill must pay (optional)"
+msgstr ""
+
 #: src/components/ConfirmationDialog.tsx:261
 msgid "Fee exceeds recommended maximum of 0.001 {ticker}"
 msgstr "La tarifa supera el máximo recomendado de 0,001 {ticker}"
+
+#: src/klimper/partial/PartialOfferTerms.tsx:180
+msgid "Fee per fill"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:332
+msgid "Fee per fill (the offer asks)"
+msgstr ""
 
 #: src/components/dialogs/MakeOfferConfirmationDialog.tsx:505
 msgid "Fee per offer:"
@@ -2513,6 +2590,15 @@ msgstr ""
 msgid "Files Processed"
 msgstr ""
 
+#: src/klimper/partial/PartialOfferTerms.tsx:25
+#: src/klimper/partial/PartialOfferTerms.tsx:80
+msgid "Filled"
+msgstr ""
+
+#: src/klimper/partial/MyPartialOffers.tsx:141
+msgid "Filled {fills}× · {filled}% · {leftText} left"
+msgstr ""
+
 #: src/components/ClawbackCoinsCard.tsx:345
 #: src/components/ClawbackCoinsCard.tsx:456
 msgid "Finalize"
@@ -2533,6 +2619,14 @@ msgstr ""
 #: src/components/ClawbackCoinsCard.tsx:272
 #: src/pages/Token.tsx:170
 msgid "Finalize Clawback Details"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:87
+msgid "Following the offer…"
+msgstr ""
+
+#: src/klimper/partial/PartialFillsOption.tsx:29
+msgid "For exactly one token offered for one token."
 msgstr ""
 
 #: src/pages/Addresses.tsx:77
@@ -2753,7 +2847,7 @@ msgstr "Caliente"
 #~ msgid "Hot Wallet"
 #~ msgstr "Hot Wallet"
 
-#: src/pages/MakeOffer.tsx:268
+#: src/pages/MakeOffer.tsx:270
 #: src/pages/MintOption.tsx:275
 #: src/pages/Send.tsx:555
 #: src/pages/Settings.tsx:390
@@ -2838,6 +2932,18 @@ msgstr "Importar billetera"
 #: src/pages/ImportWallet.tsx:267
 msgid "Importing"
 msgstr "Importando"
+
+#: src/klimper/partial/PartialOfferTerms.tsx:66
+msgid "in {atLeastOne} min"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:63
+msgid "in {days} d {hours} h"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:64
+msgid "in {hours} h {minutes} min"
+msgstr ""
 
 #: src/components/dialogs/MigrationDialog.tsx:35
 msgid "In order to proceed with the update, the wallet will be fully resynced. This means any imported offer files or custom asset names will be removed, but you can manually add them again after if needed."
@@ -2925,11 +3031,19 @@ msgstr ""
 #~ msgid "It can then see every coin at those addresses, and connect them to you. Every request still needs your approval."
 #~ msgstr ""
 
-#: src/klimper/Scanner.tsx:148
+#: src/klimper/partial/MakePartialOffer.tsx:223
+msgid "It does not expire."
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:225
+msgid "It expires {expiryText}."
+msgstr ""
+
+#: src/klimper/Scanner.tsx:154
 msgid "It is not a connect code, an offer or an address. Here is what it says."
 msgstr ""
 
-#: src/klimper/Scanner.tsx:144
+#: src/klimper/Scanner.tsx:150
 msgid "It is not something this version of Klimper can open."
 msgstr ""
 
@@ -3019,7 +3133,7 @@ msgstr ""
 #~ msgid "Klimper counted the offers in the offer itself. They are taken in one transaction: either every one of them goes through, or none does and you pay nothing."
 #~ msgstr ""
 
-#: src/klimper/Scanner.tsx:140
+#: src/klimper/Scanner.tsx:146
 msgid "Klimper does not know this code"
 msgstr ""
 
@@ -3048,7 +3162,7 @@ msgstr ""
 msgid "Klimper may not use the camera. Allow it in the system settings, or paste the code instead."
 msgstr ""
 
-#: src/klimper/Scanner.tsx:62
+#: src/klimper/Scanner.tsx:67
 msgid "Klimper may not use the camera. Allow it in the system settings, then try again."
 msgstr ""
 
@@ -3115,6 +3229,14 @@ msgstr "ID de lanzador copiado al portapapeles"
 msgid "Learn more"
 msgstr ""
 
+#: src/klimper/partial/MakePartialOffer.tsx:186
+msgid "Least one fill pays"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:173
+msgid "Least per fill"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectDappSettings.tsx:436
 msgid "Leave a field empty for no limit. A token with no limit here is not limited, and NFTs never are. A day is a UTC day."
 msgstr ""
@@ -3130,6 +3252,10 @@ msgstr ""
 
 #: src/klimper/xchonnect/XchonnectOption.tsx:374
 msgid "Lend {principal} to {other}"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:240
+msgid "Less is left than the least one fill takes, so nobody can fill it any more. Only the maker can take the rest back."
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:259
@@ -3313,19 +3439,31 @@ msgstr "Navegación principal"
 msgid "Make an offer"
 msgstr ""
 
+#: src/klimper/partial/PartialFillsOption.tsx:39
+msgid "Make partial offer"
+msgstr ""
+
 #: src/pages/CreateWallet.tsx:302
 msgid "Make sure you have saved your mnemonic. You will not be able to access it later, since it will not be saved in the wallet. You will also not be able to make transactions with this wallet."
 msgstr "Asegúrate de haber guardado tu mnemotécnico. No podrás acceder a él más adelante, ya que no estará guardado en la billetera. Tampoco podrás realizar transacciones con esta billetera."
+
+#: src/klimper/partial/PartialOfferTerms.tsx:214
+msgid "Maker"
+msgstr ""
 
 #: src/components/OfferCard.tsx:188
 msgid "Maker Fee"
 msgstr "Tarifa del creador"
 
+#: src/klimper/partial/MakePartialOffer.tsx:227
+msgid "Making it sends nothing: the first taker sends your coins along. Until then they are locked in the wallet as an offer."
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectSettings.tsx:57
 msgid "Manage"
 msgstr ""
 
-#: src/pages/Offers.tsx:241
+#: src/pages/Offers.tsx:243
 msgid "Manage offers"
 msgstr "Gestionar ofertas"
 
@@ -3337,6 +3475,10 @@ msgstr "Nodo añadido manualmente"
 
 #: src/components/OfferCard.tsx:245
 msgid "Marketplaces"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:299
+msgid "Max"
 msgstr ""
 
 #: src/components/OwnedCoinsCard.tsx:728
@@ -3383,6 +3525,10 @@ msgstr "URI de metadatos"
 #: src/pages/MintNft.tsx:215
 msgid "Metadata URLs"
 msgstr "URLs de metadatos"
+
+#: src/klimper/partial/PartialOfferPage.tsx:290
+msgid "Min"
+msgstr ""
 
 #: src/pages/MintNft.tsx:407
 msgid "Mint"
@@ -3437,7 +3583,7 @@ msgstr "Minters"
 msgid "Minting"
 msgstr "Minting"
 
-#: src/pages/MakeOffer.tsx:291
+#: src/pages/MakeOffer.tsx:293
 #: src/pages/MintOption.tsx:290
 #: src/pages/Send.tsx:572
 #: src/pages/Settings.tsx:395
@@ -3456,6 +3602,10 @@ msgstr ""
 
 #: src/components/TokenCard.tsx:162
 msgid "More options"
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:199
+msgid "More than zero, and at most {wantText}."
 msgstr ""
 
 #: src/pages/Settings.tsx:315
@@ -3516,6 +3666,9 @@ msgstr "Menú de navegación"
 msgid "Network"
 msgstr "Red"
 
+#: src/klimper/partial/MyPartialOffers.tsx:187
+#: src/klimper/partial/PartialOfferPage.tsx:313
+#: src/klimper/partial/PartialOfferPage.tsx:340
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:792
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:977
 msgid "Network fee"
@@ -3533,7 +3686,7 @@ msgstr ""
 #: src/components/TransferDialog.tsx:152
 #: src/pages/CreateProfile.tsx:87
 #: src/pages/IssueToken.tsx:146
-#: src/pages/MakeOffer.tsx:178
+#: src/pages/MakeOffer.tsx:180
 #: src/pages/MintNft.tsx:389
 #: src/pages/MintOption.tsx:300
 #: src/pages/Offer.tsx:135
@@ -3571,13 +3724,21 @@ msgstr ""
 #~ msgid "Network status"
 #~ msgstr "Estatus de la  Red"
 
-#: src/pages/MakeOffer.tsx:125
+#: src/klimper/partial/PartialOfferTerms.tsx:194
+msgid "Never"
+msgstr ""
+
+#: src/pages/MakeOffer.tsx:127
 msgid "New Offer"
 msgstr "Nueva Oferta"
 
 #: src/klimper/xchonnect/XchonnectOption.tsx:163
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:1182
 msgid "New option"
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:167
+msgid "New partial offer"
 msgstr ""
 
 #: src/klimper/xchonnect/XchonnectTrade.tsx:261
@@ -3590,6 +3751,10 @@ msgstr ""
 
 #: src/pages/OptionList.tsx:176
 msgid "Next"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:225
+msgid "Next offer"
 msgstr ""
 
 #: src/components/SimplePagination.tsx:53
@@ -3675,7 +3840,7 @@ msgstr ""
 msgid "No assets being sent to external recipients."
 msgstr "No se están enviando activos a destinatarios externos."
 
-#: src/klimper/Scanner.tsx:67
+#: src/klimper/Scanner.tsx:72
 msgid "No camera could be opened."
 msgstr ""
 
@@ -3754,7 +3919,7 @@ msgstr ""
 msgid "No NFTs to export"
 msgstr ""
 
-#: src/pages/Offers.tsx:243
+#: src/pages/Offers.tsx:245
 msgid "No offers yet"
 msgstr "No hay ofertas aún"
 
@@ -3813,6 +3978,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/components/AssignNftDialog.tsx:101
+#: src/klimper/partial/PartialOfferTerms.tsx:186
 msgid "None"
 msgstr "Ninguno"
 
@@ -3926,6 +4092,14 @@ msgstr ""
 msgid "Number of peers to maintain connections with"
 msgstr "Número de nodos con los que mantener conexiones"
 
+#: src/klimper/partial/PartialOfferTerms.tsx:124
+msgid "of {initialOffered}"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:135
+msgid "of {initialRequested}"
+msgstr ""
+
 #: src/components/OfferCard.tsx:59
 #: src/klimper/CoinAddress.tsx:17
 msgid "Offer"
@@ -3956,12 +4130,13 @@ msgstr "Detalles de la Oferta"
 msgid "Offer ID"
 msgstr "ID de oferta"
 
-#: src/pages/MakeOffer.tsx:86
+#: src/pages/MakeOffer.tsx:88
 msgid "Offer must include at least one offered or requested asset."
 msgstr ""
 
 #: src/components/OfferCard.tsx:228
-#: src/pages/MakeOffer.tsx:133
+#: src/klimper/partial/PartialOfferTerms.tsx:118
+#: src/pages/MakeOffer.tsx:135
 msgid "Offered"
 msgstr "Ofrecido"
 
@@ -3986,7 +4161,7 @@ msgid "Offering"
 msgstr ""
 
 #: src/components/Nav.tsx:102
-#: src/pages/Offers.tsx:203
+#: src/pages/Offers.tsx:205
 msgid "Offers"
 msgstr "Ofertas"
 
@@ -4026,6 +4201,10 @@ msgstr ""
 msgid "One half of a trade"
 msgstr ""
 
+#: src/klimper/partial/PartialOfferTerms.tsx:207
+msgid "One of these tokens is revocable: its issuer can take coins of it back, also after the trade."
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:194
 msgid "Only if the counterparty completes"
 msgstr ""
@@ -4041,6 +4220,10 @@ msgstr ""
 
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:407
 msgid "Only to your own addresses"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:21
+msgid "Open"
 msgstr ""
 
 #: src/components/OptionColumns.tsx:179
@@ -4299,6 +4482,22 @@ msgstr ""
 msgid "Pairing code"
 msgstr ""
 
+#: src/klimper/partial/MakePartialOffer.tsx:64
+#: src/klimper/partial/MakePartialOffer.tsx:262
+#: src/klimper/partial/PartialOfferPage.tsx:84
+#: src/klimper/partial/PartialOfferPage.tsx:107
+#: src/klimper/partial/PartialOfferTerms.tsx:103
+msgid "Partial offer"
+msgstr ""
+
+#: src/klimper/partial/MyPartialOffers.tsx:62
+msgid "Partial offers"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferTerms.tsx:23
+msgid "Partly filled"
+msgstr ""
+
 #: src/klimper/PasskeySettings.tsx:44
 #~ msgid "Passkey"
 #~ msgstr ""
@@ -4447,11 +4646,11 @@ msgstr ""
 msgid "Please wait while your offers are being uploaded..."
 msgstr ""
 
-#: src/klimper/Scanner.tsx:126
+#: src/klimper/Scanner.tsx:132
 msgid "Point the camera at a website's connect code, an offer or an address."
 msgstr ""
 
-#: src/klimper/Scanner.tsx:131
+#: src/klimper/Scanner.tsx:137
 msgid "Point the camera at an offer or an address."
 msgstr ""
 
@@ -4496,6 +4695,7 @@ msgid "Previous page"
 msgstr "Página anterior"
 
 #: src/components/TokenColumns.tsx:140
+#: src/klimper/partial/PartialOfferTerms.tsx:155
 #: src/klimper/xchonnect/XchonnectTrade.tsx:357
 msgid "Price"
 msgstr "Precio"
@@ -4709,6 +4909,10 @@ msgstr ""
 msgid "Remove Emoji"
 msgstr ""
 
+#: src/klimper/partial/MyPartialOffers.tsx:167
+msgid "Remove from list"
+msgstr ""
+
 #: src/klimper/PasskeySettings.tsx:81
 #~ msgid "Remove passkey"
 #~ msgstr ""
@@ -4747,7 +4951,8 @@ msgid "Request a loan"
 msgstr ""
 
 #: src/components/OfferCard.tsx:210
-#: src/pages/MakeOffer.tsx:157
+#: src/klimper/partial/PartialOfferTerms.tsx:129
+#: src/pages/MakeOffer.tsx:159
 msgid "Requested"
 msgstr "Solicitado"
 
@@ -4910,25 +5115,25 @@ msgid "Saving..."
 msgstr ""
 
 #: src/klimper/KlimperNavLinks.tsx:36
-#: src/klimper/Scanner.tsx:115
+#: src/klimper/Scanner.tsx:121
 #: src/klimper/xchonnect/XchonnectConnect.tsx:379
 #: src/klimper/xchonnect/XchonnectUi.tsx:39
 msgid "Scan"
 msgstr ""
 
-#: src/pages/Offers.tsx:219
+#: src/pages/Offers.tsx:221
 msgid "Scan an offer from an NFC tag"
 msgstr ""
 
-#: src/pages/Offers.tsx:186
+#: src/pages/Offers.tsx:188
 msgid "Scan an offer QR code from an image"
 msgstr ""
 
-#: src/pages/Offers.tsx:210
+#: src/pages/Offers.tsx:212
 msgid "Scan an offer QR code with the camera"
 msgstr ""
 
-#: src/klimper/Scanner.tsx:168
+#: src/klimper/Scanner.tsx:174
 msgid "Scan another code"
 msgstr ""
 
@@ -4956,7 +5161,7 @@ msgstr ""
 #~ msgid "Scan with the camera"
 #~ msgstr ""
 
-#: src/klimper/Scanner.tsx:157
+#: src/klimper/Scanner.tsx:163
 msgid "Scanned text"
 msgstr ""
 
@@ -5237,6 +5442,7 @@ msgstr "Enviando"
 msgid "sending_to_recipients"
 msgstr "enviando_a_destinatarios"
 
+#: src/klimper/partial/PartialOfferPage.tsx:205
 #: src/pages/Transaction.tsx:138
 msgid "Sent"
 msgstr "Enviado"
@@ -5266,12 +5472,20 @@ msgstr ""
 msgid "Settings"
 msgstr "Configuración"
 
+#: src/klimper/partial/PartialOfferPage.tsx:97
+msgid "Share"
+msgstr ""
+
 #: src/components/MarketplaceCard.tsx:162
 msgid "Share marketplace link"
 msgstr ""
 
 #: src/components/OfferCard.tsx:116
 msgid "Share offer"
+msgstr ""
+
+#: src/klimper/partial/MakePartialOffer.tsx:257
+msgid "Share this text. It is listed under Offers, where you can follow its fills and cancel it."
 msgstr ""
 
 #: src/components/OfferCard.tsx:248
@@ -5475,6 +5689,10 @@ msgstr "Tarjetas pequeñas"
 #~ msgid "Some spends are time-limited relative to their coins."
 #~ msgstr ""
 
+#: src/klimper/partial/PartialOfferPage.tsx:174
+msgid "Someone took from this offer first. Here is what is left now."
+msgstr ""
+
 #: src/klimper/KlimperErrorBoundary.tsx:47
 msgid "Something went wrong"
 msgstr ""
@@ -5594,6 +5812,10 @@ msgstr "Comenzar"
 #: src/pages/Settings.tsx:1481
 msgid "Status"
 msgstr "Estado"
+
+#: src/klimper/partial/PartialOfferTerms.tsx:32
+msgid "Status unknown (offline)"
+msgstr ""
 
 #: src/pages/Nft.tsx:569
 #: src/pages/Option.tsx:225
@@ -5737,6 +5959,11 @@ msgstr "Sincronización en curso..."
 msgid "Tables"
 msgstr ""
 
+#: src/klimper/partial/PartialOfferPage.tsx:368
+#: src/klimper/partial/PartialOfferPage.tsx:390
+msgid "Take"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:1154
 msgid "Take {offers} offers together"
 msgstr ""
@@ -5754,9 +5981,25 @@ msgstr "Tomar Oferta"
 #~ msgid "Take Offer "
 #~ msgstr "Tomar Oferta "
 
+#: src/klimper/partial/PartialOfferPage.tsx:253
+msgid "Take part of it"
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:376
+msgid "Take part of this offer?"
+msgstr ""
+
 #: src/components/OfferCard.tsx:142
 msgid "Taken"
 msgstr "Tomado"
+
+#: src/klimper/partial/MakePartialOffer.tsx:172
+msgid "Takers can fill it in parts"
+msgstr ""
+
+#: src/klimper/partial/PartialFillsOption.tsx:27
+msgid "Takers can take any part of it, at the same price."
+msgstr ""
 
 #: src/klimper/xchonnect/XchonnectDappSettings.tsx:384
 msgid "Taking a method away means the website is refused when it tries. Nothing here is approved automatically."
@@ -5901,6 +6144,10 @@ msgstr ""
 
 #: src/klimper/xchonnect/XchonnectOption.tsx:211
 msgid "The new option is only conditional: spends you do not sign decide whether it is made."
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:102
+msgid "The newest text of this offer. After each fill there is a new one; this wallet finds it from any older one."
 msgstr ""
 
 #: src/pages/Settings.tsx:1451
@@ -6124,7 +6371,7 @@ msgstr "Este ID de colección no existe."
 msgid "This connection cannot be used"
 msgstr ""
 
-#: src/klimper/Scanner.tsx:64
+#: src/klimper/Scanner.tsx:69
 msgid "This device cannot share its camera with Klimper."
 msgstr ""
 
@@ -6463,8 +6710,8 @@ msgstr "Para:"
 
 #: src/components/NftOptions.tsx:209
 #: src/components/NftOptions.tsx:210
-#: src/pages/Offers.tsx:319
-#: src/pages/Offers.tsx:332
+#: src/pages/Offers.tsx:323
+#: src/pages/Offers.tsx:336
 msgid "Toggle multi-select"
 msgstr "Alternar selección múltiple"
 
@@ -6522,7 +6769,7 @@ msgstr ""
 msgid "Tokens exported successfully"
 msgstr ""
 
-#: src/pages/MakeOffer.tsx:60
+#: src/pages/MakeOffer.tsx:62
 msgid "Tokens must have a positive amount."
 msgstr ""
 
@@ -6563,6 +6810,7 @@ msgid "Total: {total}"
 msgstr "Total: {total}"
 
 #: src/components/TransactionColumns.tsx:40
+#: src/klimper/partial/PartialOfferPage.tsx:216
 msgid "Transaction"
 msgstr "Transacción"
 
@@ -6697,7 +6945,7 @@ msgstr "Perfil de Transferencia"
 #~ msgid "Trusted peer"
 #~ msgstr "Nodo confiable"
 
-#: src/klimper/Scanner.tsx:170
+#: src/klimper/Scanner.tsx:176
 msgid "Try again"
 msgstr ""
 
@@ -7087,7 +7335,7 @@ msgstr "Ver metadatos"
 #: src/components/dialogs/ViewOfferDialog.tsx:49
 #: src/pages/Nft.tsx:481
 #: src/pages/Nft.tsx:600
-#: src/pages/Offers.tsx:263
+#: src/pages/Offers.tsx:265
 msgid "View Offer"
 msgstr "Ver Oferta"
 
@@ -7241,6 +7489,10 @@ msgstr ""
 #~ msgid "What does the website see?"
 #~ msgstr ""
 
+#: src/klimper/partial/PartialOfferPage.tsx:223
+msgid "What is left is offered on as a new text:"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectDappSettings.tsx:382
 msgid "What it may ask for"
 msgstr ""
@@ -7323,6 +7575,10 @@ msgstr ""
 #: src/components/OfferSummaryCard.tsx:73
 #~ msgid "XCH"
 #~ msgstr "XCH"
+
+#: src/klimper/partial/PartialOfferPage.tsx:348
+msgid "XCH in all"
+msgstr ""
 
 #: src/components/TokenListView.tsx:56
 #~ msgid "XCH logo"
@@ -7432,7 +7688,7 @@ msgstr ""
 msgid "You ask for"
 msgstr ""
 
-#: src/pages/Offers.tsx:252
+#: src/pages/Offers.tsx:254
 msgid "You can also paste an offer using"
 msgstr "También puedes pegar una oferta utilizando"
 
@@ -7456,6 +7712,12 @@ msgstr "No ha realizado transacciones aún."
 msgid "You hold the option"
 msgstr ""
 
+#: src/klimper/partial/MakePartialOffer.tsx:177
+msgid "You offer {giveText} for {wantText}. Anyone can take part of it at this price until it is all taken, it expires, or you cancel it."
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:259
+#: src/klimper/partial/PartialOfferPage.tsx:324
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:149
 #: src/klimper/xchonnect/XchonnectTrade.tsx:392
 msgid "You pay"
@@ -7465,6 +7727,15 @@ msgstr ""
 msgid "You Pay"
 msgstr ""
 
+#: src/klimper/partial/PartialOfferPage.tsx:210
+msgid "You pay {paidText} and receive {boughtText} once the transaction is confirmed."
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:379
+msgid "You pay {paysText} and receive {getsText}. The offer is checked again right before signing."
+msgstr ""
+
+#: src/klimper/partial/PartialOfferPage.tsx:356
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:153
 #: src/klimper/xchonnect/XchonnectTrade.tsx:402
 msgid "You receive"
@@ -7518,6 +7789,10 @@ msgstr ""
 #~ msgid "Your offer has been created and imported successfully{0}. You will now be redirected to the offers page where you can view its details."
 #~ msgstr ""
 
+#: src/klimper/partial/MakePartialOffer.tsx:252
+msgid "Your partial offer"
+msgstr ""
+
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:266
 msgid "Your signature would not be tied to the payment you are expecting. Klimper refuses this; if you are seeing it, reject and tell us."
 msgstr ""
@@ -7535,5 +7810,6 @@ msgid "Your wallet’s records and an independent simulation agree on what leave
 msgstr ""
 
 #: src/klimper/CoinAddress.tsx:13
+#: src/klimper/partial/PartialOfferTerms.tsx:109
 msgid "Yours"
 msgstr ""
