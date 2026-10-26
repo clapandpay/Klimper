@@ -43,25 +43,24 @@ async fn open(dir: &Path) -> Result<AppState> {
         })
         .await?;
     }
-    let fingerprint = match sage.wallet_config.wallets.first() {
-        Some(wallet) => wallet.fingerprint,
-        None => {
-            let mnemonic = sage
-                .generate_mnemonic(GenerateMnemonic { use_24_words: true })?
-                .mnemonic;
-            sage.import_key(ImportKey {
-                name: "partial offers testnet".to_string(),
-                key: mnemonic,
-                derivation_index: 0,
-                hardened: None,
-                unhardened: None,
-                save_secrets: true,
-                login: true,
-                emoji: None,
-            })
-            .await?
-            .fingerprint
-        }
+    let fingerprint = if let Some(wallet) = sage.wallet_config.wallets.first() {
+        wallet.fingerprint
+    } else {
+        let mnemonic = sage
+            .generate_mnemonic(GenerateMnemonic { use_24_words: true })?
+            .mnemonic;
+        sage.import_key(ImportKey {
+            name: "partial offers testnet".to_string(),
+            key: mnemonic,
+            derivation_index: 0,
+            hardened: None,
+            unhardened: None,
+            save_secrets: true,
+            login: true,
+            emoji: None,
+        })
+        .await?
+        .fingerprint
     };
     sage.login(Login { fingerprint }).await?;
     Ok(Arc::new(Mutex::new(sage)))
@@ -136,7 +135,7 @@ async fn test_cat(maker: &AppState) -> Result<String> {
         .iter()
         .find(|cat| cat.balance.to_u64().unwrap_or(0) >= CAT_AMOUNT)
     {
-        return Ok(cat.asset_id.clone().context("a CAT without an id")?);
+        return cat.asset_id.clone().context("a CAT without an id");
     }
     println!("maker: issuing a test CAT of {CAT_AMOUNT} mojos");
     maker
@@ -158,7 +157,7 @@ async fn test_cat(maker: &AppState) -> Result<String> {
             .iter()
             .find(|cat| cat.balance.to_u64().unwrap_or(0) >= CAT_AMOUNT)
         {
-            return Ok(cat.asset_id.clone().context("a CAT without an id")?);
+            return cat.asset_id.clone().context("a CAT without an id");
         }
     }
     bail!("the test CAT never confirmed")
