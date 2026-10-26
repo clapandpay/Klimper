@@ -29,7 +29,9 @@ pub async fn list(ctx: &WalletCtx, store: &Store, now: u64) -> Result<Vec<MyPart
     let mut mine = Vec::new();
     for mut stored in store.list()? {
         let offer = PartialOffer::from_text(&stored.latest)?;
-        let (offer, status) = if let Some(status) = stored.ended { (offer, status) } else {
+        let (offer, status) = if let Some(status) = stored.ended {
+            (offer, status)
+        } else {
             let followed = follow(ctx, offer, now).await?;
             stored.fills.extend(followed.fills);
             stored.latest = followed.offer.to_text()?;

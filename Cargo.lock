@@ -8400,6 +8400,7 @@ dependencies = [
  "chia-wallet-sdk",
  "hex",
  "indexmap 2.12.1",
+ "rustls",
  "sage",
  "sage-api",
  "sage-config",

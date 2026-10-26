@@ -32,6 +32,8 @@ anyhow = { workspace = true }
 sage-config = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 tempfile = { workspace = true }
+# examples/testnet.rs: a headless Sage needs a TLS provider, as src-tauri installs one.
+rustls = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [build-dependencies]

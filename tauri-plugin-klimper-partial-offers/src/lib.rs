@@ -111,18 +111,18 @@ impl From<sage::Error> for Error {
     }
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
-fn now() -> u64 {
+pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
 }
 
-/// The logged-in wallet, its peer and (for what signs) its key, taken from Sage's state; the
+/// What the partial offer functions need, from a running Sage with a wallet open: the
+/// wallet, its peer, its sync, (for what signs) its key, and its partial offers file. Sage's
 /// lock is let go before any chain work.
-async fn wallet_ctx<R: Runtime>(app: &AppHandle<R>, signing: bool) -> Result<(WalletCtx, Store)> {
-    let state = app.state::<AppState>().inner().clone();
+pub async fn sage_ctx(state: &AppState, signing: bool) -> Result<(WalletCtx, Store)> {
     let sage = state.lock().await;
     let wallet = sage.wallet().map_err(|_| Error::NoWallet)?;
     let master_sk = if signing {
@@ -150,18 +150,99 @@ async fn wallet_ctx<R: Runtime>(app: &AppHandle<R>, signing: bool) -> Result<(Wa
     Ok((ctx, store))
 }
 
-/// Reads a `partial1…` text and follows it on the chain to its newest coin.
+/// What each command does, on Sage's state: the commands below call these, and so does the
+/// testnet run (`examples/testnet.rs`), so it tries exactly what the app does.
+pub mod ops {
+    use super::{
+        AppState, CancelResult, ImportOffer, MakeRequest, MakeResult, MyPartialOffer,
+        PartialOfferView, Result, TakeResult, encode_offer, hex0x, mine, now, parse_amount,
+        sage_ctx, wallet,
+    };
+
+    /// Reads a `partial1…` text and follows it on the chain to its newest coin.
+    pub async fn view(state: &AppState, offer: &str) -> Result<PartialOfferView> {
+        let (ctx, _) = sage_ctx(state, false).await?;
+        wallet::view(&ctx, offer, now()).await
+    }
+
+    /// Takes `amount` mojos of the requested asset's worth of the offer, with `fee` mojos as
+    /// the network fee (the offer's required fee comes on top), and sends it.
+    pub async fn take(
+        state: &AppState,
+        offer: &str,
+        amount: &str,
+        fee: &str,
+    ) -> Result<TakeResult> {
+        let (ctx, _) = sage_ctx(state, true).await?;
+        let (result, bundle) = wallet::take(
+            &ctx,
+            offer,
+            parse_amount(amount)?,
+            parse_amount(fee)?,
+            now(),
+        )
+        .await?;
+        ctx.submit(bundle).await?;
+        Ok(result)
+    }
+
+    /// Makes a partial offer. Nothing is sent: the coins it is made from are locked in the
+    /// wallet (as an offer of its own, which Sage lists) until the first fill or a cancel
+    /// spends them.
+    pub async fn make(state: &AppState, request: &MakeRequest) -> Result<MakeResult> {
+        let (ctx, store) = sage_ctx(state, true).await?;
+        let terms = wallet::terms(&ctx, request).await?;
+        let (offer, one_sided) = wallet::make(&ctx, &terms).await?;
+        state
+            .lock()
+            .await
+            .import_offer(ImportOffer {
+                offer: encode_offer(&one_sided)?,
+            })
+            .await?;
+        let id = mine::remember(&store, &offer, now())?;
+        Ok(MakeResult {
+            id,
+            offer: offer.to_text()?,
+        })
+    }
+
+    /// Cancels one of the wallet's partial offers, with `fee` mojos as the network fee.
+    pub async fn cancel(state: &AppState, id: &str, fee: &str) -> Result<CancelResult> {
+        let (ctx, store) = sage_ctx(state, true).await?;
+        let stored = mine::latest(&store, id)?;
+        let bundle = wallet::cancel(&ctx, &stored.latest, parse_amount(fee)?, now()).await?;
+        let name = ctx.submit(bundle).await?;
+        Ok(CancelResult {
+            transaction_id: hex0x(name),
+        })
+    }
+
+    /// The wallet's partial offers, newest first, each still live followed on the chain.
+    pub async fn list(state: &AppState) -> Result<Vec<MyPartialOffer>> {
+        let (ctx, store) = sage_ctx(state, false).await?;
+        mine::list(&ctx, &store, now()).await
+    }
+
+    /// Forgets one of the wallet's partial offers (it stays on the chain as it is).
+    pub async fn forget(state: &AppState, id: &str) -> Result<bool> {
+        let (_, store) = sage_ctx(state, false).await?;
+        store.delete(id)
+    }
+}
+
+fn state<R: Runtime>(app: &AppHandle<R>) -> AppState {
+    app.state::<AppState>().inner().clone()
+}
+
 #[command]
 async fn view_partial_offer<R: Runtime>(
     app: AppHandle<R>,
     offer: String,
 ) -> Result<PartialOfferView> {
-    let (ctx, _) = wallet_ctx(&app, false).await?;
-    wallet::view(&ctx, &offer, now()).await
+    ops::view(&state(&app), &offer).await
 }
 
-/// Takes `amount` mojos of the requested asset's worth of the offer, with `fee` mojos as the
-/// network fee (the offer's required fee comes on top), and sends it.
 #[command]
 async fn take_partial_offer<R: Runtime>(
     app: AppHandle<R>,
@@ -169,72 +250,34 @@ async fn take_partial_offer<R: Runtime>(
     amount: String,
     fee: String,
 ) -> Result<TakeResult> {
-    let (ctx, _) = wallet_ctx(&app, true).await?;
-    let (result, bundle) = wallet::take(
-        &ctx,
-        &offer,
-        parse_amount(&amount)?,
-        parse_amount(&fee)?,
-        now(),
-    )
-    .await?;
-    ctx.submit(bundle).await?;
-    Ok(result)
+    ops::take(&state(&app), &offer, &amount, &fee).await
 }
 
-/// Makes a partial offer. Nothing is sent: the coins it is made from are locked in the wallet
-/// (as an offer of its own, which Sage lists) until the first fill or a cancel spends them.
 #[command]
 async fn make_partial_offer<R: Runtime>(
     app: AppHandle<R>,
     request: MakeRequest,
 ) -> Result<MakeResult> {
-    let (ctx, store) = wallet_ctx(&app, true).await?;
-    let terms = wallet::terms(&ctx, &request).await?;
-    let (offer, one_sided) = wallet::make(&ctx, &terms).await?;
-    {
-        let state = app.state::<AppState>().inner().clone();
-        let sage = state.lock().await;
-        sage.import_offer(ImportOffer {
-            offer: encode_offer(&one_sided)?,
-        })
-        .await?;
-    }
-    let id = mine::remember(&store, &offer, now())?;
-    Ok(MakeResult {
-        id,
-        offer: offer.to_text()?,
-    })
+    ops::make(&state(&app), &request).await
 }
 
-/// Cancels one of the wallet's partial offers, with `fee` mojos as the network fee.
 #[command]
 async fn cancel_partial_offer<R: Runtime>(
     app: AppHandle<R>,
     id: String,
     fee: String,
 ) -> Result<CancelResult> {
-    let (ctx, store) = wallet_ctx(&app, true).await?;
-    let stored = mine::latest(&store, &id)?;
-    let bundle = wallet::cancel(&ctx, &stored.latest, parse_amount(&fee)?, now()).await?;
-    let name = ctx.submit(bundle).await?;
-    Ok(CancelResult {
-        transaction_id: hex0x(name),
-    })
+    ops::cancel(&state(&app), &id, &fee).await
 }
 
-/// The wallet's partial offers, newest first, each still live followed on the chain.
 #[command]
 async fn get_partial_offers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<MyPartialOffer>> {
-    let (ctx, store) = wallet_ctx(&app, false).await?;
-    mine::list(&ctx, &store, now()).await
+    ops::list(&state(&app)).await
 }
 
-/// Forgets one of the wallet's partial offers (it stays on the chain as it is).
 #[command]
 async fn delete_partial_offer<R: Runtime>(app: AppHandle<R>, id: String) -> Result<bool> {
-    let (_, store) = wallet_ctx(&app, false).await?;
-    store.delete(&id)
+    ops::forget(&state(&app), &id).await
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

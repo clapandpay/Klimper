@@ -133,9 +133,10 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
                 status = Status::Open;
                 for input in offer.input_coin_ids() {
                     if let Some(input) = peer.fetch_optional_coin(input, genesis).await?
-                        && input.spent_height.is_some() {
-                            status = Status::Cancelled;
-                        }
+                        && input.spent_height.is_some()
+                    {
+                        status = Status::Cancelled;
+                    }
                 }
             }
             return Ok(Followed {
