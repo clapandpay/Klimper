@@ -6,7 +6,8 @@
 //! the offer with `chia_takeOffer`; the chain must accept the take, the taker ends up holding
 //! the option and the principal, the maker the collateral asked for. The refusals run on the
 //! same path: an option the wallet does not hold, an expired one, more than the wallet has,
-//! no option contracts on the connection, over the option limit, and malformed params.
+//! no option contracts on the connection, over the option limit, and malformed params. An
+//! `expiresAt` from the website is asserted by every spend: taken before it, refused after.
 
 use std::cell::RefCell;
 
@@ -84,6 +85,7 @@ fn offer_params(offered: Vec<Part>, options: Vec<Bytes32>, requested: Vec<Part>)
         options,
         requested,
         fee: 0,
+        expires_at: None,
     }
 }
 
@@ -359,9 +361,89 @@ async fn a_plain_xch_for_cat_offer_is_taken() {
     assert_eq!(alice.wallet.db.cat_balance(wanted).await.unwrap(), 700);
 }
 
+/// A plain offer with the website's `expiresAt` (what an agent asks for): the approval and
+/// the answer show it, and the offer is taken before it.
+#[tokio::test]
+async fn an_offer_with_expires_at_is_taken_before_it() {
+    let mut alice = SimWallet::new(5_000).await;
+    let mut bob = alice.next(1_000).await;
+    let wanted = issue_amount(&mut bob, 700).await;
+    know_cats(&alice, &[wanted]).await;
+    let now = chain_time(&alice).await;
+    let mut params = offer_params(vec![xch(2_000)], vec![], vec![cat(wanted, 700)]);
+    params.expires_at = Some(now + 600);
+    let (run, view) = make(
+        &alice,
+        &params,
+        &[wanted],
+        &Setup::new(CHIA_CREATE_OFFER, now),
+    )
+    .await;
+    let offer = the_offer(&run);
+    assert_eq!(view.unwrap().expires_at, Some(now + 600));
+    let answer: Value = serde_json::from_str(run.ok()).unwrap();
+    assert_eq!(answer["expiresAt"], now + 600);
+    taken(&mut bob, &mut alice, &[wanted], &offer).await;
+    until(&mut alice, async |w| {
+        w.wallet.db.cat_balance(wanted).await.unwrap() == 700
+    })
+    .await;
+}
+
+/// Past the website's `expiresAt` the chain refuses the take: every spend of the maker's
+/// asserts it, not only the approval screen.
+#[tokio::test]
+async fn an_offer_past_its_expires_at_cannot_be_taken() {
+    let alice = SimWallet::new(5_000).await;
+    let mut bob = alice.next(1_000).await;
+    let wanted = issue_amount(&mut bob, 700).await;
+    know_cats(&alice, &[wanted]).await;
+    let now = chain_time(&alice).await;
+    let mut params = offer_params(vec![xch(2_000)], vec![], vec![cat(wanted, 700)]);
+    params.expires_at = Some(now + 600);
+    let (run, _) = make(
+        &alice,
+        &params,
+        &[wanted],
+        &Setup::new(CHIA_CREATE_OFFER, now),
+    )
+    .await;
+    let offer = the_offer(&run);
+
+    pass_time(&alice, 601).await;
+    know_cats(&bob, &[wanted]).await;
+    let outcome = take(&bob, &[wanted], &offer, 0, &take_permissions(), true).await;
+    let bundle = outcome.sent.expect("nothing sent");
+    // Straight to the simulated chain: `push_bundle` only queues it in the wallet. Refused
+    // for the expiry, nothing else.
+    let refused = alice.sim.lock().await.new_transaction(bundle);
+    let error = format!(
+        "{:?}",
+        refused.expect_err("the chain took an expired offer")
+    );
+    assert!(error.contains("AssertBeforeSecondsAbsolute"), "{error}");
+}
+
 // ---------------------------------------------------------------------------------------
 // Refusals
 // ---------------------------------------------------------------------------------------
+
+/// An `expiresAt` that is already past would make an offer nobody can take: refused before
+/// the prompt.
+#[tokio::test]
+async fn an_expires_at_in_the_past_is_refused() {
+    let alice = SimWallet::new(5_000).await;
+    let now = chain_time(&alice).await;
+    let mut params = offer_params(
+        vec![xch(100)],
+        vec![],
+        vec![cat(Bytes32::new([0x63; 32]), 1)],
+    );
+    params.expires_at = Some(now);
+    let (run, _) = make(&alice, &params, &[], &Setup::new(CHIA_CREATE_OFFER, now)).await;
+    assert!(!run.asked());
+    assert!(run.reason().contains("expiresAt"), "{}", run.reason());
+}
 
 #[tokio::test]
 async fn an_option_the_wallet_does_not_hold_is_refused() {
@@ -437,6 +519,7 @@ fn offer_params_are_read_like_sages_and_strictly() {
         ],
         "requestAssets": [{ "assetId": cat_id, "amount": "1000" }],
         "fee": 7,
+        "expiresAt": "1900000000",
     });
     let params = super::create_offer::offer_params(&good.to_string()).unwrap();
     assert_eq!(params.options, vec![Bytes32::new([0x77; 32])]);
@@ -444,12 +527,15 @@ fn offer_params_are_read_like_sages_and_strictly() {
     assert_eq!(params.requested, vec![cat(Bytes32::new([0x51; 32]), 1_000)]);
     // The website's fee is read (and must be well formed), never used.
     assert_eq!(params.fee, crate::execute::own_fee());
+    assert_eq!(params.expires_at, Some(1_900_000_000));
     // `0x`, `XCH`, no `assetId`: all read.
     let alt = serde_json::json!({
         "offerAssets": [{ "assetId": "XCH", "amount": 1 }],
         "requestAssets": [{ "assetId": format!("0x{cat_id}"), "amount": 2 }],
     });
-    assert!(super::create_offer::offer_params(&alt.to_string()).is_ok());
+    let alt = super::create_offer::offer_params(&alt.to_string()).unwrap();
+    // No `expiresAt`: open until taken or cancelled.
+    assert_eq!(alt.expires_at, None);
 
     let nft = Address::new(Bytes32::new([0x78; 32]), "nft".to_owned())
         .encode()
@@ -504,6 +590,18 @@ fn offer_params_are_read_like_sages_and_strictly() {
         (
             serde_json::json!({ "offerAssets": vec![xch_entry.clone(); 17], "requestAssets": [cat_entry] }),
             "offerAssets",
+        ),
+        (
+            serde_json::json!({ "offerAssets": [xch_entry], "requestAssets": [cat_entry], "expiresAt": 0 }),
+            "expiresAt",
+        ),
+        (
+            serde_json::json!({ "offerAssets": [xch_entry], "requestAssets": [cat_entry], "expiresAt": -5 }),
+            "expiresAt",
+        ),
+        (
+            serde_json::json!({ "offerAssets": [xch_entry], "requestAssets": [cat_entry], "expiresAt": "soon" }),
+            "expiresAt",
         ),
     ] {
         let error = super::create_offer::offer_params(&bad.to_string()).unwrap_err();
