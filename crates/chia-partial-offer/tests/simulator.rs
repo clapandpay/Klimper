@@ -6,7 +6,8 @@
 
 use anyhow::Result;
 use chia_partial_offer::{
-    PartialAsset, PartialOffer, PartialOfferTerms, is_partial_offer, make_partial_offer,
+    PartialAsset, PartialOffer, PartialOfferTerms, PartialSpend, is_partial_offer,
+    make_partial_offer,
 };
 use chia_wallet_sdk::{
     chia::{
@@ -304,6 +305,22 @@ fn run(
         sim.new_transaction(bundle)?;
         received += bought;
 
+        // Followed from the chain, the spend reads as this fill and the same next offer.
+        let spend = sim.coin_spend(partial.coin.coin_id()).unwrap();
+        match partial.follow(&spend)? {
+            PartialSpend::Filled {
+                bought: seen,
+                next: followed,
+            } => {
+                assert_eq!(seen, bought);
+                assert_eq!(
+                    followed.map(|next| next.coin),
+                    (next.coin.amount > 0).then_some(next.coin)
+                );
+            }
+            PartialSpend::ClawedBack => panic!("a fill read as a claw back"),
+        }
+
         assert_eq!(balance(&sim, &taker, offered), received);
         if next.coin.amount > 0 {
             // The next offer is on the chain, and its text reads back to the same coin.
@@ -404,6 +421,8 @@ fn the_maker_claws_back_what_is_left() -> Result<()> {
         sim.spend_coins(ctx.take(), std::slice::from_ref(&maker.sk))?;
 
         assert_eq!(balance(&sim, &maker, partial.info.offered_asset_info), left);
+        let spend = sim.coin_spend(partial.coin.coin_id()).unwrap();
+        assert!(matches!(partial.follow(&spend)?, PartialSpend::ClawedBack));
         assert!(
             sim.coin_state(partial.coin.coin_id())
                 .unwrap()

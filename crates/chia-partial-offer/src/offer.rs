@@ -14,12 +14,13 @@ use chia_wallet_sdk::{
     },
     driver::{Cat, CatInfo, CatSpend, DriverError, Offer, Spend, SpendContext},
     puzzles::SETTLEMENT_PAYMENT_HASH,
+    types::run_puzzle,
     types::{
-        Conditions,
+        Condition, Conditions,
         puzzles::{P2OneOfManyArgs, P2OneOfManySolution, RevocationSolution, SettlementPayment},
     },
 };
-use clvm_traits::{ToClvm, clvm_tuple};
+use clvm_traits::{FromClvm, ToClvm, clvm_tuple};
 use clvmr::{Allocator, NodePtr, serde::node_from_bytes};
 
 use crate::{
@@ -393,4 +394,57 @@ impl PartialOffer {
             self.spend_bundle.aggregated_signature + &taken.aggregated_signature,
         ))
     }
+
+    /// What the spend of this offer's coin did: a fill (with the next offer if some is left),
+    /// or the maker's claw back. `coin_spend` is the coin's spend as the chain recorded it.
+    pub fn follow(&self, coin_spend: &CoinSpend) -> Result<PartialSpend> {
+        if coin_spend.coin != self.coin {
+            return Err(PartialOfferError::Invalid(
+                "that spend is of another coin".to_string(),
+            ));
+        }
+        let mut allocator = Allocator::new();
+        let puzzle = node_from_bytes(&mut allocator, coin_spend.puzzle_reveal.as_ref())
+            .map_err(|error| PartialOfferError::Invalid(error.to_string()))?;
+        let solution = node_from_bytes(&mut allocator, coin_spend.solution.as_ref())
+            .map_err(|error| PartialOfferError::Invalid(error.to_string()))?;
+        let output = run_puzzle(&mut allocator, puzzle, solution).map_err(|error| {
+            PartialOfferError::Invalid(format!("the spend does not run: {error}"))
+        })?;
+        let conditions = Vec::<Condition<NodePtr>>::from_clvm(&allocator, output)
+            .map_err(|error| PartialOfferError::Invalid(error.to_string()))?;
+        let settlement = self.info.settlement_puzzle_hash();
+        let mut bought = None;
+        let mut rest = None;
+        for condition in conditions {
+            if let Some(create_coin) = condition.into_create_coin() {
+                if create_coin.puzzle_hash == settlement && bought.is_none() {
+                    bought = Some(create_coin.amount);
+                } else if create_coin.puzzle_hash == self.coin.puzzle_hash {
+                    rest = Some(create_coin.amount);
+                }
+            }
+        }
+        Ok(match bought {
+            Some(bought) => PartialSpend::Filled {
+                bought,
+                next: rest
+                    .filter(|amount| *amount > 0)
+                    .map(|amount| Box::new(self.child(amount))),
+            },
+            None => PartialSpend::ClawedBack,
+        })
+    }
+}
+
+/// What happened to a partial offer's coin.
+#[derive(Debug, Clone)]
+pub enum PartialSpend {
+    /// A taker bought `bought` of the offered asset; `next` holds what is left, if anything.
+    Filled {
+        bought: u64,
+        next: Option<Box<PartialOffer>>,
+    },
+    /// The maker took what was left back.
+    ClawedBack,
 }
