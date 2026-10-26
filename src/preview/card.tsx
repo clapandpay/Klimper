@@ -1,6 +1,6 @@
 import './cardMock';
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A visual preview of the card screens (milestone gnosis-card-mvp) in a plain browser, with
+// A visual preview of the card screens (milestone card-payment) in a plain browser, with
 // the card plugin replaced by mockIPC (`cardMock.ts`). Development only, never bundled:
 //   npx vite --config vite.preview.config.ts   then open /preview-card.html?state=signin
 //   (states listed in cardMock.ts; ?dark=1 for the dark theme; &view=total for the wallet's

@@ -4,7 +4,8 @@
 // Today this is the route every Visa card has: the phone's wallet app takes the card's
 // details, and the card issuer verifies it. The one-tap "Add to Apple Wallet" button
 // (in-app provisioning) needs an entitlement Apple grants only to the card issuer's app or
-// an app it sponsors, plus an issuer API Gnosis Pay does not offer yet (docs/card.md).
+// an app it sponsors, plus a provisioning API from the issuer; Gnosis Pay offers none yet
+// (docs/card.md).
 // Apple's "Add to Apple Wallet" badge is reserved for that button, so it is not used here.
 //
 // Copying the number puts it on the clipboard, which other apps can read. Klimper clears

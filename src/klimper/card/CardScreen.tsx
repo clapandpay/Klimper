@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The card (milestone gnosis-card-mvp, docs/card.md): a Visa card through Gnosis Pay on a
-// Safe that the wallet's own recovery words control.
+// The card (milestone card-payment, docs/card.md): a payment card from the build's card
+// issuer (Gnosis Pay first), on an account that the wallet's own recovery words control.
+// The issuer comes from `card_status` and is handed down through `CardIssuerProvider`.
 //
 // This screen answers, in order: can this wallet have a card here, is it signed in, and
 // then hands over to the signed-in part (`CardHome`). Signing in is a signature by the card
@@ -23,8 +24,9 @@ import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { AlertTriangle, CreditCard, KeyRound, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { card, cardErrorMessage, CardStatus } from './card';
+import { card, CardIssuer, cardErrorMessage, CardStatus } from './card';
 import { CardHome } from './CardHome';
+import { CardIssuerProvider } from './issuer';
 
 export default function CardScreen() {
   const { promptIfEnabled } = useBiometric();
@@ -93,23 +95,25 @@ export default function CardScreen() {
               />
             </div>
           )
-        ) : !status.configured ? (
+        ) : !status.configured || !status.issuer ? (
           <NotInThisBuild />
         ) : !status.available ? (
           <NoCardKey reason={status.unavailable} />
         ) : !status.signedIn ? (
           <SignIn
+            issuer={status.issuer}
             address={status.address ?? ''}
-            sandbox={status.environment !== 'production'}
             busy={busy}
             onSignIn={signIn}
           />
         ) : (
-          <CardHome
-            address={status.address ?? ''}
-            onSignOut={signOut}
-            onSignedOut={refresh}
-          />
+          <CardIssuerProvider issuer={status.issuer}>
+            <CardHome
+              address={status.address ?? ''}
+              onSignOut={signOut}
+              onSignedOut={refresh}
+            />
+          </CardIssuerProvider>
         )}
       </Container>
     </Layout>
@@ -159,16 +163,18 @@ function NoCardKey({ reason }: { readonly reason: CardStatus['unavailable'] }) {
 }
 
 function SignIn({
+  issuer,
   address,
-  sandbox,
   busy,
   onSignIn,
 }: {
+  readonly issuer: CardIssuer;
   readonly address: string;
-  readonly sandbox: boolean;
   readonly busy: boolean;
   readonly onSignIn: () => void;
 }) {
+  const { name, scheme, network } = issuer;
+  const sandbox = issuer.environment !== 'production';
   return (
     <Card data-testid='card-sign-in'>
       <CardHeader>
@@ -180,10 +186,10 @@ function SignIn({
             </CardTitle>
             <CardDescription>
               <Trans>
-                The card is a Visa card by Gnosis Pay. Its money sits in an
-                account on Gnosis Chain that only your recovery words control.
-                Gnosis Pay checks who you are; Klimper never sees your
-                documents, your card number or your payments on any server.
+                The card is a {scheme} card by {name}. Its money sits in an
+                account on {network} that only your recovery words control.
+                {name} checks who you are; Klimper never sees your documents,
+                your card number or your payments on any server.
               </Trans>
             </CardDescription>
           </div>
@@ -206,7 +212,7 @@ function SignIn({
             className='rounded-md bg-muted p-2 text-xs text-muted-foreground'
             data-testid='card-sandbox'
           >
-            <Trans>Test mode: Gnosis Pay’s sandbox, no real money.</Trans>
+            <Trans>Test mode: {name}’s sandbox, no real money.</Trans>
           </div>
         )}
         <Button
@@ -219,7 +225,7 @@ function SignIn({
           ) : (
             <KeyRound className='mr-2 h-4 w-4' aria-hidden='true' />
           )}
-          <Trans>Sign in to Gnosis Pay</Trans>
+          <Trans>Sign in to {name}</Trans>
         </Button>
       </CardContent>
     </Card>

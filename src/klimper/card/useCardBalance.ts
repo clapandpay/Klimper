@@ -3,7 +3,7 @@
 // the card plugin while the page is open and never kept. It never signs in by itself:
 // signing in is a signature and asks for Face ID, so it only happens on the card screen.
 
-import { gnosisPayEnabled } from '@/lib/features';
+import { cardEnabled } from '@/lib/features';
 import { useCallback, useEffect, useState } from 'react';
 import { card, isCardError } from './card';
 
@@ -13,7 +13,7 @@ export type CardBalance =
   /** No card in this build, or this wallet cannot have one: nothing is shown. */
   | { state: 'none' }
   | { state: 'signedOut' }
-  /** Signed in, but Gnosis Pay has no account yet (onboarding not finished). */
+  /** Signed in, but the card issuer has no account yet (onboarding not finished). */
   | { state: 'setup' }
   | {
       state: 'ready';
@@ -66,7 +66,7 @@ export function useCardBalance(): CardBalance {
   }, []);
 
   useEffect(() => {
-    if (!gnosisPayEnabled) return;
+    if (!cardEnabled) return;
     void load();
     const timer = setInterval(() => void load(), CARD_BALANCE_POLL_MS);
     const onVisible = () => {

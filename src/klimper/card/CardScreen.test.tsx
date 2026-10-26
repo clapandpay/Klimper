@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The card screen before the account (milestone gnosis-card-mvp): what each state shows, and
+// The card screen before the account (milestone card-payment): what each state shows, and
 // that signing in asks for biometrics first.
 
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CardStatus } from './card';
+import { GNOSIS_PAY } from './testIssuer';
 
 vi.mock('@/components/Layout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -43,7 +44,7 @@ const ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 function status(over: Partial<CardStatus> = {}): CardStatus {
   return {
     configured: true,
-    environment: 'sandbox',
+    issuer: GNOSIS_PAY,
     available: true,
     unavailable: null,
     address: ADDRESS,
@@ -61,7 +62,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 it('says so when the build has no card provider, and signs nothing', async () => {
-  api.status.mockResolvedValue(status({ configured: false }));
+  api.status.mockResolvedValue(status({ configured: false, issuer: null }));
   renderScreen(<CardScreen />);
   expect(await screen.findByTestId('card-not-configured')).toBeTruthy();
   expect(screen.queryByTestId('card-sign-in-button')).toBeNull();

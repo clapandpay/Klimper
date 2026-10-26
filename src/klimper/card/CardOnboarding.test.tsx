@@ -37,6 +37,7 @@ vi.mock('./CardAccount', () => ({
 }));
 
 const { renderScreen } = await import('../testHarness');
+const { withIssuer } = await import('./testIssuer');
 const { CardOnboarding } = await import('./CardOnboarding');
 const { CardHome, POLL_MS } = await import('./CardHome');
 
@@ -45,7 +46,9 @@ const signedOut = vi.fn();
 function show(...steps: Step[]) {
   for (const step of steps) api.onboarding.mockResolvedValueOnce(step);
   return renderScreen(
-    <CardHome address='0x0' onSignOut={vi.fn()} onSignedOut={signedOut} />,
+    withIssuer(
+      <CardHome address='0x0' onSignOut={vi.fn()} onSignedOut={signedOut} />,
+    ),
   );
 }
 
@@ -186,7 +189,9 @@ it('opens the account, verifies the phone, then shows the account', async () => 
 it('orders the virtual card once the account is ready', async () => {
   const changed = vi.fn().mockResolvedValue(undefined);
   renderScreen(
-    <CardOnboarding step={{ step: 'completed' }} onChanged={changed} />,
+    withIssuer(
+      <CardOnboarding step={{ step: 'completed' }} onChanged={changed} />,
+    ),
   );
   fireEvent.click(await screen.findByTestId('card-order'));
   await waitFor(() => expect(changed).toHaveBeenCalled());
@@ -219,7 +224,9 @@ it('goes back to the sign-in when the session has ended', async () => {
     code: null,
   });
   renderScreen(
-    <CardHome address='0x0' onSignOut={vi.fn()} onSignedOut={signedOut} />,
+    withIssuer(
+      <CardHome address='0x0' onSignOut={vi.fn()} onSignedOut={signedOut} />,
+    ),
   );
   await waitFor(() => expect(signedOut).toHaveBeenCalled());
 });

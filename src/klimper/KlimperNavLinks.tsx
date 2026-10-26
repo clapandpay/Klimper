@@ -11,11 +11,7 @@
 // background, is one tap away from every screen.
 
 import { NavLink } from '@/components/NavLink';
-import {
-  gnosisPayEnabled,
-  scanEnabled,
-  xchonnectEnabled,
-} from '@/lib/features';
+import { cardEnabled, scanEnabled, xchonnectEnabled } from '@/lib/features';
 import { Plural, Trans } from '@lingui/react/macro';
 import { CreditCard, Globe, ScanLine } from 'lucide-react';
 import { CARD_ROUTE } from './card/card';
@@ -46,7 +42,7 @@ export function KlimperNavLinks({
       {xchonnectEnabled && (
         <WebsitesLink isCollapsed={isCollapsed} className={className} />
       )}
-      {gnosisPayEnabled && (
+      {cardEnabled && (
         <NavLink
           url={CARD_ROUTE}
           isCollapsed={isCollapsed}

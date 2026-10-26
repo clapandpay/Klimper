@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The Klimper card (clapandpay milestone gnosis-card-mvp): a Visa card through Gnosis Pay,
-//! on a self-custodied Safe on Gnosis Chain, owned by a key derived from the wallet's own
-//! recovery words. Design and privacy rules: `docs/card.md`.
+//! The Klimper card (clapandpay milestone card-payment): a payment card from a card issuer,
+//! owned by a key derived from the wallet's own recovery words. The issuer sits behind one
+//! interface (`issuer.rs`) and the build picks it with `KLIMPER_CARD_ISSUER`; Gnosis Pay is
+//! the first. Design and privacy rules: `docs/card.md`.
 //!
 //! Everything here runs on the device. There is no Klimper server in the card's path.
 
@@ -23,12 +24,13 @@ pub mod evm;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
 pub mod gnosis_pay;
+pub mod issuer;
 pub mod onboarding;
 pub mod pci;
 pub mod siwe;
 
 use evm::{Address, EvmKey};
-use gnosis_pay::{ApiError, GnosisPay, Settings};
+use issuer::{ApiError, Issuer, IssuerInfo, Signer};
 use onboarding::{Step, Term};
 
 /// What `src-tauri` manages (`src-tauri/src/app_state.rs`).
@@ -92,19 +94,56 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct Card {
     addresses: Mutex<HashMap<u32, Address>>,
-    api: Option<GnosisPay>,
+    issuer: Option<Box<dyn Issuer>>,
 }
 
 impl Card {
-    pub fn new(settings: Option<Settings>) -> Self {
+    /// `None`: this build has no card issuer.
+    pub fn new(issuer: Option<Box<dyn Issuer>>) -> Self {
         Self {
             addresses: Mutex::new(HashMap::new()),
-            api: settings.map(GnosisPay::new),
+            issuer,
         }
     }
 
-    pub fn api(&self) -> Result<&GnosisPay> {
-        self.api.as_ref().ok_or(Error::NotConfigured)
+    pub fn issuer(&self) -> Result<&dyn Issuer> {
+        self.issuer.as_deref().ok_or(Error::NotConfigured)
+    }
+}
+
+/// The open wallet's card key as an issuer adapter sees it ([`Signer`]). Each signature
+/// opens the key and drops it again, and refuses when the wallet was switched meanwhile.
+struct KeySigner {
+    sage: AppState,
+    address: Address,
+}
+
+impl KeySigner {
+    async fn sign(&self, f: impl FnOnce(&EvmKey) -> Result<[u8; 65]>) -> Result<[u8; 65]> {
+        let address = self.address;
+        let (_, signature) = with_key(&self.sage, |key| {
+            if key.address() != address {
+                return Err(Error::NoWallet);
+            }
+            f(key)
+        })
+        .await?;
+        Ok(signature)
+    }
+}
+
+#[async_trait::async_trait]
+impl Signer for KeySigner {
+    fn address(&self) -> Address {
+        self.address
+    }
+
+    async fn personal_sign(&self, message: &[u8]) -> Result<[u8; 65]> {
+        self.sign(|key| Ok(key.personal_sign(message)?)).await
+    }
+
+    async fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 65]> {
+        self.sign(|key| Ok(key.sign_digest(digest)?)).await
     }
 }
 
@@ -154,13 +193,13 @@ pub async fn address(card: &Card, sage: &AppState) -> Result<(u32, Address)> {
 }
 
 /// The open wallet's session; `SignedOut` when it has none.
-pub async fn session<'a>(card: &'a Card, sage: &AppState) -> Result<&'a GnosisPay> {
-    let api = card.api()?;
+pub async fn session<'a>(card: &'a Card, sage: &AppState) -> Result<&'a dyn Issuer> {
+    let issuer = card.issuer()?;
     let (fingerprint, address) = address(card, sage).await?;
-    if api.signed_in(fingerprint).await != Some(address) {
+    if issuer.signed_in(fingerprint).await != Some(address) {
         return Err(ApiError::SignedOut.into());
     }
-    Ok(api)
+    Ok(issuer)
 }
 
 fn now() -> u64 {
@@ -172,10 +211,10 @@ fn now() -> u64 {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CardStatus {
-    /// Whether this build was made with a card registration (docs/card.md).
+    /// Whether this build was made with a card issuer and its settings (docs/card.md).
     pub configured: bool,
-    /// `sandbox`, `production` or `custom`.
-    pub environment: Option<&'static str>,
+    /// The issuer: its name for the screens and what it can do. `None` when not configured.
+    pub issuer: Option<IssuerInfo>,
     /// Whether this wallet can have a card at all.
     pub available: bool,
     /// Why not, when it cannot: `noWallet` or `noRecoveryWords`.
@@ -188,14 +227,14 @@ pub struct CardStatus {
 #[command]
 async fn card_status<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<CardStatus> {
     let sage = app.state::<AppState>().inner().clone();
-    let configured = card.api.is_some();
-    let environment = card.api.as_ref().map(|api| api.settings().environment());
+    let configured = card.issuer.is_some();
+    let issuer = card.issuer.as_ref().map(|issuer| issuer.info());
     let (fingerprint, address) = match address(&card, &sage).await {
         Ok(found) => found,
         Err(error @ (Error::NoWallet | Error::NoRecoveryWords)) => {
             return Ok(CardStatus {
                 configured,
-                environment,
+                issuer,
                 available: false,
                 unavailable: Some(error.kind()),
                 address: None,
@@ -204,13 +243,13 @@ async fn card_status<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Re
         }
         Err(error) => return Err(error),
     };
-    let signed_in = match &card.api {
-        Some(api) => api.signed_in(fingerprint).await == Some(address),
+    let signed_in = match &card.issuer {
+        Some(issuer) => issuer.signed_in(fingerprint).await == Some(address),
         None => false,
     };
     Ok(CardStatus {
         configured,
-        environment,
+        issuer,
         available: true,
         unavailable: None,
         address: Some(address.checksummed()),
@@ -218,40 +257,30 @@ async fn card_status<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Re
     })
 }
 
-/// Signs in to Gnosis Pay with the card key. The webview asks for Face ID or Touch ID first
-/// (Sage's "Require biometrics"), as for any signature.
+/// Signs in to the card issuer with the card key. The webview asks for Face ID or Touch ID
+/// first (Sage's "Require biometrics"), as for any signature.
 #[command]
 async fn card_sign_in<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<()> {
-    let api = card.api()?;
+    let issuer = card.issuer()?;
     let sage = app.state::<AppState>().inner().clone();
     let (fingerprint, address) = address(&card, &sage).await?;
-    let message = api.challenge(address, now()).await?;
-    let (_, signature) = with_key(&sage, |key| {
-        // The wallet may have been switched between the two steps.
-        if key.address() != address {
-            return Err(Error::NoWallet);
-        }
-        Ok(key.personal_sign(message.as_bytes())?)
-    })
-    .await?;
-    api.verify(fingerprint, address, &message, &signature)
-        .await?;
-    Ok(())
+    let signer = KeySigner { sage, address };
+    issuer.sign_in(fingerprint, &signer, now()).await
 }
 
 #[command]
 async fn card_sign_out(card: State<'_, Card>) -> Result<()> {
-    card.api()?.sign_out().await;
+    card.issuer()?.sign_out().await;
     Ok(())
 }
 
 // Onboarding (TASK-150). Each command needs the open wallet's session; the e-mail address and
-// the phone number pass through to Gnosis Pay and are not kept or logged.
+// the phone number pass through to the issuer and are not kept or logged.
 
 #[command]
 async fn card_onboarding<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<Step> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage).await?.onboarding().await?)
+    session(&card, &sage).await?.onboarding().await
 }
 
 /// `true` when a code was sent, `false` when this card programme needs none.
@@ -265,10 +294,10 @@ async fn card_send_email_code<R: Runtime>(
         return Err(Error::Invalid("that does not look like an e-mail address"));
     }
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
+    session(&card, &sage)
         .await?
         .send_email_code(email.trim())
-        .await?)
+        .await
 }
 
 #[command]
@@ -285,10 +314,10 @@ async fn card_register<R: Runtime>(
         return Err(Error::Invalid("the code has six digits"));
     }
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
+    session(&card, &sage)
         .await?
         .register(email.trim(), code.as_deref())
-        .await?)
+        .await
 }
 
 #[command]
@@ -298,7 +327,7 @@ async fn card_accept_terms<R: Runtime>(
     terms: Vec<Term>,
 ) -> Result<()> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage).await?.accept_terms(&terms).await?)
+    session(&card, &sage).await?.accept_terms(&terms).await
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -318,16 +347,16 @@ async fn card_answer_source_of_funds<R: Runtime>(
         .map(|a| (a.question, a.answer))
         .collect();
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
+    session(&card, &sage)
         .await?
         .answer_source_of_funds(&answers)
-        .await?)
+        .await
 }
 
 #[command]
 async fn card_create_account<R: Runtime>(app: AppHandle<R>, card: State<'_, Card>) -> Result<()> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage).await?.create_account().await?)
+    session(&card, &sage).await?.create_account().await
 }
 
 #[command]
@@ -343,7 +372,7 @@ async fn card_send_phone_code<R: Runtime>(
         ));
     }
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage).await?.send_phone_code(&phone).await?)
+    session(&card, &sage).await?.send_phone_code(&phone).await
 }
 
 #[command]
@@ -356,10 +385,7 @@ async fn card_verify_phone<R: Runtime>(
         return Err(Error::Invalid("the code has six digits"));
     }
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
-        .await?
-        .verify_phone(code.trim())
-        .await?)
+    session(&card, &sage).await?.verify_phone(code.trim()).await
 }
 
 #[command]
@@ -373,10 +399,7 @@ async fn card_order_card<R: Runtime>(
         return Err(Error::Invalid("a card name has 1 to 50 characters"));
     }
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
-        .await?
-        .order_virtual_card(name)
-        .await?)
+    session(&card, &sage).await?.order_virtual_card(name).await
 }
 
 // The account (TASK-151).
@@ -387,7 +410,7 @@ async fn card_account<R: Runtime>(
     card: State<'_, Card>,
 ) -> Result<account::Account> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage).await?.account().await?)
+    session(&card, &sage).await?.account().await
 }
 
 #[command]
@@ -397,10 +420,10 @@ async fn card_transactions<R: Runtime>(
     cursor: Option<String>,
 ) -> Result<account::Statement> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
+    session(&card, &sage)
         .await?
         .statement(cursor.as_deref())
-        .await?)
+        .await
 }
 
 #[command]
@@ -411,15 +434,17 @@ async fn card_set_frozen<R: Runtime>(
     frozen: bool,
 ) -> Result<()> {
     let sage = app.state::<AppState>().inner().clone();
-    Ok(session(&card, &sage)
-        .await?
-        .set_frozen(&card_id, frozen)
-        .await?)
+    let issuer = session(&card, &sage).await?;
+    if !issuer.info().capabilities.freeze {
+        return Err(Error::Invalid(
+            "this card issuer cannot freeze the card here",
+        ));
+    }
+    issuer.set_frozen(&card_id, frozen).await
 }
 
 /// The card's number, expiry and CVV, for this screen only (TASK-153). The webview asks for
-/// Face ID or Touch ID first. The card key signs Gnosis Pay's challenge only after
-/// `check_card_challenge` has accepted it.
+/// Face ID or Touch ID first. The issuer's adapter checks what the card key signs.
 #[command]
 async fn card_details<R: Runtime>(
     app: AppHandle<R>,
@@ -427,16 +452,15 @@ async fn card_details<R: Runtime>(
     card_id: String,
 ) -> Result<pci::CardDetails> {
     let sage = app.state::<AppState>().inner().clone();
-    let api = session(&card, &sage).await?;
-    let typed = api.card_challenge(&card_id).await?;
-    let challenge =
-        eip712::check_card_challenge(&typed, api.settings().chain_id).map_err(|_| {
-            Error::Invalid("Gnosis Pay asked to sign something other than showing the card")
-        })?;
-    let (_, signature) = with_key(&sage, |key| Ok(key.sign_digest(&challenge.digest)?)).await?;
-    Ok(api
-        .card_details(&card_id, &signature, &challenge.nonce)
-        .await?)
+    let issuer = session(&card, &sage).await?;
+    if !issuer.info().capabilities.card_details {
+        return Err(Error::Invalid(
+            "this card issuer does not show card details here",
+        ));
+    }
+    let (_, address) = address(&card, &sage).await?;
+    let signer = KeySigner { sage, address };
+    issuer.card_details(&card_id, &signer).await
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -460,7 +484,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             card_details,
         ])
         .setup(|app, _api| {
-            app.manage(Card::new(Settings::from_build()));
+            app.manage(Card::new(issuer::from_build()));
             Ok(())
         })
         .build()

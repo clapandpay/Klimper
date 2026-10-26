@@ -158,7 +158,7 @@ describe('reading the card balance', () => {
   it('reads the account once signed in', async () => {
     api.status.mockResolvedValue(status);
     api.account.mockResolvedValue({
-      safeAddress: null,
+      accountAddress: null,
       ownerAddress: null,
       status: 'active',
       currency: 'EUR',

@@ -22,8 +22,18 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
+use crate::account::{Account, Statement};
+use crate::eip712::check_card_challenge;
 use crate::evm::Address;
-use crate::siwe::{Expected, SiweError, SiweMessage};
+use crate::issuer::{Capabilities, Issuer, IssuerInfo, Signer};
+use crate::onboarding::{Step, Term};
+use crate::pci::CardDetails;
+use crate::siwe::{Expected, SiweMessage};
+use crate::{Error, Result};
+
+/// `KLIMPER_CARD_ISSUER` for this adapter.
+pub const ID: &str = "gnosis-pay";
+pub const NAME: &str = "Gnosis Pay";
 
 /// Gnosis Pay's sandbox. A build points elsewhere only through `KLIMPER_CARD_API`.
 pub const SANDBOX_API: &str = "https://core.sandbox.gnosispay.in/user-api";
@@ -102,31 +112,7 @@ impl Settings {
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
-pub enum ApiError {
-    #[error("not signed in to the card")]
-    SignedOut,
-    #[error(transparent)]
-    Siwe(#[from] SiweError),
-    #[error("Gnosis Pay could not be reached")]
-    Network,
-    #[error("Gnosis Pay answered {status}{}", code.as_ref().map(|c| format!(" ({c})")).unwrap_or_default())]
-    Status { status: u16, code: Option<String> },
-    #[error("Gnosis Pay's answer was not understood")]
-    Unreadable,
-}
-
-impl ApiError {
-    /// Gnosis Pay's error code, e.g. `USER_ALREADY_EXISTS`.
-    pub fn code(&self) -> Option<&str> {
-        match self {
-            Self::Status { code, .. } => code.as_deref(),
-            _ => None,
-        }
-    }
-}
-
-pub type ApiResult<T> = std::result::Result<T, ApiError>;
+pub use crate::issuer::{ApiError, ApiResult};
 
 /// A bearer credential. Never printed, scrubbed when dropped.
 #[derive(Clone)]
@@ -436,13 +422,113 @@ fn error_code(body: &[u8]) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Gnosis Pay as Klimper's card issuer (`KLIMPER_CARD_ISSUER=gnosis-pay`).
+#[async_trait::async_trait]
+impl Issuer for GnosisPay {
+    fn info(&self) -> IssuerInfo {
+        IssuerInfo {
+            id: ID,
+            name: NAME,
+            scheme: "Visa",
+            network: "Gnosis Chain",
+            top_up_asset: "EURe",
+            environment: self.settings.environment(),
+            capabilities: Capabilities {
+                card_details: true,
+                freeze: true,
+            },
+        }
+    }
+
+    fn chain_id(&self) -> Option<u64> {
+        Some(self.settings.chain_id)
+    }
+
+    /// SIWE: Gnosis Pay builds the message, `challenge` checks it, the card key signs it.
+    async fn sign_in(&self, fingerprint: u32, signer: &dyn Signer, now: u64) -> Result<()> {
+        let address = signer.address();
+        let message = self.challenge(address, now).await?;
+        let signature = signer.personal_sign(message.as_bytes()).await?;
+        Ok(self
+            .verify(fingerprint, address, &message, &signature)
+            .await?)
+    }
+
+    async fn signed_in(&self, fingerprint: u32) -> Option<Address> {
+        GnosisPay::signed_in(self, fingerprint).await
+    }
+
+    async fn sign_out(&self) {
+        GnosisPay::sign_out(self).await;
+    }
+
+    async fn onboarding(&self) -> Result<Step> {
+        Ok(GnosisPay::onboarding(self).await?)
+    }
+
+    async fn send_email_code(&self, email: &str) -> Result<bool> {
+        Ok(GnosisPay::send_email_code(self, email).await?)
+    }
+
+    async fn register(&self, email: &str, code: Option<&str>) -> Result<()> {
+        Ok(GnosisPay::register(self, email, code).await?)
+    }
+
+    async fn accept_terms(&self, terms: &[Term]) -> Result<()> {
+        Ok(GnosisPay::accept_terms(self, terms).await?)
+    }
+
+    async fn answer_source_of_funds(&self, answers: &[(String, String)]) -> Result<()> {
+        Ok(GnosisPay::answer_source_of_funds(self, answers).await?)
+    }
+
+    async fn create_account(&self) -> Result<()> {
+        Ok(GnosisPay::create_account(self).await?)
+    }
+
+    async fn send_phone_code(&self, phone: &str) -> Result<()> {
+        Ok(GnosisPay::send_phone_code(self, phone).await?)
+    }
+
+    async fn verify_phone(&self, code: &str) -> Result<()> {
+        Ok(GnosisPay::verify_phone(self, code).await?)
+    }
+
+    async fn order_virtual_card(&self, name: &str) -> Result<()> {
+        Ok(GnosisPay::order_virtual_card(self, name).await?)
+    }
+
+    async fn account(&self) -> Result<Account> {
+        Ok(GnosisPay::account(self).await?)
+    }
+
+    async fn statement(&self, cursor: Option<&str>) -> Result<Statement> {
+        Ok(GnosisPay::statement(self, cursor).await?)
+    }
+
+    async fn set_frozen(&self, card_id: &str, frozen: bool) -> Result<()> {
+        Ok(GnosisPay::set_frozen(self, card_id, frozen).await?)
+    }
+
+    /// The direct PCI route: the card key signs Gnosis Pay's challenge only after
+    /// `check_card_challenge` has accepted it.
+    async fn card_details(&self, card_id: &str, signer: &dyn Signer) -> Result<CardDetails> {
+        let typed = self.card_challenge(card_id).await?;
+        let challenge = check_card_challenge(&typed, self.settings.chain_id).map_err(|_| {
+            Error::Invalid("Gnosis Pay asked to sign something other than showing the card")
+        })?;
+        let signature = signer.sign_digest(&challenge.digest).await?;
+        Ok(GnosisPay::card_details(self, card_id, &signature, &challenge.nonce).await?)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub(crate) mod tests {
     use super::*;
     use crate::evm::EvmKey;
     use crate::fake::FakeGnosisPay;
-    use crate::siwe::rfc3339;
+    use crate::siwe::{SiweError, rfc3339};
 
     pub(crate) fn now() -> u64 {
         std::time::SystemTime::now()
@@ -471,6 +557,58 @@ pub(crate) mod tests {
             .await
             .unwrap();
         api
+    }
+
+    /// The card key as the plugin hands it to an adapter, without a keychain.
+    struct TestSigner(EvmKey);
+
+    #[async_trait::async_trait]
+    impl Signer for TestSigner {
+        fn address(&self) -> Address {
+            self.0.address()
+        }
+        async fn personal_sign(&self, message: &[u8]) -> Result<[u8; 65]> {
+            Ok(self.0.personal_sign(message)?)
+        }
+        async fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 65]> {
+            Ok(self.0.sign_digest(digest)?)
+        }
+    }
+
+    /// Gnosis Pay used only through the issuer interface, as the plugin's commands use it.
+    #[tokio::test]
+    async fn gnosis_pay_through_the_issuer_interface() {
+        let fake = FakeGnosisPay::start().await;
+        fake.state().await.onboarded(key().address());
+        let issuer: Box<dyn Issuer> = Box::new(GnosisPay::new(fake.settings()));
+        let info = issuer.info();
+        assert_eq!((info.id, info.name, info.environment), (ID, NAME, "custom"));
+        assert!(info.capabilities.card_details && info.capabilities.freeze);
+        assert_eq!(issuer.chain_id(), Some(GNOSIS_CHAIN_ID));
+
+        let signer = TestSigner(key());
+        assert_eq!(issuer.signed_in(7).await, None);
+        issuer.sign_in(7, &signer, now()).await.unwrap();
+        assert_eq!(issuer.signed_in(7).await, Some(key().address()));
+
+        assert_eq!(issuer.onboarding().await.unwrap(), Step::Completed);
+        let account = issuer.account().await.unwrap();
+        assert!(account.account_address.is_some());
+        let card_id = account.cards[0].id.clone();
+        issuer.set_frozen(&card_id, true).await.unwrap();
+        let details = issuer.card_details(&card_id, &signer).await.unwrap();
+        assert_eq!(details.number.len(), 16);
+
+        issuer.sign_out().await;
+        assert_eq!(issuer.signed_in(7).await, None);
+        assert_eq!(
+            issuer
+                .account()
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            Err("not signed in to the card".to_string())
+        );
     }
 
     #[test]

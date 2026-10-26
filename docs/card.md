@@ -1,15 +1,45 @@
-# The Klimper card (Gnosis Pay)
+# The Klimper card
 
-A Visa card that pays from the user's own money. The card is issued through
-[Gnosis Pay](https://docs.gnosispay.com). Its balance sits in a Safe account on Gnosis
-Chain, and only the wallet's recovery words control that Safe. Klimper is software only.
-Identity checks, card issuing and e-money stay with Gnosis Pay and its licensed partners,
-and the card contract is between the user and them.
+A payment card that pays from the user's own money (milestone card-payment). The card comes
+from a card issuer, chosen when Klimper is built. The first issuer is
+[Gnosis Pay](https://docs.gnosispay.com): a Visa card whose balance sits in a Safe account on
+Gnosis Chain, and only the wallet's recovery words control that Safe. Klimper is software
+only. Identity checks, card issuing and e-money stay with the issuer and its licensed
+partners, and the card contract is between the user and them.
 
-Status: MVP behind the build flag `VITE_ENABLE_GNOSIS_PAY`, off by default and set off in
-`.env.production`, so release and TestFlight builds have no card. It is tested against a fake Gnosis Pay.
-Using it against Gnosis Pay's sandbox needs a registration, and production needs a
+Status: MVP behind the build flag `VITE_ENABLE_CARD`, off by default and set off in
+`.env.production`, so release and TestFlight builds have no card. It is tested against a fake
+Gnosis Pay. Using it against Gnosis Pay's sandbox needs a registration, and production needs a
 partnership (see "What a build needs").
+
+## Card issuers
+
+The plugin talks to the issuer only through one interface, `Issuer` in
+`tauri-plugin-klimper-card/src/issuer.rs` (TASK-164). The commands, the card key and the
+screens never name an issuer. The build picks one with `KLIMPER_CARD_ISSUER`; a build that
+names none, or one without an adapter, has no card.
+
+| `KLIMPER_CARD_ISSUER` | Adapter                                                                                    | Status                                  |
+| --------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `gnosis-pay`          | `src/gnosis_pay.rs` (with `siwe.rs`, `eip712.rs`, `pci.rs`, `onboarding.rs`, `account.rs`) | MVP, tested against the fake Gnosis Pay |
+
+The interface covers the session (sign in with the card key, sign out), onboarding as one
+step at a time (`Step`: e-mail, terms, identity check, questions, account, phone, card),
+the account and its payments, freeze, and the card details. `card_status` tells the webview
+the issuer's name, card scheme, network and top-up asset for the text, and what it can do
+(`capabilities`: card details, freeze); a screen hides what the issuer does not offer.
+
+**Adding an issuer** is one adapter, written once: a type that implements `Issuer`, its
+settings read at build time, an id in `issuer::KNOWN` and in `issuer::from_build`, and a
+fake server for its tests. Nothing in the screens changes. Every adapter keeps these rules:
+
+- **Device only** (owner decision 2026-10-27). The adapter calls the issuer from the device
+  with the user's own session. An issuer whose API needs a partner backend (an API key held
+  on a server) has no adapter until that decision changes.
+- **It checks what it signs.** The card key reaches an adapter only as a `Signer`, and the
+  adapter asks it to sign only a message or digest it has checked, so that nothing that can
+  move money is signed.
+- The privacy and security rules below apply to every issuer, not only to Gnosis Pay.
 
 ## What it does
 
@@ -106,17 +136,21 @@ The card settings are public, not secrets: the app name and the domain appear in
 sign-in message. They are still not in this repository. A Gnosis Pay registration belongs
 to one partner, and forks need their own.
 
+`KLIMPER_CARD_ISSUER` picks the issuer; the other `KLIMPER_CARD_*` settings are that issuer's.
+For `gnosis-pay` they are:
+
 | Variable (Rust build environment) | Meaning                                                                     |
 | --------------------------------- | --------------------------------------------------------------------------- |
+| `KLIMPER_CARD_ISSUER`             | the card issuer: `gnosis-pay`. Unset or unknown: no card in this build      |
 | `KLIMPER_CARD_APP_NAME`           | the app name Gnosis Pay registered                                          |
 | `KLIMPER_CARD_DOMAIN`             | the SIWE domain Gnosis Pay whitelisted for it                               |
 | `KLIMPER_CARD_URI`                | the SIWE URI; `https://<domain>` if unset                                   |
 | `KLIMPER_CARD_API`                | the user API; Gnosis Pay's sandbox if unset. Release builds take https only |
 | `KLIMPER_CARD_CHAIN_ID`           | the chain in the sign-in message; 100 (Gnosis Chain) if unset               |
 
-| Variable (webview, `.env`)    | Meaning                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `VITE_ENABLE_GNOSIS_PAY=true` | the `/card` route and the navigation entry. Off: no route, no entry, no call to the plugin |
+| Variable (webview, `.env`) | Meaning                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `VITE_ENABLE_CARD=true`    | the `/card` route and the navigation entry. Off: no route, no entry, no call to the plugin |
 
 A build with the flag on but without the Rust settings shows "No card in this build".
 
@@ -150,8 +184,9 @@ The desktop app against the fake server:
 ```sh
 cargo run -p tauri-plugin-klimper-card --features fake --example fake-gnosis-pay
 # in another shell (debug builds accept http):
-KLIMPER_CARD_API=http://127.0.0.1:8787/user-api KLIMPER_CARD_APP_NAME=klimper-dev \
-  KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_GNOSIS_PAY=true pnpm tauri dev
+KLIMPER_CARD_ISSUER=gnosis-pay KLIMPER_CARD_API=http://127.0.0.1:8787/user-api \
+  KLIMPER_CARD_APP_NAME=klimper-dev KLIMPER_CARD_DOMAIN=localhost VITE_ENABLE_CARD=true \
+  pnpm tauri dev
 ```
 
 The fake's codes are always `123456`. To move it along:

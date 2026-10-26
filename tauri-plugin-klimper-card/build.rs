@@ -18,9 +18,10 @@ const COMMANDS: &[&str] = &[
     "card_details",
 ];
 
-/// The card settings are read with `option_env!` (`src/gnosis_pay.rs`, `Settings::from_build`):
-/// a change to any of them must rebuild the plugin.
+/// The card settings are read with `option_env!` (`src/issuer.rs`, `from_build`, and the
+/// issuer's own `Settings::from_build`): a change to any of them must rebuild the plugin.
 const SETTINGS: &[&str] = &[
+    "KLIMPER_CARD_ISSUER",
     "KLIMPER_CARD_API",
     "KLIMPER_CARD_APP_NAME",
     "KLIMPER_CARD_DOMAIN",

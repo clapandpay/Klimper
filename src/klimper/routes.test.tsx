@@ -24,7 +24,7 @@ vi.mock('@/lib/features', () => ({
   tokenIssuingEnabled: false,
   xchonnectEnabled: true,
   scanEnabled: true,
-  gnosisPayEnabled: true,
+  cardEnabled: true,
 }));
 vi.mock('./Scanner', () => ({
   scannerRoutes: <Route path='/scanner' element={<div />} />,

@@ -221,6 +221,38 @@ msgstr ""
 msgid "{mojos} mojos"
 msgstr ""
 
+#: src/klimper/card/CardOnboarding.tsx:230
+msgid "{name} cannot offer you a card"
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:242
+msgid "{name} is on a step this version does not know"
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:175
+msgid "{name} is setting it up. This takes a moment."
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:395
+msgid "{name} needs another look at your documents"
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:199
+msgid "{name} sets up the card account on {network}. Its owner is your card address, for good: only your recovery words can control it."
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:484
+msgid "{name} uses it to confirm online payments. Klimper does not keep it."
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:268
+msgid "{name} writes to you there about the card. Klimper does not keep it."
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:335
+msgid "{name}’s terms"
+msgstr ""
+
 #: src/klimper/OfferCoinsWarning.tsx:93
 msgid "{offers, plural, one {This cancels an open offer that holds some of the selected coins.} other {This cancels # open offers that hold some of the selected coins.}}"
 msgstr ""
@@ -398,9 +430,13 @@ msgstr ""
 msgid "A more lightweight sync that only checks unseen blocks"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:184
-msgid "A person at Gnosis Pay is looking at it. There is nothing to do here; Gnosis Pay writes to you if they need more."
+#: src/klimper/card/CardOnboarding.tsx:185
+msgid "A person at {name} is looking at it. There is nothing to do here;{name} writes to you if they need more."
 msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:184
+#~ msgid "A person at Gnosis Pay is looking at it. There is nothing to do here; Gnosis Pay writes to you if they need more."
+#~ msgstr ""
 
 #: src/klimper/KlimperRoot.tsx:50
 msgid "A request could not be shown. Open requests"
@@ -518,11 +554,11 @@ msgstr "Agrega los activos que estás ofreciendo."
 msgid "Add the assets you are requesting."
 msgstr "Agrega los activos que estás solicitando."
 
-#: src/klimper/card/AddToWallet.tsx:61
+#: src/klimper/card/AddToWallet.tsx:62
 msgid "Add to Apple Pay"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:59
+#: src/klimper/card/AddToWallet.tsx:60
 msgid "Add to Google Pay"
 msgstr ""
 
@@ -631,7 +667,7 @@ msgstr ""
 msgid "After that you can claim it back"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:377
+#: src/klimper/card/CardOnboarding.tsx:376
 msgid "Agree"
 msgstr ""
 
@@ -912,7 +948,7 @@ msgstr "Saldo copiado al portapapeles"
 msgid "Banner for {collectionName}"
 msgstr "Banner para {collectionName}"
 
-#: src/klimper/card/CardAccount.tsx:198
+#: src/klimper/card/CardAccount.tsx:204
 msgid "Being made"
 msgstr ""
 
@@ -1132,7 +1168,7 @@ msgstr ""
 msgid "Cancel selected offers?"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:347
+#: src/klimper/card/CardAccount.tsx:353
 msgid "cancelled"
 msgstr ""
 
@@ -1144,7 +1180,7 @@ msgstr "Cancelado"
 msgid "Cannot send change to external address. Setting not updated."
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:72
+#: src/klimper/card/CardScreen.tsx:74
 #: src/klimper/KlimperNavLinks.tsx:49
 #: src/klimper/WalletTotal.tsx:160
 msgid "Card"
@@ -1158,7 +1194,7 @@ msgstr ""
 msgid "Card ••{last4} · you can spend"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:195
+#: src/klimper/card/CardScreen.tsx:201
 msgid "Card address"
 msgstr ""
 
@@ -1166,9 +1202,13 @@ msgstr ""
 msgid "Card Component"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:433
-msgid "Card issuers must ask this. The answers go to Gnosis Pay."
+#: src/klimper/card/CardOnboarding.tsx:434
+msgid "Card issuers must ask this. The answers go to {name}."
 msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:433
+#~ msgid "Card issuers must ask this. The answers go to Gnosis Pay."
+#~ msgstr ""
 
 #: src/klimper/card/CardDetails.tsx:94
 msgid "Card number"
@@ -1234,7 +1274,7 @@ msgstr ""
 #~ msgid "Checked twice: your wallet’s records and an independent simulation agree on what leaves your wallet."
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:156
+#: src/klimper/card/CardOnboarding.tsx:158
 msgid "Checking again every few seconds"
 msgstr ""
 
@@ -1529,8 +1569,8 @@ msgstr ""
 msgid "Conceal Hidden Tokens"
 msgstr "Ocultar tokens ocultos"
 
-#: src/klimper/card/CardOnboarding.tsx:309
-#: src/klimper/card/CardOnboarding.tsx:523
+#: src/klimper/card/CardOnboarding.tsx:307
+#: src/klimper/card/CardOnboarding.tsx:524
 #: src/pages/CreateWallet.tsx:320
 msgid "Confirm"
 msgstr "Confirmar"
@@ -1642,7 +1682,7 @@ msgstr "Copiado"
 msgid "Copied {name}"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:108
+#: src/klimper/card/AddToWallet.tsx:109
 msgid "Copied; cleared again in a minute"
 msgstr ""
 
@@ -1738,11 +1778,11 @@ msgstr "Copiar ID de NFT al portapapeles"
 msgid "Copy offer"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:110
+#: src/klimper/card/AddToWallet.tsx:111
 msgid "Copy the card number"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:66
+#: src/klimper/card/AddToWallet.tsx:67
 msgid "Copy the card number below, or keep this screen open."
 msgstr ""
 
@@ -1911,7 +1951,7 @@ msgstr ""
 msgid "Days"
 msgstr "Días"
 
-#: src/klimper/card/CardAccount.tsx:345
+#: src/klimper/card/CardAccount.tsx:351
 msgid "declined"
 msgstr ""
 
@@ -2152,7 +2192,7 @@ msgstr "Listo"
 msgid "Downloading {checkedFiles} / {totalFiles}"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:277
+#: src/klimper/card/CardOnboarding.tsx:275
 msgid "E-mail"
 msgstr ""
 
@@ -2624,7 +2664,7 @@ msgstr ""
 msgid "Finish setting up the card"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:268
+#: src/klimper/card/CardAccount.tsx:274
 msgid "Freeze the card"
 msgstr ""
 
@@ -2636,7 +2676,7 @@ msgstr "Dirección nueva"
 msgid "Frontend"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:196
+#: src/klimper/card/CardAccount.tsx:202
 msgid "Frozen"
 msgstr ""
 
@@ -2677,36 +2717,36 @@ msgstr "Asigna a tu billetera un nombre memorable"
 #~ msgstr "Global"
 
 #: src/klimper/card/CardOnboarding.tsx:230
-msgid "Gnosis Pay cannot offer you a card"
-msgstr ""
+#~ msgid "Gnosis Pay cannot offer you a card"
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:243
-msgid "Gnosis Pay is on a step this version does not know"
-msgstr ""
+#~ msgid "Gnosis Pay is on a step this version does not know"
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:173
-msgid "Gnosis Pay is setting it up. This takes a moment."
-msgstr ""
+#~ msgid "Gnosis Pay is setting it up. This takes a moment."
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:395
-msgid "Gnosis Pay needs another look at your documents"
-msgstr ""
+#~ msgid "Gnosis Pay needs another look at your documents"
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:198
-msgid "Gnosis Pay sets up a Safe account on Gnosis Chain. Its owner is your card address, for good: only your recovery words can control it."
-msgstr ""
+#~ msgid "Gnosis Pay sets up a Safe account on Gnosis Chain. Its owner is your card address, for good: only your recovery words can control it."
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:482
-msgid "Gnosis Pay uses it to confirm online payments. Klimper does not keep it."
-msgstr ""
+#~ msgid "Gnosis Pay uses it to confirm online payments. Klimper does not keep it."
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:269
-msgid "Gnosis Pay writes to you there about the card. Klimper does not keep it."
-msgstr ""
+#~ msgid "Gnosis Pay writes to you there about the card. Klimper does not keep it."
+#~ msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:336
-msgid "Gnosis Pay’s terms"
-msgstr ""
+#~ msgid "Gnosis Pay’s terms"
+#~ msgstr ""
 
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:344
 msgid "Go back"
@@ -2907,7 +2947,7 @@ msgstr ""
 #~ msgid "I have my recovery words, create the passkey"
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:369
+#: src/klimper/card/CardOnboarding.tsx:368
 msgid "I have read and agree to these terms."
 msgstr ""
 
@@ -3095,7 +3135,7 @@ msgstr "JSON"
 msgid "JSON copied to clipboard"
 msgstr "JSON copiado al portapapeles"
 
-#: src/klimper/card/CardAccount.tsx:243
+#: src/klimper/card/CardAccount.tsx:249
 msgid "Keep frozen"
 msgstr ""
 
@@ -3328,7 +3368,7 @@ msgstr ""
 
 #: src/components/ui/loading-button.tsx:26
 #: src/components/ui/loading-button.tsx:28
-#: src/klimper/card/CardScreen.tsx:92
+#: src/klimper/card/CardScreen.tsx:94
 msgid "Loading"
 msgstr ""
 
@@ -3826,7 +3866,7 @@ msgstr ""
 msgid "No camera could be opened. Paste the code or choose a picture of it."
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:124
+#: src/klimper/card/CardScreen.tsx:128
 msgid "No card in this build"
 msgstr ""
 
@@ -3913,7 +3953,7 @@ msgstr ""
 msgid "No options to export"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:300
+#: src/klimper/card/CardAccount.tsx:306
 msgid "No payments yet."
 msgstr ""
 
@@ -4157,7 +4197,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:145
+#: src/klimper/card/CardAccount.tsx:148
 msgid "On the way: {pendingText}"
 msgstr ""
 
@@ -4198,7 +4238,7 @@ msgstr ""
 msgid "Only to your own addresses"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:145
+#: src/klimper/card/CardScreen.tsx:149
 msgid "Open a wallet first"
 msgstr ""
 
@@ -4213,7 +4253,7 @@ msgstr "Abrir menú de acciones"
 msgid "Open external link: {content}"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:70
+#: src/klimper/card/AddToWallet.tsx:71
 msgid "Open Google Wallet, tap Add to Wallet, then Payment card, and enter the details by hand."
 msgstr ""
 
@@ -4232,7 +4272,7 @@ msgstr "Abrir menú"
 msgid "Open the account"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:196
+#: src/klimper/card/CardOnboarding.tsx:197
 msgid "Open the card account"
 msgstr ""
 
@@ -4240,7 +4280,7 @@ msgstr ""
 msgid "Open the identity check"
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:77
+#: src/klimper/card/AddToWallet.tsx:78
 msgid "Open the Wallet app, tap +, then Debit or Credit Card, and choose to enter the details by hand."
 msgstr ""
 
@@ -4376,11 +4416,11 @@ msgstr ""
 #~ msgid "Or type the code"
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:561
+#: src/klimper/card/CardOnboarding.tsx:562
 msgid "Order a virtual card"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:549
+#: src/klimper/card/CardOnboarding.tsx:550
 msgid "Order a virtual card. It works as soon as it is made: show its details to pay online or to add it to Apple Pay or Google Pay."
 msgstr ""
 
@@ -4506,7 +4546,7 @@ msgstr ""
 #~ msgid "Paste the code"
 #~ msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:84
+#: src/klimper/card/AddToWallet.tsx:85
 msgid "Paste the number, then type the expiry, the security code and your name as on your ID."
 msgstr ""
 
@@ -4534,7 +4574,7 @@ msgstr ""
 msgid "Pay {strike}, receive {collateral}"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:179
+#: src/klimper/card/CardScreen.tsx:185
 msgid "Pay by card with your own money"
 msgstr ""
 
@@ -4542,7 +4582,7 @@ msgstr ""
 msgid "Paying"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:294
+#: src/klimper/card/CardAccount.tsx:300
 msgid "Payments"
 msgstr ""
 
@@ -4562,7 +4602,7 @@ msgstr "Lista de nodos"
 msgid "peers"
 msgstr "nodos"
 
-#: src/klimper/card/CardAccount.tsx:343
+#: src/klimper/card/CardAccount.tsx:349
 msgid "pending"
 msgstr ""
 
@@ -4606,7 +4646,7 @@ msgstr "Quemado de forma permanente"
 msgid "Permanently Delete"
 msgstr "Eliminar permanentemente"
 
-#: src/klimper/card/CardOnboarding.tsx:490
+#: src/klimper/card/CardOnboarding.tsx:491
 msgid "Phone, with the country code"
 msgstr ""
 
@@ -4682,7 +4722,7 @@ msgstr "Posiciona el código QR dentro del marco"
 msgid "Preferences"
 msgstr "Preferencias"
 
-#: src/klimper/card/CardOnboarding.tsx:171
+#: src/klimper/card/CardOnboarding.tsx:174
 msgid "Preparing the identity check"
 msgstr ""
 
@@ -4819,7 +4859,7 @@ msgstr ""
 msgid "Read-only wallet — transactions require private keys"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:194
+#: src/klimper/card/CardAccount.tsx:200
 msgid "Ready to pay"
 msgstr ""
 
@@ -5447,12 +5487,12 @@ msgstr "Enviar en masa (airdrop)"
 msgid "Send option"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:467
+#: src/klimper/card/CardOnboarding.tsx:468
 msgid "Send the answers"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:320
-#: src/klimper/card/CardOnboarding.tsx:536
+#: src/klimper/card/CardOnboarding.tsx:318
+#: src/klimper/card/CardOnboarding.tsx:537
 msgid "Send the code"
 msgstr ""
 
@@ -5659,9 +5699,13 @@ msgstr ""
 msgid "Sign and send"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:222
-msgid "Sign in to Gnosis Pay"
+#: src/klimper/card/CardScreen.tsx:228
+msgid "Sign in to {name}"
 msgstr ""
+
+#: src/klimper/card/CardScreen.tsx:222
+#~ msgid "Sign in to Gnosis Pay"
+#~ msgstr ""
 
 #: src/klimper/WalletTotal.tsx:164
 msgid "Sign in to see what you can spend"
@@ -5671,9 +5715,13 @@ msgstr ""
 msgid "Sign one half of a trade"
 msgstr ""
 
-#: src/klimper/card/CardHome.tsx:98
-msgid "Sign out of Gnosis Pay"
+#: src/klimper/card/CardHome.tsx:100
+msgid "Sign out of {name}"
 msgstr ""
+
+#: src/klimper/card/CardHome.tsx:98
+#~ msgid "Sign out of Gnosis Pay"
+#~ msgstr ""
 
 #: src/components/ConfirmationDialog.tsx:563
 msgid "Sign Transaction"
@@ -5853,7 +5901,7 @@ msgstr "Estado"
 msgid "Status: {offerStatus}"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:95
+#: src/klimper/card/CardOnboarding.tsx:97
 msgid "Step {current} of {total}"
 msgstr ""
 
@@ -6031,9 +6079,13 @@ msgstr "Nodos objetivo"
 msgid "Technical Information"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:209
-msgid "Test mode: Gnosis Pay’s sandbox, no real money."
+#: src/klimper/card/CardScreen.tsx:215
+msgid "Test mode: {name}’s sandbox, no real money."
 msgstr ""
+
+#: src/klimper/card/CardScreen.tsx:209
+#~ msgid "Test mode: Gnosis Pay’s sandbox, no real money."
+#~ msgstr ""
 
 #: src/klimper/ClapAndPayConnect.tsx:247
 #~ msgid "That answer did not come from {pageHost}. Nothing was imported."
@@ -6115,33 +6167,53 @@ msgstr "Los activos que estás pagando."
 msgid "The assets you will receive."
 msgstr "Los activos que recibirás."
 
+#: src/klimper/card/CardOnboarding.tsx:220
+msgid "The card account is being set up on {network}."
+msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:337
+msgid "The card contract is between you and {name} and its card issuer. Read them before you agree."
+msgstr ""
+
 #: src/klimper/card/CardOnboarding.tsx:338
-msgid "The card contract is between you and Gnosis Pay and its card issuer. Read them before you agree."
+#~ msgid "The card contract is between you and Gnosis Pay and its card issuer. Read them before you agree."
+#~ msgstr ""
+
+#: src/klimper/card/CardScreen.tsx:188
+msgid "The card is a {scheme} card by {name}. Its money sits in an account on {network} that only your recovery words control.{name} checks who you are; Klimper never sees your documents, your card number or your payments on any server."
 msgstr ""
 
 #: src/klimper/card/CardScreen.tsx:182
-msgid "The card is a Visa card by Gnosis Pay. Its money sits in an account on Gnosis Chain that only your recovery words control. Gnosis Pay checks who you are; Klimper never sees your documents, your card number or your payments on any server."
-msgstr ""
+#~ msgid "The card is a Visa card by Gnosis Pay. Its money sits in an account on Gnosis Chain that only your recovery words control. Gnosis Pay checks who you are; Klimper never sees your documents, your card number or your payments on any server."
+#~ msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:150
+#: src/klimper/card/CardScreen.tsx:154
 msgid "The card is controlled by a key made from the wallet’s recovery words. This wallet was imported without them."
 msgstr ""
 
-#: src/klimper/card/AddToWallet.tsx:90
+#: src/klimper/card/AddToWallet.tsx:91
 msgid "The card issuer checks the card; it may send you a code by text message. Then pay by holding the phone to the card reader."
 msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:401
-msgid "The check runs on the page of Sumsub, Gnosis Pay’s identity provider, in your browser. Your documents go to them, not to Klimper. Come back here when you are done."
+msgid "The check runs on the page of {name}’s identity provider, in your browser. Your documents go to them, not to Klimper. Come back here when you are done."
 msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:401
+#~ msgid "The check runs on the page of Sumsub, Gnosis Pay’s identity provider, in your browser. Your documents go to them, not to Klimper. Come back here when you are done."
+#~ msgstr ""
 
 #: src/klimper/xchonnect/XchonnectConnect.tsx:262
 msgid "The clipboard is empty."
 msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:232
-msgid "The decision is Gnosis Pay’s, and they tell you about it directly. Your wallet is not affected."
+msgid "The decision is {name}’s, and they tell you about it directly. Your wallet is not affected."
 msgstr ""
+
+#: src/klimper/card/CardOnboarding.tsx:232
+#~ msgid "The decision is Gnosis Pay’s, and they tell you about it directly. Your wallet is not affected."
+#~ msgstr ""
 
 #: src/pages/Settings.tsx:358
 msgid "The default fee to use for transactions"
@@ -6224,8 +6296,8 @@ msgid "The request from {dapp} was no longer waiting. Nothing was signed."
 msgstr ""
 
 #: src/klimper/card/CardOnboarding.tsx:220
-msgid "The Safe is being set up on Gnosis Chain."
-msgstr ""
+#~ msgid "The Safe is being set up on Gnosis Chain."
+#~ msgstr ""
 
 #: src/klimper/OfferCoinsWarning.tsx:114
 #~ msgid "The selection holds coins locked in {offers} open offers. Using them cancels those offers: once this transaction confirms, nobody can take them any more. Your coins stay yours."
@@ -6239,11 +6311,11 @@ msgstr ""
 msgid "The six digits were never confirmed, so this connection cannot be used."
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:292
+#: src/klimper/card/CardOnboarding.tsx:290
 msgid "The six-digit code from the e-mail"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:506
+#: src/klimper/card/CardOnboarding.tsx:507
 msgid "The six-digit code from the text message"
 msgstr ""
 
@@ -6420,7 +6492,7 @@ msgstr "Este ID de colección no existe."
 msgid "This connection cannot be used"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:127
+#: src/klimper/card/CardScreen.tsx:131
 msgid "This copy of Klimper was built without a card provider. Nothing about your wallet was sent anywhere."
 msgstr ""
 
@@ -6586,7 +6658,7 @@ msgstr ""
 msgid "This spend uses a contract Klimper cannot read"
 msgstr ""
 
-#: src/klimper/card/CardScreen.tsx:143
+#: src/klimper/card/CardScreen.tsx:147
 msgid "This wallet cannot have a card"
 msgstr ""
 
@@ -6838,9 +6910,13 @@ msgstr ""
 msgid "Top up the card"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:152
-msgid "Top up: send EURe on Gnosis Chain to the card account"
+#: src/klimper/card/CardAccount.tsx:155
+msgid "Top up: send {topUpAsset} on {network} to the card account"
 msgstr ""
+
+#: src/klimper/card/CardAccount.tsx:152
+#~ msgid "Top up: send EURe on Gnosis Chain to the card account"
+#~ msgstr ""
 
 #: src/klimper/WalletTotal.tsx:191
 msgid "Top-up on the way: <0/>"
@@ -7063,15 +7139,15 @@ msgstr ""
 msgid "Underlying Asset (Locked)"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:236
+#: src/klimper/card/CardAccount.tsx:242
 msgid "Unfreeze"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:255
+#: src/klimper/card/CardAccount.tsx:261
 msgid "Unfreeze the card"
 msgstr ""
 
-#: src/klimper/card/CardAccount.tsx:228
+#: src/klimper/card/CardAccount.tsx:234
 msgid "Unfreeze? The card can pay again at once."
 msgstr ""
 
@@ -7595,7 +7671,7 @@ msgstr ""
 msgid "When enabled, cold wallets can build transactions and export the unsigned spend bundle for external signing, instead of being blocked from transacting entirely."
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:431
+#: src/klimper/card/CardOnboarding.tsx:432
 msgid "Where your money comes from"
 msgstr ""
 
@@ -7772,7 +7848,7 @@ msgstr ""
 msgid "You can also paste an offer using"
 msgstr "También puedes pegar una oferta utilizando"
 
-#: src/klimper/card/CardAccount.tsx:135
+#: src/klimper/card/CardAccount.tsx:138
 msgid "You can spend"
 msgstr ""
 
@@ -7822,7 +7898,7 @@ msgstr ""
 #~ msgid "Your {keyCount} receive addresses, so it can show your balances"
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:547
+#: src/klimper/card/CardOnboarding.tsx:548
 msgid "Your account is ready"
 msgstr ""
 
@@ -7834,7 +7910,7 @@ msgstr ""
 msgid "Your coins"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:267
+#: src/klimper/card/CardOnboarding.tsx:266
 msgid "Your e-mail address"
 msgstr ""
 
@@ -7842,7 +7918,7 @@ msgstr ""
 msgid "Your handles"
 msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:182
+#: src/klimper/card/CardOnboarding.tsx:183
 msgid "Your identity check is being reviewed"
 msgstr ""
 
@@ -7870,7 +7946,7 @@ msgstr ""
 #~ msgid "Your offer has been created and imported successfully{0}. You will now be redirected to the offers page where you can view its details."
 #~ msgstr ""
 
-#: src/klimper/card/CardOnboarding.tsx:480
+#: src/klimper/card/CardOnboarding.tsx:482
 msgid "Your phone number"
 msgstr ""
 

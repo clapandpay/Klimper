@@ -112,7 +112,17 @@ mockIPC(async (cmd, args) => {
     case 'card_status':
       return {
         configured: state.configured,
-        environment: 'sandbox',
+        issuer: state.configured
+          ? {
+              id: 'gnosis-pay',
+              name: 'Gnosis Pay',
+              scheme: 'Visa',
+              network: 'Gnosis Chain',
+              topUpAsset: 'EURe',
+              environment: 'sandbox',
+              capabilities: { cardDetails: true, freeze: true },
+            }
+          : null,
         available: state.words,
         unavailable: state.words ? null : 'noRecoveryWords',
         address: state.words
@@ -155,7 +165,7 @@ mockIPC(async (cmd, args) => {
       return null;
     case 'card_account':
       return {
-        safeAddress: '0x5afe5afE5afE5AfE5aFE5aFe5AFe5afe5afE5aFE',
+        accountAddress: '0x5afe5afE5afE5AfE5aFE5aFe5AFe5afe5afE5aFE',
         ownerAddress: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
         status: 'active',
         currency: 'EUR',

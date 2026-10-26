@@ -3,7 +3,7 @@ name = "tauri-plugin-klimper-card"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-description = "Klimper: a payment card through Gnosis Pay, signed by a key derived from the wallet's own recovery words."
+description = "Klimper: a payment card from a card issuer (Gnosis Pay first), signed by a key derived from the wallet's own recovery words."
 publish = false
 links = "tauri-plugin-klimper-card"
 
@@ -21,6 +21,8 @@ reqwest = { workspace = true, features = ["rustls-tls", "json"] }
 hex = { workspace = true }
 tracing = { workspace = true }
 bip39 = { workspace = true }
+# The issuer interface (src/issuer.rs) is used as `dyn Issuer`. Already in Cargo.lock.
+async-trait = "0.1.89"
 
 # The card signer (src/evm.rs). The same versions Cargo.lock already holds for the rest of
 # the workspace, so the plugin adds no new crate to the build.

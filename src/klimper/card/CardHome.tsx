@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The signed-in part of the card screen: onboarding until Gnosis Pay says it is complete
+// The signed-in part of the card screen: onboarding until the card issuer says it is complete
 // (TASK-150), then the account (TASK-151).
 //
-// Gnosis Pay has no push to a wallet without a partner backend, so the steps where it is
+// An issuer has no push to a wallet without a partner backend, so the steps where it is
 // working are polled while this screen is open, and read again when Klimper comes back to
 // the front (after the identity check in the browser, for example).
 
@@ -19,6 +19,7 @@ import {
 } from './card';
 import { CardAccount } from './CardAccount';
 import { CardOnboarding } from './CardOnboarding';
+import { useCardIssuer } from './issuer';
 
 export const POLL_MS = 5000;
 
@@ -31,6 +32,7 @@ export function CardHome({
   /** The session ended on its own (expired, revoked): back to the sign-in. */
   readonly onSignedOut: () => void;
 }) {
+  const { name } = useCardIssuer();
   const [step, setStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +97,7 @@ export function CardHome({
           data-testid='card-sign-out'
         >
           <LogOut className='mr-2 h-4 w-4' aria-hidden='true' />
-          <Trans>Sign out of Gnosis Pay</Trans>
+          <Trans>Sign out of {name}</Trans>
         </Button>
       </div>
     </div>

@@ -30,6 +30,7 @@ vi.mock('./card', async (original) => ({
 
 const { renderScreen } = await import('../testHarness');
 const { CardAccount } = await import('./CardAccount');
+const { GNOSIS_PAY, withIssuer } = await import('./testIssuer');
 
 function plastic(status: CardSummary['status']): CardSummary {
   return {
@@ -44,7 +45,7 @@ function plastic(status: CardSummary['status']): CardSummary {
 
 function account(cards: CardSummary[], over: Partial<Account> = {}): Account {
   return {
-    safeAddress: '0x5afe5afE5afE5AfE5aFE5aFe5AFe5afe5afE5aFE',
+    accountAddress: '0x5afe5afE5afE5AfE5aFE5aFe5AFe5afe5afE5aFE',
     ownerAddress: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
     status: 'active',
     currency: 'EUR',
@@ -90,7 +91,7 @@ it('shows the balance, the card and the payments', async () => {
   api.account.mockResolvedValue(
     account([plastic('active')], { pending: '5.00' }),
   );
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   expect((await screen.findByTestId('card-spendable')).textContent).toContain(
     '123.45',
   );
@@ -101,9 +102,28 @@ it('shows the balance, the card and the payments', async () => {
   );
   expect(screen.getByText('Bakery Example')).toBeTruthy();
   expect(screen.getByText(/declined/)).toBeTruthy();
-  expect(screen.getByTestId('card-safe-address').textContent).toMatch(
+  expect(screen.getByTestId('card-account-address').textContent).toMatch(
     /^0x5afe/i,
   );
+});
+
+it('names the issuer and hides what it does not offer', async () => {
+  api.account.mockResolvedValue(account([plastic('active')]));
+  const other = {
+    ...GNOSIS_PAY,
+    id: 'other',
+    name: 'Other Issuer',
+    network: 'Base',
+    topUpAsset: 'USDC',
+    capabilities: { cardDetails: false, freeze: false },
+  };
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />, other));
+  await screen.findByTestId('card-last4');
+  expect(
+    screen.getByText('Top up: send USDC on Base to the card account'),
+  ).toBeTruthy();
+  expect(screen.queryByTestId('card-freeze')).toBeNull();
+  expect(screen.queryByTestId('card-show-details')).toBeNull();
 });
 
 it('hides the amounts in privacy mode', async () => {
@@ -111,7 +131,7 @@ it('hides the amounts in privacy mode', async () => {
   api.account.mockResolvedValue(
     account([plastic('active')], { pending: '5.00' }),
   );
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   const spendable = await screen.findByTestId('card-spendable');
   expect(spendable.textContent).not.toContain('123.45');
   expect(screen.queryByTestId('card-pending')).toBeNull();
@@ -123,7 +143,7 @@ it('hides the amounts in privacy mode', async () => {
 it('freezes at once', async () => {
   api.account.mockResolvedValueOnce(account([plastic('active')]));
   api.account.mockResolvedValue(account([plastic('blocked')]));
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   fireEvent.click(await screen.findByTestId('card-freeze'));
   await screen.findByTestId('card-unfreeze');
   expect(api.setFrozen).toHaveBeenCalledWith('card-1', true);
@@ -133,7 +153,7 @@ it('freezes at once', async () => {
 it('unfreezes only after a confirmation', async () => {
   api.account.mockResolvedValueOnce(account([plastic('blocked')]));
   api.account.mockResolvedValue(account([plastic('active')]));
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   fireEvent.click(await screen.findByTestId('card-unfreeze'));
   expect(api.setFrozen).not.toHaveBeenCalled();
   fireEvent.click(screen.getByTestId('card-unfreeze-confirm'));
@@ -143,7 +163,7 @@ it('unfreezes only after a confirmation', async () => {
 
 it('offers a card when the account has none', async () => {
   api.account.mockResolvedValue(account([]));
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   expect(await screen.findByTestId('card-order')).toBeTruthy();
 });
 
@@ -153,7 +173,7 @@ it('goes back to the sign-in when the session has ended', async () => {
     message: 'x',
     code: null,
   });
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   await waitFor(() => expect(signedOut).toHaveBeenCalled());
 });
 
@@ -163,7 +183,7 @@ it('shows an error and keeps nothing stale', async () => {
     message: 'Gnosis Pay could not be reached',
     code: null,
   });
-  renderScreen(<CardAccount onSignedOut={signedOut} />);
+  renderScreen(withIssuer(<CardAccount onSignedOut={signedOut} />));
   expect((await screen.findByRole('alert')).textContent).toContain(
     'could not be reached',
   );

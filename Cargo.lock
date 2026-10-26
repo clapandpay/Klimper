@@ -8370,6 +8370,7 @@ name = "tauri-plugin-klimper-card"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "bip39",

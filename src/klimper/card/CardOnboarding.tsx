@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Gnosis Pay's onboarding, one step at a time (TASK-150). Gnosis Pay decides the order;
-// this screen shows the step it names and nothing else.
+// The card issuer's onboarding, one step at a time (TASK-150). The issuer decides the order;
+// this screen shows the step it names and nothing else. The issuer's name and network come
+// from `useCardIssuer` (TASK-164).
 //
-// What the user types here (e-mail, phone, answers) goes to Gnosis Pay and is not kept by
-// Klimper. The identity check runs on Sumsub's own page in the browser.
+// What the user types here (e-mail, phone, answers) goes to the issuer and is not kept by
+// Klimper. The identity check runs on the identity provider's own page in the browser.
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,6 +22,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 import { card, cardErrorMessage, Step, Term } from './card';
+import { useCardIssuer } from './issuer';
 
 interface StepProps {
   /** Runs an action, shows its error, then reloads the step. */
@@ -160,6 +162,7 @@ function Waiting({
 }
 
 function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
+  const { name, network } = useCardIssuer();
   switch (step.step) {
     case 'register':
       return <Register act={act} busy={busy} />;
@@ -169,9 +172,7 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
       return (
         <Waiting
           title={<Trans>Preparing the identity check</Trans>}
-          text={
-            <Trans>Gnosis Pay is setting it up. This takes a moment.</Trans>
-          }
+          text={<Trans>{name} is setting it up. This takes a moment.</Trans>}
         />
       );
     case 'completeKyc':
@@ -182,8 +183,8 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
           title={<Trans>Your identity check is being reviewed</Trans>}
           text={
             <Trans>
-              A person at Gnosis Pay is looking at it. There is nothing to do
-              here; Gnosis Pay writes to you if they need more.
+              A person at {name} is looking at it. There is nothing to do here;
+              {name} writes to you if they need more.
             </Trans>
           }
         />
@@ -196,9 +197,8 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
           title={<Trans>Open the card account</Trans>}
           description={
             <Trans>
-              Gnosis Pay sets up a Safe account on Gnosis Chain. Its owner is
-              your card address, for good: only your recovery words can control
-              it.
+              {name} sets up the card account on {network}. Its owner is your
+              card address, for good: only your recovery words can control it.
             </Trans>
           }
         >
@@ -217,7 +217,7 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
       return (
         <Waiting
           title={<Trans>Opening the account</Trans>}
-          text={<Trans>The Safe is being set up on Gnosis Chain.</Trans>}
+          text={<Trans>The card account is being set up on {network}.</Trans>}
         />
       );
     case 'verifyPhone':
@@ -227,10 +227,10 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
     case 'rejected':
       return (
         <StepCard
-          title={<Trans>Gnosis Pay cannot offer you a card</Trans>}
+          title={<Trans>{name} cannot offer you a card</Trans>}
           description={
             <Trans>
-              The decision is Gnosis Pay’s, and they tell you about it directly.
+              The decision is {name}’s, and they tell you about it directly.
               Your wallet is not affected.
             </Trans>
           }
@@ -239,9 +239,7 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
     case 'unknown':
       return (
         <Waiting
-          title={
-            <Trans>Gnosis Pay is on a step this version does not know</Trans>
-          }
+          title={<Trans>{name} is on a step this version does not know</Trans>}
           text={step.status}
         />
       );
@@ -249,6 +247,7 @@ function StepBody({ step, act, busy }: { readonly step: Step } & StepProps) {
 }
 
 function Register({ act, busy }: StepProps) {
+  const { name } = useCardIssuer();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState<boolean | null>(null);
@@ -267,8 +266,7 @@ function Register({ act, busy }: StepProps) {
       title={<Trans>Your e-mail address</Trans>}
       description={
         <Trans>
-          Gnosis Pay writes to you there about the card. Klimper does not keep
-          it.
+          {name} writes to you there about the card. Klimper does not keep it.
         </Trans>
       }
     >
@@ -330,14 +328,15 @@ function AcceptTerms({
   act,
   busy,
 }: { readonly terms: Term[] } & StepProps) {
+  const { name } = useCardIssuer();
   const [agreed, setAgreed] = useState(false);
   return (
     <StepCard
-      title={<Trans>Gnosis Pay’s terms</Trans>}
+      title={<Trans>{name}’s terms</Trans>}
       description={
         <Trans>
-          The card contract is between you and Gnosis Pay and its card issuer.
-          Read them before you agree.
+          The card contract is between you and {name} and its card issuer. Read
+          them before you agree.
         </Trans>
       }
     >
@@ -388,20 +387,21 @@ function Kyc({
   readonly url: string | null;
   readonly resubmission: boolean;
 }) {
+  const { name } = useCardIssuer();
   return (
     <StepCard
       title={
         resubmission ? (
-          <Trans>Gnosis Pay needs another look at your documents</Trans>
+          <Trans>{name} needs another look at your documents</Trans>
         ) : (
           <Trans>Check your identity</Trans>
         )
       }
       description={
         <Trans>
-          The check runs on the page of Sumsub, Gnosis Pay’s identity provider,
-          in your browser. Your documents go to them, not to Klimper. Come back
-          here when you are done.
+          The check runs on the page of {name}’s identity provider, in your
+          browser. Your documents go to them, not to Klimper. Come back here
+          when you are done.
         </Trans>
       }
     >
@@ -424,13 +424,14 @@ function SourceOfFunds({
   act,
   busy,
 }: { readonly step: Extract<Step, { step: 'sourceOfFunds' }> } & StepProps) {
+  const { name } = useCardIssuer();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const complete = step.questions.every((q) => answers[q.id]);
   return (
     <StepCard
       title={<Trans>Where your money comes from</Trans>}
       description={
-        <Trans>Card issuers must ask this. The answers go to Gnosis Pay.</Trans>
+        <Trans>Card issuers must ask this. The answers go to {name}.</Trans>
       }
     >
       {step.questions.map((q) => (
@@ -472,6 +473,7 @@ function SourceOfFunds({
 }
 
 function VerifyPhone({ act, busy }: StepProps) {
+  const { name } = useCardIssuer();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -480,8 +482,7 @@ function VerifyPhone({ act, busy }: StepProps) {
       title={<Trans>Your phone number</Trans>}
       description={
         <Trans>
-          Gnosis Pay uses it to confirm online payments. Klimper does not keep
-          it.
+          {name} uses it to confirm online payments. Klimper does not keep it.
         </Trans>
       }
     >

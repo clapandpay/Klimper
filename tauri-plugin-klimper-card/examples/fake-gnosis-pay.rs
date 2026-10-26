@@ -16,7 +16,7 @@ async fn main() {
     let fake = FakeGnosisPay::serve(&bind).await;
     println!("fake Gnosis Pay at {}", fake.api());
     println!(
-        "build with KLIMPER_CARD_API={} KLIMPER_CARD_APP_NAME={} KLIMPER_CARD_DOMAIN={}",
+        "build with KLIMPER_CARD_ISSUER=gnosis-pay KLIMPER_CARD_API={} KLIMPER_CARD_APP_NAME={} KLIMPER_CARD_DOMAIN={}",
         fake.api(),
         tauri_plugin_klimper_card::fake::APP_NAME,
         tauri_plugin_klimper_card::fake::DOMAIN

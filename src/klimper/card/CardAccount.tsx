@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The card account (TASK-151): is the card usable, how much can be spent, what was paid
-// where. Read from Gnosis Pay while the screen is open, every few seconds, and never kept.
+// where. Read from the card issuer while the screen is open, every few seconds, and never
+// kept. Freeze and the card details show only when the issuer offers them (TASK-164).
 //
 // Freezing is the safe direction and needs no confirmation. Unfreezing asks once. Privacy
 // mode hides the amounts here as everywhere else in the wallet.
@@ -29,6 +30,7 @@ import { Masked, useMaskAmounts } from '../privacy';
 import { AddToWallet } from './AddToWallet';
 import { CardDetails } from './CardDetails';
 import { CardOnboarding } from './CardOnboarding';
+import { useCardIssuer } from './issuer';
 
 export const ACCOUNT_POLL_MS = 15000;
 
@@ -125,6 +127,7 @@ function money(amount: string, currency: string) {
 }
 
 function Balance({ account }: { readonly account: Account }) {
+  const { network, topUpAsset } = useCardIssuer();
   const pending = Number(account.pending) > 0;
   const pendingText = money(account.pending, account.currency);
   const mask = useMaskAmounts();
@@ -146,16 +149,18 @@ function Balance({ account }: { readonly account: Account }) {
           </div>
         )}
       </CardHeader>
-      {account.safeAddress && (
+      {account.accountAddress && (
         <CardContent className='space-y-1'>
           <div className='text-xs text-muted-foreground'>
-            <Trans>Top up: send EURe on Gnosis Chain to the card account</Trans>
+            <Trans>
+              Top up: send {topUpAsset} on {network} to the card account
+            </Trans>
           </div>
           <div
             className='break-all font-mono text-xs'
-            data-testid='card-safe-address'
+            data-testid='card-account-address'
           >
-            {account.safeAddress}
+            {account.accountAddress}
           </div>
         </CardContent>
       )}
@@ -170,6 +175,7 @@ function PaymentCard({
   readonly summary: CardSummary;
   readonly onChanged: () => Promise<void>;
 }) {
+  const { scheme, capabilities } = useCardIssuer();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +211,7 @@ function PaymentCard({
           <CreditCard className='h-6 w-6 shrink-0' aria-hidden='true' />
           <div className='min-w-0 flex-1'>
             <CardTitle className='text-base'>
-              {summary.brand ?? 'Visa'} ••{' '}
+              {summary.brand ?? scheme} ••{' '}
               <span data-testid='card-last4'>{summary.last4 ?? '····'}</span>
             </CardTitle>
             <CardDescription data-testid='card-status'>
@@ -221,7 +227,7 @@ function PaymentCard({
             {error}
           </div>
         )}
-        {frozen ? (
+        {!capabilities.freeze ? null : frozen ? (
           confirming ? (
             <div className='flex flex-wrap items-center gap-2'>
               <span className='text-sm'>
@@ -269,7 +275,7 @@ function PaymentCard({
             </Button>
           )
         )}
-        {summary.status === 'active' && (
+        {summary.status === 'active' && capabilities.cardDetails && (
           <CardDetails cardId={summary.id}>
             {(details) => <AddToWallet details={details} />}
           </CardDetails>

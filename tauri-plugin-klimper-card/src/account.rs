@@ -14,7 +14,8 @@ use crate::gnosis_pay::{ApiError, ApiResult, GnosisPay};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
-    pub safe_address: Option<String>,
+    /// The on-chain address that holds the card's money, for top-ups (Gnosis Pay: the Safe).
+    pub account_address: Option<String>,
     pub owner_address: Option<String>,
     /// `provisioning`, `active`, `blocked`, `closed`.
     pub status: String,
@@ -176,7 +177,7 @@ impl GnosisPay {
             .filter_map(|k| text(&balance, &[k]).and_then(|r| r.parse::<u128>().ok()))
             .sum::<u128>();
         Ok(Account {
-            safe_address: text(&account, &["safeAddress"]),
+            account_address: text(&account, &["safeAddress"]),
             owner_address: text(&account, &["safeOwnerAddress"]),
             status: text(&account, &["status"]).unwrap_or_else(|| "unknown".into()),
             spendable: amount("spendable"),
