@@ -251,6 +251,21 @@ behaviour.
 | `src/components/AmountCell.tsx`                    | one import, the label                   | privacy mode hides the amount from the accessibility label too                                          |
 | `crates/sage-wallet/src/wallet/coin_management.rs` | one test appended                       | combining a coin locked in an offer cancels the offer; a test only, no engine change                    |
 
+### Partial offers (TASK-164)
+
+Three parts, each replaceable on its own once Sage or chia-wallet-sdk ships partial offers
+(`docs/partial-offers.md`): the driver `crates/chia-partial-offer` (new, Apache-2.0, meant for
+chia-wallet-sdk), the plugin `tauri-plugin-klimper-partial-offers` (new) and the screens in
+`src/klimper/partial/` (new). Sage's crates are not changed. Off unless
+`VITE_ENABLE_PARTIAL_OFFERS=true`; off in both release files.
+
+| File                                                         | Ours                              | Note                                                                                                                            |
+| ------------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | workspace member, dep, one plugin | three lines; `crates/chia-partial-offer` is a member through `crates/*`                                                         |
+| `src/pages/Offers.tsx`                                       | one import, one element           | `<MyPartialOffers />`: the wallet's partial offers above Sage's list. _Propose upstream_ as a hiding point                      |
+| `src/pages/MakeOffer.tsx`                                    | one import, one element           | `<PartialFillsOption />`: opens `/offers/make-partial` with Sage's offer state. _Propose upstream_ as a hiding point            |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                          | `VITE_ENABLE_PARTIAL_OFFERS`. `/offers/view/:offer` and `/offers/make-partial` are switched in `src/klimper/partial/routes.tsx` |
+
 ### Phone data and push
 
 Klimper's keys are Sage's: `keys.bin` under Sage's empty password, guarded by Sage's own

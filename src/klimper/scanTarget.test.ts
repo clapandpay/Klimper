@@ -63,6 +63,18 @@ describe('classifyScan', () => {
     expect(classifyScan(offer, OFF)).toEqual({ kind: 'unknown', text: offer });
   });
 
+  it('opens a partial offer only when partial offers are built in', () => {
+    const partial = 'partial1qqr83wcuu2rykcmqvpsxzgqqemhmlaekcenaz02ma6hs5w6';
+    expect(classifyScan(partial, { ...ON, partialOffers: true })).toEqual({
+      kind: 'offer',
+      offer: partial,
+    });
+    expect(classifyScan(partial, ON)).toEqual({
+      kind: 'unknown',
+      text: partial,
+    });
+  });
+
   it('shows anything else as it is', () => {
     expect(classifyScan(' https://example.com/x ', ON)).toEqual({
       kind: 'unknown',

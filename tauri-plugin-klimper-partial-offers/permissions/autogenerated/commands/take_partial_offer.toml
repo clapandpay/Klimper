@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-partial-offer"
+description = "Enables the take_partial_offer command without any pre-configured scope."
+commands.allow = ["take_partial_offer"]
+
+[[permission]]
+identifier = "deny-take-partial-offer"
+description = "Denies the take_partial_offer command without any pre-configured scope."
+commands.deny = ["take_partial_offer"]

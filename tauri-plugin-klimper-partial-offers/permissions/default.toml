@@ -1,0 +1,10 @@
+[default]
+description = "Partial offers (CHIP-0052): view one, take an amount of it, make one, list and cancel the wallet's own."
+permissions = [
+  "allow-view-partial-offer",
+  "allow-take-partial-offer",
+  "allow-make-partial-offer",
+  "allow-cancel-partial-offer",
+  "allow-get-partial-offers",
+  "allow-delete-partial-offer",
+]

@@ -35,3 +35,9 @@ export const klimperCoinsEnabled =
 // On by default: the Scan tab (src/klimper/Scanner.tsx), one camera for every code — a
 // website's Xchonnect code, an offer, an address. `VITE_DISABLE_SCAN=true` turns it off.
 export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';
+// Opt-in: partial offers (CHIP-0052, TASK-164): view a `partial1…`, take an amount of it,
+// make one, list and cancel the wallet's own. Needs offers. Off unless set to true, and off
+// in the release builds until it has been tried on testnet; it all lives in
+// src/klimper/partial/ and tauri-plugin-klimper-partial-offers (docs/partial-offers.md).
+export const partialOffersEnabled =
+  offersEnabled && import.meta.env.VITE_ENABLE_PARTIAL_OFFERS === 'true';

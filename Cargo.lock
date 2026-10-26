@@ -1183,6 +1183,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chia-partial-offer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia-wallet-sdk",
+ "clvm-traits 0.36.1",
+ "clvm-utils",
+ "clvmr",
+ "hex-literal",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "chia-protocol"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7068,6 +7081,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-klimper-jingle",
+ "tauri-plugin-klimper-partial-offers",
  "tauri-plugin-klimper-storage",
  "tauri-plugin-klimper-xchonnect",
  "tauri-plugin-opener",
@@ -8374,6 +8388,32 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "tauri-plugin-klimper-partial-offers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia-partial-offer",
+ "chia-wallet-sdk",
+ "hex",
+ "indexmap 2.12.1",
+ "rustls",
+ "sage",
+ "sage-api",
+ "sage-config",
+ "sage-database",
+ "sage-wallet",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-plugin",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
  "tracing",
 ]
 

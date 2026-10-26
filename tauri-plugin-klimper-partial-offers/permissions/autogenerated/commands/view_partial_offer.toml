@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-view-partial-offer"
+description = "Enables the view_partial_offer command without any pre-configured scope."
+commands.allow = ["view_partial_offer"]
+
+[[permission]]
+identifier = "deny-view-partial-offer"
+description = "Denies the view_partial_offer command without any pre-configured scope."
+commands.deny = ["view_partial_offer"]

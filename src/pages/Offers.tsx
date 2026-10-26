@@ -1,5 +1,7 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { commands, events, OfferRecord } from '@/bindings';
 import Container from '@/components/Container';
+import { MyPartialOffers } from '@/klimper/partial/MyPartialOffers';
 import { DeleteOfferDialog } from '@/components/dialogs/DeleteOfferDialog';
 import { NfcScanDialog } from '@/components/dialogs/NfcScanDialog';
 import { ViewOfferDialog } from '@/components/dialogs/ViewOfferDialog';
@@ -279,6 +281,8 @@ export function Offers() {
                 </ReadOnlyButton>
               </div>
             </div>
+
+            <MyPartialOffers />
 
             {offers.length > 0 && (
               <div className='flex flex-col gap-4'>
