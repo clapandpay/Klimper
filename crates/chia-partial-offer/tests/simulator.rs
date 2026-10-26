@@ -88,13 +88,11 @@ fn issue(
 }
 
 fn asset(kind: Kind, cat: Option<&Cat>) -> PartialAsset {
-    match kind {
-        Kind::Xch => PartialAsset::xch(),
-        _ => {
-            let cat = cat.unwrap();
-            PartialAsset::cat(cat.info.asset_id, cat.info.hidden_puzzle_hash)
-        }
+    if kind == Kind::Xch {
+        return PartialAsset::xch();
     }
+    let cat = cat.unwrap();
+    PartialAsset::cat(cat.info.asset_id, cat.info.hidden_puzzle_hash)
 }
 
 /// The maker's signed one-sided offer: the offered asset (and one mojo of XCH) into
@@ -324,7 +322,7 @@ fn run(
 }
 
 #[test]
-fn every_pairing_fills_in_two_parts() -> Result<()> {
+fn every_pairing_fills_in_two_parts() {
     let kinds = [Kind::Xch, Kind::Cat, Kind::RevocableCat];
     for offered in kinds {
         for requested in kinds {
@@ -343,7 +341,6 @@ fn every_pairing_fills_in_two_parts() -> Result<()> {
             }
         }
     }
-    Ok(())
 }
 
 /// Makes a CAT-for-XCH (or `offered_kind`-for-XCH) partial offer and fills a quarter of it.
