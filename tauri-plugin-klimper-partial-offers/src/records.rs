@@ -102,10 +102,12 @@ impl PartialOfferView {
         prefix: &str,
     ) -> Result<Self, crate::Error> {
         let info = &offer.info;
-        let remaining = if status.is_live() || status == Status::Expired {
-            offer.coin.amount
-        } else {
+        // A filled offer has nothing left; a cancelled one shows what was left when the maker
+        // took it back, so it does not read as sold.
+        let remaining = if status == Status::Filled {
             0
+        } else {
+            offer.coin.amount
         };
         Ok(Self {
             offer: offer.to_text()?,

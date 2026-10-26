@@ -54,13 +54,18 @@ feature for the CAT makers.
   anything else would point at a coin that is not there).
 - `make_partial_offer(one_sided_offer, terms, agg_sig)`: turns the wallet's signed one-sided
   offer (the offered asset plus one mojo of XCH, for nothing) into the first partial coin and a
-  security coin, as the reference CLI does.
+  security coin, as the reference CLI does, with one difference that matters: the security
+  coin's spend asserts each settlement coin's announcement of the payments into the partial
+  coin. The reference spends it to a bare remark, which lets anyone who reads a first partial
+  offer pay the maker's settlement coins to themselves before the first fill (found in review,
+  2026-10-26; worth reporting to the reference and to whoever ports it).
 - `encode_partial_offer` / `decode_partial_offer` / `is_partial_offer`.
 
 Tests (`tests/simulator.rs`, chia-wallet-sdk's simulator): every pairing of XCH, a CAT and a
 revocable CAT, with and without a required fee and an expiry, made from a one-sided offer, read
 back from its text and filled in two parts, each fill followed from the chain; claw back of a
-CAT and a revocable CAT; a claw back with another key fails; a fill below the minimum or above
+CAT and a revocable CAT; a claw back with another key fails; the maker's coins cannot be taken
+before the first fill (and could with the reference's remark); a fill below the minimum or above
 what is left is refused; an expired offer cannot be filled.
 
 Swap-out: when chia-wallet-sdk has a partial driver, delete the crate and change the imports in
@@ -89,9 +94,10 @@ changed.
   `cancel_partial_offer`, `get_partial_offers`, `delete_partial_offer`. Errors come as
   `{code, message}`. Records are named after nodexch's `partial` fields; amounts are mojos as
   strings.
-- Making imports the one-sided offer into Sage (`import_offer`), so Sage locks its coins until
-  the first fill or a cancel spends them. Sage's Offers list shows it as an offer of the asset
-  for nothing; it completes at the first fill.
+- Making does not import the one-sided offer into Sage: Sage would list it as an ordinary offer
+  of the asset for nothing, and anyone given that text could take it. So its coins are not
+  locked; if the wallet spends one before the first fill, the partial offer reads as
+  cancelled and nothing is lost.
 
 Tests (`src/tests.rs`): two Sage wallets on a simulated chain (`src/sage_sim.rs`, copied from
 the Xchonnect plugin): CAT for XCH filled in two parts (the second with a network fee),

@@ -91,10 +91,12 @@ function MyPartialOfferRow({
   const filled = percent(initial - left, initial);
   const fills = offer.fills.length;
   const leftText = amountText(left, offered);
+  // Unknown (offline) may still be open on the chain: keep Cancel, never offer to forget it.
   const live =
     view.status === 'open' ||
     view.status === 'partly_filled' ||
-    view.status === 'expired';
+    view.status === 'expired' ||
+    view.status === 'unknown';
 
   const cancel = async () => {
     if (!(await promptIfEnabled())) return;

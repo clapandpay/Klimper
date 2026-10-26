@@ -106,7 +106,18 @@ fn fill(offer: &PartialOffer, bought: u64) -> Fill {
     Fill {
         coin_id: hex0x(offer.coin.coin_id()),
         bought: bought.to_string(),
-        paid: offer.info.price_data.reverse_quote(bought).to_string(),
+        // What `bought` cost at least, rounded up (the puzzle rounds what a payment buys down).
+        paid: least_payment(&offer.info, bought).to_string(),
+    }
+}
+
+/// The least payment that buys `bought` of the offered asset.
+fn least_payment(info: &chia_partial_offer::PartialOfferInfo, bought: u64) -> u64 {
+    let down = info.price_data.reverse_quote(bought);
+    if info.price_data.quote(down) >= bought {
+        down
+    } else {
+        down + 1
     }
 }
 
@@ -131,12 +142,21 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
             let mut status = Status::Unknown;
             if offer.is_first() {
                 status = Status::Open;
+                let mut spent = false;
                 for input in offer.input_coin_ids() {
                     if let Some(input) = peer.fetch_optional_coin(input, genesis).await?
                         && input.spent_height.is_some()
                     {
-                        status = Status::Cancelled;
+                        spent = true;
                     }
+                }
+                if spent {
+                    // The first fill may have confirmed between the two lookups: then the
+                    // partial coin exists now, and the offer goes on from there.
+                    if peer.fetch_optional_coin(coin_id, genesis).await?.is_some() {
+                        continue;
+                    }
+                    status = Status::Cancelled;
                 }
             }
             return Ok(Followed {
@@ -289,10 +309,11 @@ pub async fn take(
 /// The maker's terms from a request, with this wallet's receive puzzle as the maker.
 pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<PartialOfferTerms, Error> {
     let asset = |id: &Option<String>| -> Result<Option<Bytes32>, Error> {
-        id.as_deref()
-            .filter(|id| !id.is_empty() && *id != "xch")
-            .map(parse_hash)
-            .transpose()
+        match id.as_deref() {
+            None | Some("xch") => Ok(None),
+            Some("") => Err(Error::Invalid("pick the token first".to_string())),
+            Some(id) => parse_hash(id).map(Some),
+        }
     };
     let side = async |id: Option<Bytes32>| -> Result<PartialAsset, Error> {
         Ok(match id {

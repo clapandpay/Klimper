@@ -3,7 +3,10 @@
 //! wallet database. Not a table in that database: Sage numbers its own migrations, and one of
 //! ours would collide with upstream's next (docs/partial-offers.md).
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +33,10 @@ pub struct StoredOffer {
 struct File {
     offers: Vec<StoredOffer>,
 }
+
+/// Every change reads, edits and writes the whole file: one at a time, across the commands
+/// that run at once (a list rewriting entries while an offer is made or deleted).
+static WRITES: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -73,6 +80,9 @@ impl Store {
 
     /// Adds the offer, or replaces the one with its id.
     pub fn put(&self, offer: StoredOffer) -> Result<(), Error> {
+        let _one_at_a_time = WRITES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut file = self.read()?;
         match file.offers.iter_mut().find(|stored| stored.id == offer.id) {
             Some(stored) => *stored = offer,
@@ -81,7 +91,25 @@ impl Store {
         self.write(&file)
     }
 
+    /// Replaces the offer with its id, if it is still there (a list that followed it on the
+    /// chain must not bring back an offer deleted meanwhile).
+    pub fn update(&self, offer: StoredOffer) -> Result<bool, Error> {
+        let _one_at_a_time = WRITES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut file = self.read()?;
+        let Some(stored) = file.offers.iter_mut().find(|stored| stored.id == offer.id) else {
+            return Ok(false);
+        };
+        *stored = offer;
+        self.write(&file)?;
+        Ok(true)
+    }
+
     pub fn delete(&self, id: &str) -> Result<bool, Error> {
+        let _one_at_a_time = WRITES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut file = self.read()?;
         let before = file.offers.len();
         file.offers.retain(|offer| offer.id != id);
@@ -120,6 +148,8 @@ mod tests {
         assert_eq!(store.get("0x01").unwrap().unwrap().latest, "partial1b");
         assert!(store.delete("0x01").unwrap());
         assert!(!store.delete("0x01").unwrap());
+        // A list that followed it meanwhile does not bring it back.
+        assert!(!store.update(offer.clone()).unwrap());
         assert!(store.list().unwrap().is_empty());
     }
 }

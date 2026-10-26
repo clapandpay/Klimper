@@ -14,9 +14,8 @@ use std::{
 };
 
 use chia_partial_offer::PartialOfferError;
-use chia_wallet_sdk::{driver::encode_offer, signer::AggSigConstants};
+use chia_wallet_sdk::signer::AggSigConstants;
 use sage::Sage;
-use sage_api::ImportOffer;
 use sage_wallet::WalletError;
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use tauri::{
@@ -154,9 +153,8 @@ pub async fn sage_ctx(state: &AppState, signing: bool) -> Result<(WalletCtx, Sto
 /// testnet run (`examples/testnet.rs`), so it tries exactly what the app does.
 pub mod ops {
     use super::{
-        AppState, CancelResult, ImportOffer, MakeRequest, MakeResult, MyPartialOffer,
-        PartialOfferView, Result, TakeResult, encode_offer, hex0x, mine, now, parse_amount,
-        sage_ctx, wallet,
+        AppState, CancelResult, MakeRequest, MakeResult, MyPartialOffer, PartialOfferView, Result,
+        TakeResult, hex0x, mine, now, parse_amount, sage_ctx, wallet,
     };
 
     /// Reads a `partial1…` text and follows it on the chain to its newest coin.
@@ -186,20 +184,16 @@ pub mod ops {
         Ok(result)
     }
 
-    /// Makes a partial offer. Nothing is sent: the coins it is made from are locked in the
-    /// wallet (as an offer of its own, which Sage lists) until the first fill or a cancel
-    /// spends them.
+    /// Makes a partial offer. Nothing is sent: the first taker sends the maker's spends.
+    ///
+    /// The one-sided offer it is made from is not imported into Sage: Sage would list it as an
+    /// ordinary offer of the asset for nothing, and anyone given that text could take it. So
+    /// its coins are not locked either. If the wallet spends one of them before the first fill,
+    /// the partial offer reads as cancelled; nothing is lost.
     pub async fn make(state: &AppState, request: &MakeRequest) -> Result<MakeResult> {
         let (ctx, store) = sage_ctx(state, true).await?;
         let terms = wallet::terms(&ctx, request).await?;
-        let (offer, one_sided) = wallet::make(&ctx, &terms).await?;
-        state
-            .lock()
-            .await
-            .import_offer(ImportOffer {
-                offer: encode_offer(&one_sided)?,
-            })
-            .await?;
+        let (offer, _one_sided) = wallet::make(&ctx, &terms).await?;
         let id = mine::remember(&store, &offer, now())?;
         Ok(MakeResult {
             id,
