@@ -6,7 +6,7 @@ use tracing::warn;
 
 use crate::{
     Error,
-    records::{MyPartialOffer, PartialOfferView, Status, hex0x},
+    records::{MyPartialOffer, PartialOfferView, PendingCancel, Status, hex0x},
     store::{Store, StoredOffer},
     wallet::{WalletCtx, follow},
 };
@@ -20,8 +20,58 @@ pub fn remember(store: &Store, offer: &PartialOffer, now: u64) -> Result<String,
         latest: offer.to_text()?,
         fills: Vec::new(),
         ended: None,
+        cancel: None,
     })?;
     Ok(id)
+}
+
+/// Notes that a cancel of offer `id` was sent, so the list says "cancelling" until the chain
+/// shows it cancelled.
+pub fn cancel_sent(
+    store: &Store,
+    id: &str,
+    transaction_id: String,
+    coin_id: String,
+    now: u64,
+) -> Result<(), Error> {
+    let mut stored = latest(store, id)?;
+    stored.cancel = Some(PendingCancel {
+        transaction_id,
+        coin_id,
+        sent_at: now,
+    });
+    store.update(stored)?;
+    Ok(())
+}
+
+/// A view of one of the wallet's own offers says "cancelling" while a cancel it sent is
+/// unconfirmed, as the list does. `text` is the text that was viewed.
+pub fn with_pending_cancel(
+    store: &Store,
+    text: &str,
+    mut view: PartialOfferView,
+) -> Result<PartialOfferView, Error> {
+    if view.is_mine {
+        let text = text.trim();
+        let pending = store.list()?.into_iter().find(|stored| {
+            stored.cancel.is_some() && (stored.latest == text || stored.latest == view.offer)
+        });
+        if let Some(stored) = pending {
+            view.status = shown(view.status, stored.cancel.as_ref());
+        }
+    }
+    Ok(view)
+}
+
+/// What the list shows: a cancel that was sent reads as "cancelling" while the offer is still
+/// live on the chain.
+fn shown(status: Status, cancel: Option<&PendingCancel>) -> Status {
+    match (status, cancel) {
+        (Status::Open | Status::PartlyFilled | Status::Expired | Status::Unknown, Some(_)) => {
+            Status::Cancelling
+        }
+        (status, _) => status,
+    }
 }
 
 /// Every partial offer the wallet made, newest first, each still live followed to its newest
@@ -41,11 +91,24 @@ pub async fn list(ctx: &WalletCtx, store: &Store, now: u64) -> Result<Vec<MyPart
             Some(status) => (offer, status),
             None => match follow(ctx, offer.clone(), now).await {
                 Ok(followed) => {
-                    let changed = !followed.fills.is_empty()
-                        || matches!(followed.status, Status::Filled | Status::Cancelled);
+                    let ended = matches!(followed.status, Status::Filled | Status::Cancelled);
+                    let was_pending = stored.cancel.is_some();
+                    let changed = !followed.fills.is_empty() || ended;
+                    // Past the coin the cancel spends, a fill confirmed first and the cancel
+                    // failed: the offer is live again.
+                    let coin_id = hex0x(followed.offer.coin.coin_id());
+                    if ended
+                        || stored
+                            .cancel
+                            .as_ref()
+                            .is_some_and(|cancel| cancel.coin_id != coin_id)
+                    {
+                        stored.cancel = None;
+                    }
+                    let changed = changed || stored.cancel.is_some() != was_pending;
                     stored.fills.extend(followed.fills);
                     stored.latest = followed.offer.to_text()?;
-                    if matches!(followed.status, Status::Filled | Status::Cancelled) {
+                    if ended {
                         stored.ended = Some(followed.status);
                     }
                     if changed {
@@ -59,10 +122,12 @@ pub async fn list(ctx: &WalletCtx, store: &Store, now: u64) -> Result<Vec<MyPart
                 }
             },
         };
+        let status = shown(status, stored.cancel.as_ref());
         mine.push(MyPartialOffer {
             id: stored.id.clone(),
             created_at: stored.created_at,
             fills: stored.fills.clone(),
+            cancel: stored.cancel.clone(),
             view: PartialOfferView::new(&offer, status, Vec::new(), true, &ctx.prefix)?,
         });
     }

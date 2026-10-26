@@ -197,7 +197,7 @@ async fn xch_for_a_cat_is_filled_once_and_the_rest_clawed_back() {
     let xch_before = maker.wallet.db.xch_balance().await.unwrap();
     let stored = mine::latest(&store, &id).unwrap();
     let ctx = maker.ctx().await;
-    let bundle = wallet::cancel(&ctx, &stored.latest, 5, NOW).await.unwrap();
+    let (bundle, _) = wallet::cancel(&ctx, &stored.latest, 5, NOW).await.unwrap();
     let rest = bundle
         .coin_spends
         .iter()
@@ -222,6 +222,68 @@ async fn xch_for_a_cat_is_filled_once_and_the_rest_clawed_back() {
 }
 
 #[tokio::test]
+async fn a_sent_cancel_reads_as_cancelling_until_the_chain_has_it() {
+    let mut maker = SimWallet::new(10_000).await;
+    let mut taker = maker.next(10_000).await;
+    let cat = issue(&mut maker, 1_000).await;
+    know_cat(&taker, cat).await;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("partial.json"));
+    let (text, id) = make(&maker, &store, &request(Some(cat), 1_000, None, 5_000)).await;
+    let first = take(&mut taker, &mut maker, &text, 1_250, 0).await;
+    let next = first.next_offer.unwrap();
+
+    // A cancel signed and noted as sent, not on the chain yet.
+    let ctx = maker.ctx().await;
+    let stored = mine::latest(&store, &id).unwrap();
+    let (bundle, coin_id) = wallet::cancel(&ctx, &stored.latest, 5, NOW).await.unwrap();
+    mine::cancel_sent(&store, &id, "0x01".to_string(), coin_id, NOW).unwrap();
+    let listed = mine::list(&ctx, &store, NOW).await.unwrap();
+    assert_eq!(listed[0].view.status, Status::Cancelling);
+    assert_eq!(listed[0].cancel.as_ref().unwrap().transaction_id, "0x01");
+    let seen = wallet::view(&ctx, &next, NOW).await.unwrap();
+    let seen = mine::with_pending_cancel(&store, &next, seen).unwrap();
+    assert_eq!(seen.status, Status::Cancelling);
+
+    // Confirmed: cancelled, and the note is gone. The simulated chain takes a moment.
+    ctx.submit(bundle).await.unwrap();
+    let mut listed = Vec::new();
+    for _ in 0..100 {
+        listed = mine::list(&maker.ctx().await, &store, NOW).await.unwrap();
+        if listed[0].view.status != Status::Cancelling {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(listed[0].view.status, Status::Cancelled);
+    assert!(listed[0].cancel.is_none());
+}
+
+#[tokio::test]
+async fn a_fill_before_the_cancel_confirms_makes_the_offer_live_again() {
+    let mut maker = SimWallet::new(10_000).await;
+    let mut taker = maker.next(10_000).await;
+    let cat = issue(&mut maker, 1_000).await;
+    know_cat(&taker, cat).await;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("partial.json"));
+    let (text, id) = make(&maker, &store, &request(Some(cat), 1_000, None, 5_000)).await;
+    let next = take(&mut taker, &mut maker, &text, 1_250, 0)
+        .await
+        .next_offer
+        .unwrap();
+
+    // The cancel is signed and noted as sent, but a taker's fill reaches the chain first.
+    let ctx = maker.ctx().await;
+    let (_, coin_id) = wallet::cancel(&ctx, &next, 0, NOW).await.unwrap();
+    mine::cancel_sent(&store, &id, "0x01".to_string(), coin_id, NOW).unwrap();
+    take(&mut taker, &mut maker, &next, 1_250, 0).await;
+    let listed = mine::list(&maker.ctx().await, &store, NOW).await.unwrap();
+    assert_eq!(listed[0].view.status, Status::PartlyFilled);
+    assert!(listed[0].cancel.is_none());
+}
+
+#[tokio::test]
 async fn an_offer_cancelled_before_any_fill_cannot_be_taken() {
     let mut maker = SimWallet::new(10_000).await;
     let taker = maker.next(10_000).await;
@@ -236,7 +298,7 @@ async fn an_offer_cancelled_before_any_fill_cannot_be_taken() {
     assert!(matches!(theirs, Err(Error::NotMine)), "{theirs:?}");
 
     let ctx = maker.ctx().await;
-    let bundle = wallet::cancel(&ctx, &text, 0, NOW).await.unwrap();
+    let (bundle, _) = wallet::cancel(&ctx, &text, 0, NOW).await.unwrap();
     ctx.submit(bundle).await.unwrap();
     maker.wait_for_coins().await;
     assert_eq!(maker.wallet.db.cat_balance(cat).await.unwrap(), 1_000);

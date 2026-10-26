@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The one element in Sage's Offers screen (TASK-164): the partial offers this wallet made,
-// each followed on the chain when shown: how often and how far it is filled, what is left,
-// and cancelling it (claw back).
+// Sage's Offers screen shows the partial offers this wallet made as a group of their own
+// (TASK-164), under the same filter as its offers. Each is followed on the chain when shown:
+// how often and how far it is filled, what is left, and cancelling it (claw back). A cancel
+// reads "Cancel pending" until the chain confirms it, and the list refreshes itself meanwhile.
 
+import { events } from '@/bindings';
 import { CopyButton } from '@/components/CopyButton';
 import { ReadOnlyButton } from '@/components/ReadOnlyButton';
 import { Button } from '@/components/ui/button';
@@ -24,22 +26,63 @@ import { useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { isPartialError, MyPartialOffer, partialOffers } from './api';
+import {
+  isPartialError,
+  MyPartialOffer,
+  PartialStatus,
+  partialOffers,
+} from './api';
+import { matchesOfferFilter } from './filter';
 import { percent } from './math';
 import { FilledBar, statusLabel } from './PartialOfferTerms';
 import { amountText, useSideAsset } from './useSideAsset';
 
-export function MyPartialOffers() {
+/** How often the list looks again while a cancel waits for the chain. */
+const PENDING_POLL_MS = 10_000;
+/** After this long a pending cancel may have been dropped: offer to send it again. */
+const RETRY_AFTER_S = 10 * 60;
+
+export interface MyPartialOffersState {
+  /** Null until loaded, and always null with partial offers off. */
+  offers: MyPartialOffer[] | null;
+  reload: () => void;
+}
+
+/** The wallet's partial offers, reloaded when the wallet's coins change and, while a cancel
+ * is pending, every few seconds. Says so when a pending cancel is confirmed or fails. */
+export function useMyPartialOffers(): MyPartialOffersState {
   const [offers, setOffers] = useState<MyPartialOffer[] | null>(null);
   const { addError } = useErrors();
+  const seen = useRef(new Map<string, PartialStatus>());
 
   const load = useCallback(() => {
+    if (!partialOffersEnabled) return;
     partialOffers
       .list()
-      .then(setOffers)
+      .then((next) => {
+        for (const offer of next) {
+          const before = seen.current.get(offer.id);
+          const now = offer.view.status;
+          if (before === 'cancelling' && now === 'cancelled') {
+            toast.success(
+              t`Partial offer cancelled. The rest is back in your wallet.`,
+            );
+          } else if (
+            before === 'cancelling' &&
+            (now === 'open' || now === 'partly_filled')
+          ) {
+            toast.warning(
+              t`The cancel did not go through: someone filled the offer first. Cancel again to take back the rest.`,
+            );
+          }
+          seen.current.set(offer.id, now);
+        }
+        setOffers(next);
+      })
       .catch((error) =>
         addError({
           kind: 'invalid',
@@ -49,21 +92,56 @@ export function MyPartialOffers() {
   }, [addError]);
 
   useEffect(() => {
-    if (partialOffersEnabled) load();
+    if (!partialOffersEnabled) return;
+    load();
+    const unlisten = events.syncEvent.listen((data) => {
+      if (data.payload.type === 'coin_state') load();
+    });
+    return () => {
+      unlisten.then((u) => u());
+    };
   }, [load]);
 
+  const pending = offers?.some((offer) => offer.view.status === 'cancelling');
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(load, PENDING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [pending, load]);
+
+  return { offers, reload: load };
+}
+
+/** The partial offers group on the Offers screen, under Sage's status filter. */
+export function MyPartialOffers({
+  state,
+  statusFilter,
+}: {
+  state: MyPartialOffersState;
+  statusFilter: string;
+}) {
+  const { offers, reload } = state;
   if (!partialOffersEnabled || offers === null || offers.length === 0) {
     return null;
   }
+  const shown = offers.filter((offer) =>
+    matchesOfferFilter(offer.view.status, statusFilter),
+  );
 
   return (
-    <section className='space-y-2'>
-      <h2 className='text-sm font-medium text-muted-foreground'>
-        <Trans>Partial offers</Trans>
-      </h2>
-      {offers.map((offer) => (
-        <MyPartialOfferRow key={offer.id} offer={offer} reload={load} />
-      ))}
+    <section className='flex flex-col gap-2'>
+      <h3 className='text-sm font-medium text-muted-foreground'>
+        <Trans>Partial offers</Trans> ({shown.length})
+      </h3>
+      {shown.length === 0 ? (
+        <p className='text-sm text-muted-foreground'>
+          <Trans>No partial offers match this filter.</Trans>
+        </p>
+      ) : (
+        shown.map((offer) => (
+          <MyPartialOfferRow key={offer.id} offer={offer} reload={reload} />
+        ))
+      )}
     </section>
   );
 }
@@ -97,6 +175,10 @@ function MyPartialOfferRow({
     view.status === 'partly_filled' ||
     view.status === 'expired' ||
     view.status === 'unknown';
+  const pending = view.status === 'cancelling' ? offer.cancel : null;
+  // A cancel still pending after a while may have been dropped by the network.
+  const stuck =
+    pending !== null && Date.now() / 1000 - pending.sent_at > RETRY_AFTER_S;
 
   const cancel = async () => {
     if (!(await promptIfEnabled())) return;
@@ -108,7 +190,9 @@ function MyPartialOfferRow({
           .integerValue(BigNumber.ROUND_DOWN)
           .toFixed(),
       );
-      toast.success(t`Cancelled. The rest comes back once it is confirmed.`);
+      toast.info(
+        t`Cancel sent. It shows as cancelled once the network confirms it.`,
+      );
       setCancelling(false);
       reload();
     } catch (error) {
@@ -135,7 +219,16 @@ function MyPartialOfferRow({
             {amountText(view.initial_offered, offered)} →{' '}
             {amountText(view.initial_requested, requested)}
           </span>
-          <span className='text-xs text-muted-foreground'>
+          <span
+            className={
+              pending
+                ? 'flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {pending && (
+              <Loader2 className='h-3 w-3 animate-spin' aria-hidden='true' />
+            )}
             {statusLabel(view.status)}
           </span>
         </div>
@@ -146,19 +239,35 @@ function MyPartialOfferRow({
         </div>
       </button>
       <FilledBar view={view} />
+      {pending && (
+        <div className='rounded-md bg-muted p-2 text-xs text-muted-foreground'>
+          <Trans>
+            Waiting for the network to confirm the cancel. {leftText} comes back
+            to you then.
+          </Trans>
+          <div className='mt-1 flex items-center gap-1 break-all font-mono'>
+            {pending.transaction_id.slice(0, 18)}…
+            <CopyButton value={pending.transaction_id} />
+          </div>
+        </div>
+      )}
       <div className='flex flex-wrap gap-2'>
         <CopyButton value={view.offer} />
-        {live && (
+        {(live || stuck) && (
           <ReadOnlyButton
             requiresSigning
             size='sm'
             variant='outline'
             onClick={() => setCancelling(true)}
           >
-            <Trans>Cancel (claw back)</Trans>
+            {stuck ? (
+              <Trans>Cancel again</Trans>
+            ) : (
+              <Trans>Cancel (claw back)</Trans>
+            )}
           </ReadOnlyButton>
         )}
-        {!live && (
+        {!live && !pending && (
           <Button
             size='sm'
             variant='ghost'

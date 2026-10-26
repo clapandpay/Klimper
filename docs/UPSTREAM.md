@@ -259,12 +259,12 @@ chia-wallet-sdk), the plugin `tauri-plugin-klimper-partial-offers` (new) and the
 `src/klimper/partial/` (new). Sage's crates are not changed. Off unless
 `VITE_ENABLE_PARTIAL_OFFERS=true`; off in both release files.
 
-| File                                                         | Ours                              | Note                                                                                                                            |
-| ------------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | workspace member, dep, one plugin | three lines; `crates/chia-partial-offer` is a member through `crates/*`                                                         |
-| `src/pages/Offers.tsx`                                       | one import, one element           | `<MyPartialOffers />`: the wallet's partial offers above Sage's list. _Propose upstream_ as a hiding point                      |
-| `src/pages/MakeOffer.tsx`                                    | one import, one element           | `<PartialFillsOption />`: opens `/offers/make-partial` with Sage's offer state. _Propose upstream_ as a hiding point            |
-| `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                          | `VITE_ENABLE_PARTIAL_OFFERS`. `/offers/view/:offer` and `/offers/make-partial` are switched in `src/klimper/partial/routes.tsx` |
+| File                                                         | Ours                                          | Note                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | workspace member, dep, one plugin             | three lines; `crates/chia-partial-offer` is a member through `crates/*`                                                                                                                                                                 |
+| `src/pages/Offers.tsx`                                       | one import, a hook, two headings, one element | Two groups under Sage's one filter: "Offers" (Sage's list, a heading and an empty line only with the flag on) and `<MyPartialOffers />`; the filter row also shows when only partial offers exist. _Propose upstream_ as a hiding point |
+| `src/pages/MakeOffer.tsx`                                    | one import, one element                       | `<PartialFillsOption />`: opens `/offers/make-partial` with Sage's offer state. _Propose upstream_ as a hiding point                                                                                                                    |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                                      | `VITE_ENABLE_PARTIAL_OFFERS`. `/offers/view/:offer` and `/offers/make-partial` are switched in `src/klimper/partial/routes.tsx`                                                                                                         |
 
 ### Phone data and push
 

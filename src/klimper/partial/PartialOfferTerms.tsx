@@ -27,6 +27,8 @@ export function statusLabel(status: PartialStatus): string {
       return t`Cancelled`;
     case 'expired':
       return t`Expired`;
+    case 'cancelling':
+      return t`Cancel pending`;
     case 'unknown':
     default:
       return t`Status unknown (offline)`;

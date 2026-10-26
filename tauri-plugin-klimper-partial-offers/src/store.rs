@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Error,
-    records::{Fill, Status},
+    records::{Fill, PendingCancel, Status},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +27,9 @@ pub struct StoredOffer {
     /// How it ended (filled or cancelled): set once, and then it is not followed again.
     #[serde(default)]
     pub ended: Option<Status>,
+    /// A cancel sent and not yet seen on the chain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel: Option<PendingCancel>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -136,6 +139,7 @@ mod tests {
             latest: "partial1a".to_string(),
             fills: Vec::new(),
             ended: None,
+            cancel: None,
         };
         store.put(offer.clone()).unwrap();
         store

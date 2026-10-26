@@ -159,8 +159,9 @@ pub mod ops {
 
     /// Reads a `partial1…` text and follows it on the chain to its newest coin.
     pub async fn view(state: &AppState, offer: &str) -> Result<PartialOfferView> {
-        let (ctx, _) = sage_ctx(state, false).await?;
-        wallet::view(&ctx, offer, now()).await
+        let (ctx, store) = sage_ctx(state, false).await?;
+        let view = wallet::view(&ctx, offer, now()).await?;
+        mine::with_pending_cancel(&store, offer, view)
     }
 
     /// Takes `amount` mojos of the requested asset's worth of the offer, with `fee` mojos as
@@ -205,11 +206,11 @@ pub mod ops {
     pub async fn cancel(state: &AppState, id: &str, fee: &str) -> Result<CancelResult> {
         let (ctx, store) = sage_ctx(state, true).await?;
         let stored = mine::latest(&store, id)?;
-        let bundle = wallet::cancel(&ctx, &stored.latest, parse_amount(fee)?, now()).await?;
-        let name = ctx.submit(bundle).await?;
-        Ok(CancelResult {
-            transaction_id: hex0x(name),
-        })
+        let (bundle, coin_id) =
+            wallet::cancel(&ctx, &stored.latest, parse_amount(fee)?, now()).await?;
+        let transaction_id = hex0x(ctx.submit(bundle).await?);
+        mine::cancel_sent(&store, id, transaction_id.clone(), coin_id, now())?;
+        Ok(CancelResult { transaction_id })
     }
 
     /// The wallet's partial offers, newest first, each still live followed on the chain.

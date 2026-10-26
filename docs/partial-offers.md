@@ -148,7 +148,15 @@ with those, as the reference CLI does. Offer methods for apps wait for Sage.
 - Make: `<PartialFillsOption />` in Sage's `MakeOffer.tsx` opens `MakePartialOffer`, which takes
   the assets, amounts and expiry from Sage's offer state (exactly one token for one token) and
   adds the least per fill and the fee per fill.
-- My offers: `<MyPartialOffers />` in Sage's `Offers.tsx`.
+- My offers: Sage's `Offers.tsx` shows two groups, "Offers" and "Partial offers"
+  (`<MyPartialOffers />`, with `useMyPartialOffers`), and Sage's status filter applies to both
+  (`filter.ts`: active is open, partly filled, cancel pending or unknown; completed is filled).
+- Cancel feedback: `cancel_partial_offer` notes the cancel in the store (transaction id and the
+  partial coin it spends). Until the chain shows it, the list and the offer's page say
+  `cancelling` ("Cancel pending", with the transaction id), and the list reloads on the
+  wallet's coin events and every 10 s. Confirmed: "cancelled", with a toast. If a taker's
+  fill confirms first (the offer has moved past that coin), the note is dropped and the offer
+  is live again, with a toast. After 10 minutes still pending, "Cancel again" is offered.
 - No QR code for a partial offer: its text is several kilobytes, more than a QR code holds.
   Copy it, or post it to nodexch or Splash.
 - Strings extracted into `src/locales/*/messages.po` (English only so far, like the rest of
@@ -188,9 +196,11 @@ to nodexch from the make screen; nodexch's MCP `decode_offer` accepts only `offe
   or CAT), opens the partial make screen. Fields: min fill, fee per fill (optional); the expiry
   is Make offer's. Output: `partial1…` to copy.
 - **My offers:**
+  - A group of their own under the Offers list, under the same filter.
   - "Filled 3× · 42 %" and what is left.
   - The fills from the coin chain.
   - "Cancel (claw back)": works at any time, costs a network fee, and returns the rest.
+  - After a cancel: "Cancel pending" until it is confirmed, then "Cancelled".
 
 ## nodexch fields
 

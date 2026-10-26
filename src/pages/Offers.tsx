@@ -1,7 +1,11 @@
 // Modified by Klimper (2026): see docs/UPSTREAM.md
 import { commands, events, OfferRecord } from '@/bindings';
 import Container from '@/components/Container';
-import { MyPartialOffers } from '@/klimper/partial/MyPartialOffers';
+import {
+  MyPartialOffers,
+  useMyPartialOffers,
+} from '@/klimper/partial/MyPartialOffers';
+import { partialOffersEnabled } from '@/lib/features';
 import { DeleteOfferDialog } from '@/components/dialogs/DeleteOfferDialog';
 import { NfcScanDialog } from '@/components/dialogs/NfcScanDialog';
 import { ViewOfferDialog } from '@/components/dialogs/ViewOfferDialog';
@@ -65,6 +69,8 @@ export function Offers() {
   const [multiSelect, setMultiSelect] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+  const partialOffers = useMyPartialOffers();
+  const partialCount = partialOffers.offers?.length ?? 0;
 
   const toggleSelected = useCallback((offerId: string, value: boolean) => {
     setSelected((prev) =>
@@ -282,9 +288,7 @@ export function Offers() {
               </div>
             </div>
 
-            <MyPartialOffers />
-
-            {offers.length > 0 && (
+            {(offers.length > 0 || partialCount > 0) && (
               <div className='flex flex-col gap-4'>
                 <div className='flex flex-row items-center justify-between gap-4'>
                   <div className='flex items-center gap-2'>
@@ -367,6 +371,16 @@ export function Offers() {
                 </div>
 
                 <div className='flex flex-col gap-2'>
+                  {partialOffersEnabled && (
+                    <h3 className='text-sm font-medium text-muted-foreground'>
+                      <Trans>Offers</Trans> ({filteredOffers.length})
+                    </h3>
+                  )}
+                  {partialOffersEnabled && filteredOffers.length === 0 && (
+                    <p className='text-sm text-muted-foreground'>
+                      <Trans>No offers match this filter.</Trans>
+                    </p>
+                  )}
                   {filteredOffers.map((record) => (
                     <OfferRowCard
                       record={record}
@@ -383,6 +397,11 @@ export function Offers() {
                     />
                   ))}
                 </div>
+
+                <MyPartialOffers
+                  state={partialOffers}
+                  statusFilter={statusFilter}
+                />
               </div>
             )}
           </div>

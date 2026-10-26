@@ -42,6 +42,9 @@ pub enum Status {
     Expired,
     /// No connection to the network: the status could not be checked.
     Unknown,
+    /// This wallet sent a cancel that the chain has not confirmed yet. Only the wallet's own
+    /// list says this (it knows the cancel was sent); following the chain never does.
+    Cancelling,
 }
 
 impl Status {
@@ -142,7 +145,20 @@ pub struct MyPartialOffer {
     pub created_at: u64,
     /// Every fill since it was made.
     pub fills: Vec<Fill>,
+    /// The cancel this wallet sent, while the chain has not confirmed it.
+    pub cancel: Option<PendingCancel>,
     pub view: PartialOfferView,
+}
+
+/// A cancel sent and not confirmed yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingCancel {
+    pub transaction_id: String,
+    /// The partial coin the cancel spends, `0x` hex. Once the offer has moved past it (a fill
+    /// confirmed first), the cancel failed.
+    pub coin_id: String,
+    /// Unix seconds.
+    pub sent_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

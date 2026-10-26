@@ -385,7 +385,13 @@ pub async fn make(
 
 /// Cancels a partial offer this wallet made: before the first fill by spending one of the
 /// coins it was made from, after it by clawing the rest back. Costs `fee` as the network fee.
-pub async fn cancel(ctx: &WalletCtx, text: &str, fee: u64, now: u64) -> Result<SpendBundle, Error> {
+/// Answers the signed cancel and the partial coin it spends (`0x` hex).
+pub async fn cancel(
+    ctx: &WalletCtx,
+    text: &str,
+    fee: u64,
+    now: u64,
+) -> Result<(SpendBundle, String), Error> {
     let followed = follow(ctx, PartialOffer::from_text(text)?, now).await?;
     match followed.status {
         Status::Open | Status::PartlyFilled | Status::Expired => {}
@@ -393,6 +399,7 @@ pub async fn cancel(ctx: &WalletCtx, text: &str, fee: u64, now: u64) -> Result<S
         status => return Err(Error::Closed(status)),
     }
     let offer = followed.offer;
+    let coin_id = hex0x(offer.coin.coin_id());
     let maker = offer.info.maker_puzzle_hash;
     let Some(public_key) = ctx.wallet.db.public_key(maker).await? else {
         return Err(Error::NotMine);
@@ -424,6 +431,8 @@ pub async fn cancel(ctx: &WalletCtx, text: &str, fee: u64, now: u64) -> Result<S
             StandardLayer::new(public_key).delegated_inner_spend(&mut spend_ctx, delegated)?;
         offer.claw_back(&mut spend_ctx, inner)?;
     }
-    ctx.sign(SpendBundle::new(spend_ctx.take(), Signature::default()))
-        .await
+    let bundle = ctx
+        .sign(SpendBundle::new(spend_ctx.take(), Signature::default()))
+        .await?;
+    Ok((bundle, coin_id))
 }

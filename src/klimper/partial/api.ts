@@ -19,7 +19,9 @@ export type PartialStatus =
   | 'filled'
   | 'cancelled'
   | 'expired'
-  | 'unknown';
+  | 'unknown'
+  /** This wallet sent a cancel; the chain has not confirmed it yet. */
+  | 'cancelling';
 
 export interface PartialFill {
   coin_id: string;
@@ -53,10 +55,20 @@ export interface PartialOfferView {
   is_mine: boolean;
 }
 
+/** A cancel this wallet sent that the chain has not confirmed yet. */
+export interface PendingCancel {
+  transaction_id: string;
+  /** The partial coin the cancel spends. */
+  coin_id: string;
+  /** Unix seconds. */
+  sent_at: number;
+}
+
 export interface MyPartialOffer {
   id: string;
   created_at: number;
   fills: PartialFill[];
+  cancel: PendingCancel | null;
   view: PartialOfferView;
 }
 
