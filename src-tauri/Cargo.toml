@@ -53,6 +53,7 @@ tauri-plugin-sharesheet = "0.0.1"
 tauri-plugin-klimper-xchonnect = { workspace = true }
 tauri-plugin-klimper-jingle = { workspace = true }
 tauri-plugin-klimper-storage = { workspace = true }
+tauri-plugin-klimper-partial-offers = { workspace = true }
 tauri-plugin-deep-link = { workspace = true }
 
 [dev-dependencies]
