@@ -1,7 +1,9 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import Container from '@/components/Container';
 import { MakeOfferConfirmationDialog } from '@/components/dialogs/MakeOfferConfirmationDialog';
 import { OfferCreationProgressDialog } from '@/components/dialogs/OfferCreationProgressDialog';
 import Header from '@/components/Header';
+import { PartialFillsOption } from '@/klimper/partial/PartialFillsOption';
 import { ReadOnlyButton } from '@/components/ReadOnlyButton';
 import { AssetSelector } from '@/components/selectors/AssetSelector';
 import { Button } from '@/components/ui/button';
@@ -297,6 +299,8 @@ export function MakeOffer() {
             </div>
           </div>
         </div>
+
+        <PartialFillsOption />
 
         <div className='mt-4 flex gap-2'>
           <Button

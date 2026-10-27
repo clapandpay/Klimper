@@ -26,6 +26,7 @@ vi.mock('@/lib/features', () => ({
   nftMintingEnabled: true,
   nftsEnabled: true,
   offersEnabled: true,
+  partialOffersEnabled: false,
   optionsEnabled: true,
   profilesEnabled: true,
   swapEnabled: true,
