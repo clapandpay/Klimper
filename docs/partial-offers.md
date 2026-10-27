@@ -113,16 +113,23 @@ which is ours. Sage's `view_offer`, `import_offer` and `get_offers` stay as they
 Swap-out: when Sage has endpoints, drop the plugin, import the JSON file's offers into Sage's
 offers once, and point `api.ts` at Sage's commands.
 
-### Xchonnect: Klimper-only (`tauri-plugin-klimper-xchonnect`), not done yet
+### Xchonnect: Klimper-only (`tauri-plugin-klimper-xchonnect`)
 
-All in a new `execute/partial_offer.rs`, using part 1:
+**Make: done** (TASK-165). `chia_createPartialOffer { offerAssets, requestAssets,
+minFillRequested, requiredFee?, expiresAt?, fee? }` in `execute/partial_offer.rs`: the wallet
+reads the terms with this plugin's `wallet::terms`, builds and signs the one-sided offer through
+Xchonnect's one approval, makes the partial offer with part 1 and answers only
+`{ offer: "partial1…", id, coinId, expiresAt? }`; the one-sided offer never leaves the wallet.
+The offer is kept in this plugin's store (`mine::remember`), so My partial offers lists and
+cancels it. `docs/xchonnect.md` has the details.
+
+**Take: still to do**, in the same file, using part 1:
 
 - `execute.rs:586` `decode_offer_bundle` takes only `offer1`. `check_offer` (:607) refuses a
   partial offer: wallet-kit's `simulate` marks the P2_1_OF_N coin `SpendKind::Unknown`, and the
   hint spend is not a placeholder by its parent. Recognise the partial coin in a pre-check.
-- `chia_takePartialOffer {offer, requestedAmount, fee}`; add it to `WALLET_BUILT_METHODS` (:52)
-  and raise `METHODS_REVISION` (:66). A `partial` flag on create (`execute/create_offer.rs`).
-  No cancel method yet.
+- `chia_takePartialOffer {offer, requestedAmount, fee}`; add it to `WALLET_BUILT_METHODS` and
+  raise `METHODS_REVISION` (3 since the make). No cancel method yet.
 - The limits (`AssetLimit`, `DailySpend`) apply to the fill `x`, not the whole offer. The price
   shown on approval is `initial_requested / initial_offered`.
 
@@ -172,7 +179,8 @@ matching the coin on chain; the stale first text refused before signing; filled 
 quarter; listed by the maker with two fills; the rest clawed back; balances taker +500,
 maker −500 CAT mojos. AC #1–#5 are met.
 
-Open: tapping through the screens in the running app; Xchonnect's take; posting a made offer
+Open: tapping through the screens in the running app; Xchonnect's take (the make is
+TASK-165); posting a made offer
 to nodexch from the make screen; nodexch's MCP `decode_offer` accepts only `offer1…`, so a
 `partial1…` cannot be cross-checked there yet (its indexer reads them).
 

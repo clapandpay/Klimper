@@ -224,6 +224,19 @@ impl SimWallet {
             .await;
     }
 
+    /// What the partial-offers plugin's functions take (TASK-165): this wallet, its key, the
+    /// simulated chain and its sync.
+    pub async fn partial_ctx(&self) -> tauri_plugin_klimper_partial_offers::wallet::WalletCtx {
+        tauri_plugin_klimper_partial_offers::wallet::WalletCtx {
+            wallet: self.wallet.clone(),
+            agg_sig: self.agg_sig,
+            master_sk: Some(self.master_sk.clone()),
+            peer: Some(self.peer().await),
+            sync: Some(self.sender.clone()),
+            prefix: "txch".to_string(),
+        }
+    }
+
     pub async fn wait_for_coins(&mut self) {
         self.consume_until(|event| matches!(event, SyncEvent::CoinsUpdated))
             .await;

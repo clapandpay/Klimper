@@ -31,6 +31,7 @@ import {
   LoanView,
   OfferView,
   OptionEffectView,
+  PartialTermsView,
   SpendPromptView,
   TradeLegView,
 } from './xchonnectPrompt';
@@ -471,6 +472,16 @@ function OfferCard({
   const amount = (leg: TradeLegView) => (
     <strong>{amountText(leg, facts, xchLabel)}</strong>
   );
+  if (offer.partial !== null) {
+    return (
+      <PartialOfferCard
+        offer={offer}
+        partial={offer.partial}
+        amount={amount}
+        closes={closes}
+      />
+    );
+  }
   return (
     <div className='xc-trade xc-option' data-testid='prompt-offer'>
       <div className='xc-option-title'>
@@ -550,6 +561,101 @@ function OfferCard({
   );
 }
 
+/**
+ * A partial offer the wallet makes (`chia_createPartialOffer`, TASK-165), from Klimper's
+ * `offer` key: what it gives for what it asks, that takers may fill any part from the least
+ * fill up, the fee each fill pays, and the expiry. Nothing is sent: Klimper signs it.
+ */
+function PartialOfferCard({
+  offer,
+  partial,
+  amount,
+  closes,
+}: {
+  readonly offer: OfferView;
+  readonly partial: PartialTermsView;
+  readonly amount: (leg: TradeLegView) => React.ReactNode;
+  readonly closes: string;
+}) {
+  const least = amount(partial.minFill);
+  const buys = amount(partial.minFillOffered);
+  const feePerFill =
+    partial.feePerFill === null ? null : amount(partial.feePerFill);
+  return (
+    <div className='xc-trade xc-option' data-testid='prompt-partial-offer'>
+      <div className='xc-option-title'>
+        <FileSignature className={ICON} aria-hidden='true' />
+        <Trans>Make a partial offer</Trans>
+      </div>
+      <div className='xc-option-lead'>
+        <Trans>You give</Trans>
+      </div>
+      <ul className='xc-option-lines' data-testid='offer-gives'>
+        {offer.gives.map((leg) => (
+          <Line
+            key={leg.label + leg.amount.toFixed(0)}
+            icon={<Send className={ICON} aria-hidden='true' />}
+            testId='offer-give'
+          >
+            {amount(leg)}
+          </Line>
+        ))}
+      </ul>
+      <div className='xc-trade-turn' aria-hidden='true'>
+        <ArrowDown className='h-4 w-4' />
+      </div>
+      <div className='xc-option-lead'>
+        <Trans>You ask for</Trans>
+      </div>
+      <ul className='xc-option-lines' data-testid='offer-asks'>
+        {offer.asks.map((leg) => (
+          <Line
+            key={leg.label + leg.amount.toFixed(0)}
+            icon={<HandCoins className={ICON} aria-hidden='true' />}
+            testId='offer-ask'
+          >
+            {amount(leg)}
+          </Line>
+        ))}
+      </ul>
+      <ul className='xc-option-lines' data-testid='partial-terms'>
+        <Line
+          icon={<HandCoins className={ICON} aria-hidden='true' />}
+          testId='partial-min-fill'
+        >
+          <Trans>
+            Takers may fill any part from {least} up (for {buys}), at the same
+            price, until it is all taken.
+          </Trans>
+        </Line>
+        {feePerFill !== null && (
+          <Line
+            icon={<Send className={ICON} aria-hidden='true' />}
+            testId='partial-fee-per-fill'
+          >
+            <Trans>Each fill pays a network fee of {feePerFill}.</Trans>
+          </Line>
+        )}
+        {offer.expiresAt !== null && (
+          <Line
+            icon={<CalendarClock className={ICON} aria-hidden='true' />}
+            testId='partial-expiry'
+          >
+            <Trans>Nobody can fill it from {closes}.</Trans>
+          </Line>
+        )}
+      </ul>
+      <div className='xc-option-note' data-testid='offer-note'>
+        <Trans>
+          Klimper signs a partial offer. Nothing moves until someone fills part
+          of it. It is listed under your partial offers, where you can cancel
+          it.
+        </Trans>
+      </div>
+    </div>
+  );
+}
+
 /** The option card(s) of a request: one loan, or one card per option effect. */
 export function OptionCards({
   view,
@@ -607,6 +713,9 @@ export function optionAssets(view: SpendPromptView): AssetRef[] {
       legs.push(option.terms.collateral, option.terms.strike);
     }
     legs.push(...view.offer.gives, ...view.offer.asks);
+    if (view.offer.partial !== null) {
+      legs.push(view.offer.partial.minFill, view.offer.partial.minFillOffered);
+    }
   }
   return legs;
 }
