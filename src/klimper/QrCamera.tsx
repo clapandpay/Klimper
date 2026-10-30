@@ -16,8 +16,12 @@ import { CameraOff, QrCode } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import './xchonnect/xchonnect.css';
 
-/** Longest edge a frame is scaled to before decoding: enough for a QR on a screen. */
-const DECODE_EDGE = 640;
+/**
+ * Longest edge a frame is scaled to before decoding. A partial offer's QR code has ~130
+ * modules a side (TASK-164); at 640 px each is ~2 px and jsQR misses it, so frames are decoded
+ * at the camera's full 1280.
+ */
+const DECODE_EDGE = 1280;
 /** Time between decodes. ~7 a second is instant to a person and cheap on a laptop. */
 const DECODE_INTERVAL_MS = 140;
 

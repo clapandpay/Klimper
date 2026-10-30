@@ -157,8 +157,12 @@ with those, as the reference CLI does. Offer methods for apps wait for Sage.
   wallet's coin events and every 10 s. Confirmed: "cancelled", with a toast. If a taker's
   fill confirms first (the offer has moved past that coin), the note is dropped and the offer
   is live again, with a toast. After 10 minutes still pending, "Cancel again" is offered.
-- No QR code for a partial offer: its text is several kilobytes, more than a QR code holds.
-  Copy it, or post it to nodexch or Splash.
+- QR code: the make screen shows one, and the offer's page and the list have a "QR code"
+  button. The text (~1.7 kB for a first offer) is written in capitals, which QR's alphanumeric
+  mode holds up to 4,296 characters; the Scan tab lowercases it again, and decodes camera
+  frames at 1280 px so a code this dense reads. Messengers cut long texts (Telegram at 4,096
+  characters), and a cut text fails as "invalid checksum": the offer's page says it was cut
+  off and points to the QR code.
 - Strings extracted into `src/locales/*/messages.po` (English only so far, like the rest of
   Klimper's own strings).
 
