@@ -1165,6 +1165,7 @@ export function promptHeadline(view: PromptView): React.ReactNode {
 
 /** The headline of a request about option contracts or a loan (TASK-140), or null. */
 function optionHeadline(view: SpendPromptView): React.ReactNode {
+  if (view.offer?.partial) return <Trans>Make a partial offer</Trans>;
   if (view.offer !== null) return <Trans>Make an offer</Trans>;
   if (view.loan !== null) {
     return view.loan.role === 'borrower' ? (

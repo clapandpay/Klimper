@@ -261,6 +261,19 @@ export interface OfferView {
   readonly asks: readonly TradeLegView[];
   /** Unix seconds from which nobody can take it (the earliest expiry of its options). */
   readonly expiresAt: number | null;
+  /** A partial offer (`chia_createPartialOffer`, TASK-165): the terms of each fill. */
+  readonly partial: PartialTermsView | null;
+}
+
+/**
+ * The terms of each fill of a partial offer the wallet makes (TASK-165): the least of what
+ * it asks one fill pays, what that buys of what it gives, and the network fee every fill must
+ * pay (`null`: none). Takers fill any part from the least up to what is left.
+ */
+export interface PartialTermsView {
+  readonly minFill: TradeLegView;
+  readonly minFillOffered: TradeLegView;
+  readonly feePerFill: TradeLegView | null;
 }
 
 export interface SpendPromptView {
@@ -836,7 +849,31 @@ function offerOf(
     value.expires_at === undefined || value.expires_at === null
       ? null
       : strictSeconds(value.expires_at);
-  return { gives, options: offered, asks, expiresAt };
+  const partial = partialTermsOf(value.partial, offered.length, xchLabel);
+  return { gives, options: offered, asks, expiresAt, partial };
+}
+
+/**
+ * The `partial` key of Klimper's `offer` (TASK-165). Absent is an ordinary offer; present, it
+ * must be exact and the offer must give no option, or the prompt is unreadable.
+ */
+function partialTermsOf(
+  value: unknown,
+  options: number,
+  xchLabel: string,
+): PartialTermsView | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value) || options > 0) throw new UnreadableAmount();
+  const feePerFill =
+    value.fee_per_fill === undefined || value.fee_per_fill === null
+      ? null
+      : optionLegOf(value.fee_per_fill, xchLabel);
+  if (feePerFill !== null && !feePerFill.isXch) throw new UnreadableAmount();
+  return {
+    minFill: optionLegOf(value.min_fill, xchLabel),
+    minFillOffered: optionLegOf(value.min_fill_offered, xchLabel),
+    feePerFill,
+  };
 }
 
 /**

@@ -338,3 +338,62 @@ export function openLoanOffer(extra: Record<string, unknown> = {}) {
     },
   });
 }
+
+/**
+ * A partial offer the wallet makes (`chia_createPartialOffer`, TASK-165): 300 wUSDC (and the
+ * mojo of the security coin) for 100 XCH, any part from 10 XCH up, 5 mojos per fill, until
+ * the expiry; signed, not sent.
+ */
+export function partialOffer(extra: Record<string, unknown> = {}) {
+  return optionPrompt({
+    method: 'chia_createPartialOffer',
+    options: [],
+    assets: [
+      [USDC, 300 * ONE_CAT, 0],
+      [XCH, 1, 0],
+    ],
+    outputs: [
+      {
+        asset: USDC,
+        amount: String(300 * ONE_CAT),
+        puzzle_hash: SETTLEMENT,
+        recipient: SETTLEMENT,
+        to_user: false,
+        option: null,
+      },
+      {
+        asset: XCH,
+        amount: '1',
+        puzzle_hash: SETTLEMENT,
+        recipient: SETTLEMENT,
+        to_user: false,
+        option: null,
+      },
+    ],
+    fee: 0,
+    // `offer.create` is a label wallet-kit does not verify.
+    kind: null,
+    extra: {
+      makes_offer: true,
+      linking: 'direct',
+      intent: {
+        kind: 'offer.create',
+        kind_verified: false,
+        verified: [{ type: 'fee', amount: '0' }],
+        recipients_complete: false,
+      },
+      offer: {
+        gives: [leg(USDC, 300 * ONE_CAT), leg(XCH, 1)],
+        options: [],
+        asks: [leg(XCH, 100 * ONE_XCH)],
+        expires_at: EXPIRY,
+        partial: {
+          min_fill: leg(XCH, 10 * ONE_XCH),
+          min_fill_offered: leg(USDC, 30 * ONE_CAT),
+          fee_per_fill: leg(XCH, 5),
+        },
+      },
+      ...extra,
+    },
+  });
+}

@@ -482,6 +482,16 @@ fn run(
                         params,
                         &|offer| approver.mark_offer(offer),
                     ),
+                    execute::CHIA_CREATE_PARTIAL_OFFER => {
+                        execute::partial_offer::create_partial_offer(
+                            state,
+                            &context,
+                            &signer,
+                            &approver,
+                            params,
+                            &|offer| approver.mark_offer(offer),
+                        )
+                    }
                     execute::options::CHIA_MINT_OPTION => execute::options::mint_option(
                         state,
                         &context,
@@ -651,7 +661,14 @@ pub fn record_released(
         serde_json::from_str::<Value>(result)
             .ok()
             .and_then(|value| Some(value.get("offer")?.as_str()?.to_owned()))
-            .and_then(|offer| chia_wallet_sdk::driver::decode_offer(&offer).ok())
+            .and_then(|offer| {
+                // A partial offer (`chia_createPartialOffer`) carries the user's spends too.
+                if chia_partial_offer::is_partial_offer(&offer) {
+                    chia_partial_offer::decode_partial_offer(&offer).ok()
+                } else {
+                    chia_wallet_sdk::driver::decode_offer(&offer).ok()
+                }
+            })
             .map(|bundle| bundle.coin_spends)
     } else {
         None
@@ -804,7 +821,8 @@ mod tests {
                 "signCoinSpends",
                 CHIA_SEND,
                 CHIA_TAKE_OFFER,
-                crate::execute::CHIA_CREATE_OFFER
+                crate::execute::CHIA_CREATE_OFFER,
+                crate::execute::CHIA_CREATE_PARTIAL_OFFER
             ]
         );
         assert!(!upgrade_methods(&mut old), "only once");
@@ -829,10 +847,48 @@ mod tests {
         old.methods_revision = 1;
         old.permissions.methods = vec![CHIA_SEND.to_owned()];
         assert!(upgrade_methods(&mut old));
-        assert_eq!(old.permissions.methods, [CHIA_SEND, CHIA_CREATE_OFFER]);
+        assert_eq!(
+            old.permissions.methods,
+            [
+                CHIA_SEND,
+                CHIA_CREATE_OFFER,
+                crate::execute::CHIA_CREATE_PARTIAL_OFFER
+            ]
+        );
         assert!(!old.permissions.methods.iter().any(|m| m == CHIA_TAKE_OFFER));
         assert!(!upgrade_methods(&mut old), "only once");
         assert!(crate::execute::is_wallet_built(CHIA_CREATE_OFFER));
+    }
+
+    /// A connection that already had `chia_createOffer` (revision 2) is given
+    /// `chia_createPartialOffer` once, if it may send; an offer method the user turned off
+    /// stays off (TASK-165).
+    #[test]
+    fn a_revision_two_connection_may_make_partial_offers_once_if_it_may_send() {
+        use crate::execute::{
+            CHIA_CREATE_OFFER, CHIA_CREATE_PARTIAL_OFFER, CHIA_SEND, upgrade_methods,
+        };
+        let mut old = record();
+        old.methods_revision = 2;
+        old.permissions.methods = vec![CHIA_SEND.to_owned()];
+        assert!(upgrade_methods(&mut old));
+        assert_eq!(
+            old.permissions.methods,
+            [CHIA_SEND, CHIA_CREATE_PARTIAL_OFFER]
+        );
+        assert!(
+            !old.permissions
+                .methods
+                .iter()
+                .any(|m| m == CHIA_CREATE_OFFER)
+        );
+        assert!(!upgrade_methods(&mut old), "only once");
+
+        let mut no_send = record();
+        no_send.methods_revision = 2;
+        no_send.permissions.methods = vec![CHIA_CREATE_OFFER.to_owned()];
+        assert!(!upgrade_methods(&mut no_send));
+        assert_eq!(no_send.permissions.methods, [CHIA_CREATE_OFFER]);
     }
 
     /// A record stored before the revision was kept reads as revision 0.

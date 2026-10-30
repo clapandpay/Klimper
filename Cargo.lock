@@ -8433,6 +8433,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chia-bls 0.36.1",
+ "chia-partial-offer",
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
@@ -8461,6 +8462,7 @@ dependencies = [
  "sqlx",
  "tauri",
  "tauri-plugin",
+ "tauri-plugin-klimper-partial-offers",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
