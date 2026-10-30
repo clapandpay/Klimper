@@ -33,11 +33,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   isPartialError,
+  viewErrorText,
   partialOffers,
   PartialOfferView,
   TakeResult,
 } from './api';
 import { clampPayment, price, quote, trimPayment } from './math';
+import { PartialOfferQrButton } from './PartialOfferQr';
 import { PartialOfferTerms } from './PartialOfferTerms';
 import { amountText, useSideAsset } from './useSideAsset';
 
@@ -63,10 +65,7 @@ export default function PartialOfferPage() {
       try {
         setView(await partialOffers.view(text));
       } catch (error) {
-        addError({
-          kind: 'invalid',
-          reason: isPartialError(error) ? error.message : String(error),
-        });
+        addError({ kind: 'invalid', reason: viewErrorText(error) });
         navigate('/offers');
       } finally {
         setLoading(false);
@@ -106,6 +105,9 @@ export default function PartialOfferPage() {
                   </Trans>
                 </p>
                 <CopyBox title={t`Partial offer`} value={view.offer} />
+                <div className='mt-2'>
+                  <PartialOfferQrButton offer={view.offer} />
+                </div>
               </CardContent>
             </Card>
           </>
