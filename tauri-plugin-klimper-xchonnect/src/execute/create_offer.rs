@@ -66,12 +66,12 @@ pub struct OfferParams {
 }
 
 /// An asset as an entry of `offerAssets` / `requestAssets` names it.
-enum Named {
+pub(super) enum Named {
     Fungible(AssetId),
     Option(Bytes32),
 }
 
-fn unsupported(what: &str) -> RpcError {
+pub(super) fn unsupported(what: &str) -> RpcError {
     error(
         codes::UNSUPPORTED_CONTENT,
         &format!("{what} cannot be offered or asked for here"),
@@ -82,7 +82,7 @@ fn unsupported(what: &str) -> RpcError {
 /// `assetId` as Sage's `make_offer` reads it: absent, `""` or `"xch"` is XCH; a 32-byte hex
 /// id (with or without `0x`) a CAT; an `option1…` id (bech32m, Sage's option id) an option.
 /// An NFT (`nft1…`) or anything else bech32m-shaped is refused as not supported here.
-fn named(value: Option<&Value>, key: &str) -> Result<Named, RpcError> {
+pub(super) fn named(value: Option<&Value>, key: &str) -> Result<Named, RpcError> {
     match value {
         None | Some(Value::Null) => Ok(Named::Fungible(AssetId::Xch)),
         Some(Value::String(s)) if s.is_empty() || s.eq_ignore_ascii_case("xch") => {
@@ -212,6 +212,10 @@ pub struct OfferView {
     /// website's `expiresAt` and the expiries of the options it gives, so nobody can buy an
     /// option that can no longer be used.
     pub expires_at: Option<u64>,
+    /// A partial offer (`chia_createPartialOffer`, TASK-165): the terms of each fill. Absent
+    /// for an ordinary offer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partial: Option<super::partial_offer::PartialView>,
 }
 
 fn leg(asset: AssetId, amount: u64) -> kit::option::OptionLeg {
@@ -407,6 +411,7 @@ pub async fn build_offer(
             options,
             asks: legs(&params.requested),
             expires_at,
+            partial: None,
         },
     }))
 }
@@ -484,7 +489,7 @@ pub fn offer_granted(
 /// `offer.create`, a label. The fee is claimed: the offer's own spends are the whole
 /// request, so its fee is the user's. Who is paid is not claimed: what the user gives goes
 /// to the settlement puzzle, and the approval shows it from the simulation.
-fn offer_intent(options: bool, fee: u64) -> Intent {
+pub(super) fn offer_intent(options: bool, fee: u64) -> Intent {
     Intent {
         kind: Some(
             if options {

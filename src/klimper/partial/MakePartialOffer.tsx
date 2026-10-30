@@ -22,6 +22,7 @@ import BigNumber from 'bignumber.js';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isPartialError, partialOffers } from './api';
+import { PartialOfferQr } from './PartialOfferQr';
 import { partialPair } from './pair';
 import { amountText, useSideAsset } from './useSideAsset';
 
@@ -236,10 +237,11 @@ function MakeForm({
             <CardContent className='space-y-3 text-sm'>
               <p className='text-muted-foreground'>
                 <Trans>
-                  Share this text. It is listed under Offers, where you can
-                  follow its fills and cancel it.
+                  Scan this code with Klimper, or share the text. It is listed
+                  under Offers, where you can follow its fills and cancel it.
                 </Trans>
               </p>
+              <PartialOfferQr offer={made} />
               <CopyBox title={t`Partial offer`} value={made} />
               <Button onClick={done}>
                 <Trans>Done</Trans>

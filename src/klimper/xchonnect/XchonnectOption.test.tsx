@@ -343,6 +343,67 @@ describe('an open loan offer (TASK-142)', () => {
   });
 });
 
+describe('a partial offer (TASK-165)', () => {
+  it('shows what it gives and asks, the least fill, the fee per fill and the expiry', async () => {
+    knowUsdc();
+    const prompt = f.partialOffer();
+    const view = show(prompt);
+    expect(view.kind === 'spend' && view.offer?.partial?.minFill.isXch).toBe(
+      true,
+    );
+    const card = screen.getByTestId('prompt-partial-offer');
+    await within(card).findAllByText(/wUSDC 3c3c3c3c/);
+    expect(screen.queryByTestId('prompt-offer')).toBeNull();
+    const gives = screen.getAllByTestId('offer-give').map(text);
+    expect(gives[0]).toContain('300 wUSDC 3c3c3c3c');
+    expect(gives[1]).toContain('1 mojo');
+    expect(text(screen.getByTestId('offer-ask'))).toContain('100 XCH');
+    const least = text(screen.getByTestId('partial-min-fill'));
+    expect(least).toContain('any part from 10 XCH up');
+    expect(least).toContain('30 wUSDC 3c3c3c3c');
+    expect(text(screen.getByTestId('partial-fee-per-fill'))).toContain(
+      '5 mojos',
+    );
+    expect(text(screen.getByTestId('partial-expiry'))).toContain(
+      whenText(f.EXPIRY),
+    );
+    expect(text(screen.getByTestId('offer-note'))).toContain(
+      'Klimper signs a partial offer',
+    );
+    expect(screen.getByTestId('prompt-makes-offer')).toBeTruthy();
+    expect(headline(prompt)).toBe('Make a partial offer');
+  });
+
+  it('shows no fee per fill or expiry when there is none', () => {
+    const offer = {
+      gives: [f.leg(f.USDC, 300 * f.ONE_CAT), f.leg(f.XCH, 1)],
+      options: [],
+      asks: [f.leg(f.XCH, 100 * f.ONE_XCH)],
+      expires_at: null,
+    };
+    const terms = {
+      min_fill: f.leg(f.XCH, 10 * f.ONE_XCH),
+      min_fill_offered: f.leg(f.USDC, 30 * f.ONE_CAT),
+    };
+    show(f.partialOffer({ offer: { ...offer, partial: terms } }));
+    expect(screen.getByTestId('partial-min-fill')).toBeTruthy();
+    expect(screen.queryByTestId('partial-fee-per-fill')).toBeNull();
+    expect(screen.queryByTestId('partial-expiry')).toBeNull();
+    cleanup();
+
+    // Malformed terms, or a fee per fill in anything but XCH: unreadable.
+    const noLeast = { min_fill_offered: terms.min_fill_offered };
+    expect(
+      readPrompt(f.partialOffer({ offer: { ...offer, partial: noLeast } }))
+        .kind,
+    ).toBe('unreadable');
+    const catFee = { ...terms, fee_per_fill: f.leg(f.USDC, 5) };
+    expect(
+      readPrompt(f.partialOffer({ offer: { ...offer, partial: catFee } })).kind,
+    ).toBe('unreadable');
+  });
+});
+
 describe('an option asset', () => {
   it('is counted whole and named by its id, never as XCH', () => {
     const view = readPrompt(f.optionPrompt());

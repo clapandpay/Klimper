@@ -39,6 +39,7 @@ import {
 import { matchesOfferFilter } from './filter';
 import { percent } from './math';
 import { FilledBar, statusLabel } from './PartialOfferTerms';
+import { PartialOfferQrButton } from './PartialOfferQr';
 import { amountText, useSideAsset } from './useSideAsset';
 
 /** How often the list looks again while a cancel waits for the chain. */
@@ -253,6 +254,7 @@ function MyPartialOfferRow({
       )}
       <div className='flex flex-wrap gap-2'>
         <CopyButton value={view.offer} />
+        {live && <PartialOfferQrButton offer={view.offer} />}
         {(live || stuck) && (
           <ReadOnlyButton
             requiresSigning

@@ -309,6 +309,58 @@ and is gone.
      XCH for the CAT) and an option with a CAT for XCH, made through Klimper's path and taken by a
      second wallet with `chia_takeOffer` on the simulated chain (the taker holds the option and
      the principal, the maker the asset asked), a plain XCH-for-CAT offer; the refusals above.
+     **Making partial offers** (TASK-165, `src/execute/partial_offer.rs`): a partial offer
+     (CHIP-0052, `partial1…`, `docs/partial-offers.md`) made in the wallet for a website such as
+     Pengui's "Allow partial fills". Klimper's own method, not a flag on `chia_createOffer`: a
+     Klimper without it answers method-not-found instead of making a whole offer.
+
+   | Method                    | Params                                                                                                                                                                                                                                         | Answer                                                                                                                                                                                    | Intent kind    |
+   | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+   | `chia_createPartialOffer` | `offerAssets: [{assetId?, amount}]`, `requestAssets: [{assetId?, amount}]` (exactly one each), `minFillRequested` (mojos of the requested asset), `requiredFee?` (mojos of XCH every fill pays), `expiresAt?` (unix seconds), `fee?` (ignored) | `{ offer: "partial1…", id, coinId, expiresAt? }` (`id`: plain hex of the sorted bundle's name, as `chia_createOffer`'s; `coinId`: the first partial coin, `0x` hex); nothing is broadcast | `offer.create` |
+   - **Params**: read like `chia_createOffer`'s (same `assetId` and amount rules, other keys
+     ignored), but exactly one entry a side, XCH or a CAT (an option or NFT: `4101`
+     `unsupported_asset`), not the same asset. `minFillRequested` from 1 to the requested
+     amount, and it must buy something at the price (the driver's `PartialOfferTerms::check`,
+     its words as the message, reason `minFillRequested`). `requiredFee` 0 is none.
+     `expiresAt` 0 or not after now is refused. Malformed: `4000` with the field as reason
+     (`offerAssets`, `requestAssets`, `minFillRequested`, `requiredFee`, `expiresAt`, `fee`,
+     `json`); all of this before anything is built.
+   - **Build**: the terms as Klimper's own Make partial offer reads them
+     (`tauri-plugin-klimper-partial-offers`' `wallet::terms`: the maker is the wallet's change
+     puzzle, refused unless standard; a CAT's revocation from the wallet), then Sage's
+     `make_offer` of the one-sided offer (the offered asset plus one mojo of XCH, for
+     nothing, with Klimper's own fee), key-free. Then the sign guard, Sage's summary against
+     the simulation, wallet-kit's submit (released, `OfferOnly`: nothing is sent), one
+     approval, one signature; the signed one-sided offer becomes the partial offer with the
+     driver's `make_partial_offer`. **The one-sided offer never leaves the wallet**: handed
+     out, anyone could take it. In the partial offer its spends are bound by the security
+     coin, whose spend asserts the settlement payments into the partial coin and whose
+     signature is summed with the user's. The user's coins in it go into the record of
+     signed coins as released before the answer leaves (`record_released` reads `partial1…`
+     texts too). More than the wallet holds is `4003` `build_failed` and counts towards the
+     failed-build limit.
+   - **Kept**: the offer goes into the wallet's own partial offers
+     (`<network>-klimper-partial-offers.json`, `mine::remember`, as Make partial offer keeps
+     it): My partial offers lists it, follows its fills and can cancel it. It is not imported
+     into Sage's offers (Sage would list the one-sided offer as an offer for nothing), so its
+     coins are not locked; spending one cancels the offer before its first fill.
+   - **Permissions**: granted like `chia_createOffer`: in a new connection's default grant,
+     and a connection paired before it existed is given it once if it may use `chia_send`
+     (`METHODS_REVISION` 3; a method the user turned off stays off). The offered amount and
+     the mojo count against the per-request and per-day limits. Klimper has no agent rules
+     yet (TASK-143.01); when it has, an agent's `chia_createPartialOffer` is refused with
+     `action_not_allowed`.
+   - **Approval**: Klimper's `offer` key as for `chia_createOffer` (`gives`: the offered amount
+     and the mojo; `asks`; `expires_at`) with `partial`: `min_fill` (the least of the requested
+     asset one fill pays), `min_fill_offered` (what it buys, rounded down as the puzzle does)
+     and `fee_per_fill` (XCH, or null). The screen shows "Make a partial offer": what is given
+     for what is asked, "any part from <least> up", the fee per fill, the expiry.
+   - **Tests**: `src/execute/partial_offer_tests.rs`: CAT for XCH and XCH for CAT (with a fee per
+     fill and an expiry) made through Klimper's path, the answer checked, the text read back
+     with the driver, kept and listed in My partial offers, and filled in two parts by a second
+     wallet on the simulated chain; more than the wallet holds; malformed params and the terms
+     the driver refuses (two assets, the same asset, least fill 0, above the requested amount
+     or buying nothing, a bad expiry).
 
 4. **Sealed and released** (xchonnect spec 11.2, `src/signed_coins.rs`). Whether one of the
    user's spends could be taken out of a bundle and used without the others depends on who
@@ -322,7 +374,7 @@ and is gone.
      `linking: "sealed"`).
    - **Released**: everything else — a `signCoinSpends` (the signature goes to the
      website), a website's own bundle (`xchonnect_submitCoinSpends`), a loan request or any
-     offer the wallet makes (`chia_createOffer`). Each of the user's spends must then itself assert what the user is paid, or the
+     offer the wallet makes (`chia_createOffer`, `chia_createPartialOffer`). Each of the user's spends must then itself assert what the user is paid, or the
      request is refused.
      A request is sealed only if no coin of the user's it spends has a signature outside the
      wallet, and only while the wallet never makes one of a sealed bundle's signatures again

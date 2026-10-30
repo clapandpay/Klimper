@@ -4,6 +4,7 @@
 // `tauri-plugin-klimper-partial-offers`. When Sage ships partial offers, this file points at
 // Sage's commands and the screens stay as they are.
 
+import { t } from '@lingui/core/macro';
 import { invoke } from '@tauri-apps/api/core';
 
 /** One side's asset. `asset_id` is null for XCH. */
@@ -128,3 +129,15 @@ export const partialOffers = {
   list: () => call<MyPartialOffer[]>('get_partial_offers'),
   forget: (id: string) => call<boolean>('delete_partial_offer', { id }),
 };
+
+/**
+ * Why a partial offer could not be read. A bad checksum almost always means the text was cut
+ * on the way (messengers split long texts), so say that rather than the bech32 error.
+ */
+export function viewErrorText(error: unknown): string {
+  if (!isPartialError(error)) return String(error);
+  if (error.code === 'not_partial' && /checksum/i.test(error.message)) {
+    return t`This partial offer text is incomplete or changed: it was probably cut off when it was sent. Scan its QR code with Klimper instead, or copy the whole text again.`;
+  }
+  return error.message;
+}
