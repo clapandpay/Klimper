@@ -39,6 +39,7 @@ vi.mock('theme-o-rama', () => ({
 const pendingApprovals = vi.fn();
 const resolveApproval = vi.fn().mockResolvedValue(null);
 const cancelApproval = vi.fn().mockResolvedValue(null);
+const chooseFee = vi.fn().mockResolvedValue(null);
 const listSessions = vi.fn().mockResolvedValue([]);
 const handlers = new Map<string, (payload: unknown) => void>();
 
@@ -48,6 +49,7 @@ vi.mock('./xchonnect', () => ({
     resolveApproval: (id: string, approved: boolean) =>
       resolveApproval(id, approved),
     cancelApproval: (id: string) => cancelApproval(id),
+    chooseFee: (id: string, choice: string) => chooseFee(id, choice),
     listSessions: () => listSessions(),
   },
   XCHONNECT_EVENTS: {
@@ -126,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resolveApproval.mockResolvedValue(null);
   cancelApproval.mockResolvedValue(null);
+  chooseFee.mockResolvedValue(null);
   listSessions.mockResolvedValue([]);
   pendingApprovals.mockResolvedValue([]);
 });
@@ -792,5 +795,110 @@ describe('one answer per request', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
     await waitFor(() => expect(resolveApproval).toHaveBeenCalledTimes(1));
     expect(resolveApproval).toHaveBeenCalledWith('a1', true);
+  });
+});
+
+describe('a fee the website suggests', () => {
+  function sent(feeHint: Record<string, unknown>) {
+    return {
+      ...spendPrompt(),
+      type: 'submit_coin_spends',
+      method: 'chia_send',
+      wallet_built: true,
+      fee_hint: feeHint,
+    };
+  }
+  const hint = {
+    suggested: '1000000000',
+    default: '500000',
+    chosen: 'default',
+    unaffordable: false,
+  };
+
+  it('offers it next to the default, which is selected', async () => {
+    pendingApprovals.mockResolvedValue([request(sent(hint))]);
+    renderScreen(<XchonnectApproval />);
+
+    const suggested = await waitFor(() => screen.getByTestId('fee-suggested'));
+    expect(suggested.textContent).toBe('This site suggests 0.001 XCH');
+    expect(suggested.getAttribute('aria-pressed')).toBe('false');
+    const own = screen.getByTestId('fee-default');
+    expect(own.textContent).toBe('Your default 0.0000005 XCH');
+    expect(own.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('fee-unaffordable')).toBeNull();
+  });
+
+  it('asks the wallet to rebuild with it on a tap, never answers, and holds the slider', async () => {
+    // The rebuilt request is still on its way.
+    chooseFee.mockReturnValue(new Promise<null>(() => undefined));
+    pendingApprovals.mockResolvedValue([request(sent(hint))]);
+    renderScreen(<XchonnectApproval />);
+
+    fireEvent.click(await waitFor(() => screen.getByTestId('fee-suggested')));
+    await waitFor(() =>
+      expect(chooseFee).toHaveBeenCalledWith('a1', 'suggested'),
+    );
+    const approve = screen.getByRole('button', { name: 'Approve and send' });
+    expect(approve).toHaveProperty('disabled', true);
+    expect(screen.getByTestId('fee-default')).toHaveProperty('disabled', true);
+    fireEvent.click(approve);
+    fireEvent.click(screen.getByTestId('fee-default'));
+    expect(chooseFee).toHaveBeenCalledTimes(1);
+    expect(resolveApproval).not.toHaveBeenCalled();
+  });
+
+  it('keeps the screen while the rebuilt request is on its way, then shows it', async () => {
+    pendingApprovals.mockResolvedValue([request(sent(hint))]);
+    renderScreen(<XchonnectApproval />);
+    fireEvent.click(await waitFor(() => screen.getByTestId('fee-suggested')));
+    await waitFor(() => expect(chooseFee).toHaveBeenCalled());
+
+    handlers.get('approval-resolved')?.({
+      id: 'a1',
+      approved: false,
+      replaced: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('nothing-waiting')).toBeNull();
+    expect(screen.queryByTestId('go-back-notice')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Approve and send' }),
+    ).toHaveProperty('disabled', true);
+
+    // The rebuilt send: a new approval for the same request.
+    handlers.get('approval')?.({
+      ...request(sent({ ...hint, chosen: 'suggested' }), 'a2'),
+      requestId: 'r-a1',
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('fee-suggested').getAttribute('aria-pressed'),
+      ).toBe('true'),
+    );
+    expect(screen.queryByTestId('queue-count')).toBeNull();
+    const approve = screen.getByRole('button', { name: 'Approve and send' });
+    await waitFor(() => expect(approve).toHaveProperty('disabled', false), {
+      timeout: 2000,
+    });
+    fireEvent.click(approve);
+    await waitFor(() =>
+      expect(resolveApproval).toHaveBeenCalledWith('a2', true),
+    );
+  });
+
+  it('says so when the suggestion could not be afforded', async () => {
+    pendingApprovals.mockResolvedValue([
+      request(sent({ ...hint, unaffordable: true })),
+    ]);
+    renderScreen(<XchonnectApproval />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('fee-unaffordable').textContent).toBe(
+        'The suggested fee could not be afforded; your default is used',
+      ),
+    );
+    expect(screen.getByTestId('fee-default').getAttribute('aria-pressed')).toBe(
+      'true',
+    );
   });
 });

@@ -198,6 +198,12 @@ export const xchonnect = {
   /** Withdraw a request: the website is told it was cancelled (4102), not rejected. */
   cancelApproval: (approvalId: string) =>
     call<null>('cancel_approval', { approvalId }),
+  /**
+   * Rebuild a send with the website's suggested fee or the user's default. The prompt is
+   * withdrawn (`replaced: true`) and a new one for the same request follows. Never signs.
+   */
+  chooseFee: (approvalId: string, choice: 'default' | 'suggested') =>
+    call<null>('choose_fee', { approvalId, choice }),
   pushStatus: () => call<PushStatus>('push_status'),
 };
 
@@ -212,7 +218,10 @@ export const XCHONNECT_EVENTS = {
   request: 'klimper-xchonnect://request',
   /** An `Approval`: something is waiting for the user. */
   approval: 'klimper-xchonnect://approval',
-  /** `{ id, approved }` — answered, withdrawn or timed out. */
+  /**
+   * `{ id, approved, replaced? }` — answered, withdrawn or timed out. `replaced: true`: withdrawn
+   * for a fee choice, a new approval with the same `requestId` follows.
+   */
   approvalResolved: 'klimper-xchonnect://approval-resolved',
   /** `{ dapp, method, transactionId, status }` — Klimper broadcast a transaction. */
   sent: 'klimper-xchonnect://sent',

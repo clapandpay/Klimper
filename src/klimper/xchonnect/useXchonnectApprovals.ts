@@ -17,10 +17,14 @@
 // background or the phone is locked, when the webview hears no event. The queue is read again
 // whenever the app comes to the front, and once more a moment later, for a request the
 // message loop fetches right as the app resumes.
+//
+// A fee choice (`chooseFee`) withdraws the approval on screen (`replaced: true`) and the
+// wallet rebuilds the send: the approval stays in its place until the new one for the same
+// request arrives and takes it, so the screen neither closes nor reads as an answer.
 
 import { useBiometric } from '@/hooks/useBiometric';
 import { xchonnectEnabled } from '@/lib/features';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Approval,
   onXchonnectEvent,
@@ -46,6 +50,9 @@ export interface ApprovalQueue {
 /** The second look after coming to the front. */
 const RELOAD_AGAIN_MS = 1500;
 
+/** How long a replaced approval waits for its rebuilt send before it is dropped. */
+const REPLACE_WAIT_MS = 30_000;
+
 /** How an answer ended: sent, no longer waiting, or not confirmed by Face ID. */
 export type Answered = 'answered' | 'gone' | 'unconfirmed';
 
@@ -53,10 +60,22 @@ export function useXchonnectApprovals(): ApprovalQueue {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  /** Approvals withdrawn for a fee choice, by id, while their rebuilt send is on its way. */
+  const replacing = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
   const reload = useCallback(async () => {
     if (!xchonnectEnabled) return;
     try {
-      setApprovals(await xchonnect.pendingApprovals());
+      const pending = await xchonnect.pendingApprovals();
+      // A replaced one stays until its successor is listed (or it waited too long).
+      setApprovals((current) => [
+        ...current.filter(
+          (item) =>
+            replacing.current.has(item.id) &&
+            !pending.some((next) => next.requestId === item.requestId),
+        ),
+        ...pending,
+      ]);
     } catch (problem) {
       setError(String(problem));
     }
@@ -73,24 +92,50 @@ export function useXchonnectApprovals(): ApprovalQueue {
     };
     document.addEventListener('visibilitychange', onFront);
     window.addEventListener('focus', onFront);
+    const waits = replacing.current;
+    const stopWaiting = (id: string) => {
+      clearTimeout(waits.get(id));
+      waits.delete(id);
+    };
+    const drop = (id: string) => {
+      stopWaiting(id);
+      setApprovals((current) => current.filter((item) => item.id !== id));
+    };
     const subscriptions = [
       onXchonnectEvent<Approval>(XCHONNECT_EVENTS.approval, (approval) =>
-        setApprovals((current) =>
-          current.some((item) => item.id === approval.id)
-            ? current
-            : [...current, approval],
-        ),
+        setApprovals((current) => {
+          if (current.some((item) => item.id === approval.id)) return current;
+          // The rebuilt send of a replaced approval takes its place in the queue.
+          const replaced = current.findIndex(
+            (item) =>
+              waits.has(item.id) && item.requestId === approval.requestId,
+          );
+          // Its wait timer is left to run out: dropping an id no longer queued is a no-op.
+          if (replaced === -1) return [...current, approval];
+          return current.map((item, index) =>
+            index === replaced ? approval : item,
+          );
+        }),
       ),
-      onXchonnectEvent<{ id: string }>(
+      onXchonnectEvent<{ id: string; replaced?: boolean }>(
         XCHONNECT_EVENTS.approvalResolved,
-        (payload) =>
-          setApprovals((current) =>
-            current.filter((item) => item.id !== payload.id),
-          ),
+        (payload) => {
+          if (payload.replaced === true) {
+            stopWaiting(payload.id);
+            waits.set(
+              payload.id,
+              setTimeout(() => drop(payload.id), REPLACE_WAIT_MS),
+            );
+            return;
+          }
+          drop(payload.id);
+        },
       ),
     ];
     return () => {
       clearTimeout(later);
+      for (const timer of waits.values()) clearTimeout(timer);
+      waits.clear();
       document.removeEventListener('visibilitychange', onFront);
       window.removeEventListener('focus', onFront);
       for (const subscription of subscriptions) {

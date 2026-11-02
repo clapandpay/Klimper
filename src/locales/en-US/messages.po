@@ -6252,6 +6252,10 @@ msgstr "The request from {dapp} was no longer waiting. Nothing was signed."
 msgid "The six digits were never confirmed, so this connection cannot be used."
 msgstr "The six digits were never confirmed, so this connection cannot be used."
 
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:156
+msgid "The suggested fee could not be afforded; your default is used"
+msgstr "The suggested fee could not be afforded; your default is used"
+
 #: src/components/confirmations/CancelOfferConfirmation.tsx:49
 msgid "The transaction fee of {fee} applies to each offer being canceled."
 msgstr "The transaction fee of {fee} applies to each offer being canceled."
@@ -6582,6 +6586,10 @@ msgstr "This screen could not be shown. Your wallet and your money are not affec
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:912
 msgid "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
 msgstr "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:140
+msgid "This site suggests {suggested} {xchLabel}"
+msgstr "This site suggests {suggested} {xchLabel}"
 
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:317
 msgid "This spend uses a contract Klimper cannot read"
@@ -7820,6 +7828,10 @@ msgstr "Your balance changes by"
 #: src/klimper/pouch/CoinPouch.tsx:468
 msgid "Your coins"
 msgstr "Your coins"
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:146
+msgid "Your default {ownDefault} {xchLabel}"
+msgstr "Your default {ownDefault} {xchLabel}"
 
 #: src/klimper/MyHandles.tsx:41
 msgid "Your handles"

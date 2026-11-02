@@ -428,27 +428,161 @@ pub fn own_fee() -> u64 {
 /// user's default fee ([`set_own_fee`]), and never a figure a website picked (xchonnect spec
 /// 11.1.1 and 11.2: wallet-kit credits a sealed bundle's fee as the wallet's, and a host
 /// MUST NOT build a sealed bundle with a fee from a dApp's parameters). A website's `fee`
-/// is still read, so a malformed one is refused as before, and then ignored: not even a
-/// capped hint. It is passed to wallet-kit as `SubmitRequest::wallet_fee`, and the approval
-/// shows the fee the bundle pays.
+/// is still read, so a malformed one is refused as before, and then ignored. It is passed
+/// to wallet-kit as `SubmitRequest::wallet_fee`, and the approval shows the fee the bundle
+/// pays. `chia_send` alone shows a website's fee as a suggestion ([`fee_hint`]).
 fn wallet_fee(params: &Value) -> Result<u64, RpcError> {
-    fee_of(params, own_fee())
+    amount_param(params, "fee")?;
+    Ok(own_fee())
 }
 
-/// [`wallet_fee`] with the wallet's fee given: the website's `fee` checked, then dropped.
-fn fee_of(params: &Value, own: u64) -> Result<u64, RpcError> {
-    amount_param(params, "fee")?;
-    Ok(own)
+/// Which fee the user picked on a `chia_send` approval: the only thing the webview sends
+/// back about a fee. The figure itself is never the webview's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeeChoice {
+    /// The user's default fee ([`own_fee`]). Pre-selected.
+    Default,
+    /// The website's `fee`, capped at [`MAX_FEE`].
+    Suggested,
+}
+
+/// A `chia_send`'s `fee`, as a suggestion the approval shows next to the user's default.
+/// A malformed one is refused (4000); none is shown for 0, for more than [`MAX_FEE`] or for
+/// the default itself. One below the default is shown: the user may pay less.
+fn fee_hint(params: &Value) -> Result<Option<u64>, RpcError> {
+    hint_of(params, own_fee())
+}
+
+/// [`fee_hint`] with the user's default fee given.
+fn hint_of(params: &Value, own: u64) -> Result<Option<u64>, RpcError> {
+    Ok(amount_param(params, "fee")?.filter(|fee| *fee != 0 && *fee <= MAX_FEE && *fee != own))
+}
+
+/// The fee a send is built with: the user's default, or the suggestion they tapped, capped
+/// again whatever the hint says.
+fn fee_for(choice: FeeChoice, hint: Option<u64>) -> u64 {
+    match choice {
+        FeeChoice::Default => own_fee(),
+        FeeChoice::Suggested => capped_fee(hint.unwrap_or(own_fee())),
+    }
+}
+
+/// The approval's side of a fee suggestion: what to show with the next prompt, and what the
+/// user tapped on it. Usually the same object as the `Approver`.
+pub trait FeeChooser {
+    /// Show `hint` (if any) next to the default on the next prompt, with `chosen` selected.
+    /// `unaffordable`: the suggestion could not be built, so the default is used.
+    fn show(&self, hint: Option<u64>, chosen: FeeChoice, unaffordable: bool);
+    /// The fee the user tapped on the prompt just answered, instead of approving it. Taken:
+    /// a second call returns `None`.
+    fn taken_choice(&self) -> Option<FeeChoice>;
+}
+
+/// The most times one send is built again with another fee before it is taken as a no
+/// (4002): a user tapping back and forth is not asked forever.
+const MAX_FEE_SWAPS: usize = 6;
+
+/// One build of a send with a given fee, ready for wallet-kit: its spends and the intent
+/// they are held to.
+#[derive(Debug)]
+pub struct BuiltSend {
+    pub spends: Vec<CoinSpend>,
+    pub intent: Intent,
+}
+
+fn build_failed() -> RpcError {
+    error(
+        codes::SPENDABLE_BALANCE_EXCEEDED,
+        "the wallet could not build this send",
+        Some("build_failed"),
+    )
+}
+
+/// Submit a send, built again whenever the user taps the other fee: the fee is part of the
+/// build, so a tap never changes a prompt already on screen, it answers it and a fresh one
+/// for the new build is shown (the prompt shown is the prompt signed). Only an approval
+/// signs. `build(fee)` is `Ok(None)` when the wallet cannot build the send with that fee.
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub fn submit_send(
+    ctx: &RequestContext<'_>,
+    signer: &dyn kit::Signer,
+    approver: &dyn kit::Approver,
+    broadcaster: &dyn Broadcaster,
+    chooser: &dyn FeeChooser,
+    hint: Option<u64>,
+    build: &mut dyn FnMut(u64) -> Result<Option<BuiltSend>, RpcError>,
+) -> Result<String, RpcError> {
+    let mut choice = FeeChoice::Default;
+    let mut unaffordable = false;
+    let mut swaps = 0;
+    loop {
+        let fee = fee_for(choice, hint);
+        let Some(BuiltSend { spends, intent }) = build(fee)? else {
+            if swaps == 0 {
+                // A send that cannot be built is answered without a prompt, which tells the
+                // dApp the wallet cannot afford it. A few are normal; a run of them is a
+                // search for the balance.
+                failed_builds::record(ctx.dapp, ctx.now);
+                return Err(build_failed());
+            }
+            if choice == FeeChoice::Default {
+                return Err(build_failed());
+            }
+            // The user's own tap made it unaffordable: asked again with the default, and
+            // the dApp learns nothing of it.
+            choice = FeeChoice::Default;
+            unaffordable = true;
+            continue;
+        };
+        chooser.show(hint, choice, unaffordable);
+        // Klimper broadcasts the bundle itself and answers only its id and status: sealed
+        // (xchonnect spec 11.2). The caller's broadcaster records its coins.
+        let submitted = kit::submit(
+            SubmitRequest {
+                method: CHIA_SEND,
+                spends,
+                other_signature: None,
+                intent: Some(&intent),
+                wallet_built: true,
+                // Klimper's own fee ([`fee_for`]), which the bundle reserves.
+                wallet_fee: fee,
+                signatures_released: false,
+            },
+            ctx,
+            signer,
+            approver,
+            broadcaster,
+        );
+        match submitted {
+            Err(e) if e.code == codes::USER_REJECTED => {
+                let Some(taken) = chooser.taken_choice() else {
+                    return Err(e);
+                };
+                swaps += 1;
+                if swaps > MAX_FEE_SWAPS {
+                    return Err(e);
+                }
+                choice = taken;
+                unaffordable = false;
+            }
+            outcome => return outcome.map(|s| s.to_json()),
+        }
+    }
 }
 
 /// `chia_send { address, amount, fee?, assetId?, memos? }`: Sage builds the send from the
-/// wallet's own coins, Klimper checks, asks once, signs once and broadcasts.
+/// wallet's own coins, Klimper checks, asks once, signs once and broadcasts. A website's
+/// `fee` is shown as a suggestion ([`fee_hint`]); tapping it builds the send again
+/// ([`submit_send`]).
 pub fn send(
     state: &AppState,
     ctx: &RequestContext<'_>,
     signer: &dyn kit::Signer,
     approver: &dyn kit::Approver,
     broadcaster: &dyn Broadcaster,
+    chooser: &dyn FeeChooser,
     params_json: &str,
 ) -> Result<String, RpcError> {
     let params: Value = serde_json::from_str(params_json).map_err(|_| invalid("json"))?;
@@ -461,15 +595,11 @@ pub fn send(
     if amount == 0 {
         return Err(invalid("amount"));
     }
-    let fee = wallet_fee(&params)?;
+    let hint = fee_hint(&params)?;
     // A send that cannot be built is answered without a prompt, which tells the dApp the
     // wallet cannot afford it. A few are normal; a run of them is a search for the balance.
     if failed_builds::too_many(ctx.dapp, ctx.now) {
-        return Err(error(
-            codes::SPENDABLE_BALANCE_EXCEEDED,
-            "the wallet could not build this send",
-            Some("build_failed"),
-        ));
+        return Err(build_failed());
     }
     let memos: Vec<String> = params
         .get("memos")
@@ -488,105 +618,96 @@ pub fn send(
                 .map_err(|_| invalid("assetId"))?,
         ),
     };
-
-    // Build from the wallet's own coins; nothing is signed or submitted here.
-    let to_address = address.clone();
     let cat = match asset {
         AssetId::Cat(id) => Some(id),
         AssetId::Xch => None,
         _ => return Err(invalid("assetId")),
     };
-    let built = on_sage(state, async move |sage| match cat {
-        None => {
-            sage.send_xch(SendXch {
-                address: to_address,
-                amount: Amount::u64(amount),
-                fee: Amount::u64(fee),
-                memos,
-                clawback: None,
-                auto_submit: false,
-            })
-            .await
-        }
-        Some(id) => {
-            sage.send_cat(SendCat {
-                asset_id: hex::encode(id),
-                address: to_address,
-                amount: Amount::u64(amount),
-                fee: Amount::u64(fee),
-                include_hint: true,
-                memos,
-                clawback: None,
-                auto_submit: false,
-            })
-            .await
-        }
-    })
-    .map_err(|e| {
-        // Sage's own words stay here: they name balances and coins, and a dApp could probe
-        // the wallet with them without the user ever seeing a prompt.
-        tracing::info!("xchonnect: chia_send could not be built: {e}");
-        failed_builds::record(ctx.dapp, ctx.now);
-        error(
-            codes::SPENDABLE_BALANCE_EXCEEDED,
-            "the wallet could not build this send",
-            Some("build_failed"),
-        )
-    })?;
-    let puzzle_hash = on_sage(state, async move |sage| sage.parse_address(address))
-        .map_err(|_| invalid("address"))?;
+    // Build from the wallet's own coins with this fee; nothing is signed or submitted here.
+    let mut build = |fee: u64| -> Result<Option<BuiltSend>, RpcError> {
+        let to_address = address.clone();
+        let memos = memos.clone();
+        let built = on_sage(state, async move |sage| match cat {
+            None => {
+                sage.send_xch(SendXch {
+                    address: to_address,
+                    amount: Amount::u64(amount),
+                    fee: Amount::u64(fee),
+                    memos,
+                    clawback: None,
+                    auto_submit: false,
+                })
+                .await
+            }
+            Some(id) => {
+                sage.send_cat(SendCat {
+                    asset_id: hex::encode(id),
+                    address: to_address,
+                    amount: Amount::u64(amount),
+                    fee: Amount::u64(fee),
+                    include_hint: true,
+                    memos,
+                    clawback: None,
+                    auto_submit: false,
+                })
+                .await
+            }
+        });
+        let built = match built {
+            Ok(built) => built,
+            Err(e) => {
+                // Sage's own words stay here: they name balances and coins, and a dApp could
+                // probe the wallet with them without the user ever seeing a prompt.
+                tracing::info!("xchonnect: chia_send could not be built: {e}");
+                return Ok(None);
+            }
+        };
+        let address = address.clone();
+        let puzzle_hash = on_sage(state, async move |sage| sage.parse_address(address))
+            .map_err(|_| invalid("address"))?;
 
-    let spends: Vec<CoinSpend> = built
-        .coin_spends
-        .iter()
-        .map(from_json)
-        .collect::<Option<_>>()
-        .ok_or_else(|| invalid("coin_spends"))?;
+        let spends: Vec<CoinSpend> = built
+            .coin_spends
+            .iter()
+            .map(from_json)
+            .collect::<Option<_>>()
+            .ok_or_else(|| invalid("coin_spends"))?;
 
-    // The send is proven to do what was asked: exactly this payment to exactly this
-    // recipient (none to anyone else) and exactly this fee. A send to one of the user's
-    // own addresses pays nobody else.
-    let to_self = ctx.ownership.p2_puzzle_hashes.contains(&puzzle_hash);
-    let intent = Intent {
-        kind: Some(if to_self { "send.self" } else { "send" }.to_owned()),
-        recipients: Some(if to_self {
-            Vec::new()
-        } else {
-            vec![RecipientClaim {
-                asset,
-                puzzle_hash,
-                amount,
-            }]
-        }),
-        fee: Some(fee),
-        net: None,
+        // The send is proven to do what was asked: exactly this payment to exactly this
+        // recipient (none to anyone else) and exactly this fee. A send to one of the user's
+        // own addresses pays nobody else.
+        let to_self = ctx.ownership.p2_puzzle_hashes.contains(&puzzle_hash);
+        let intent = Intent {
+            kind: Some(if to_self { "send.self" } else { "send" }.to_owned()),
+            recipients: Some(if to_self {
+                Vec::new()
+            } else {
+                vec![RecipientClaim {
+                    asset,
+                    puzzle_hash,
+                    amount,
+                }]
+            }),
+            fee: Some(fee),
+            net: None,
+        };
+
+        // Sage spends the wallet's coins with quoted conditions; held to it all the same.
+        crate::sign_guard::check_spends(&spends, ctx.keys, &ctx.network)?;
+        let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
+            .map_err(RpcError::from)?;
+        cross_check(&built.summary, &kit_summary)?;
+        Ok(Some(BuiltSend { spends, intent }))
     };
-
-    // Sage spends the wallet's coins with quoted conditions; held to it all the same.
-    crate::sign_guard::check_spends(&spends, ctx.keys, &ctx.network)?;
-    let kit_summary = kit::simulate(&spends, ctx.ownership, kit::simulate::DEFAULT_MAX_COST)
-        .map_err(RpcError::from)?;
-    cross_check(&built.summary, &kit_summary)?;
-
-    // Klimper broadcasts the bundle itself and answers only its id and status: sealed
-    // (xchonnect spec 11.2). The caller's broadcaster records its coins.
-    let submitted = kit::submit(
-        SubmitRequest {
-            method: CHIA_SEND,
-            spends,
-            other_signature: None,
-            intent: Some(&intent),
-            wallet_built: true,
-            // Klimper's own fee ([`wallet_fee`]), which the bundle reserves.
-            wallet_fee: fee,
-            signatures_released: false,
-        },
+    submit_send(
         ctx,
         signer,
         approver,
         broadcaster,
-    )?;
-    Ok(submitted.to_json())
+        chooser,
+        hint,
+        &mut build,
+    )
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1167,21 +1288,55 @@ mod tests {
         }
     }
 
-    /// The fee of a sealed request is Klimper's own, the user's default fee: a website's
-    /// `fee` is read (a malformed one is refused) and ignored, whatever it is (xchonnect
-    /// spec 11.1.1, 11.2). The default fee is capped at `MAX_FEE`.
+    /// A website's `fee` is only ever a suggestion next to the user's default (xchonnect
+    /// spec 11.1.1, 11.2): a malformed one is refused, and none is shown for 0, above
+    /// `MAX_FEE` or equal to the default. One below the default is shown.
     #[test]
-    fn a_websites_fee_is_ignored_for_klimpers_own() {
-        let fee = |params: Value| fee_of(&params, 2_000_000).unwrap();
-        assert_eq!(fee(serde_json::json!({})), 2_000_000);
-        assert_eq!(fee(serde_json::json!({ "fee": 0 })), 2_000_000);
-        assert_eq!(fee(serde_json::json!({ "fee": 50_000_000 })), 2_000_000);
-        assert_eq!(fee(serde_json::json!({ "fee": "1000000000" })), 2_000_000);
-        assert!(fee_of(&serde_json::json!({ "fee": -1 }), 0).is_err());
+    fn a_websites_fee_is_only_a_suggestion() {
+        let own = 2_000_000;
+        let hint = |params: Value| hint_of(&params, own);
+        for (params, expected) in [
+            (serde_json::json!({}), Some(None)),
+            (serde_json::json!({ "fee": null }), Some(None)),
+            (serde_json::json!({ "fee": 0 }), Some(None)),
+            (serde_json::json!({ "fee": "0" }), Some(None)),
+            (serde_json::json!({ "fee": 1.5 }), None),
+            (serde_json::json!({ "fee": "1.5" }), None),
+            (serde_json::json!({ "fee": -1 }), None),
+            (serde_json::json!({ "fee": "-1" }), None),
+            (serde_json::json!({ "fee": MAX_FEE + 1 }), Some(None)),
+            (serde_json::json!({ "fee": "10000000000" }), Some(None)),
+            (serde_json::json!({ "fee": own }), Some(None)),
+            (
+                serde_json::json!({ "fee": 50_000_000 }),
+                Some(Some(50_000_000)),
+            ),
+            (
+                serde_json::json!({ "fee": "1000000000" }),
+                Some(Some(MAX_FEE)),
+            ),
+            (serde_json::json!({ "fee": 1_000 }), Some(Some(1_000))),
+        ] {
+            match expected {
+                Some(expected) => assert_eq!(hint(params.clone()).unwrap(), expected, "{params}"),
+                None => assert_eq!(
+                    hint(params.clone()).unwrap_err().code,
+                    codes::INVALID_PARAMS,
+                    "{params}"
+                ),
+            }
+        }
+        // The other wallet-built requests still pay the default, whatever the website says.
+        assert!(wallet_fee(&serde_json::json!({ "fee": -1 })).is_err());
         assert_eq!(
-            fee_of(&serde_json::json!({ "fee": 50_000_000 }), 0).unwrap(),
-            0
+            wallet_fee(&serde_json::json!({ "fee": 50_000_000 })).unwrap(),
+            own_fee()
         );
+        // A tapped suggestion is capped again, and the default is the default.
+        assert_eq!(fee_for(FeeChoice::Suggested, Some(10 * MAX_FEE)), MAX_FEE);
+        assert_eq!(fee_for(FeeChoice::Suggested, Some(5)), 5);
+        assert_eq!(fee_for(FeeChoice::Suggested, None), own_fee());
+        assert_eq!(fee_for(FeeChoice::Default, Some(5)), own_fee());
         // The default fee as the webview hands it over: capped.
         assert_eq!(capped_fee(10_000_000_000_000), MAX_FEE);
         assert_eq!(capped_fee(2_000_000), 2_000_000);

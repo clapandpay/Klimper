@@ -53,7 +53,9 @@ use xchonnect_core::rpc;
 use xchonnect_core::session::Session;
 use xchonnect_core::uri::{LocalSigner, ParseOptions};
 
-use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
+use tauri_plugin_klimper_xchonnect::approval::{
+    Answer, Approval, ApprovalBridge, ApprovalKind, Emitter,
+};
 use tauri_plugin_klimper_xchonnect::error::Error;
 use tauri_plugin_klimper_xchonnect::origin;
 use tauri_plugin_klimper_xchonnect::push::{GatewayConfig, Kind, PushHandle};
@@ -980,7 +982,7 @@ fn bridge_answerer() -> Answerer {
                     },
                     || report(Progress::Shown),
                 );
-                if !approved {
+                if approved != Answer::Approved {
                     return Err(RpcError {
                         code: rpc::codes::USER_REJECTED,
                         message: "user rejected request".to_owned(),

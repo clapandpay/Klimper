@@ -853,3 +853,52 @@ describe('option keys', () => {
     expect(spend(signOnly).sealed).toBe(false);
   });
 });
+
+describe('fee_hint', () => {
+  const send = {
+    ...simpleSend,
+    type: 'submit_coin_spends',
+    wallet_built: true,
+  };
+  const hint = {
+    suggested: '1000000000',
+    default: '500000',
+    chosen: 'default',
+    unaffordable: false,
+  };
+  const withHint = (feeHint: unknown) =>
+    readPrompt({ ...send, fee_hint: feeHint });
+
+  it('reads a suggestion and the default exactly', () => {
+    const view = withHint({ ...hint, chosen: 'suggested', unaffordable: true });
+    if (view.kind !== 'spend') throw new Error(`not a spend: ${view.kind}`);
+    expect(view.feeHint?.suggested.toFixed()).toBe('1000000000');
+    expect(view.feeHint?.default.toFixed()).toBe('500000');
+    expect(view.feeHint?.chosen).toBe('suggested');
+    expect(view.feeHint?.unaffordable).toBe(true);
+  });
+
+  it('is none when absent', () => {
+    const view = readPrompt(send);
+    if (view.kind !== 'spend') throw new Error(`not a spend: ${view.kind}`);
+    expect(view.feeHint).toBeNull();
+  });
+
+  it('makes the whole prompt unreadable when malformed', () => {
+    for (const bad of [
+      'yes',
+      { ...hint, suggested: '1.5' },
+      { ...hint, suggested: '-1' },
+      { ...hint, default: '1e9' },
+      { ...hint, default: '' },
+      { ...hint, suggested: 1000000000 },
+      { ...hint, default: undefined },
+      { ...hint, chosen: 'website' },
+      { ...hint, chosen: undefined },
+      { ...hint, unaffordable: 'false' },
+      { ...hint, unaffordable: undefined },
+    ]) {
+      expect(withHint(bad).kind).toBe('unreadable');
+    }
+  });
+});
