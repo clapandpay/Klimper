@@ -6252,6 +6252,10 @@ msgstr ""
 msgid "The six digits were never confirmed, so this connection cannot be used."
 msgstr ""
 
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:156
+msgid "The suggested fee could not be afforded; your default is used"
+msgstr "余额不足以支付建议的手续费，已改用默认手续费"
+
 #: src/components/confirmations/CancelOfferConfirmation.tsx:49
 msgid "The transaction fee of {fee} applies to each offer being canceled."
 msgstr ""
@@ -6581,6 +6585,10 @@ msgstr ""
 #: src/klimper/xchonnect/XchonnectPromptView.tsx:912
 msgid "This signature would be valid in any spend, not just this one. Reject it unless you know exactly why it is needed."
 msgstr ""
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:140
+msgid "This site suggests {suggested} {xchLabel}"
+msgstr "此网站建议 {suggested} {xchLabel}"
 
 #: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:317
 msgid "This spend uses a contract Klimper cannot read"
@@ -7818,6 +7826,10 @@ msgstr ""
 #: src/klimper/pouch/CoinPouch.tsx:468
 msgid "Your coins"
 msgstr ""
+
+#: src/klimper/xchonnect/XchonnectApprovalDetail.tsx:146
+msgid "Your default {ownDefault} {xchLabel}"
+msgstr "默认手续费 {ownDefault} {xchLabel}"
 
 #: src/klimper/MyHandles.tsx:41
 msgid "Your handles"

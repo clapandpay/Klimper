@@ -18,6 +18,9 @@
 //     request needs, after one unlock, and — for a request Klimper broadcasts — sends it;
 //   * Approve exists only here. A list may show what is waiting, but nothing is approved
 //     without this whole view on screen;
+//   * a fee the website suggested is offered next to the user's default. A tap only asks the
+//     wallet to rebuild the send with the other fee (`chooseFee`), which replaces this request
+//     with a new one; nothing is signed until the slider is used on that one;
 //   * doing nothing is a refusal. The approval bridge in Rust treats five minutes of
 //     silence, a closed webview and a session that ended as "do not sign", and the
 //     countdown says when that happens.
@@ -36,9 +39,15 @@ import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { Clock, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Approval } from './xchonnect';
+import { Approval, xchonnect } from './xchonnect';
 import { promptHeadline, XchonnectPromptView } from './XchonnectPromptView';
-import { needsSecondConfirmation, readPrompt } from './xchonnectPrompt';
+import {
+  FeeHintView,
+  formatAmount,
+  needsSecondConfirmation,
+  readPrompt,
+  XCH_PRECISION,
+} from './xchonnectPrompt';
 import { SlideToApprove } from './SlideToApprove';
 import { Hint } from '../Hint';
 import { SiteCoin } from './XchonnectUi';
@@ -89,6 +98,67 @@ export function Countdown({ expiresAt }: { readonly expiresAt: number }) {
       </span>
       {time}
     </span>
+  );
+}
+
+/**
+ * The website's suggested fee next to the user's default, the one the send is built with
+ * selected. Picking the other is not an answer: the wallet rebuilds the send with it.
+ */
+function FeeChoice({
+  hint,
+  xchLabel,
+  disabled,
+  onChoose,
+}: {
+  readonly hint: FeeHintView;
+  readonly xchLabel: string;
+  readonly disabled: boolean;
+  readonly onChoose: (choice: 'default' | 'suggested') => void;
+}) {
+  const suggested = formatAmount(hint.suggested, XCH_PRECISION);
+  const ownDefault = formatAmount(hint.default, XCH_PRECISION);
+  const option = (choice: 'default' | 'suggested', label: ReactNode) => (
+    <Button
+      variant={hint.chosen === choice ? 'default' : 'outline'}
+      className='h-auto flex-1 whitespace-normal rounded-2xl py-2'
+      aria-pressed={hint.chosen === choice}
+      disabled={disabled}
+      onClick={() => {
+        if (hint.chosen !== choice) onChoose(choice);
+      }}
+      data-testid={`fee-${choice}`}
+    >
+      {label}
+    </Button>
+  );
+  return (
+    <div className='space-y-1.5' data-testid='fee-choice'>
+      <div className='flex gap-2' role='group' aria-label={t`Network fee`}>
+        {option(
+          'suggested',
+          <Trans>
+            This site suggests {suggested} {xchLabel}
+          </Trans>,
+        )}
+        {option(
+          'default',
+          <Trans>
+            Your default {ownDefault} {xchLabel}
+          </Trans>,
+        )}
+      </div>
+      {hint.unaffordable && (
+        <p
+          className='text-xs text-muted-foreground'
+          data-testid='fee-unaffordable'
+        >
+          <Trans>
+            The suggested fee could not be afforded; your default is used
+          </Trans>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -176,6 +246,13 @@ export function XchonnectApprovalDetail({
       });
     });
 
+  // Not an answer: the wallet withdraws this request and sends a rebuilt one, and every button
+  // stays off until it is here. No Face ID, since nothing is signed.
+  const chooseFee = (choice: 'default' | 'suggested') =>
+    once(() => {
+      void xchonnect.chooseFee(approval.id, choice).catch(() => setBusy(false));
+    });
+
   const onApprove = () => {
     if (needsSecondConfirmation(view)) {
       setConfirming(true);
@@ -243,6 +320,14 @@ export function XchonnectApprovalDetail({
       </div>
 
       <footer className='xc-approval-actions'>
+        {view.kind === 'spend' && view.feeHint !== null && (
+          <FeeChoice
+            hint={view.feeHint}
+            xchLabel={view.xchLabel}
+            disabled={disabled}
+            onChoose={chooseFee}
+          />
+        )}
         <SlideToApprove
           label={approveLabel}
           hint={

@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "set_dapp_policy",
     "pending_approvals",
     "resolve_approval",
+    "choose_fee",
     "cancel_approval",
     "push_status",
     "set_own_fee",

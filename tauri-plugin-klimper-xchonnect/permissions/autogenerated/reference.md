@@ -17,6 +17,7 @@ never reach this surface.
 - `allow-set-dapp-policy`
 - `allow-pending-approvals`
 - `allow-resolve-approval`
+- `allow-choose-fee`
 - `allow-cancel-approval`
 - `allow-push-status`
 - `allow-set-own-fee`
@@ -104,6 +105,32 @@ Enables the cancel_pairing command without any pre-configured scope.
 <td>
 
 Denies the cancel_pairing command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:allow-choose-fee`
+
+</td>
+<td>
+
+Enables the choose_fee command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`klimper-xchonnect:deny-choose-fee`
+
+</td>
+<td>
+
+Denies the choose_fee command without any pre-configured scope.
 
 </td>
 </tr>

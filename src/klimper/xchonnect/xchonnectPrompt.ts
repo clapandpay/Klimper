@@ -324,6 +324,19 @@ export interface SpendPromptView {
   readonly makesOffer: boolean;
   /** An offer the wallet makes, when the request is one; `null` otherwise. */
   readonly offer: OfferView | null;
+  /** The website suggested a fee for a send the wallet built; `null` otherwise. */
+  readonly feeHint: FeeHintView | null;
+}
+
+/**
+ * A fee the website suggested (`chia_send`) next to the user's default, in mojos. The send
+ * is built with `chosen`; `unaffordable`: the suggestion could not be built, so the default is.
+ */
+export interface FeeHintView {
+  readonly suggested: BigNumber;
+  readonly default: BigNumber;
+  readonly chosen: 'default' | 'suggested';
+  readonly unaffordable: boolean;
 }
 
 export interface MessagePromptView {
@@ -1117,7 +1130,34 @@ function readPromptStrict(
     loan: loanOf(prompt.loan, options, xchLabel),
     makesOffer,
     offer: makesOffer ? offerOf(prompt.offer, options, xchLabel) : null,
+    feeHint: feeHintOf(prompt.fee_hint),
   };
+}
+
+/** `fee_hint`: absent is none; a malformed one makes the whole prompt unreadable. */
+function feeHintOf(value: unknown): FeeHintView | null {
+  if (value === undefined || value === null) return null;
+  if (
+    !isRecord(value) ||
+    (value.chosen !== 'default' && value.chosen !== 'suggested') ||
+    typeof value.unaffordable !== 'boolean'
+  ) {
+    throw new UnreadableAmount();
+  }
+  return {
+    suggested: mojosOf(value.suggested),
+    default: mojosOf(value.default),
+    chosen: value.chosen,
+    unaffordable: value.unaffordable,
+  };
+}
+
+/** A fee in mojos as the decimal string the wallet writes: a whole number, never negative. */
+function mojosOf(value: unknown): BigNumber {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw new UnreadableAmount();
+  }
+  return BigNumber(value);
 }
 
 /** Format an amount in the smallest unit for display. Exact, never rounded up. */

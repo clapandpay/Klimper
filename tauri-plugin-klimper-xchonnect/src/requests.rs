@@ -32,9 +32,9 @@ use serde_json::Value;
 use xchonnect_core::rpc::{canonical_method, codes};
 use xchonnect_wallet_kit::{self as kit, Approver, Host, Prompt, RequestContext, RpcError};
 
-use crate::approval::{Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
+use crate::approval::{Answer, Approval, ApprovalBridge, ApprovalKind, DECISION_TIMEOUT};
 use crate::error::Error;
-use crate::execute::{self, SageBroadcaster};
+use crate::execute::{self, FeeChoice, FeeChooser, SageBroadcaster};
 use crate::sign_guard;
 use crate::signed_coins::{self, SignedCoinsHandle};
 use crate::store::{PersistentLimits, SessionRecord, SessionStore};
@@ -144,6 +144,11 @@ pub struct UiApprover {
     /// For an offer the wallet makes (`chia_createOffer`, TASK-142): what it gives, options
     /// with their terms, and what it asks. Computed by the wallet from its own build.
     offer: std::sync::Mutex<Option<Value>>,
+    /// For a `chia_send` with a website's fee (`execute::fee_hint`): the suggestion, the fee
+    /// the send on screen was built with, and whether the suggestion could not be afforded.
+    fee: std::sync::Mutex<(Option<u64>, FeeChoice, bool)>,
+    /// The fee the user tapped on the last prompt instead of approving it.
+    refee: std::sync::Mutex<Option<FeeChoice>>,
 }
 
 impl std::fmt::Debug for UiApprover {
@@ -163,6 +168,8 @@ impl UiApprover {
             offers: AtomicUsize::new(0),
             loan: std::sync::Mutex::new(None),
             offer: std::sync::Mutex::new(None),
+            fee: std::sync::Mutex::new((None, FeeChoice::Default, false)),
+            refee: std::sync::Mutex::new(None),
         }
     }
 
@@ -204,6 +211,23 @@ impl Approver for UiApprover {
         {
             fields.insert("cross_checked".to_owned(), Value::Bool(true));
         }
+        // A website's fee as a suggestion next to the user's default, Klimper's own key like
+        // `cross_checked`: both figures are the wallet's checked `u64`s, as strings. The
+        // webview sends back only which one it wants (`choose_fee`).
+        if let Ok(slot) = self.fee.lock()
+            && let (Some(suggested), chosen, unaffordable) = *slot
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert(
+                "fee_hint".to_owned(),
+                serde_json::json!({
+                    "suggested": suggested.to_string(),
+                    "default": execute::own_fee().to_string(),
+                    "chosen": chosen,
+                    "unaffordable": unaffordable,
+                }),
+            );
+        }
         // The trade overview, computed here from the same simulation (TASK-139): what is
         // paid, what is received, the user's fee, the price, how many offers. Klimper's
         // own key next to `cross_checked`; nothing in it comes from the website.
@@ -233,7 +257,7 @@ impl Approver for UiApprover {
             fields.insert("offer".to_owned(), offer.clone());
             fields.insert("makes_offer".to_owned(), Value::Bool(true));
         }
-        let approved = self.bridge.ask_with(
+        let answer = self.bridge.ask_with(
             Approval {
                 id: new_id(),
                 session_id: self.meta.session_id.clone(),
@@ -245,10 +269,31 @@ impl Approver for UiApprover {
             },
             || self.meta.report(Progress::Shown),
         );
-        if approved {
-            self.meta.report(Progress::Approved);
+        match answer {
+            Answer::Approved => {
+                self.meta.report(Progress::Approved);
+                true
+            }
+            Answer::Rejected => false,
+            Answer::Refee(choice) => {
+                if let Ok(mut slot) = self.refee.lock() {
+                    *slot = Some(choice);
+                }
+                false
+            }
         }
-        approved
+    }
+}
+
+impl FeeChooser for UiApprover {
+    fn show(&self, hint: Option<u64>, chosen: FeeChoice, unaffordable: bool) {
+        if let Ok(mut slot) = self.fee.lock() {
+            *slot = (hint, chosen, unaffordable);
+        }
+    }
+
+    fn taken_choice(&self) -> Option<FeeChoice> {
+        self.refee.lock().ok().and_then(|mut slot| slot.take())
     }
 }
 
@@ -461,9 +506,15 @@ fn run(
                     approver.mark_loan(loan, makes_offer);
                 };
                 match method {
-                    execute::CHIA_SEND => {
-                        execute::send(state, &context, &signer, &approver, &broadcaster, params)
-                    }
+                    execute::CHIA_SEND => execute::send(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        &approver,
+                        params,
+                    ),
                     execute::CHIA_TAKE_OFFER => execute::take_offer(
                         state,
                         &context,

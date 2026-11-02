@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
+use crate::execute::FeeChoice;
 
 /// How long a prompt waits for the user. A signing request's own `exp` is usually
 /// shorter; whichever comes first wins, and both mean "rejected".
@@ -85,9 +86,21 @@ fn time_left(expires_at: u64) -> Duration {
     Duration::from_secs(expires_at.saturating_sub(now)).min(DECISION_TIMEOUT)
 }
 
+/// How the user answered a prompt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answer {
+    /// The approve slider: the only answer that signs.
+    Approved,
+    /// No, silence, a withdrawal or anything else that is not an approval.
+    Rejected,
+    /// The user tapped the other fee of a `chia_send`: the prompt is replaced by a fresh one
+    /// for the send built again with that fee. Not a no, and nothing is signed.
+    Refee(FeeChoice),
+}
+
 struct Waiting {
     approval: Approval,
-    answer: mpsc::Sender<bool>,
+    answer: mpsc::Sender<Answer>,
     /// The deadline on the monotonic clock the waiting thread times out by, so an answer is
     /// refused exactly when the thread stops listening.
     deadline: std::time::Instant,
@@ -172,42 +185,43 @@ impl ApprovalBridge {
         (self.emit)("sync-event", serde_json::json!({ "type": "coin_state" }));
     }
 
-    /// [`ApprovalBridge::ask_with`] without a callback.
+    /// [`ApprovalBridge::ask_with`] without a callback; `true` only for an approval.
     #[cfg(test)]
     pub fn ask(&self, approval: Approval) -> bool {
-        self.ask_with(approval, || {})
+        self.ask_with(approval, || {}) == Answer::Approved
     }
 
     /// Ask the user and block until the answer arrives. Called from a blocking thread
-    /// inside `handle()`; `false` means "do not sign". `on_shown` runs once the prompt is
-    /// on screen (not when the request was refused before it could be shown).
-    pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> bool {
+    /// inside `handle()`; anything but [`Answer::Approved`] means "do not sign". `on_shown`
+    /// runs once the prompt is on screen (not when the request was refused before it could
+    /// be shown).
+    pub fn ask_with(&self, approval: Approval, on_shown: impl FnOnce()) -> Answer {
         let id = approval.id.clone();
         let key = (approval.session_id.clone(), approval.request_id.clone());
         let (tx, rx) = mpsc::channel();
         let wait = time_left(approval.expires_at);
         // Already past its deadline: never shown, never signed.
         if wait.is_zero() {
-            return false;
+            return Answer::Rejected;
         }
         let deadline = std::time::Instant::now() + wait;
         let payload = serde_json::to_value(&approval).unwrap_or(Value::Null);
         {
             let Ok(mut registry) = self.registry.lock() else {
                 tracing::error!("approval registry poisoned; refusing the request");
-                return false;
+                return Answer::Rejected;
             };
             // The session ended while this request was being simulated: nothing to ask.
             if registry.closed.contains(&approval.session_id) {
-                return false;
+                return Answer::Rejected;
             }
             // Withdrawn while it was being simulated: never shown.
             if registry.withdrawn.contains_key(&key) {
-                return false;
+                return Answer::Rejected;
             }
             // The user just said no to this website several times: not asked again yet.
             if registry.paused(&approval.session_id, std::time::Instant::now()) {
-                return false;
+                return Answer::Rejected;
             }
             registry.waiting.insert(
                 id.clone(),
@@ -221,19 +235,18 @@ impl ApprovalBridge {
         (self.emit)(EVENT_APPROVAL, payload);
         on_shown();
 
-        // A timeout and a closed channel are both rejections: the only path to `true` is
-        // the user pressing approve, before the request's own deadline. A request the dApp
-        // has already given up on (and may have sent again) is never signed late.
-        let decision = matches!(
-            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())),
-            Ok(true)
-        );
+        // A timeout and a closed channel are both rejections: the only path to an approval
+        // is the user pressing approve, before the request's own deadline. A request the
+        // dApp has already given up on (and may have sent again) is never signed late.
+        let decision = rx
+            .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            .unwrap_or(Answer::Rejected);
         if let Ok(mut registry) = self.registry.lock() {
             registry.waiting.remove(&id);
             // Any prompt that was shown and not approved counts: a no, silence, the user's
             // cancel, and the website withdrawing it too, or a website could keep the user
-            // prompted forever by cancelling each request itself.
-            if !decision {
+            // prompted forever by cancelling each request itself. A fee tap is not a no.
+            if decision == Answer::Rejected {
                 registry
                     .rejections
                     .entry(key.0.clone())
@@ -241,15 +254,35 @@ impl ApprovalBridge {
                     .push_back(std::time::Instant::now());
             }
         }
-        (self.emit)(
-            EVENT_APPROVAL_DONE,
-            serde_json::json!({ "id": id, "approved": decision }),
-        );
+        let done = match decision {
+            Answer::Refee(_) => {
+                serde_json::json!({ "id": id, "approved": false, "replaced": true })
+            }
+            _ => serde_json::json!({ "id": id, "approved": decision == Answer::Approved }),
+        };
+        (self.emit)(EVENT_APPROVAL_DONE, done);
         decision
     }
 
     /// The webview answered.
     pub fn resolve(&self, id: &str, approved: bool) -> Result<()> {
+        self.answer(
+            id,
+            if approved {
+                Answer::Approved
+            } else {
+                Answer::Rejected
+            },
+        )
+    }
+
+    /// The user tapped the other fee of a `chia_send` prompt: it is answered, without a
+    /// signature, so the send can be built again with that fee and asked afresh.
+    pub fn refee(&self, id: &str, choice: FeeChoice) -> Result<()> {
+        self.answer(id, Answer::Refee(choice))
+    }
+
+    fn answer(&self, id: &str, answer: Answer) -> Result<()> {
         let sender = {
             let registry = self.registry.lock().map_err(Error::internal)?;
             registry.waiting.get(id).and_then(|w| {
@@ -265,7 +298,7 @@ impl ApprovalBridge {
         let sender = sender.ok_or(Error::UnknownApproval)?;
         // The waiting thread removes its own entry; a send failure means it already gave
         // up, which is itself a rejection.
-        sender.send(approved).map_err(|_| Error::UnknownApproval)
+        sender.send(answer).map_err(|_| Error::UnknownApproval)
     }
 
     /// Everything still waiting, so a reloaded webview can rebuild its screen.
@@ -280,7 +313,7 @@ impl ApprovalBridge {
     /// is answered "no", and a prompt not yet shown never will be. Returns whether a prompt
     /// was waiting.
     pub fn withdraw_request(&self, session_id: &str, request_id: &str, by: Withdrawn) -> bool {
-        let senders: Vec<mpsc::Sender<bool>> = self
+        let senders: Vec<mpsc::Sender<Answer>> = self
             .registry
             .lock()
             .map(|mut r| {
@@ -298,7 +331,7 @@ impl ApprovalBridge {
             .unwrap_or_default();
         let waiting = !senders.is_empty();
         for sender in senders {
-            let _ = sender.send(false);
+            let _ = sender.send(Answer::Rejected);
         }
         waiting
     }
@@ -341,7 +374,7 @@ impl ApprovalBridge {
     /// The user changed this website's settings: whatever it is waiting on was checked
     /// against the old ones, so it is withdrawn (the website is told, and may ask again).
     pub fn withdraw_waiting(&self, session_id: &str) {
-        let senders: Vec<mpsc::Sender<bool>> = self
+        let senders: Vec<mpsc::Sender<Answer>> = self
             .registry
             .lock()
             .map(|mut r| {
@@ -362,7 +395,7 @@ impl ApprovalBridge {
             })
             .unwrap_or_default();
         for sender in senders {
-            let _ = sender.send(false);
+            let _ = sender.send(Answer::Rejected);
         }
     }
 
@@ -370,7 +403,7 @@ impl ApprovalBridge {
     /// ask, so a request that was mid-simulation when the user disconnected cannot open a
     /// prompt for a connection that no longer exists.
     pub fn withdraw_session(&self, session_id: &str) {
-        let senders: Vec<mpsc::Sender<bool>> = self
+        let senders: Vec<mpsc::Sender<Answer>> = self
             .registry
             .lock()
             .map(|mut r| {
@@ -383,7 +416,7 @@ impl ApprovalBridge {
             })
             .unwrap_or_default();
         for sender in senders {
-            let _ = sender.send(false);
+            let _ = sender.send(Answer::Rejected);
         }
     }
 }
@@ -582,7 +615,11 @@ mod tests {
             bridge.resolve("e", true),
             Err(Error::UnknownApproval)
         ));
-        assert!(!worker.join().unwrap(), "withdrawn means do not sign");
+        assert_eq!(
+            worker.join().unwrap(),
+            Answer::Rejected,
+            "withdrawn means do not sign"
+        );
         assert!(*shown.lock().unwrap());
         assert_eq!(bridge.take_withdrawn("s1", "r-e"), Some(Withdrawn::ByDapp));
         assert_eq!(
@@ -601,7 +638,10 @@ mod tests {
         let (bridge, seen) = bridge();
         bridge.withdraw_request("s1", "r-f", Withdrawn::ByDapp);
         let mut shown = false;
-        assert!(!bridge.ask_with(approval("f"), || shown = true));
+        assert_eq!(
+            bridge.ask_with(approval("f"), || shown = true),
+            Answer::Rejected
+        );
         assert!(!shown);
         assert!(seen.lock().unwrap().is_empty());
     }
@@ -618,6 +658,58 @@ mod tests {
         assert!(!worker.join().unwrap());
         assert_eq!(bridge.take_withdrawn("s1", "r-g"), Some(Withdrawn::ByUser));
         assert!(matches!(bridge.cancel("g"), Err(Error::UnknownApproval)));
+    }
+
+    /// A fee tap replaces the prompt; it is not a no, so tapping back and forth never
+    /// pauses the website, and the webview is told the prompt was replaced.
+    #[test]
+    fn a_fee_tap_replaces_the_prompt_and_is_not_a_rejection() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let emit: Emitter = Arc::new(move |event, payload| {
+            sink.lock().unwrap().push((event.to_owned(), payload));
+        });
+        let bridge = Arc::new(ApprovalBridge::new(emit));
+        for round in 0..=REJECTIONS_BEFORE_PAUSE {
+            let id = format!("fee{round}");
+            let worker = {
+                let bridge = bridge.clone();
+                let id = id.clone();
+                std::thread::spawn(move || bridge.ask_with(approval(&id), || {}))
+            };
+            wait_until_waiting(&bridge);
+            bridge.refee(&id, FeeChoice::Suggested).unwrap();
+            assert_eq!(worker.join().unwrap(), Answer::Refee(FeeChoice::Suggested));
+        }
+        assert!(!bridge.paused("s1"));
+        let seen = seen.lock().unwrap();
+        assert_eq!(
+            seen.last().unwrap(),
+            &(
+                EVENT_APPROVAL_DONE.to_owned(),
+                serde_json::json!({ "id": format!("fee{REJECTIONS_BEFORE_PAUSE}"), "approved": false, "replaced": true })
+            )
+        );
+    }
+
+    #[test]
+    fn a_fee_tap_on_an_unknown_or_withdrawn_prompt_is_refused() {
+        let (bridge, _) = bridge();
+        assert!(matches!(
+            bridge.refee("nope", FeeChoice::Suggested),
+            Err(Error::UnknownApproval)
+        ));
+        let worker = {
+            let bridge = bridge.clone();
+            std::thread::spawn(move || bridge.ask_with(approval("h"), || {}))
+        };
+        wait_until_waiting(&bridge);
+        bridge.withdraw_request("s1", "r-h", Withdrawn::ByDapp);
+        assert!(matches!(
+            bridge.refee("h", FeeChoice::Default),
+            Err(Error::UnknownApproval)
+        ));
+        assert_eq!(worker.join().unwrap(), Answer::Rejected);
     }
 
     #[test]

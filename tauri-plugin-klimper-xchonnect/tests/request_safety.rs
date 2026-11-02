@@ -19,7 +19,7 @@
 )]
 
 use std::collections::{BTreeMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -45,6 +45,9 @@ use xchonnect_wallet_kit::{
 use tauri_plugin_klimper_xchonnect::DappPolicy;
 use tauri_plugin_klimper_xchonnect::approval::{Approval, ApprovalBridge, ApprovalKind, Emitter};
 use tauri_plugin_klimper_xchonnect::error::Result as KitResult;
+use tauri_plugin_klimper_xchonnect::execute::{
+    BuiltSend, FeeChoice, MAX_FEE, own_fee, submit_send,
+};
 use tauri_plugin_klimper_xchonnect::requests::{
     Progress, ProgressSender, RequestMeta, UiApprover, handle_dapp_built,
 };
@@ -1345,6 +1348,195 @@ fn a_request_that_arrives_during_a_sealed_prompt_cannot_sign_its_message() {
     });
     assert_eq!(chain.accepted.lock().unwrap().len(), 1);
     assert!(!record.load().unwrap().to_kit().unwrap().sealed.is_empty());
+}
+
+// ---------------------------------------------------------------------------------------
+// chia_send with a website's fee: a suggestion the user may tap
+// ---------------------------------------------------------------------------------------
+
+/// Approves without ever showing a prompt.
+struct NoPrompt;
+
+impl kit::Approver for NoPrompt {
+    fn approve(&self, _prompt: &kit::Prompt<'_>) -> bool {
+        true
+    }
+}
+
+/// What one `chia_send` with a fee hint did.
+struct FeeRun {
+    outcome: Result<String, RpcError>,
+    /// The fee of each build, in order.
+    built: Vec<u64>,
+    /// Every prompt shown.
+    shown: Vec<Approval>,
+    chain: SimChain,
+}
+
+/// Drive `submit_send` the way `execute::send` does, with a build that reserves the fee it
+/// is given. The user taps `tap` once on the first prompt, then approves whatever is on
+/// screen; `prompted: false` approves without a prompt.
+fn send_with_hint(hint: Option<u64>, tap: Option<FeeChoice>, prompted: bool) -> FeeRun {
+    let who = BlsPair::new(1);
+    let harness = Harness::new(who.clone(), true);
+    let mut sim = Simulator::new();
+    let coin = sim.new_coin(who.puzzle_hash, 10 * MAX_FEE);
+    let chain = SimChain::on(sim);
+    let to = BlsPair::new(2).puzzle_hash;
+
+    let shown = Arc::new(Mutex::new(Vec::new()));
+    let sink = shown.clone();
+    let emit: Emitter = Arc::new(move |event, payload| {
+        if event.ends_with("approval")
+            && let Ok(approval) = serde_json::from_value::<Approval>(payload)
+        {
+            sink.lock().unwrap().push(approval);
+        }
+    });
+    let bridge = Arc::new(ApprovalBridge::new(emit));
+    let stop = Arc::new(AtomicBool::new(false));
+    let user = {
+        let (bridge, stop) = (bridge.clone(), stop.clone());
+        std::thread::spawn(move || {
+            let mut tap = tap;
+            let mut answered = HashSet::new();
+            while !stop.load(Ordering::SeqCst) {
+                for approval in bridge.outstanding() {
+                    if !answered.insert(approval.id.clone()) {
+                        continue;
+                    }
+                    match tap.take() {
+                        Some(choice) => bridge.refee(&approval.id, choice).unwrap(),
+                        None => bridge.resolve(&approval.id, true).unwrap(),
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        })
+    };
+
+    let approver = UiApprover::new(bridge, harness.meta("chia_send"));
+    let permissions = DappPermissions {
+        methods: vec!["chia_send".to_owned()],
+        exposed_keys: vec![who.pk],
+        limits: BTreeMap::new(),
+        options: kit::DEFAULT_OPTION_LIMIT,
+    };
+    let limits = PersistentLimits::new(harness.store.clone(), 1, DAPP.to_owned(), "s1".to_owned());
+    let signed = SignedCoins::default();
+    let context = RequestContext {
+        dapp: DAPP,
+        network: Network::Testnet11,
+        session_chain_id: "testnet11",
+        permissions: &permissions,
+        allow_agg_sig_unsafe: false,
+        allow_unknown_contracts: false,
+        ownership: &harness.ownership,
+        keys: &harness.keys,
+        limits: &limits,
+        now: NOW,
+        chain: None,
+        signed_coins: &signed,
+    };
+    let mut built = Vec::new();
+    let mut build = |fee: u64| -> Result<Option<BuiltSend>, RpcError> {
+        built.push(fee);
+        let mut ctx = SpendContext::new();
+        StandardLayer::new(who.pk)
+            .spend(
+                &mut ctx,
+                coin,
+                Conditions::new()
+                    .create_coin(to, 400, Memos::None)
+                    .create_coin(who.puzzle_hash, coin.amount - 400 - fee, Memos::None)
+                    .reserve_fee(fee),
+            )
+            .unwrap();
+        Ok(Some(BuiltSend {
+            spends: ctx.take(),
+            intent: kit::Intent {
+                kind: Some("send".to_owned()),
+                recipients: Some(vec![kit::RecipientClaim {
+                    asset: AssetId::Xch,
+                    puzzle_hash: to,
+                    amount: 400,
+                }]),
+                fee: Some(fee),
+                net: None,
+            },
+        }))
+    };
+    let shown_approver: &dyn kit::Approver = if prompted { &approver } else { &NoPrompt };
+    let outcome = submit_send(
+        &context,
+        &CountingSigner::new(&who),
+        shown_approver,
+        &chain,
+        &approver,
+        hint,
+        &mut build,
+    );
+    stop.store(true, Ordering::SeqCst);
+    user.join().unwrap();
+    let shown = shown.lock().unwrap().clone();
+    FeeRun {
+        outcome,
+        built,
+        shown,
+        chain,
+    }
+}
+
+fn prompt_of(approval: &Approval) -> &Value {
+    let ApprovalKind::Request { prompt } = &approval.kind;
+    prompt
+}
+
+/// A tap on the website's fee builds the send again with it and shows a fresh prompt; only
+/// the approval of that one signs, and the bundle reserves the suggested fee as Klimper's
+/// own, so it stays sealed.
+#[test]
+fn a_tapped_suggestion_rebuilds_the_send_with_that_fee() {
+    let run = send_with_hint(Some(2_000_000), Some(FeeChoice::Suggested), true);
+    run.outcome.unwrap();
+    assert_eq!(run.built, vec![own_fee(), 2_000_000]);
+    assert_eq!(run.shown.len(), 2);
+    assert_ne!(run.shown[0].id, run.shown[1].id);
+    assert_eq!(run.shown[0].request_id, run.shown[1].request_id);
+    assert_eq!(
+        prompt_of(&run.shown[0])["fee_hint"],
+        json!({
+            "suggested": "2000000",
+            "default": own_fee().to_string(),
+            "chosen": "default",
+            "unaffordable": false,
+        })
+    );
+    let last = prompt_of(&run.shown[1]);
+    assert_eq!(last["fee_hint"]["chosen"], "suggested");
+    assert_eq!(last["summary"]["reserve_fee"], "2000000");
+    assert_eq!(last["linking"], "sealed");
+    assert_eq!(run.chain.accepted.lock().unwrap().len(), 1);
+}
+
+/// The figure is the wallet's: a hint above `MAX_FEE` that reached the loop, with the
+/// webview asking for it, is paid as `MAX_FEE`.
+#[test]
+fn a_suggestion_above_the_cap_is_paid_as_the_cap() {
+    let run = send_with_hint(Some(10 * MAX_FEE), Some(FeeChoice::Suggested), true);
+    run.outcome.unwrap();
+    assert_eq!(run.built, vec![own_fee(), MAX_FEE]);
+    assert_eq!(prompt_of(&run.shown[1])["linking"], "sealed");
+}
+
+/// No prompt, no suggestion: the send pays the user's default fee.
+#[test]
+fn a_send_approved_without_a_prompt_pays_the_default_fee() {
+    let run = send_with_hint(Some(2_000_000), Some(FeeChoice::Suggested), false);
+    run.outcome.unwrap();
+    assert_eq!(run.built, vec![own_fee()]);
+    assert!(run.shown.is_empty());
+    assert_eq!(run.chain.accepted.lock().unwrap().len(), 1);
 }
 
 /// wallet-kit reports the coins of every `signCoinSpends` answer before the signature is

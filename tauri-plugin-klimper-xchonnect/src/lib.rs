@@ -27,6 +27,7 @@
 //! | `set_dapp_policy` | `sessionId: string`, `policy:` [`DappPolicy`] | [`SessionSummary`] |
 //! | `pending_approvals` | — | [`Approval`]`[]` |
 //! | `resolve_approval` | `approvalId: string`, `approved: boolean` | `null` |
+//! | `choose_fee` | `approvalId: string`, `choice: "default" \| "suggested"` | `null` (a fresh approval follows) |
 //! | `cancel_approval` | `approvalId: string` | `null` (the dApp gets `rpc.cancel` and 4102) |
 //!
 //! Events:
@@ -38,7 +39,7 @@
 //! | `klimper-xchonnect://session` | `{ sessionId, state, epoch?, dapp? }` |
 //! | `klimper-xchonnect://request` | `{ sessionId, dapp, method }` |
 //! | `klimper-xchonnect://approval` | [`Approval`] — something is waiting for the user |
-//! | `klimper-xchonnect://approval-resolved` | `{ id, approved }` |
+//! | `klimper-xchonnect://approval-resolved` | `{ id, approved, replaced? }`; `replaced` after `choose_fee` |
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -1058,6 +1059,19 @@ async fn resolve_approval<R: Runtime>(
     state.approvals.resolve(&approval_id, approved)
 }
 
+/// The user tapped the other fee of a `chia_send` approval: it is answered without a
+/// signature, and the send is built again with that fee and asked afresh (same request id).
+/// Only the choice is sent; the figure is the wallet's own.
+#[command]
+async fn choose_fee<R: Runtime>(
+    _app: AppHandle<R>,
+    state: State<'_, Xchonnect<R>>,
+    approval_id: String,
+    choice: execute::FeeChoice,
+) -> Result<()> {
+    state.approvals.refee(&approval_id, choice)
+}
+
 /// Withdraw a waiting request from the requests page. Unlike rejecting it (4002), the
 /// dApp is told the request was cancelled (`rpc.cancel`, then 4102), so it can drop it from
 /// its own list.
@@ -1132,6 +1146,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             set_dapp_policy,
             pending_approvals,
             resolve_approval,
+            choose_fee,
             cancel_approval,
             push_status,
             set_own_fee
