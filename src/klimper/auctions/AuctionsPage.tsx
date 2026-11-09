@@ -91,13 +91,10 @@ export default function AuctionsPage() {
                         : ''}
                     </span>
                     {auction.view?.winning_bid && (
-                      <span className='text-muted-foreground'>
-                        {t`Highest bid`}:{' '}
-                        {xch.text(auction.view.winning_bid.amount)}
-                        {auction.view.winning_bid.is_mine
-                          ? ` (${t`yours`})`
-                          : ''}
-                      </span>
+                      <WinningBid
+                        amount={xch.text(auction.view.winning_bid.amount)}
+                        mine={auction.view.winning_bid.is_mine}
+                      />
                     )}
                     {auction.error && (
                       <span className='text-destructive'>{auction.error}</span>
@@ -113,5 +110,17 @@ export default function AuctionsPage() {
         </div>
       </Container>
     </>
+  );
+}
+
+function WinningBid({ amount, mine }: { amount: string; mine: boolean }) {
+  return (
+    <span className='text-muted-foreground'>
+      {mine ? (
+        <Trans>Highest bid: {amount} (yours)</Trans>
+      ) : (
+        <Trans>Highest bid: {amount}</Trans>
+      )}
+    </span>
   );
 }

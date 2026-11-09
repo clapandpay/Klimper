@@ -34,6 +34,7 @@ import {
   AuctionView,
   auctionErrorText,
   auctions,
+  isAuctionError,
   auctionShareText,
   parseAuctionId,
 } from './api';
@@ -82,15 +83,23 @@ export default function AuctionPage() {
   const [fee, setFee] = useState('');
   const [pending, setPending] = useState<Pending>(null);
   const [sending, setSending] = useState(false);
+  const [notYet, setNotYet] = useState(false);
 
   const load = useCallback(async () => {
     if (id === null) return;
     setLoading(true);
     try {
       setView(await auctions.view(id));
+      setNotYet(false);
     } catch (error) {
-      addError({ kind: 'invalid', reason: auctionErrorText(error) });
-      navigate('/auctions');
+      // An auction just started is not on the chain until its transaction is confirmed:
+      // wait for it here rather than calling it no auction.
+      if (isAuctionError(error) && error.code === 'not_auction') {
+        setNotYet(true);
+      } else {
+        addError({ kind: 'invalid', reason: auctionErrorText(error) });
+        navigate('/auctions');
+      }
     } finally {
       setLoading(false);
     }
@@ -99,6 +108,13 @@ export default function AuctionPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Look again every 15 seconds while it is not on the chain yet.
+  useEffect(() => {
+    if (!notYet) return;
+    const timer = setInterval(load, 15_000);
+    return () => clearInterval(timer);
+  }, [notYet, load]);
 
   // The least bid, filled in once, for the user to raise.
   const nextMinimum = view?.next_minimum_bid ?? null;
@@ -192,7 +208,27 @@ export default function AuctionPage() {
     <>
       <Header title={t`Auction`} back={() => navigate('/auctions')} />
       <Container className='max-w-2xl'>
-        {loading && view === null ? (
+        {view === null && notYet ? (
+          <Card>
+            <CardContent className='space-y-3 pt-6 text-sm'>
+              <p>
+                <Trans>
+                  This auction is not on the chain yet. An auction just started
+                  appears once the network confirms it, usually within a minute
+                  or two. This page looks again by itself.
+                </Trans>
+              </p>
+              <p className='text-muted-foreground'>
+                <Trans>
+                  If it never appears, the id is not an auction: check it.
+                </Trans>
+              </p>
+              <Button variant='outline' disabled={loading} onClick={load}>
+                <Trans>Look again</Trans>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : loading && view === null ? (
           <Loading />
         ) : view === null ? null : (
           <div className='flex flex-col gap-4'>

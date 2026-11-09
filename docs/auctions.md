@@ -45,10 +45,11 @@ launcher id is also in the memo of the NFT's send to the auction and in a remark
 - **Timing bounds**: no start or bid when the end is more than 90 days away or the grace period
   is over a day; a start must run at least ten minutes. The grace rule is the puzzles' (above);
   block times lag, so a margin of a minute applies. The last spend's time comes from its block
-  header, only for auctions with a grace period (without it no grace bid is offered, and an end
-  waits out the whole grace period after the end time).
-- **Every wallet spend is tied to the auction spend it pays for**: a bid's coins assert its
-  announcement; an end's or cancel's fee spend asserts the auction coin's spend. A bid is
+  header, only for auctions with a grace period; when a peer cannot say, no grace bid and no end
+  is offered (a grace bid after the end time could still keep the auction open).
+- **Every wallet spend is tied to the auction spend it pays for**: the first of a bid's wallet
+  spends asserts the bid's announcement and Sage's spend builder ties the others to it as
+  concurrent spends; an end's or cancel's fee spend asserts the auction coin's spend. A bid is
   checked before signing: the driver runs it as the puzzle will, the reserve amount matches
   what was shown, and inputs less outputs equal the network fee.
 - **Start**: the launching coin is picked first (the launcher's id and the lock follow from
@@ -68,8 +69,11 @@ launcher id is also in the memo of the NFT's send to the auction and in a remark
 `tauri-plugin-klimper-auctions/src/tests.rs`, on Sage wallets and a simulated chain: an NFT
 minted, auctioned, bid on by two wallets (the first refunded in full; each bidder's balance down
 by exactly bid, royalty and fee), ended after the end time (the seller paid, the NFT in the
-winner's Sage database); a cancel before a bid (the NFT back in the seller's database, nobody
-else can cancel); an id that is not an auction refused. Frontend: `math.test.ts`, the scan target.
+winner's Sage database); a cancel before a bid (read as cancelled, the NFT back in the seller's
+database, nobody else can cancel); an auction without a bid ended by a third wallet (not before
+its end time; read as unsold, the NFT back); an id that is not an auction refused. Unit tests
+in `wallet.rs`: the start bounds, another seller's far-off auction, the bid window with and
+without a grace period, when an end may come, the statuses, the next bid. Frontend: `math.test.ts`, the scan target.
 
 Not yet: a run on testnet11 (then turn `VITE_ENABLE_AUCTIONS` on in the release files), bids in
 a CAT, an index of auctions.

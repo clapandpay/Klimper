@@ -94,7 +94,7 @@ pub struct Followed {
     /// Why the auction cannot take bids or end, if it holds no valid NFT.
     pub nft_problem: Option<String>,
     /// Unix seconds of the block that made the newest auction coin; `None` if the peer could
-    /// not say (then no grace bid is offered, and an end waits out the whole grace period).
+    /// not say (then no grace bid is offered, and with a grace period no end either).
     pub last_spend_time: Option<u64>,
     /// The spend that ended it was the seller's cancel (not an end).
     pub cancelled: bool,
@@ -350,16 +350,26 @@ fn bid_window(followed: &Followed, now: u64) -> Result<bool, String> {
 
 /// Whether the auction can be ended now: past its end time, and past the grace period since the
 /// last spend.
+///
+/// With a grace period, the last spend's time is needed: grace bids after the end time can keep
+/// it open. A peer that cannot say when it was gives no end at all (rather than one the chain
+/// would refuse); without a grace period the time is not needed.
 fn can_end(followed: &Followed, now: u64) -> bool {
     let info = &followed.auction.info;
     let timings = info.settings.timings;
+    let last_spend = if timings.grace_period == 0 {
+        timings.end_time
+    } else {
+        let Some(last) = followed.last_spend_time else {
+            return false;
+        };
+        last
+    };
     !info.state.ended
         && followed.locked_nft.is_some()
         && now >= timings.end_time.saturating_add(MARGIN)
         && now
-            >= followed
-                .last_spend_time
-                .unwrap_or(timings.end_time)
+            >= last_spend
                 .max(timings.end_time)
                 .saturating_add(timings.grace_period)
                 .saturating_add(MARGIN)
@@ -689,8 +699,9 @@ pub async fn bid(
     }
 
     // The wallet's coins pay the reserve (left unreserved: the auction's reserve takes it) and
-    // the fee, and every one of them asserts this bid's announcement, so they pay for nothing
-    // else. A remark keeps the auction's id in the wallet's own spend.
+    // the fee. The first of their spends asserts this bid's announcement (Sage's spend builder
+    // puts required conditions there), and Sage ties the rest to it as concurrent spends, so
+    // they pay for nothing else. A remark keeps the auction's id in the wallet's own spend.
     let actions = [
         Action::Fee(FeeAction {
             amount: reserve_amount,
@@ -843,4 +854,144 @@ pub async fn cancel(ctx: &WalletCtx, launcher_id: Bytes32, fee: u64) -> Result<S
     Ok(ctx
         .sign(SpendBundle::new(sctx.take(), Signature::default()))
         .await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use chia_sdk_next::{AuctionInfo, AuctionState};
+    use chia_wallet_sdk::chia::puzzle_types::{EveProof, Proof};
+
+    use super::*;
+
+    const NOW: u64 = 1_800_000_000;
+    const SELLER: Bytes32 = Bytes32::new([5; 32]);
+
+    fn request(end_time: u64, grace_period: u64) -> StartRequest {
+        StartRequest {
+            nft_id: hex::encode([1; 32]),
+            minimum_bid: "1000".to_string(),
+            increment: Increment::Flat {
+                amount: "100".to_string(),
+            },
+            end_time,
+            grace_period,
+            fee: None,
+        }
+    }
+
+    fn followed(end_time: u64, grace: u64, last_spend_time: Option<u64>, bid: u64) -> Followed {
+        let settings = settings(&request(end_time, grace), SELLER, end_time - 3_600).unwrap();
+        let mut state = AuctionState::initial(SELLER);
+        state.winning_bid = AuctionBid::new(bid, Bytes32::new([9; 32]));
+        let info = AuctionInfo::new(
+            Bytes32::new([2; 32]),
+            settings,
+            Bytes32::new([3; 32]),
+            RoyaltyInfo::new(Bytes32::new([4; 32]), Bytes32::new([6; 32]), 0),
+            state,
+            AuctionReserve::Xch(Coin::new(Bytes32::new([7; 32]), Bytes32::new([8; 32]), 0)),
+        );
+        let coin = Coin::new(Bytes32::new([10; 32]), Bytes32::new([11; 32]), 1);
+        let proof = Proof::Eve(EveProof {
+            parent_parent_coin_info: Bytes32::new([12; 32]),
+            parent_amount: 1,
+        });
+        Followed {
+            auction: Auction::new(coin, proof, info),
+            locked_nft: Some(Bytes32::new([3; 32])),
+            nft_problem: None,
+            last_spend_time,
+            cancelled: false,
+        }
+    }
+
+    #[test]
+    fn a_start_is_bounded() {
+        assert!(settings(&request(NOW + 3_600, 0), SELLER, NOW).is_ok());
+        assert!(settings(&request(NOW + MIN_DURATION - 1, 0), SELLER, NOW).is_err());
+        assert!(settings(&request(NOW + MAX_DURATION, MAX_GRACE), SELLER, NOW).is_ok());
+        assert!(settings(&request(NOW + MAX_DURATION + 1, 0), SELLER, NOW).is_err());
+        assert!(settings(&request(NOW + 3_600, MAX_GRACE + 1), SELLER, NOW).is_err());
+        let mut zero = request(NOW + 3_600, 0);
+        zero.minimum_bid = "0".to_string();
+        assert!(settings(&zero, SELLER, NOW).is_err());
+        let mut over = request(NOW + 3_600, 0);
+        over.increment = Increment::Percent { bps: 10_001 };
+        assert!(settings(&over, SELLER, NOW).is_err());
+    }
+
+    #[test]
+    fn another_sellers_far_off_auction_is_not_biddable() {
+        let timings = AuctionTimings::new(NOW + MAX_DURATION + 1, 0);
+        assert!(timing_problem(timings, NOW).is_some());
+        assert!(timing_problem(AuctionTimings::new(NOW + 60, MAX_GRACE + 1), NOW).is_some());
+        assert!(timing_problem(AuctionTimings::new(NOW + 60, MAX_GRACE), NOW).is_none());
+    }
+
+    #[test]
+    fn bids_before_the_end_then_only_in_the_grace_period() {
+        let end = NOW;
+        // Without a grace period: until a minute before the end.
+        let plain = followed(end, 0, None, 0);
+        assert_eq!(bid_window(&plain, end - MARGIN - 1), Ok(false));
+        assert!(bid_window(&plain, end - MARGIN).is_err());
+        assert!(bid_window(&plain, end + 1).is_err());
+        // With one: after the end, within the grace of the last spend, as a grace bid.
+        let graced = followed(end, 600, Some(end - 100), 1_000);
+        assert_eq!(bid_window(&graced, end + 10), Ok(true));
+        assert!(bid_window(&graced, end - 100 + 600 - MARGIN).is_err());
+        // The last spend's time unknown: no grace bid.
+        let unknown = followed(end, 600, None, 1_000);
+        assert!(bid_window(&unknown, end + 10).is_err());
+    }
+
+    #[test]
+    fn an_end_waits_for_the_end_time_and_the_grace_period() {
+        let end = NOW;
+        let plain = followed(end, 0, None, 1_000);
+        assert!(!can_end(&plain, end));
+        assert!(can_end(&plain, end + MARGIN));
+        // A grace bid after the end time keeps it open for the grace period after it.
+        let graced = followed(end, 600, Some(end + 300), 1_000);
+        assert!(!can_end(&graced, end + MARGIN));
+        assert!(!can_end(&graced, end + 300 + 600));
+        assert!(can_end(&graced, end + 300 + 600 + MARGIN));
+        // With a grace period, an unknown last spend gives no end at all.
+        let unknown = followed(end, 600, None, 1_000);
+        assert!(!can_end(&unknown, end + 10 * MAX_GRACE));
+        // An ended auction, or one whose NFT is gone, is not ended again.
+        let mut gone = followed(end, 0, None, 1_000);
+        gone.locked_nft = None;
+        assert!(!can_end(&gone, end + MARGIN));
+    }
+
+    #[test]
+    fn statuses() {
+        let end = NOW;
+        assert_eq!(
+            status(&followed(end, 0, None, 0), end - 1),
+            AuctionStatus::Live
+        );
+        assert_eq!(
+            status(&followed(end, 0, None, 0), end + 1),
+            AuctionStatus::Ending
+        );
+        let mut sold = followed(end, 0, None, 1_000);
+        sold.auction.info.state.ended = true;
+        assert_eq!(status(&sold, end + 1), AuctionStatus::Sold);
+        let mut unsold = followed(end, 0, None, 0);
+        unsold.auction.info.state.ended = true;
+        assert_eq!(status(&unsold, end + 1), AuctionStatus::Unsold);
+        unsold.cancelled = true;
+        assert_eq!(status(&unsold, end + 1), AuctionStatus::Cancelled);
+    }
+
+    #[test]
+    fn the_next_bid() {
+        assert_eq!(next_minimum_bid(&followed(NOW, 0, None, 0).auction), 1_000);
+        assert_eq!(
+            next_minimum_bid(&followed(NOW, 0, None, 1_000).auction),
+            1_100
+        );
+    }
 }

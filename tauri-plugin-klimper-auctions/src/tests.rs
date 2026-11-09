@@ -234,19 +234,60 @@ async fn the_seller_cancels_before_any_bid_and_gets_the_nft_back() {
     let view = wallet::view(&seller.ctx().await, &followed, now)
         .await
         .unwrap();
-    assert!(
-        matches!(
-            view.status,
-            AuctionStatus::Cancelled | AuctionStatus::Unsold
-        ),
-        "{:?}",
-        view.status
-    );
+    assert_eq!(view.status, AuctionStatus::Cancelled);
     assert!(!view.can_bid && !view.can_cancel);
     assert!(
         held_nft(&seller, nft_id).await.is_some(),
         "the NFT came back"
     );
+}
+
+#[tokio::test]
+async fn an_auction_without_a_bid_ends_unsold_and_the_nft_goes_back() {
+    let mut seller = SimWallet::new(10_000).await;
+    let other = seller.next(5_000).await;
+    let nft_id = mint(&mut seller, Bytes32::new([0x77; 32])).await;
+    let now = chain_time(&seller).await;
+    let id = start(&mut seller, nft_id, now).await;
+
+    // Not before its end time.
+    let early = wallet::end(&other.ctx().await, id, 0, now).await;
+    assert!(matches!(early, Err(Error::Invalid(_))), "{early:?}");
+
+    let end_time = now + 3_600;
+    seller
+        .sim
+        .lock()
+        .await
+        .set_next_timestamp(end_time + 120)
+        .unwrap();
+    let later = end_time + 200;
+    // Anyone may end it, with no fee: here a wallet that is neither seller nor bidder.
+    let ctx = other.ctx().await;
+    let auction_coin = wallet::follow(&ctx, id)
+        .await
+        .unwrap()
+        .auction
+        .coin
+        .coin_id();
+    let bundle = wallet::end(&ctx, id, 0, later).await.unwrap();
+    ctx.submit(bundle).await.unwrap();
+    seller.wait_until_spent(auction_coin).await;
+
+    let followed = wallet::follow(&seller.ctx().await, id).await.unwrap();
+    let view = wallet::view(&seller.ctx().await, &followed, later)
+        .await
+        .unwrap();
+    assert_eq!(view.status, AuctionStatus::Unsold);
+    let mut back = false;
+    for _ in 0..100 {
+        if held_nft(&seller, nft_id).await.is_some() {
+            back = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(back, "the NFT came back to the seller");
 }
 
 #[tokio::test]
