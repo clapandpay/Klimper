@@ -5,6 +5,13 @@
 //! The texts in `tests/fixtures/klimper-1.2/` were made by that driver on the same simulated
 //! chain these tests build (the parties' keys and coins are deterministic), for every pairing
 //! with and without a fee per fill and an expiry. Klimper 1.2 users have such offers live.
+//!
+//! How they were made (2026-11-07, before that driver was deleted at 330f0f3c): this test with
+//! `crates/chia-partial-offer` as a dev-dependency, the maker's one-sided offer built from
+//! `maker.spends()` with `Action::send` of the offered amount and one mojo of XCH to the
+//! settlement puzzle (`Relation::None`), `chia_partial_offer::make_partial_offer` with
+//! testnet11's signature constants, and its `to_text()` written here. Each text differs per run
+//! (the security coin's key is random); any of them decodes and fills on this chain.
 
 use anyhow::Result;
 use chia_sdk_test::Simulator;

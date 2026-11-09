@@ -1076,8 +1076,11 @@ async fn a_take_that_writes_someone_elses_option_is_refused() {
 ///
 /// Ignored since the 2026-11-07 Sage merge (`upstream/main` ce9de66d): Sage's
 /// `exercise_options` now spends one of the wallet's XCH coins twice even without a fee
-/// (here a 1000-mojo coin), which wallet-kit refuses (4000) and the chain would too. Sage
-/// is not changed here; to report upstream. Run with `--ignored` to reproduce.
+/// (here a 1000-mojo coin), which wallet-kit refuses (4000) and the chain would too: the
+/// bundle `build_exercise` returned held 6 spends of 5 coins, coin `4b4007d9…` (1000 mojos,
+/// the holder's XCH) twice (dumped 2026-11-07). Upstream's own exercise test has a CAT
+/// underlying, not XCH. Sage is not changed here; to report upstream. Run with `--ignored` to
+/// reproduce.
 #[tokio::test]
 #[ignore = "Sage's exercise_options spends one coin twice"]
 async fn an_xch_option_is_used_before_the_expiry() {

@@ -156,7 +156,8 @@ with those, as the reference CLI does. Offer methods for apps wait for Sage.
   `Offers.tsx` paste and scan code, `QrScanner.tsx` and `offerData.ts` need no change. It also
   adds `/offers/make-partial`. The pages load lazily.
 - Flag: `partialOffersEnabled` (needs `offersEnabled` and `VITE_ENABLE_PARTIAL_OFFERS=true`),
-  off in `.env.production` and `.env.desktop` (tested in `releaseFlags.test.ts`). Off, the routes
+  on in `.env.production` (the phones, since 1.2.0) and off in `.env.desktop` (tested in
+  `releaseFlags.test.ts`). Off, the routes
   are Sage's and the two elements render nothing.
 - Make: `<PartialFillsOption />` in Sage's `MakeOffer.tsx` opens `MakePartialOffer`, which takes
   the assets, amounts and expiry from Sage's offer state (exactly one token for one token) and
