@@ -1326,6 +1326,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chia-bls 0.52.1",
+ "chia-consensus",
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
@@ -1336,6 +1337,8 @@ dependencies = [
  "clvmr",
  "hex-literal 0.4.1",
  "indexmap 2.12.1",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
  "rstest",
  "thiserror 1.0.69",
 ]
@@ -6249,6 +6252,16 @@ dependencies = [
  "ppv-lite86",
  "rand_core 0.9.3",
  "serde",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e6af7f3e25ded52c41df4e0b1af2d047e45896c2f3281792ed68a1c243daedb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
