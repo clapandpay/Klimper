@@ -7284,6 +7284,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-klimper-auctions",
  "tauri-plugin-klimper-jingle",
  "tauri-plugin-klimper-partial-offers",
  "tauri-plugin-klimper-storage",
@@ -8630,6 +8631,30 @@ dependencies = [
  "thiserror 2.0.17",
  "toml 1.1.0+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-klimper-auctions"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia-sdk-next",
+ "chia-wallet-sdk",
+ "hex",
+ "sage",
+ "sage-config",
+ "sage-database",
+ "sage-wallet",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-plugin",
+ "tauri-plugin-klimper-partial-offers",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -75,6 +75,20 @@ describe('classifyScan', () => {
     });
   });
 
+  it('opens an auction by its id only when auctions are built in', () => {
+    const id = 'ab'.repeat(32);
+    for (const text of [`auction:0x${id}`, `AUCTION:${id.toUpperCase()}`]) {
+      expect(classifyScan(text, { ...ON, auctions: true })).toEqual({
+        kind: 'auction',
+        id: `0x${id}`,
+      });
+      expect(classifyScan(text, ON).kind).toBe('unknown');
+    }
+    expect(
+      classifyScan(`auction:0x${id}00`, { ...ON, auctions: true }).kind,
+    ).toBe('unknown');
+  });
+
   it('shows anything else as it is', () => {
     expect(classifyScan(' https://example.com/x ', ON)).toEqual({
       kind: 'unknown',

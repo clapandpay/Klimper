@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/card';
 import { featureElement } from '@/lib/featureElement';
 import {
+  auctionsEnabled,
   offersEnabled,
   partialOffersEnabled,
   scanEnabled,
@@ -86,6 +87,7 @@ export default function Scanner() {
         xchonnect: xchonnectEnabled,
         offers: offersEnabled,
         partialOffers: partialOffersEnabled,
+        auctions: auctionsEnabled,
       });
       switch (target.kind) {
         case 'xchonnect':
@@ -95,6 +97,9 @@ export default function Scanner() {
           return;
         case 'offer':
           navigate(`/offers/view/${encodeURIComponent(target.offer)}`);
+          return;
+        case 'auction':
+          navigate(`/auctions/view/${target.id}`);
           return;
         case 'address':
           setReturnValue(SEND_XCH_ROUTE, {

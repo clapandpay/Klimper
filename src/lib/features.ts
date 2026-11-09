@@ -38,6 +38,11 @@ export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';
 // src/klimper/partial/ and tauri-plugin-klimper-partial-offers (docs/partial-offers.md).
 export const partialOffersEnabled =
   offersEnabled && import.meta.env.VITE_ENABLE_PARTIAL_OFFERS === 'true';
+// Opt-in: NFT auctions (chia-wallet-sdk's auction, bids in XCH): start one for an NFT, open
+// one from its id or QR, bid, end, cancel. Needs NFTs. All in src/klimper/auctions/ and
+// tauri-plugin-klimper-auctions (docs/auctions.md).
+export const auctionsEnabled =
+  nftsEnabled && import.meta.env.VITE_ENABLE_AUCTIONS === 'true';
 // Sage's own: XCHandles ("@anna") in every recipient field, verified by the backend.
 export const xchandlesEnabled =
   import.meta.env.VITE_DISABLE_XCHANDLES !== 'true';

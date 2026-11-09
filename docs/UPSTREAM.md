@@ -135,7 +135,7 @@ and a release we have not merged is a bridge fix we do not have. Do this on its 
    grep -h identifier src-tauri/tauri.*.conf.json   # com.clapandpay.klimper, every one
    scripts/set-version.sh --check                   # Klimper's version, not the merged tag
    grep -c 'fn context' src-tauri/src/lib.rs        # 1: apps are told the Sage version
-   grep -c '^VITE_' .env.production .env.desktop     # 14 each (`releaseFlags.test.ts` checks each value)
+   grep -c '^VITE_' .env.production .env.desktop     # 15 each (`releaseFlags.test.ts` checks each value)
    grep -c 'klimperRouter\|KlimperRoot' src/App.tsx # 3: the import, the router, the root
    ```
 
@@ -267,6 +267,21 @@ Three parts, each replaceable on its own once Sage or chia-wallet-sdk ships part
 | `src/pages/Offers.tsx`                                       | one import, a hook, two headings, one element | Two groups under Sage's filters: "Offers" (Sage's paged list, its heading with the total only with the flag on) and `<MyPartialOffers />` under it, matched to Sage's status filter; the intro card ("No offers yet") hides while partial offers exist. _Propose upstream_ as a hiding point |
 | `src/pages/MakeOffer.tsx`                                    | one import, one element                       | `<PartialFillsOption />`: opens `/offers/make-partial` with Sage's offer state. _Propose upstream_ as a hiding point                                                                                                                                                                         |
 | `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                                      | `VITE_ENABLE_PARTIAL_OFFERS`. `/offers/view/:offer` and `/offers/make-partial` are switched in `src/klimper/partial/routes.tsx`                                                                                                                                                              |
+
+### Auctions (owner's "dutch offers", 2026-11-07)
+
+NFT auctions with bids in XCH, on chia-wallet-sdk's auction (`docs/auctions.md`): the driver in
+`crates/chia-sdk-next` (with the partial offer driver), the plugin
+`tauri-plugin-klimper-auctions` (new) and the screens in `src/klimper/auctions/` (new), reached
+from `/auctions` (Klimper's nav link), an NFT's page and the Scan tab (`auction:0x…`). Sage's
+crates are not changed. Off unless `VITE_ENABLE_AUCTIONS=true`; off in both release files until
+tried on testnet.
+
+| File                                                         | Ours                    | Note                                                                                                               |
+| ------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | member, dep, one plugin | three lines, as for partial offers                                                                                 |
+| `src/pages/Nft.tsx`                                          | one import, one element | `<StartAuctionButton />` beside the external links; nothing without the flag. _Propose upstream_ as a hiding point |
+| `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                | `VITE_ENABLE_AUCTIONS` (needs NFTs)                                                                                |
 
 ### Phone data and push
 

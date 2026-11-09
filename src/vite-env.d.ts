@@ -15,6 +15,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_KLIMPER_COINS?: string;
   readonly VITE_DISABLE_SCAN?: string;
   readonly VITE_ENABLE_PARTIAL_OFFERS?: string;
+  readonly VITE_ENABLE_AUCTIONS?: string;
   readonly VITE_DISABLE_XCHANDLES?: string;
 }
 

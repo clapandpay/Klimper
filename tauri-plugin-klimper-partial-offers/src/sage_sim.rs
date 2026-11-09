@@ -133,7 +133,12 @@ impl SimWallet {
             options(),
             state.clone(),
             Some(wallet.clone()),
-            TESTNET11.clone(),
+            // The simulator sends a new peak only when a block is made; upstream drops a peer
+            // that goes quiet, which would drop the chain mid-test.
+            sage_config::Network {
+                drop_silent_peers: false,
+                ..TESTNET11.clone()
+            },
             Connector::Plain,
         );
         tokio::spawn(sync_manager.sync());

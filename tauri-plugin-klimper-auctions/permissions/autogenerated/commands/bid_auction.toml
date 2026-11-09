@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-bid-auction"
+description = "Enables the bid_auction command without any pre-configured scope."
+commands.allow = ["bid_auction"]
+
+[[permission]]
+identifier = "deny-bid-auction"
+description = "Denies the bid_auction command without any pre-configured scope."
+commands.deny = ["bid_auction"]

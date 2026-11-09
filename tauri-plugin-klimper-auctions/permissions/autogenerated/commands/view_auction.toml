@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-view-auction"
+description = "Enables the view_auction command without any pre-configured scope."
+commands.allow = ["view_auction"]
+
+[[permission]]
+identifier = "deny-view-auction"
+description = "Denies the view_auction command without any pre-configured scope."
+commands.deny = ["view_auction"]

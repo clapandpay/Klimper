@@ -25,6 +25,7 @@ import {
 } from '@/lib/features';
 import { ReactElement } from 'react';
 import { createRoutesFromElements, RouteObject } from 'react-router-dom';
+import { auctionRoutes } from './auctions/routes';
 import { RouteRecovery } from './KlimperErrorBoundary';
 import { withPartialOffers } from './partial/routes';
 import { scannerRoutes } from './Scanner';
@@ -99,6 +100,7 @@ export function withKlimper(routes: RouteObject[]): RouteObject[] {
       <>
         {xchonnectRoutes}
         {scannerRoutes}
+        {auctionRoutes}
       </>,
     ),
   ]
