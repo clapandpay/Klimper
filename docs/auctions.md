@@ -21,8 +21,9 @@ them yet (nodexch could).
   in full. Before the end time a bid asserts it is before it; after it, a grace bid must come
   within the grace period of the last spend.
 - Ending (anyone, after the end time and the grace period since the last spend; Klimper offers
-  it a little later: once both the end time and the last spend plus the grace period, plus a
-  minute, have passed) sends the NFT to
+  it later, at the later of the end time and the last spend, plus the grace period, plus a
+  minute: so with a grace period it always waits the grace period past the end time) sends
+  the NFT to
   the winner (back to the seller with no bid) and pays out. The seller can cancel before the
   first bid; the NFT comes back.
 
@@ -80,3 +81,11 @@ without a grace period, when an end may come, the statuses, the next bid. Fronte
 
 Not yet: a run on testnet11 (then turn `VITE_ENABLE_AUCTIONS` on in the release files), bids in
 a CAT, an index of auctions.
+
+Not tested (known limits): a grace-period bid on a chain (the simulator closes the connection
+on the block-header request that gives the last spend's time; the puzzle path is the driver's
+`test_grace_period_extends_bidding`, Klimper's window and end rule are unit-tested); the two
+refusals just before a bid is signed (the reserve amount differing from what was shown, and the
+bundle leaving more than the fee), which only an inconsistency between the driver's `child_state`
+check and the wallet's spends could reach; the funding coin's exclusion at start (Sage's start
+spends select no XCH today; the test checks no coin is spent twice).
