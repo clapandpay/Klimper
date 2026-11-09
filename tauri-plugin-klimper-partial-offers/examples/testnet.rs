@@ -20,7 +20,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use anyhow::{Context, Result, bail, ensure};
 use sage::Sage;
 use sage_api::{
-    Amount, GenerateMnemonic, GetCats, GetPeers, GetSyncStatus, ImportKey, IssueCat, Login,
+    Amount, GenerateMnemonic, GetCats, GetPeers, GetSyncStatus, ImportWallet, IssueCat, Login,
     SetNetwork,
 };
 use tauri_plugin_klimper_partial_offers::{
@@ -49,7 +49,7 @@ async fn open(dir: &Path) -> Result<AppState> {
         let mnemonic = sage
             .generate_mnemonic(GenerateMnemonic { use_24_words: true })?
             .mnemonic;
-        sage.import_key(ImportKey {
+        sage.import_wallet(ImportWallet {
             name: "partial offers testnet".to_string(),
             key: mnemonic,
             derivation_index: 0,

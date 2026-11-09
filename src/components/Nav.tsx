@@ -10,7 +10,6 @@ import {
   offersEnabled,
   optionsEnabled,
   profilesEnabled,
-  swapEnabled,
 } from '@/lib/features';
 import { logoutAndUpdateState, useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
@@ -18,7 +17,6 @@ import { Trans } from '@lingui/react/macro';
 import { platform } from '@tauri-apps/plugin-os';
 import {
   ArrowDownUp,
-  ArrowLeftRight,
   Blocks,
   BookUser,
   Cog,
@@ -102,16 +100,6 @@ export function TopNav({ isCollapsed }: NavProps) {
           message={<Trans>Offers</Trans>}
         >
           <Handshake className={className} aria-hidden='true' />
-        </NavLink>
-      )}
-
-      {swapEnabled && (
-        <NavLink
-          url={'/swap'}
-          isCollapsed={isCollapsed}
-          message={<Trans>Swap</Trans>}
-        >
-          <ArrowLeftRight className={className} aria-hidden='true' />
         </NavLink>
       )}
 

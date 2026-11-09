@@ -45,6 +45,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 rustls = { workspace = true }
 reqwest = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 # This is to ensure that the bindgen feature is enabled for the aws-lc-rs crate.
 # https://aws.github.io/aws-lc-rs/platform_support.html#tested-platforms
@@ -57,6 +58,7 @@ tauri-plugin-klimper-partial-offers = { workspace = true }
 tauri-plugin-deep-link = { workspace = true }
 
 [dev-dependencies]
+toml = { workspace = true }
 tempfile = "3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

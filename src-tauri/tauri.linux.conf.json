@@ -8,6 +8,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "Klimper",
         "width": 1150,
         "height": 750,

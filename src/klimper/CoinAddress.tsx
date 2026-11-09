@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The address a coin in a transaction belongs to, and whose it is: the wallet's own, a burn,
 // an offer's settlement, a launcher, or someone else's. Sage knows all of this per coin
-// (`address_kind`) and its transaction page showed none of it.
+// (`address_kind`) and its transaction page showed none of it. Sage's contact and handle labels
+// follow it.
 
 import { AddressKind, TransactionCoinRecord } from '@/bindings';
+import { AddressLabels } from '@/components/AddressLabels';
 import { t } from '@lingui/core/macro';
 import { AddressText } from './AddressText';
 
@@ -32,13 +34,14 @@ export function CoinAddress({
   if (!coin.address) return null;
   return (
     <div
-      className='mt-3 flex min-w-0 items-center border-t border-border pt-3'
+      className='mt-3 flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3'
       data-testid='coin-address'
     >
       <AddressText
         address={coin.address}
         badge={kindLabel(coin.address_kind) ?? undefined}
       />
+      <AddressLabels address={coin.address} compact />
     </div>
   );
 }

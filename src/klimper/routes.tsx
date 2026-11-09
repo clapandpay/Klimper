@@ -20,7 +20,6 @@ import {
   offersEnabled,
   optionsEnabled,
   profilesEnabled,
-  swapEnabled,
   themeGalleryEnabled,
   tokenIssuingEnabled,
 } from '@/lib/features';
@@ -37,7 +36,6 @@ const GATED: Readonly<Record<string, boolean>> = {
   '/dids': profilesEnabled,
   '/options': optionsEnabled,
   '/offers': offersEnabled,
-  '/swap': swapEnabled,
   '/themes': themeGalleryEnabled,
 };
 

@@ -2,6 +2,7 @@
 import { commands, NftRecord, TransactionResponse } from '@/bindings';
 import { CustomError } from '@/contexts/ErrorContext';
 import { useWallet } from '@/contexts/WalletContext';
+import { withHandleConfirmation } from '@/lib/handles';
 import { useErrors } from '@/hooks/useErrors';
 import useOfferStateWithDefault from '@/hooks/useOfferStateWithDefault';
 import { offersEnabled, profilesEnabled } from '@/lib/features';
@@ -126,12 +127,14 @@ export function MultiSelectActions({
   const onTransferSubmit = (address: string, fee: string) => {
     setIsTransferring(true);
     setTransferAddress(address);
-    commands
-      .transferNfts({
+    withHandleConfirmation((confirmed_handles) =>
+      commands.transferNfts({
         nft_ids: selected,
         address,
         fee: toMojos(fee, walletState.sync.unit.precision),
-      })
+        confirmed_handles,
+      }),
+    )
       .then(setResponse)
       .catch((err: unknown) => {
         setIsTransferring(false);

@@ -22,10 +22,10 @@ use chia_wallet_sdk::{
     test::PeerSimulator,
 };
 use sage_config::TESTNET11;
-use sage_database::{Database, Derivation};
+use sage_database::{Database, Derivation, SharedDatabase};
 use sage_wallet::{
     PeerState, SyncCommand, SyncEvent, SyncManager, SyncOptions, Timeouts, Transaction, Wallet,
-    insert_transaction,
+    WalletKind, insert_transaction,
 };
 use sqlx::SqlitePool;
 use tokio::{
@@ -73,6 +73,17 @@ impl SimWallet {
         sqlx::migrate!("../migrations").run(&pool).await.unwrap();
         let db = Database::new(pool);
         db.run_rust_migrations("TXCH".to_string()).await.unwrap();
+        // Upstream keeps contacts and handles in a database shared by a network's wallets.
+        let shared_pool = SqlitePool::connect(&format!(
+            "file:klimper-xchonnect-shared-{db_index}?mode=memory&cache=shared"
+        ))
+        .await
+        .unwrap();
+        sqlx::migrate!("../migrations")
+            .run(&shared_pool)
+            .await
+            .unwrap();
+        let shared_db = SharedDatabase::new(shared_pool);
 
         let sk = BlsPair::default().sk.derive_unhardened(key_index);
         let pk = sk.public_key();
@@ -109,8 +120,9 @@ impl SimWallet {
         let state = Arc::new(Mutex::new(PeerState::default()));
         let wallet = Arc::new(Wallet::new(
             db,
+            shared_db,
             pk.get_fingerprint(),
-            intermediate_pk,
+            WalletKind::Bls { intermediate_pk },
             TESTNET11_CONSTANTS.genesis_challenge,
             agg_sig,
             None,

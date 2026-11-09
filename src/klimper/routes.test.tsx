@@ -20,7 +20,6 @@ vi.mock('@/lib/features', () => ({
   partialOffersEnabled: false,
   optionsEnabled: true,
   profilesEnabled: true,
-  swapEnabled: true,
   themeGalleryEnabled: true,
   tokenIssuingEnabled: false,
   xchonnectEnabled: true,
