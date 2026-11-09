@@ -5,9 +5,16 @@
 //! auction refused.
 #![allow(clippy::unwrap_used)]
 
+use chia_sdk_next::{AuctionBid, AuctionExt, auction_lock_p2_puzzle_hash};
 use chia_wallet_sdk::{
-    chia::{protocol::Bytes32, puzzle_types::nft::NftMetadata},
+    chia::{
+        protocol::{Bytes32, Coin, SpendBundle},
+        puzzle_types::{Memos, nft::NftMetadata},
+    },
+    clvm_traits::FromClvm,
+    clvmr::{NodePtr, serde::node_to_bytes},
     driver::SpendContext,
+    types::{Condition, run_puzzle},
 };
 use sage_database::DeserializePrimitive;
 use sage_wallet::WalletNftMint;
@@ -299,4 +306,197 @@ async fn an_id_that_is_no_auction_is_refused() {
     assert!(matches!(read, Err(Error::NotAuction(_))), "{read:?}");
     let missing = crate::wallet::follow(&wallet.ctx().await, Bytes32::new([1; 32])).await;
     assert!(matches!(missing, Err(Error::NotAuction(_))), "{missing:?}");
+}
+
+/// Every coin spend of `bundle` with the conditions its puzzle outputs.
+/// A coin spent, and the conditions its spend outputs.
+type Spent = (Coin, Vec<Condition<NodePtr>>);
+
+fn conditions(bundle: &SpendBundle) -> (SpendContext, Vec<Spent>) {
+    let mut ctx = SpendContext::new();
+    let mut all = Vec::new();
+    for spend in &bundle.coin_spends {
+        let puzzle = ctx.alloc(&spend.puzzle_reveal).unwrap();
+        let solution = ctx.alloc(&spend.solution).unwrap();
+        let output = run_puzzle(&mut ctx, puzzle, solution).unwrap();
+        all.push((
+            spend.coin,
+            Vec::<Condition<NodePtr>>::from_clvm(&ctx, output).unwrap(),
+        ));
+    }
+    (ctx, all)
+}
+
+/// Whether the CLVM at `node` holds the 32 bytes of `id`.
+fn holds(ctx: &SpendContext, node: NodePtr, id: Bytes32) -> bool {
+    let bytes = node_to_bytes(ctx, node).unwrap();
+    bytes.windows(32).any(|window| window == id.as_ref())
+}
+
+fn asserts_concurrent(conditions: &[Condition<NodePtr>], coin_id: Bytes32) -> bool {
+    conditions.iter().any(|condition| {
+        matches!(condition, Condition::AssertConcurrentSpend(assert) if assert.coin_id == coin_id)
+    })
+}
+
+#[tokio::test]
+async fn the_wallets_spends_are_tied_to_the_auction() {
+    let mut seller = SimWallet::new(10_000).await;
+    let bidder = seller.next(20_000).await;
+    let nft_id = mint(&mut seller, Bytes32::new([0x77; 32])).await;
+    let now = chain_time(&seller).await;
+    let nft_coin = held_nft(&seller, nft_id).await.unwrap();
+
+    // Start: no coin spent twice; the launching coin asserts the NFT's spend; the NFT's send to
+    // the lock carries the auction's id in its memo.
+    let request = StartRequest {
+        nft_id: hex::encode(nft_id),
+        minimum_bid: "1000".to_string(),
+        increment: Increment::Flat {
+            amount: "100".to_string(),
+        },
+        end_time: now + 3_600,
+        grace_period: 0,
+        fee: Some("10".to_string()),
+    };
+    let ctx = seller.ctx().await;
+    let (id, bundle) = wallet::start(&ctx, &request, now).await.unwrap();
+    let (cctx, spends) = conditions(&bundle);
+    let mut ids: Vec<Bytes32> = spends.iter().map(|(coin, _)| coin.coin_id()).collect();
+    let count = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), count, "a coin is spent twice");
+    let lock = auction_lock_p2_puzzle_hash(id);
+    // The launching coin is the launcher's parent.
+    let launcher = spends
+        .iter()
+        .find(|(coin, _)| coin.coin_id() == id)
+        .unwrap()
+        .0;
+    let launching = spends
+        .iter()
+        .find(|(coin, _)| coin.coin_id() == launcher.parent_coin_info)
+        .unwrap();
+    assert!(asserts_concurrent(&launching.1, nft_coin));
+    let (_, nft_conditions) = spends
+        .iter()
+        .find(|(coin, _)| coin.coin_id() == nft_coin)
+        .unwrap();
+    assert!(nft_conditions.iter().any(|condition| matches!(
+        condition,
+        Condition::CreateCoin(create) if match create.memos {
+            Memos::Some(memos) => holds(&cctx, memos, id),
+            Memos::None => false,
+        }
+    )));
+    ctx.submit(bundle).await.unwrap();
+    seller.wait_until_spent(nft_coin).await;
+
+    // A bid: the wallet's spend asserts the bid's announcement and remarks the auction's id.
+    let bctx = bidder.ctx().await;
+    let followed = wallet::follow(&bctx, id).await.unwrap();
+    let bid_to = bidder.wallet.change_p2_puzzle_hash().await.unwrap();
+    let announcement = followed
+        .auction
+        .bid_announcement_id(AuctionBid::new(1_000, bid_to));
+    let bundle = wallet::bid(&bctx, id, 1_000, 5, now).await.unwrap();
+    let (cctx, spends) = conditions(&bundle);
+    let own: Vec<_> = spends
+        .iter()
+        .filter(|(coin, _)| {
+            coin.puzzle_hash != lock && coin.coin_id() != followed.auction.coin.coin_id()
+        })
+        .collect();
+    assert!(!own.is_empty());
+    assert!(own.iter().any(
+        |(_, conditions)| conditions.iter().any(|condition| matches!(
+            condition,
+            Condition::AssertCoinAnnouncement(assert) if assert.announcement_id == announcement
+        ))
+    ));
+    assert!(own.iter().any(
+        |(_, conditions)| conditions.iter().any(|condition| matches!(
+            condition,
+            Condition::Remark(remark) if holds(&cctx, remark.rest, id)
+        ))
+    ));
+    bctx.submit(bundle).await.unwrap();
+    bidder
+        .wait_until_spent(followed.auction.coin.coin_id())
+        .await;
+
+    // An end with a fee: the fee's spend asserts the auction coin's spend.
+    let end_time = now + 3_600;
+    seller
+        .sim
+        .lock()
+        .await
+        .set_next_timestamp(end_time + 120)
+        .unwrap();
+    let followed = wallet::follow(&ctx, id).await.unwrap();
+    let auction_coin = followed.auction.coin.coin_id();
+    let bundle = wallet::end(&ctx, id, 7, end_time + 200).await.unwrap();
+    let (_, spends) = conditions(&bundle);
+    assert!(spends.iter().any(|(coin, conditions)| {
+        coin.coin_id() != auction_coin && asserts_concurrent(conditions, auction_coin)
+    }));
+}
+
+#[tokio::test]
+async fn the_nft_check_refuses_what_the_auction_does_not_hold() {
+    let mut seller = SimWallet::new(10_000).await;
+    let nft_id = mint(&mut seller, Bytes32::new([0x77; 32])).await;
+    let other_nft = mint(&mut seller, Bytes32::new([0x77; 32])).await;
+    let now = chain_time(&seller).await;
+    let id = start(&mut seller, nft_id, now).await;
+    let ctx = seller.ctx().await;
+    let held = wallet::follow(&ctx, id).await.unwrap().locked_nft.unwrap();
+    let check = async |coin_id: Bytes32| {
+        let mut sctx = SpendContext::new();
+        wallet::locked_nft(&ctx, &mut sctx, id, coin_id)
+            .await
+            .unwrap()
+            .map(|nft| nft.coin.coin_id())
+    };
+
+    assert_eq!(check(held).await, Ok(held));
+    let not_locked = held_nft(&seller, other_nft).await.unwrap();
+    assert_eq!(
+        check(not_locked).await.unwrap_err(),
+        "the NFT is not held by this auction"
+    );
+    let xch = seller.wallet.db.selectable_xch_coins().await.unwrap()[0].coin_id();
+    assert_eq!(
+        check(xch).await.unwrap_err(),
+        "the coin this auction names is not a standard NFT"
+    );
+    assert_eq!(
+        check(Bytes32::new([1; 32])).await.unwrap_err(),
+        "the NFT this auction names is not on the chain"
+    );
+
+    // Once the NFT has left the auction (here, a cancel), it is refused, and nobody can bid.
+    let auction_coin = wallet::follow(&ctx, id)
+        .await
+        .unwrap()
+        .auction
+        .coin
+        .coin_id();
+    let bundle = wallet::cancel(&ctx, id, 0).await.unwrap();
+    // A cancel's paying spend asserts the auction coin's spend too.
+    let (_, spends) = conditions(&bundle);
+    assert!(spends.iter().any(|(coin, conditions)| {
+        coin.coin_id() != auction_coin && asserts_concurrent(conditions, auction_coin)
+    }));
+    ctx.submit(bundle).await.unwrap();
+    seller.wait_until_spent(auction_coin).await;
+    assert_eq!(
+        check(held).await.unwrap_err(),
+        "the NFT this auction names has moved"
+    );
+    let followed = wallet::follow(&ctx, id).await.unwrap();
+    assert!(followed.locked_nft.is_none());
+    let view = wallet::view(&ctx, &followed, now).await.unwrap();
+    assert!(!view.can_bid && !view.can_end && !view.can_cancel);
 }

@@ -109,10 +109,15 @@ export default function AuctionPage() {
     load();
   }, [load]);
 
-  // Look again every 15 seconds while it is not on the chain yet.
+  // Look again every 15 seconds while it is not on the chain yet, for ten minutes.
   useEffect(() => {
     if (!notYet) return;
-    const timer = setInterval(load, 15_000);
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 40) clearInterval(timer);
+      else load();
+    }, 15_000);
     return () => clearInterval(timer);
   }, [notYet, load]);
 
@@ -139,7 +144,9 @@ export default function AuctionPage() {
   }
 
   const bid = xch.mojos(amount);
-  const networkFee = xch.mojos(fee || '0') ?? 0n;
+  const typedFee = xch.mojos(fee || '0');
+  const networkFee = typedFee ?? 0n;
+  const feeValid = typedFee !== null;
   const cost =
     view && bid !== null
       ? bidCost(bid, view.buyers_premium_bps, view.royalty_bps)
@@ -220,7 +227,8 @@ export default function AuctionPage() {
               </p>
               <p className='text-muted-foreground'>
                 <Trans>
-                  If it never appears, the id is not an auction: check it.
+                  If it never appears, the id is not an auction: check it. After
+                  ten minutes, look again by hand.
                 </Trans>
               </p>
               <Button variant='outline' disabled={loading} onClick={load}>
@@ -323,7 +331,7 @@ export default function AuctionPage() {
                     </p>
                   )}
                   <Button
-                    disabled={!bidValid || isReadOnly || sending}
+                    disabled={!bidValid || !feeValid || isReadOnly || sending}
                     onClick={() => setPending('bid')}
                   >
                     <Trans>Bid</Trans>
@@ -355,7 +363,7 @@ export default function AuctionPage() {
                         </Trans>
                       </p>
                       <Button
-                        disabled={isReadOnly || sending}
+                        disabled={!feeValid || isReadOnly || sending}
                         onClick={() => setPending('end')}
                       >
                         <Trans>End the auction</Trans>
@@ -365,7 +373,7 @@ export default function AuctionPage() {
                   {view.can_cancel && (
                     <Button
                       variant='outline'
-                      disabled={isReadOnly || sending}
+                      disabled={!feeValid || isReadOnly || sending}
                       onClick={() => setPending('cancel')}
                     >
                       <Trans>Cancel and take the NFT back</Trans>

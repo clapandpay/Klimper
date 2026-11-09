@@ -20,7 +20,9 @@ them yet (nodexch could).
 - A bid locks the bid plus premium plus royalty in the reserve and refunds the previous bidder
   in full. Before the end time a bid asserts it is before it; after it, a grace bid must come
   within the grace period of the last spend.
-- Ending (anyone, after the end time and the grace period since the last spend) sends the NFT to
+- Ending (anyone, after the end time and the grace period since the last spend; Klimper offers
+  it a little later: once both the end time and the last spend plus the grace period, plus a
+  minute, have passed) sends the NFT to
   the winner (back to the seller with no bid) and pays out. The seller can cancel before the
   first bid; the NFT comes back.
 
@@ -34,8 +36,9 @@ them yet (nodexch could).
 
 Commands: `view_auction`, `start_auction`, `bid_auction`, `end_auction`, `cancel_auction`,
 `get_auctions`, `delete_auction`. The wallet's auctions (started or bid on) are kept in
-`<network>-klimper-auctions.json` next to Sage's wallet database; losing it loses nothing (the
-launcher id is also in the memo of the NFT's send to the auction and in a remark of each bid).
+`<network>-klimper-auctions.json` next to Sage's wallet database; losing it loses no funds: an
+auction can still be opened by its id, and the id is also in the memo of the NFT's send to the
+auction and in a remark of each bid, though nothing reads those back into the list yet.
 
 ## What the wallet adds to the driver (challenger review, 2026-11-07)
 
@@ -71,7 +74,7 @@ minted, auctioned, bid on by two wallets (the first refunded in full; each bidde
 by exactly bid, royalty and fee), ended after the end time (the seller paid, the NFT in the
 winner's Sage database); a cancel before a bid (read as cancelled, the NFT back in the seller's
 database, nobody else can cancel); an auction without a bid ended by a third wallet (not before
-its end time; read as unsold, the NFT back); an id that is not an auction refused. Unit tests
+its end time; read as unsold, the NFT back); an id that is not an auction refused; the NFT check refusing an NFT the auction does not hold, a coin that is not an NFT, one not on the chain, and the NFT once it has left (then nothing can be bid, ended or cancelled); the signed bundles themselves: no coin spent twice at the start, the launching coin asserting the NFT's spend, the auction's id in the NFT's memo and in the bid's remark, the bid's announcement asserted, and the end's and cancel's fee spends asserting the auction coin's spend. Unit tests
 in `wallet.rs`: the start bounds, another seller's far-off auction, the bid window with and
 without a grace period, when an end may come, the statuses, the next bid. Frontend: `math.test.ts`, the scan target.
 

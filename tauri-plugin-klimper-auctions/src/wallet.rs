@@ -109,7 +109,7 @@ async fn confirmed_spend(ctx: &WalletCtx, coin_id: Bytes32) -> Result<CoinSpend,
 
 /// The NFT at `nft_coin_id`, checked: on the chain, unspent, a standard NFT, and locked by the
 /// auction `launcher_id`. `Err` names what is wrong.
-async fn locked_nft(
+pub(crate) async fn locked_nft(
     ctx: &WalletCtx,
     sctx: &mut SpendContext,
     launcher_id: Bytes32,

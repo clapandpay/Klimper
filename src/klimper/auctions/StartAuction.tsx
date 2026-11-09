@@ -59,7 +59,9 @@ export default function StartAuction() {
 
   const minimumMojos = xch.mojos(minimum);
   const stepMojos = xch.mojos(step);
+  const feeMojos = xch.mojos(fee || '0');
   const valid =
+    feeMojos !== null &&
     nftId !== undefined &&
     minimumMojos !== null &&
     minimumMojos > 0n &&
@@ -77,7 +79,7 @@ export default function StartAuction() {
         increment: { kind: 'flat', amount: (stepMojos as bigint).toString() },
         end_time: Math.floor(Date.now() / 1000) + Number(duration),
         grace_period: Number(grace),
-        fee: (xch.mojos(fee || '0') ?? 0n).toString(),
+        fee: (feeMojos ?? 0n).toString(),
       });
       toast.success(
         t`Auction sent. It takes bids once the network confirms it.`,
