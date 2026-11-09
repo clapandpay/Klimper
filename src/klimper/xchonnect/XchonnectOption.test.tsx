@@ -355,8 +355,8 @@ describe('a partial offer (TASK-165)', () => {
     await within(card).findAllByText(/wUSDC 3c3c3c3c/);
     expect(screen.queryByTestId('prompt-offer')).toBeNull();
     const gives = screen.getAllByTestId('offer-give').map(text);
+    expect(gives).toHaveLength(1);
     expect(gives[0]).toContain('300 wUSDC 3c3c3c3c');
-    expect(gives[1]).toContain('1 mojo');
     expect(text(screen.getByTestId('offer-ask'))).toContain('100 XCH');
     const least = text(screen.getByTestId('partial-min-fill'));
     expect(least).toContain('any part from 10 XCH up');
@@ -376,7 +376,7 @@ describe('a partial offer (TASK-165)', () => {
 
   it('shows no fee per fill or expiry when there is none', () => {
     const offer = {
-      gives: [f.leg(f.USDC, 300 * f.ONE_CAT), f.leg(f.XCH, 1)],
+      gives: [f.leg(f.USDC, 300 * f.ONE_CAT)],
       options: [],
       asks: [f.leg(f.XCH, 100 * f.ONE_XCH)],
       expires_at: null,

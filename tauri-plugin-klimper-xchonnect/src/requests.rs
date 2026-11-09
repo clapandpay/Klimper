@@ -714,8 +714,8 @@ pub fn record_released(
             .and_then(|value| Some(value.get("offer")?.as_str()?.to_owned()))
             .and_then(|offer| {
                 // A partial offer (`chia_createPartialOffer`) carries the user's spends too.
-                if chia_partial_offer::is_partial_offer(&offer) {
-                    chia_partial_offer::decode_partial_offer(&offer).ok()
+                if tauri_plugin_klimper_partial_offers::is_partial_offer(&offer) {
+                    chia_sdk_next::decode_partial_offer(&offer).ok()
                 } else {
                     chia_wallet_sdk::driver::decode_offer(&offer).ok()
                 }

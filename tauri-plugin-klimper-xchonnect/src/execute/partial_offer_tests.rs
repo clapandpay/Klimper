@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `chia_createPartialOffer` end to end (TASK-165): a wallet makes a partial offer through
-//! Klimper's own path — the key-free one-sided offer with Sage's offer code, the cross-check
+//! Klimper's own path — the key-free maker's spends with Sage's spend code, the cross-check
 //! against Sage's summary, wallet-kit's submit, one approval with the partial terms, the
-//! driver's make — and only the `partial1…` text comes back. The text is read back with the
+//! SDK's make — and only the `partial1…` text comes back. The text is read back with the
 //! driver, kept in the wallet's own partial offers, and filled in two parts by a second
 //! wallet on the simulated chain, the chain accepting each fill. The refusals run on the
 //! same path: malformed params, terms the driver refuses, more than the wallet holds.
 
 use std::cell::RefCell;
 
-use chia_partial_offer::PartialOffer;
 use serde_json::Value;
+use tauri_plugin_klimper_partial_offers::PartialOffer;
 use tauri_plugin_klimper_partial_offers::{
     mine, records::Status, store::Store, wallet as partial_wallet,
 };
@@ -33,7 +33,7 @@ async fn make(
 ) -> (Run, Option<OfferView>, Option<PartialOffer>) {
     let built = match build_partial_offer(&maker.partial_ctx().await, params)
         .await
-        .expect("Sage could not build the one-sided offer")
+        .expect("Sage could not build the maker's spends")
     {
         Ok(built) => built,
         Err(error) => {
@@ -90,11 +90,11 @@ fn the_offer(run: &Run) -> (String, PartialOffer, Value) {
     );
     let text = answer["offer"].as_str().expect("no offer").to_owned();
     assert!(text.starts_with("partial1"), "{text}");
-    // Never an ordinary offer: the one-sided offer stays in the wallet.
+    // Never an ordinary offer.
     assert!(chia_wallet_sdk::driver::decode_offer(&text).is_err());
     let offer = PartialOffer::from_text(&text).unwrap();
     assert!(offer.is_first());
-    assert_eq!(answer["coinId"], hex0x(offer.coin.coin_id()));
+    assert_eq!(answer["coinId"], hex0x(offer.coin().coin_id()));
     assert_eq!(
         answer["id"],
         hex::encode(sage_wallet::sort_offer(offer.to_spend_bundle().unwrap()).name())
@@ -177,18 +177,18 @@ async fn a_cat_for_xch_partial_offer_is_made_kept_and_filled_in_two_parts() {
     assert_eq!(json["partial"]["min_fill"]["amount"], "250");
 
     // The text read back: the terms asked, the maker this wallet.
-    assert_eq!(offer.info.initial_offered(), 1_000);
-    assert_eq!(offer.info.initial_requested(), 5_000);
-    assert_eq!(offer.info.min_fill_requested(), 250);
-    assert_eq!(offer.info.required_fee, None);
-    assert_eq!(offer.info.expiration, None);
+    assert_eq!(offer.initial_amounts().0, 1_000);
+    assert_eq!(offer.initial_amounts().1, 5_000);
+    assert_eq!(offer.min_fill_requested(), 250);
+    assert_eq!(offer.info().required_fee, None);
+    assert_eq!(offer.info().expiration, None);
     let made = made.unwrap();
-    assert_eq!(made.coin, offer.coin);
+    assert_eq!(made.coin(), offer.coin());
     assert!(
         alice
             .partial_ctx()
             .await
-            .owns(offer.info.maker_puzzle_hash)
+            .owns(offer.info().maker_puzzle_hash)
             .await
             .unwrap()
     );
@@ -263,9 +263,9 @@ async fn an_xch_for_cat_partial_offer_with_a_fee_per_fill_and_an_expiry_is_fille
     .await;
     let (text, offer, answer) = the_offer(&run);
     assert_eq!(answer["expiresAt"], expires_at);
-    assert_eq!(offer.info.expiration, Some(expires_at));
-    assert_eq!(offer.info.required_fee, Some(5));
-    assert_eq!(offer.info.min_fill_requested(), 100);
+    assert_eq!(offer.info().expiration, Some(expires_at));
+    assert_eq!(offer.info().required_fee, Some(5));
+    assert_eq!(offer.min_fill_requested(), 100);
     let view = view.unwrap();
     assert_eq!(view.expires_at, Some(expires_at));
     let partial = view.partial.unwrap();

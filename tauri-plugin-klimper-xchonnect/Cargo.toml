@@ -42,9 +42,9 @@ chia-protocol = "0.52"
 chia-puzzle-types = "0.52"
 # Puzzle construction for coin reads, as Sage builds them for WalletConnect (TASK-082).
 chia-wallet-sdk = { workspace = true }
-# Partial offers (TASK-165): the driver makes the offer, and the partial-offers plugin reads
-# the terms as Klimper's own Make partial offer does and keeps the offer in its list.
-chia-partial-offer = { path = "../crates/chia-partial-offer" }
+# Partial offers (TASK-165): the SDK's driver (chia-sdk-next) and the partial-offers plugin,
+# which builds the maker's spends as Klimper's own Make partial offer does and keeps the offer.
+chia-sdk-next = { path = "../crates/chia-sdk-next" }
 tauri-plugin-klimper-partial-offers = { workspace = true }
 
 # Session keys live in the OS keyring under their own service name, never in the Sage
