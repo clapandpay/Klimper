@@ -245,10 +245,7 @@ mod tests {
         let selectable = test.wallet.db.selectable_xch_coins().await?;
         assert_eq!(selectable.len(), 1);
         assert!(selectable.iter().all(|coin| coin.coin_id() != locked));
-        let ids = coins
-            .iter()
-            .map(|coin| hex::encode(coin.coin_id()))
-            .collect::<Vec<_>>();
+        let ids = coins.iter().map(Coin::coin_id).collect::<Vec<_>>();
         assert!(test.wallet.db.are_coins_spendable(&ids).await?);
 
         let coin_spends = test

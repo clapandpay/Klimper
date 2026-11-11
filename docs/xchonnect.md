@@ -276,7 +276,9 @@ and is gone.
    - **Build**: from the wallet's coins with Sage's offer code (`prepare_spends_for_selection`,
      `select_spends`, the settlement payments, the requested payments to the change address
      under the nonce of the coins spent, `complete_spends`), key-free, as Sage's `make_offer`
-     builds them. One difference: the offer's signatures go to the website, so they are
+     builds them by default. A website's offer never pre-splits (Sage's `pre_split_fee`, upstream
+     #976, is the app's own Make Offer switch): it locks whole coins, and nothing is broadcast
+     before the offer is taken. One difference: the offer's signatures go to the website, so they are
      **released** and only direct assertions bind (spec 11.2). Sage gives the assertion of the
      requested payments to one spend and ties the others by `ASSERT_CONCURRENT_SPEND`, which
      does not bind a released offer; here every spend of the user's (XCH, CAT and option)
@@ -327,27 +329,26 @@ and is gone.
      `json`); all of this before anything is built.
    - **Build**: the terms as Klimper's own Make partial offer reads them
      (`tauri-plugin-klimper-partial-offers`' `wallet::terms`: the maker is the wallet's change
-     puzzle, refused unless standard; a CAT's revocation from the wallet), then Sage's
-     `make_offer` of the one-sided offer (the offered asset plus one mojo of XCH, for
-     nothing, with Klimper's own fee), key-free. Then the sign guard, Sage's summary against
-     the simulation, wallet-kit's submit (released, `OfferOnly`: nothing is sent), one
-     approval, one signature; the signed one-sided offer becomes the partial offer with the
-     driver's `make_partial_offer`. **The one-sided offer never leaves the wallet**: handed
-     out, anyone could take it. In the partial offer its spends are bound by the security
-     coin, whose spend asserts the settlement payments into the partial coin and whose
-     signature is summed with the user's. The user's coins in it go into the record of
-     signed coins as released before the answer leaves (`record_released` reads `partial1…`
-     texts too). More than the wallet holds is `4003` `build_failed` and counts towards the
+     puzzle, refused unless standard; a CAT's revocation from the wallet), then the maker's
+     spends (`wallet::maker_spends`: the offered amount sent to the partial puzzle with the
+     CHIP-0052 creation memos, change back to the wallet, Klimper's own fee), key-free. Then the
+     sign guard, Sage's summary against the simulation, wallet-kit's submit (released,
+     `OfferOnly`: nothing is sent), one approval, one signature; chia-wallet-sdk's
+     `PartialOfferBundle::from_maker_spend_bundle` makes the signed spends the partial offer,
+     refusing a coin a settlement coin would make, siblings that share a payment, or wrong
+     memos, so the user's spends in the text can only make that coin. (Klimper 1.1 and 1.2 made
+     it from a one-sided offer and a security coin instead; docs/partial-offers.md.) The user's
+     coins in it go into the record of signed coins as released before the answer leaves
+     (`record_released` reads `partial1…` texts too). More than the wallet holds is `4003` `build_failed` and counts towards the
      failed-build limit.
    - **Kept**: the offer goes into the wallet's own partial offers
      (`<network>-klimper-partial-offers.json`, `mine::remember`, as Make partial offer keeps
-     it): My partial offers lists it, follows its fills and can cancel it. It is not imported
-     into Sage's offers (Sage would list the one-sided offer as an offer for nothing), so its
-     coins are not locked; spending one cancels the offer before its first fill.
+     it): My partial offers lists it, follows its fills and can cancel it. Nothing is sent, so
+     Sage does not lock its coins; spending one cancels the offer before its first fill.
    - **Permissions**: granted like `chia_createOffer`: in a new connection's default grant,
      and a connection paired before it existed is given it once if it may use `chia_send`
-     (`METHODS_REVISION` 3; a method the user turned off stays off). The offered amount and
-     the mojo count against the per-request and per-day limits. Klimper has no agent rules
+     (`METHODS_REVISION` 3; a method the user turned off stays off). The offered amount counts
+     against the per-request and per-day limits. Klimper has no agent rules
      yet (TASK-143.01); when it has, an agent's `chia_createPartialOffer` is refused with
      `action_not_allowed`.
    - **Approval**: Klimper's `offer` key as for `chia_createOffer` (`gives`: the offered amount
