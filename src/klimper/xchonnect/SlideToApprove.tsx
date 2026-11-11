@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Slide to approve: a glass track and a sun knob that has to be carried to the end.
+// Slide to approve: a blue coin that has to be carried into the goal at the end of the track.
 //
 // A tap is not an answer here, so a stray thumb on a busy screen approves nothing: the knob
 // must travel almost the whole track, and a short slide springs back. The phone ticks as the
@@ -170,6 +170,7 @@ export function SlideToApprove({
       onPointerCancel={onPointerEnd}
     >
       <span className='xc-slide-fill' aria-hidden='true' />
+      <span className='xc-slide-goal' aria-hidden='true' />
       <span className='xc-slide-label' aria-hidden='true'>
         {disabled && !done && offHint ? offHint : hint}
       </span>

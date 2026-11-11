@@ -311,9 +311,19 @@ describe('after the six digits match', () => {
     await waitFor(() => screen.getByRole('button', { name: 'Connect' }));
     const toggle = screen.getByLabelText('Option contracts');
     expect(toggle.getAttribute('data-state')).toBe('unchecked');
-    expect(screen.getByTestId('option-switch').textContent).toContain(
-      'they lock funds until a date',
+    const dot = screen
+      .getByTestId('option-switch')
+      .querySelector<HTMLButtonElement>('button.klimper-hint');
+    if (dot === null) throw new Error('no info dot on the option switch');
+    fireEvent.click(dot);
+    await waitFor(() =>
+      expect(
+        document.body.querySelector('.klimper-hint-body')?.textContent,
+      ).toContain('they lock funds until a date'),
     );
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: 'Escape',
+    });
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await waitFor(() => screen.getByRole('button', { name: 'They match' }));
