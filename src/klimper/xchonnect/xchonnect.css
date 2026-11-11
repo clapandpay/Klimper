@@ -71,7 +71,7 @@
   font-weight: 800;
   box-shadow:
     inset 0 0 0 2px rgb(255 255 255 / 0.35),
-    0 4px 10px -4px rgb(255 59 31 / 0.6);
+    0 4px 10px -4px rgb(59 91 169 / 0.5);
 }
 
 /* Steps: a dot per stage, the current one in sun orange, done ones in teal. */
@@ -91,13 +91,13 @@
 .xc-step[data-state='current'] .xc-step-dot {
   border-color: var(--sun-orange, var(--primary));
   background: var(--sun-orange, var(--primary));
-  color: var(--ink, var(--primary-foreground));
+  color: var(--on-sun, var(--primary-foreground));
 }
 
 .xc-step[data-state='done'] .xc-step-dot {
   border-color: var(--teal, var(--primary));
   background: var(--teal, var(--primary));
-  color: #ffffff;
+  color: var(--on-teal, var(--primary-foreground));
 }
 
 .xc-step[data-state='current'] .xc-step-label {
@@ -137,7 +137,7 @@
   color: var(--muted-foreground);
 }
 
-/* A status pill: teal when the connection is live. */
+/* A status pill: blue when the connection is live (yellow is never text, docs/design-guide.md). */
 .xc-pill {
   display: inline-flex;
   align-items: center;
@@ -151,8 +151,8 @@
 
 .xc-pill[data-live='true'] {
   border-color: transparent;
-  background: color-mix(in srgb, var(--teal, var(--primary)) 14%, transparent);
-  color: var(--teal, var(--primary));
+  background: rgb(59 91 169 / 0.12);
+  color: var(--primary);
 }
 
 .xc-pill-compact {
@@ -453,7 +453,7 @@
   color: var(--ink, var(--primary-foreground));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 10px 24px -10px rgb(255 59 31 / 0.65);
+  box-shadow: 0 10px 24px -10px rgb(59 91 169 / 0.5);
 }
 
 /* The requests page: one row per waiting request; the picked one is edged in orange. */
@@ -513,8 +513,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  color: var(--teal, var(--primary));
-  background: color-mix(in srgb, var(--teal, var(--primary)) 12%, transparent);
+  color: var(--primary);
+  background: rgb(59 91 169 / 0.12);
 }
 
 .xc-notice {
@@ -542,9 +542,9 @@
     color-mix(in srgb, var(--teal, var(--primary)) 35%, transparent);
 }
 
-/* Verified by the wallet: teal ticks and a teal-edged box for the website's checked claims. */
+/* Verified by the wallet: blue ticks and a yellow-rimmed box for the website's checked claims. */
 .xc-verified {
-  color: var(--teal, var(--primary));
+  color: var(--primary);
 }
 
 .xc-intent {
@@ -577,9 +577,8 @@
 }
 
 .xc-badge[data-tone='verified'] {
-  color: var(--teal, var(--primary));
-  background: rgb(15 124 135 / 0.12);
-  background: color-mix(in srgb, var(--teal, var(--primary)) 12%, transparent);
+  color: var(--primary);
+  background: rgb(59 91 169 / 0.12);
 }
 
 /* One asset in the verdict: icon, the net in the display face, its dollars and what is left. */
@@ -859,15 +858,18 @@
 }
 
 /*
- * Slide to approve. Glass: a translucent track that lets the sheet show through its blur, a
- * soft highlight along the top edge, and the sun knob with a specular spot. Everything moves
- * from one custom property, --p (0 to 1), and the pixel travel measured when the knob is taken
- * (--travel): the knob is a transform and the trail a clip, so a drag costs paint, not layout.
- * Plain rgb() only: color-mix() needs Safari 16.2 and the app runs from iOS 15.
+ * Slide to approve, in Klimper Coins (docs/design-guide.md): a paper track with a hairline, a
+ * blue coin to carry and an empty coin-sized goal at the far end. Once letting go approves,
+ * the coin turns yellow with an ink check and lands in the goal; no gradient, no loop. All of
+ * it moves from one custom property, --p (0 to 1), and the pixel travel measured when the coin
+ * is taken (--travel): the knob is a transform and the trail a clip, so a drag costs paint, not
+ * layout. Plain rgb() only: color-mix() needs Safari 16.2 and the app runs from iOS 15.
  */
 .xc-slide {
   --p: 0;
   --knob: 3.25rem;
+  --slide-blue: var(--coin-blue, #3b5ba9);
+  --slide-yellow: var(--coin-yellow, #e9b23a);
   position: relative;
   height: calc(var(--knob) + 8px);
   width: 100%;
@@ -877,103 +879,72 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.45),
-      rgb(255 255 255 / 0.08) 55%,
-      rgb(255 255 255 / 0.18)
-    ),
-    rgb(255 122 31 / 0.14);
-  border: 1px solid rgb(255 255 255 / 0.5);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.65),
-    inset 0 -1px 0 rgb(0 0 0 / 0.05),
-    inset 0 2px 10px rgb(0 0 0 / 0.06),
-    0 10px 30px -14px rgb(255 122 31 / 0.6);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 3px rgb(28 27 25 / 0.06);
   cursor: grab;
 }
 
 :root.theme-dark .xc-slide {
-  border-color: rgb(255 255 255 / 0.14);
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.14),
-      rgb(255 255 255 / 0.02) 55%,
-      rgb(255 255 255 / 0.06)
-    ),
-    rgb(255 122 31 / 0.12);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.18),
-    inset 0 2px 12px rgb(0 0 0 / 0.35),
-    0 10px 30px -14px rgb(255 122 31 / 0.45);
+  box-shadow: inset 0 1px 4px rgb(0 0 0 / 0.35);
 }
 
-/* The trail the knob leaves: the sun filling in behind it, revealed by a clip. */
+/* The trail the coin leaves: a flat blue wash, revealed by a clip; solid blue once armed. */
 .xc-slide-fill {
   position: absolute;
   inset: 4px;
   border-radius: 9999px;
-  background: linear-gradient(
-    90deg,
-    rgb(255 194 26 / 0.3),
-    rgb(255 122 31 / 0.75)
-  );
+  background: rgb(59 91 169 / 0.14);
   clip-path: inset(
     0 calc((1 - var(--p)) * var(--travel, 100%)) 0 0 round 9999px
   );
-  opacity: calc(0.35 + var(--p) * 0.65);
+  transition:
+    clip-path 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms;
 }
 
-/* The label fades as the knob covers it, with a slow light passing through it. */
+:root.theme-dark .xc-slide-fill {
+  background: rgb(125 155 232 / 0.18);
+}
+
+/* Where the coin has to go: an empty coin, a dashed hairline rim. */
+.xc-slide-goal {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: var(--knob);
+  height: var(--knob);
+  border-radius: 9999px;
+  border: 1.5px dashed var(--muted-foreground);
+  opacity: calc(0.45 + var(--p) * 0.55);
+  pointer-events: none;
+  transition:
+    border-color 200ms,
+    opacity 200ms;
+}
+
+/* The prompt, fading as the coin covers it. Still: the goal says where to go. */
 .xc-slide-label {
   position: absolute;
   inset: 0;
-  display: block;
-  padding: 0 1rem 0 calc(var(--knob) + 0.75rem);
-  line-height: calc(var(--knob) + 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(var(--knob) + 0.5rem);
+  /* Two lines when one does not fit: the prompt says what approving does, so none of it is cut. */
+  line-height: 1.15;
   text-align: center;
-  white-space: nowrap;
+  text-wrap: balance;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--foreground);
-  opacity: calc(0.85 - var(--p) * 1.2);
+  opacity: calc(0.9 - var(--p) * 1.3);
   pointer-events: none;
+  transition: opacity 200ms;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .xc-slide[data-done='false'][data-disabled='false']
-    .xc-slide-label:not(.xc-slide-release) {
-    background: linear-gradient(
-        100deg,
-        var(--foreground) 40%,
-        rgb(255 255 255 / 0.9) 50%,
-        var(--foreground) 60%
-      )
-      0 0 / 250% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: xc-shine 2.6s linear infinite;
-  }
-
-  .xc-slide[data-dragging] .xc-slide-label {
-    animation-play-state: paused;
-  }
-}
-
-@keyframes xc-shine {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -150% 0;
-  }
-}
-
+/* The coin: coin blue, a white glyph, a light inner rim and a soft blue shadow. */
 .xc-slide-knob {
   position: absolute;
   top: 4px;
@@ -985,37 +956,21 @@
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  color: var(--ink, var(--primary-foreground));
+  color: #ffffff;
   touch-action: none;
   transform: translateX(calc(var(--travel, 0px) * var(--p)));
-  background:
-    radial-gradient(
-      circle at 32% 26%,
-      rgb(255 255 255 / 0.75),
-      rgb(255 255 255 / 0) 42%
-    ),
-    var(--sun, var(--primary));
+  background: var(--slide-blue);
   box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.7),
-    inset 0 -2px 4px rgb(0 0 0 / 0.12),
-    0 6px 14px -4px rgb(255 59 31 / 0.55);
+    inset 0 0 0 2px rgb(255 255 255 / 0.3),
+    0 4px 12px -4px rgb(59 91 169 / 0.6);
   transition:
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 200ms,
-    background 160ms;
+    background-color 160ms,
+    color 160ms;
 }
 
-.xc-slide-fill {
-  transition:
-    clip-path 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 200ms;
-}
-
-.xc-slide-label {
-  transition: opacity 200ms;
-}
-
-/* While a finger holds it, the knob follows exactly and lifts a little. */
+/* While a finger holds it, the coin follows exactly and lifts a little. */
 .xc-slide[data-dragging] .xc-slide-knob,
 .xc-slide[data-dragging] .xc-slide-fill,
 .xc-slide[data-dragging] .xc-slide-label {
@@ -1030,9 +985,8 @@
 .xc-slide[data-dragging] .xc-slide-knob {
   will-change: transform;
   box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.7),
-    inset 0 -2px 4px rgb(0 0 0 / 0.12),
-    0 10px 22px -6px rgb(255 59 31 / 0.65);
+    inset 0 0 0 2px rgb(255 255 255 / 0.3),
+    0 8px 18px -6px rgb(59 91 169 / 0.7);
 }
 
 /*
@@ -1053,7 +1007,7 @@
 
 .xc-slide-press:focus-visible {
   clip-path: none;
-  outline: 3px solid var(--sun-orange, var(--primary));
+  outline: 3px solid var(--ring, var(--primary));
   outline-offset: -3px;
 }
 
@@ -1069,12 +1023,10 @@
   display: block;
 }
 
-/* Past the point of no return: the other text, and the trail at full strength. */
+/* Past the point of no return: the trail turns solid blue and says so in white. */
 .xc-slide-release {
   opacity: 0;
-  color: var(--foreground);
-  background: none;
-  animation: none;
+  color: #ffffff;
 }
 
 .xc-slide[data-armed] .xc-slide-release {
@@ -1082,20 +1034,24 @@
   padding: 0 calc(var(--knob) + 0.75rem) 0 1rem;
 }
 
-.xc-slide[data-armed] .xc-slide-fill {
-  opacity: 1;
+.xc-slide[data-armed] .xc-slide-fill,
+.xc-slide[data-done='true'] .xc-slide-fill {
+  background: var(--slide-blue);
 }
 
+.xc-slide[data-armed] .xc-slide-goal,
+.xc-slide[data-done='true'] .xc-slide-goal {
+  border-color: transparent;
+}
+
+/* The coin lands: yellow with an ink check (text on yellow is ink). */
 .xc-slide[data-armed] .xc-slide-knob,
 .xc-slide[data-done='true'] .xc-slide-knob {
-  color: #ffffff;
-  background:
-    radial-gradient(
-      circle at 32% 26%,
-      rgb(255 255 255 / 0.55),
-      rgb(255 255 255 / 0) 42%
-    ),
-    var(--teal, var(--primary));
+  color: var(--ink, #1c1b19);
+  background: var(--slide-yellow);
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.35),
+    0 4px 12px -4px rgb(233 178 58 / 0.7);
 }
 
 .xc-slide[data-disabled='true'] {
@@ -1111,6 +1067,7 @@
 @media (prefers-reduced-motion: reduce) {
   .xc-slide-knob,
   .xc-slide-fill,
+  .xc-slide-goal,
   .xc-slide-label {
     transition: none;
   }
