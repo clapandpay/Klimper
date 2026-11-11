@@ -276,7 +276,9 @@ and is gone.
    - **Build**: from the wallet's coins with Sage's offer code (`prepare_spends_for_selection`,
      `select_spends`, the settlement payments, the requested payments to the change address
      under the nonce of the coins spent, `complete_spends`), key-free, as Sage's `make_offer`
-     builds them. One difference: the offer's signatures go to the website, so they are
+     builds them by default. A website's offer never pre-splits (Sage's `pre_split_fee`, upstream
+     #976, is the app's own Make Offer switch): it locks whole coins, and nothing is broadcast
+     before the offer is taken. One difference: the offer's signatures go to the website, so they are
      **released** and only direct assertions bind (spec 11.2). Sage gives the assertion of the
      requested payments to one spend and ties the others by `ASSERT_CONCURRENT_SPEND`, which
      does not bind a released offer; here every spend of the user's (XCH, CAT and option)

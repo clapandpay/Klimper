@@ -221,6 +221,9 @@ to nodexch from the make screen; nodexch's MCP `decode_offer` accepts only `offe
   - "Cancel (claw back)": works at any time, costs a network fee, and returns the rest.
   - After a cancel: "Cancel pending" until it is confirmed, then "Cancelled".
 
+Sage's "Pre-split coins" switch on Make Offer (upstream #976) applies to Sage's own offers only.
+"Make partial offer" leaves that screen, and a partial offer does not pre-split.
+
 ## nodexch fields
 
 nodexch's offer answers, book entries and `offer` event carry `kind: "partial"` and `partial`
