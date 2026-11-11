@@ -1,114 +1,145 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-import { HandleLookup } from '@/hooks/useHandle';
+import { commands, Error as BackendError, HandleRecord } from '@/bindings';
+import { useDebounce } from '@/hooks/useDebounce';
 import {
-  HandleError,
-  HandleErrorCode,
+  handleErrorMessage,
   isHandleInput,
-  resolveHandle,
+  isValidHandle,
 } from '@/lib/handles';
-import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import {
-  CheckCircle2Icon,
-  LoaderCircleIcon,
-  TriangleAlertIcon,
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  Loader2Icon,
+  XCircleIcon,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-function handleErrorMessage(code: HandleErrorCode): string {
-  switch (code) {
-    case 'invalid':
-      return t`A handle is 3 to 63 letters and digits`;
-    case 'not_found':
-      return t`Nobody has this handle`;
-    case 'expired':
-      return t`This handle has expired`;
-    case 'not_payable':
-      return t`This handle cannot receive payments right now`;
-    case 'unavailable':
-      return t`Handles cannot be looked up right now. Use an address instead`;
-  }
-}
+type Resolution =
+  | { state: 'loading' }
+  | { state: 'resolved'; record: HandleRecord }
+  | { state: 'failed'; error: BackendError };
 
 /**
- * Resolve "@anna" again at submit. The address on screen is the one the user agreed to: if
- * none is shown yet, or the handle now points somewhere else, nothing is sent and the user
- * looks again. `shown` is read after the registry answered, so a live lookup that finished
- * meanwhile counts. Input that is not a handle passes through unchanged.
+ * Shows what a handle recipient resolves to while it's being entered. This is
+ * only a preview: the backend resolves and verifies the handle again when the
+ * transaction is created, and again right before it's submitted.
  */
-export async function recheckHandle(
-  input: string,
-  prefix: string | null,
-  shownNow: () => string | null,
-): Promise<{ address: string } | { error: string }> {
-  if (!prefix || !isHandleInput(input)) return { address: input };
-  let address: string;
-  try {
-    address = (await resolveHandle(input, prefix)).address;
-  } catch (error) {
-    return {
-      error: handleErrorMessage(
-        error instanceof HandleError ? error.code : 'unavailable',
-      ),
-    };
-  }
-  const shown = shownNow();
-  if (shown === null) {
-    return { error: t`Wait until the address is shown, then try again` };
-  }
-  if (shown !== address) {
-    return {
-      error: t`This handle just changed. Check the address and try again`,
-    };
-  }
-  return { address };
-}
+export function HandleResolution({ value }: { value: string }) {
+  const handle = value.trim();
+  const debounced = useDebounce(handle, 400);
+  const [resolution, setResolution] = useState<Resolution | null>(null);
 
-// Shows what "@anna" stands for, in full: the address is what the money is sent to.
-export function HandleResolution({ lookup }: { lookup: HandleLookup }) {
-  if (lookup.status === 'idle') return null;
+  const active = isHandleInput(debounced) && isValidHandle(debounced);
 
-  if (lookup.status === 'loading') {
+  useEffect(() => {
+    if (!active) {
+      setResolution(null);
+      return;
+    }
+
+    let cancelled = false;
+    setResolution({ state: 'loading' });
+
+    commands
+      .resolveHandle({ handle: debounced })
+      .then((response) => {
+        if (!cancelled) {
+          setResolution({ state: 'resolved', record: response.handle });
+        }
+      })
+      .catch((error: BackendError) => {
+        if (!cancelled) setResolution({ state: 'failed', error });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, debounced]);
+
+  if (!isHandleInput(handle) || handle !== debounced || !resolution) {
+    return null;
+  }
+
+  if (resolution.state === 'loading') {
     return (
-      <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-        <LoaderCircleIcon className='h-4 w-4 animate-spin' aria-hidden='true' />
-        <Trans>Looking up handle…</Trans>
+      <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+        <Loader2Icon className='h-3.5 w-3.5 animate-spin' aria-hidden='true' />
+        <Trans>Resolving {handle}</Trans>
       </div>
     );
   }
 
-  if (lookup.status === 'error') {
+  if (resolution.state === 'failed') {
     return (
-      <div className='flex items-center gap-2 text-sm text-destructive'>
-        <TriangleAlertIcon className='h-4 w-4 shrink-0' aria-hidden='true' />
-        {handleErrorMessage(lookup.error.code)}
+      <div className='flex items-start gap-1.5 text-xs text-destructive'>
+        <XCircleIcon className='h-3.5 w-3.5 mt-0.5 shrink-0' />
+        <span className='break-words'>
+          {handleErrorMessage(resolution.error)}
+        </span>
       </div>
     );
   }
 
-  const { handle, address, pendingTransfer } = lookup.resolved;
+  const { record } = resolution;
+  const changedFrom = record.changed_from;
+  const updatedHeight = record.updated_height.toLocaleString();
 
   return (
-    <div className='space-y-1 text-sm'>
-      <div className='flex items-start gap-2'>
-        <CheckCircle2Icon
-          className='h-4 w-4 mt-0.5 shrink-0 text-green-600'
-          aria-hidden='true'
-        />
+    <div className='space-y-1 text-xs'>
+      <div className='flex items-start gap-1.5'>
+        {record.cached ? (
+          <ClockIcon className='h-3.5 w-3.5 mt-0.5 shrink-0 text-yellow-600' />
+        ) : (
+          <CheckCircleIcon className='h-3.5 w-3.5 mt-0.5 shrink-0 text-green-600' />
+        )}
         <div className='min-w-0'>
-          <div className='font-medium'>@{handle}</div>
-          <div className='font-mono text-xs text-muted-foreground break-all'>
-            {address}
+          <span className='text-muted-foreground'>
+            {record.cached ? (
+              <Trans>Resolves to (verified recently, offline)</Trans>
+            ) : (
+              <Trans>Verified, resolves to</Trans>
+            )}
+          </span>{' '}
+          <span className='font-mono break-all'>{record.address}</span>
+          <div className='text-muted-foreground'>
+            <Trans>Last updated at height {updatedHeight}</Trans>
           </div>
         </div>
       </div>
-      {pendingTransfer && (
-        <div className='flex items-center gap-2 text-amber-600'>
-          <TriangleAlertIcon className='h-4 w-4 shrink-0' aria-hidden='true' />
-          <Trans>
-            This handle is changing owner. Check with the recipient.
-          </Trans>
+
+      {changedFrom && (
+        <div className='flex items-start gap-1.5 text-destructive'>
+          <AlertTriangleIcon className='h-3.5 w-3.5 mt-0.5 shrink-0' />
+          <span className='break-words'>
+            <Trans>
+              This handle changed since you last used it. It previously resolved
+              to <span className='font-mono break-all'>{changedFrom}</span>.
+              You&apos;ll be asked to confirm the new address.
+            </Trans>
+          </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Previews each distinct handle in a list of recipients. */
+export function HandleResolutionList({ values }: { values: string[] }) {
+  const handles = [...new Set(values.map((value) => value.trim()))].filter(
+    isHandleInput,
+  );
+
+  if (handles.length === 0) return null;
+
+  return (
+    <div className='space-y-2'>
+      {handles.map((handle) => (
+        <div key={handle}>
+          <div className='text-xs font-medium'>{handle}</div>
+          <HandleResolution value={handle} />
+        </div>
+      ))}
     </div>
   );
 }

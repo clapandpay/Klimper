@@ -189,6 +189,12 @@ pub(super) async fn sage_summary(
         .keychain
         .add_public_key(&taker.master_sk.public_key())
         .unwrap();
+    // Sage opens only fingerprints listed as wallets, not every key in the keychain.
+    sage.wallet_config.wallets.push(sage_config::Wallet {
+        name: "taker".to_string(),
+        fingerprint,
+        ..Default::default()
+    });
     sage.config.global.fingerprint = Some(fingerprint);
     sage.wallet = Some(taker.wallet.clone());
     sage.view_coin_spends(ViewCoinSpends {

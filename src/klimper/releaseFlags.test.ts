@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What each release build turns on (TASK-160). Desktop (.env.desktop, `vite build --mode
-// desktop`): everything, the Sage app bridge included. Phones (.env.production): everything
-// except offers; the app bridge is off there by Sage's own platform check in App.tsx.
+// desktop`): everything, the Sage app bridge included, except partial offers. Phones
+// (.env.production): everything, partial offers too (since 1.2.0); the app bridge is off there
+// by Sage's own platform check in App.tsx.
 import { readFileSync } from 'node:fs';
 import { loadEnv } from 'vite';
 import { describe, expect, it } from 'vitest';
@@ -16,7 +17,6 @@ const json = (file: string) =>
 const SWITCHES = [
   'OFFERS',
   'OPTIONS',
-  'SWAP',
   'NFTS',
   'NFT_MINTING',
   'PROFILES',
@@ -25,8 +25,9 @@ const SWITCHES = [
   'RPC_SETTINGS',
   'THEME_GALLERY',
   'SCAN',
+  'XCHANDLES',
 ];
-const OPT_IN = ['HANDLES', 'XCHONNECT', 'KLIMPER_COINS'];
+const OPT_IN = ['XCHONNECT', 'KLIMPER_COINS'];
 
 describe('release flags', () => {
   it('turn everything on for the desktop', () => {
@@ -39,22 +40,19 @@ describe('release flags', () => {
     }
   });
 
-  it('turn everything on for the phones except offers', () => {
+  it('turn everything on for the phones', () => {
     const env = flags('production');
     for (const name of SWITCHES) {
-      expect(env[`VITE_DISABLE_${name}`], name).toBe(
-        name === 'OFFERS' ? 'true' : 'false',
-      );
+      expect(env[`VITE_DISABLE_${name}`], name).toBe('false');
     }
     for (const name of OPT_IN) {
       expect(env[`VITE_ENABLE_${name}`], name).toBe('true');
     }
   });
 
-  it('keep partial offers off until they have been tried on testnet', () => {
-    for (const mode of ['desktop', 'production']) {
-      expect(flags(mode).VITE_ENABLE_PARTIAL_OFFERS, mode).toBe('false');
-    }
+  it('turn partial offers on for the phones only', () => {
+    expect(flags('production').VITE_ENABLE_PARTIAL_OFFERS).toBe('true');
+    expect(flags('desktop').VITE_ENABLE_PARTIAL_OFFERS).toBe('false');
   });
 
   it('are picked per platform by the Tauri configs', () => {

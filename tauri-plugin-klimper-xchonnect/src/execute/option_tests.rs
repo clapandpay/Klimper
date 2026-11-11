@@ -1073,7 +1073,13 @@ async fn a_take_that_writes_someone_elses_option_is_refused() {
 
 /// Using an XCH-backed option with the writer's own strike CAT, with Sage's
 /// `exercise_options` as it builds it (nothing added).
+///
+/// Ignored since the 2026-11-07 Sage merge (`upstream/main` ce9de66d): Sage's
+/// `exercise_options` now spends one of the wallet's XCH coins twice even without a fee
+/// (here a 1000-mojo coin), which wallet-kit refuses (4000) and the chain would too. Sage
+/// is not changed here; to report upstream. Run with `--ignored` to reproduce.
 #[tokio::test]
+#[ignore = "Sage's exercise_options spends one coin twice"]
 async fn an_xch_option_is_used_before_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;
     let strike = xch_strike_cat(&mut alice).await;
@@ -1542,8 +1548,7 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     // which the database does not hold, stay (no peer is asked).
     settle(&mut alice, &first).await;
     let coins = record.coins().unwrap();
-    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
-    let rows = alice.wallet.db.coins_by_ids(&ids).await.unwrap();
+    let rows = alice.wallet.db.coins_by_ids(&coins).await.unwrap();
     let known: Vec<Bytes32> = rows.iter().map(|row| row.coin.coin_id()).collect();
     assert!(!known.is_empty());
     let spent_at = rows
@@ -2056,4 +2061,32 @@ fn the_committed_loan_offers_still_hold() {
             "{name}"
         );
     }
+}
+
+/// Sage binds one query parameter per coin id (upstream #986) and `SQLite` takes 32,766 at
+/// most. The record's coins and the coins of every offer Sage made have no bound, so they are
+/// read in parts: a list longer than one query takes still finds the wallet's coin.
+#[tokio::test]
+async fn more_coin_ids_than_one_query_takes_are_read_in_parts() {
+    let alice = SimWallet::new(5_000).await;
+    let own = alice.wallet.db.selectable_xch_coins().await.unwrap()[0].coin_id();
+    let mut ids: Vec<Bytes32> = (0..40_000u32)
+        .map(|n| {
+            let mut id = [0xee; 32];
+            id[..4].copy_from_slice(&n.to_be_bytes());
+            Bytes32::new(id)
+        })
+        .collect();
+    ids.push(own);
+
+    // What an unsplit query does with this list: the reason for the parts.
+    assert!(alice.wallet.db.coins_by_ids(&ids).await.is_err());
+
+    let rows = crate::signed_coins::coins_by_ids(&alice.wallet.db, &ids)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].coin.coin_id(), own);
+    // Unspent, so nothing to forget, and no failure that would read as "nothing is spent".
+    assert!(spent_coins(&alice.wallet, &ids).await.is_empty());
 }

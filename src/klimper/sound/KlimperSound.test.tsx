@@ -37,7 +37,7 @@ vi.mock('@/state', async () => {
 
 const key = vi.hoisted(() => vi.fn());
 vi.mock('@/bindings', () => ({
-  commands: { getKey: key },
+  commands: { getWallet: key },
 }));
 const price = vi.hoisted(() => ({ usd: null as number | null }));
 vi.mock('@/klimper/price', () => ({
@@ -90,7 +90,7 @@ describe('the Klimper sound, running', () => {
     ding.mockClear();
     shake.mockClear();
     price.usd = 10;
-    key.mockReset().mockResolvedValue({ key: { fingerprint: 1 } });
+    key.mockReset().mockResolvedValue({ wallet: { fingerprint: 1 } });
     resetPageValue();
     setting.value = null;
     phone.value = false;
@@ -141,7 +141,7 @@ describe('the Klimper sound, running', () => {
       wallet().setState({ sync: sync('1000000000000') });
     });
     await settle();
-    key.mockResolvedValue({ key: { fingerprint: 2 } });
+    key.mockResolvedValue({ wallet: { fingerprint: 2 } });
     await act(async () => {
       wallet().setState({ sync: sync('5000000000000') });
     });

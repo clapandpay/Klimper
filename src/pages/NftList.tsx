@@ -10,6 +10,7 @@ import { ReceiveAddress } from '@/components/ReceiveAddress';
 import { ReadOnlyButton } from '@/components/ReadOnlyButton';
 import { useErrors } from '@/hooks/useErrors';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useNftData } from '@/hooks/useNftData';
 import { NftGroupMode, useNftParams } from '@/hooks/useNftParams';
 import { exportNfts } from '@/lib/exportNfts';
@@ -17,7 +18,7 @@ import { nftMintingEnabled } from '@/lib/features';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { ImagePlusIcon } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 export function NftList() {
@@ -29,8 +30,14 @@ export function NftList() {
   } = useParams();
   const [params, setParams] = useNftParams();
   const { pageSize, sort, group, showHidden, query } = params;
-  const [multiSelect, setMultiSelect] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const {
+    multiSelect,
+    setMultiSelect,
+    selected,
+    setSelected,
+    selectAll,
+    clear,
+  } = useMultiSelect([collectionId, ownerDid, minterDid, group]);
   const { addError } = useErrors();
   const {
     nfts,
@@ -60,12 +67,6 @@ export function NftList() {
   useIntersectionObserver(optionsRef, ([entry]) => {
     setIsOptionsVisible(entry.isIntersecting);
   });
-
-  // Reset multi-select when route changes
-  useEffect(() => {
-    setMultiSelect(false);
-    setSelected([]);
-  }, [collectionId, ownerDid, minterDid, group]);
 
   const canLoadMore = useCallback(() => {
     // If we're grouping by collection, or filtering by collection,owner,
@@ -148,10 +149,7 @@ export function NftList() {
             params={params}
             setParams={setParams}
             multiSelect={multiSelect}
-            setMultiSelect={(value) => {
-              setMultiSelect(value);
-              setSelected([]);
-            }}
+            setMultiSelect={setMultiSelect}
             className='mt-4'
             renderPagination={() => renderPagination(false)}
             aria-live='polite'
@@ -193,12 +191,9 @@ export function NftList() {
       {selected.length > 0 && (
         <MultiSelectActions
           selected={selected}
-          onConfirm={() => {
-            setSelected([]);
-            setMultiSelect(false);
-          }}
-          onSelectAll={() => setSelected(nfts.map((nft) => nft.launcher_id))}
-          onClearSelection={() => setSelected([])}
+          onConfirm={() => setMultiSelect(false)}
+          onSelectAll={() => selectAll(nfts.map((nft) => nft.launcher_id))}
+          onClearSelection={clear}
           aria-label={t`Actions for selected NFTs`}
         />
       )}

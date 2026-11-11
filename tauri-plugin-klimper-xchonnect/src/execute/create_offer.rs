@@ -11,7 +11,8 @@
 //!
 //! The offer is built from the wallet's own coins with Sage's offer code: the same coin
 //! selection, settlement payments, requested payments and nonce as Sage's `make_offer`
-//! (`sage_wallet::Wallet::make_offer`), key-free. One difference, and it is the reason this
+//! (`sage_wallet::Wallet::make_offer`, without its opt-in pre-split: a website's offer locks
+//! whole coins and broadcasts nothing), key-free. One difference, and it is the reason this
 //! is not Sage's call itself: the offer's signatures go to the website, so they are
 //! **released** (xchonnect spec 11.2) and only direct assertions bind them. Sage gives the
 //! assertion of what the maker is paid to one spend and links the others to it by

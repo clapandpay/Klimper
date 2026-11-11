@@ -636,6 +636,10 @@ pub fn send(
                     memos,
                     clawback: None,
                     auto_submit: false,
+                    // Sage refuses a handle recipient that is not confirmed here: a website's
+                    // `@handle` goes nowhere.
+                    coin_ids: None,
+                    confirmed_handles: Vec::new(),
                 })
                 .await
             }
@@ -649,6 +653,10 @@ pub fn send(
                     memos,
                     clawback: None,
                     auto_submit: false,
+                    // Sage refuses a handle recipient that is not confirmed here: a website's
+                    // `@handle` goes nowhere.
+                    coin_ids: None,
+                    confirmed_handles: Vec::new(),
                 })
                 .await
             }
@@ -1254,6 +1262,7 @@ mod tests {
                 asset: Some(xch()),
                 outputs: vec![output(paid, false), output(change, true)],
             }],
+            handles: Vec::new(),
         }
     }
 

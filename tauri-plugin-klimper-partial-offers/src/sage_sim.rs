@@ -24,15 +24,15 @@ use chia_wallet_sdk::{
     test::PeerSimulator,
 };
 use sage_config::TESTNET11;
-use sage_database::{Database, Derivation};
+use sage_database::{Database, Derivation, SharedDatabase};
 use sage_wallet::{
     PeerState, SyncCommand, SyncEvent, SyncManager, SyncOptions, Timeouts, Transaction, Wallet,
-    insert_transaction,
+    WalletKind, insert_transaction,
 };
 use sqlx::SqlitePool;
 use tokio::{
     sync::{Mutex, mpsc::Receiver, mpsc::Sender},
-    time::timeout,
+    time::{sleep, timeout},
 };
 
 static INDEX: Mutex<u32> = Mutex::const_new(0);
@@ -75,6 +75,17 @@ impl SimWallet {
         sqlx::migrate!("../migrations").run(&pool).await.unwrap();
         let db = Database::new(pool);
         db.run_rust_migrations("TXCH".to_string()).await.unwrap();
+        // Upstream keeps contacts and handles in a database shared by a network's wallets.
+        let shared_pool = SqlitePool::connect(&format!(
+            "file:klimper-partial-shared-{db_index}?mode=memory&cache=shared"
+        ))
+        .await
+        .unwrap();
+        sqlx::migrate!("../migrations")
+            .run(&shared_pool)
+            .await
+            .unwrap();
+        let shared_db = SharedDatabase::new(shared_pool);
 
         let sk = BlsPair::default().sk.derive_unhardened(key_index);
         let pk = sk.public_key();
@@ -111,8 +122,9 @@ impl SimWallet {
         let state = Arc::new(Mutex::new(PeerState::default()));
         let wallet = Arc::new(Wallet::new(
             db,
+            shared_db,
             pk.get_fingerprint(),
-            intermediate_pk,
+            WalletKind::Bls { intermediate_pk },
             TESTNET11_CONSTANTS.genesis_challenge,
             agg_sig,
             None,
@@ -230,6 +242,29 @@ impl SimWallet {
     pub async fn wait_for_coins(&mut self) {
         self.consume_until(|event| matches!(event, SyncEvent::CoinsUpdated))
             .await;
+    }
+
+    /// Waits until `coin_id` is spent on the simulated chain. A submitted transaction is only
+    /// recorded as pending; Sage's transaction queue sends it a little later, and since the
+    /// 2026-11-07 Sage merge the wallet reports its coins as updated before that.
+    pub async fn wait_until_spent(&self, coin_id: Bytes32) {
+        let genesis = self.wallet.genesis_challenge;
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let state = self
+                    .peer()
+                    .await
+                    .fetch_optional_coin(coin_id, genesis)
+                    .await
+                    .unwrap();
+                if state.is_some_and(|state| state.spent_height.is_some()) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for the coin to be spent");
     }
 }
 

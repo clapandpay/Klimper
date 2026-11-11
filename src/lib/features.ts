@@ -2,7 +2,6 @@
 // Modified by Klimper (2026): see docs/UPSTREAM.md
 export const offersEnabled = import.meta.env.VITE_DISABLE_OFFERS !== 'true';
 export const optionsEnabled = import.meta.env.VITE_DISABLE_OPTIONS !== 'true';
-export const swapEnabled = import.meta.env.VITE_DISABLE_SWAP !== 'true';
 export const nftsEnabled = import.meta.env.VITE_DISABLE_NFTS !== 'true';
 // Minting is separate from the NFT gallery (TASK-138): Klimper shows the user's NFTs and lets
 // them send, hide and burn them, but makes none (decision-003). `VITE_DISABLE_NFT_MINTING`.
@@ -17,8 +16,6 @@ export const rpcSettingsEnabled =
   import.meta.env.VITE_DISABLE_RPC_SETTINGS !== 'true';
 export const themeGalleryEnabled =
   import.meta.env.VITE_DISABLE_THEME_GALLERY !== 'true';
-// Opt-in, unlike the flags above: "@handle" in the send screen, resolved through XCHandles.
-export const handlesEnabled = import.meta.env.VITE_ENABLE_HANDLES === 'true';
 // Opt-in: dApp connections over Xchonnect (decision-008, milestone m-4). Off unless set to
 // true, so a build that does not ask for it has no Xchonnect entry point at all — the
 // routes redirect and the navigation entry is absent. The Rust plugin is always compiled
@@ -41,3 +38,6 @@ export const scanEnabled = import.meta.env.VITE_DISABLE_SCAN !== 'true';
 // src/klimper/partial/ and tauri-plugin-klimper-partial-offers (docs/partial-offers.md).
 export const partialOffersEnabled =
   offersEnabled && import.meta.env.VITE_ENABLE_PARTIAL_OFFERS === 'true';
+// Sage's own: XCHandles ("@anna") in every recipient field, verified by the backend.
+export const xchandlesEnabled =
+  import.meta.env.VITE_DISABLE_XCHANDLES !== 'true';

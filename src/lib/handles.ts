@@ -1,110 +1,171 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// XCHandles (https://www.xchandles.com): "@anna" instead of "xch1...". A handle is a slot in an
-// on-chain registry that points to an NFT; whoever holds that NFT receives the payment.
-// API reference: https://docs.xchandles.com/api
+import {
+  Error as BackendError,
+  commands,
+  HandleConfirmation,
+  RecipientError,
+} from '@/bindings';
+import { t } from '@lingui/core/macro';
+import { create } from 'zustand';
 
-import { toAddress } from '@/lib/utils';
+const HANDLE_PATTERN = /^@[a-z0-9]{3,63}$/;
 
-const API_URL = 'https://api.xchandles.com';
-const TIMEOUT_MS = 8000;
-const HANDLE_PATTERN = /^[a-z0-9]{3,63}$/;
+/**
+ * Whether a recipient is written as an XCHandles handle. The backend resolves
+ * these even when this build hides XCHandles, so they're always previewed and
+ * validated as handles, rather than only when XCHandles is shown.
+ */
+export function isHandleInput(value: string): boolean {
+  return value.trim().startsWith('@');
+}
 
-export type HandleErrorCode =
-  | 'invalid'
-  | 'not_found'
-  | 'expired'
-  | 'not_payable'
-  | 'unavailable';
+/** Explains why resolving or verifying a handle failed. */
+export function handleErrorMessage(error: BackendError): string {
+  const reason = error.reason;
 
-export class HandleError extends Error {
-  constructor(public code: HandleErrorCode) {
-    super(code);
+  switch (error.handle_error_code) {
+    case 'not_found':
+    case 'expired':
+      return t`This handle isn't registered, or has expired`;
+    case 'unavailable':
+      return t`This handle couldn't be verified right now: ${reason}`;
+    default:
+      return t`This handle couldn't be verified: ${reason}`;
   }
 }
 
-export interface ResolvedHandle {
+/** Whether a handle is written as `@handle` with a valid name. */
+export function isValidHandle(value: string): boolean {
+  return HANDLE_PATTERN.test(value.trim());
+}
+
+/**
+ * Checks that a recipient is a valid address for this network, or a
+ * syntactically valid handle. Whether the handle is registered is checked by
+ * the backend when the transaction is created.
+ */
+export async function validateRecipient(value: string): Promise<boolean> {
+  const recipient = value.trim();
+
+  if (isHandleInput(recipient)) {
+    return isValidHandle(recipient);
+  }
+
+  return await commands.validateAddress(recipient);
+}
+
+function recipientErrors(error: unknown): RecipientError[] | null {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'kind' in error &&
+    error.kind === 'recipient' &&
+    'recipients' in error &&
+    Array.isArray(error.recipients)
+  ) {
+    return error.recipients as RecipientError[];
+  }
+
+  return null;
+}
+
+export interface HandleChange {
   handle: string;
+  previousAddress: string;
   address: string;
-  // Unix seconds.
-  expiration: number;
-  // An ownership change is queued on chain; the address may change soon.
-  pendingTransfer: boolean;
 }
 
-// An input is a handle only with a leading "@": a bare address also fits the handle alphabet.
-export function isHandleInput(input: string): boolean {
-  return input.trim().startsWith('@');
+interface HandleChangeState {
+  changes: HandleChange[] | null;
+  resolve: ((confirmed: boolean) => void) | null;
+  confirm: (changes: HandleChange[]) => Promise<boolean>;
+  finish: (confirmed: boolean) => void;
 }
 
-// Returns the bare handle ("anna") or null. Lowercasing is the only normalization applied; the
-// registry itself accepts none.
-export function parseHandle(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed.startsWith('@')) return null;
-  const handle = trimmed.slice(1).toLowerCase();
-  return HANDLE_PATTERN.test(handle) ? handle : null;
+export const useHandleChangeStore = create<HandleChangeState>((set, get) => ({
+  changes: null,
+  resolve: null,
+  confirm: (changes) =>
+    new Promise<boolean>((resolve) => {
+      // Only one request is reviewed at a time, so an earlier one is declined.
+      get().resolve?.(false);
+      set({ changes, resolve });
+    }),
+  finish: (confirmed) => {
+    get().resolve?.(confirmed);
+    set({ changes: null, resolve: null });
+  },
+}));
+
+/**
+ * Thrown when the user declines to send to a handle which changed. It keeps the
+ * recipient errors, so that dApps can be told which handles changed.
+ */
+export interface HandleChangeDeclined {
+  kind: 'cancelled';
+  reason: string;
+  recipients: RecipientError[];
 }
 
-interface HandleResponse {
-  handle: string;
-  slot: { expiration: number };
-  resolved_singleton: {
-    melted: boolean;
-    nft: { p2_puzzle_hash: string } | null;
-  } | null;
-  pending_transfer: unknown;
-}
+/**
+ * Runs a request which may take handle recipients. If a handle now resolves to
+ * a different address than before, the user is shown both addresses, and the
+ * request is only made again with the new addresses confirmed if they accept.
+ *
+ * The backend makes the final check, both here and again when the transaction
+ * is submitted, so this can't send anywhere the user didn't confirm.
+ */
+export async function withHandleConfirmation<T>(
+  request: (confirmedHandles: HandleConfirmation[]) => Promise<T>,
+): Promise<T> {
+  let confirmed: HandleConfirmation[] = [];
 
-export async function resolveHandle(
-  input: string,
-  prefix: string,
-  fetchFn: typeof fetch = fetch,
-): Promise<ResolvedHandle> {
-  const handle = parseHandle(input);
-  if (!handle) throw new HandleError('invalid');
+  // A handle could change again while the user is reviewing it, so this is
+  // repeated until nothing has changed, or the user declines.
+  for (;;) {
+    try {
+      return await request(confirmed);
+    } catch (error) {
+      const recipients = recipientErrors(error);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      if (
+        !recipients ||
+        recipients.length === 0 ||
+        !recipients.every(
+          (recipient) =>
+            recipient.kind === 'changed' &&
+            recipient.handle &&
+            recipient.address &&
+            recipient.previous_address,
+        )
+      ) {
+        throw error;
+      }
 
-  let response: Response;
-  try {
-    response = await fetchFn(`${API_URL}/handle/${handle}`, {
-      signal: controller.signal,
-    });
-  } catch {
-    throw new HandleError('unavailable');
-  } finally {
-    clearTimeout(timer);
+      const changes = recipients.map((recipient) => ({
+        handle: recipient.handle as string,
+        previousAddress: recipient.previous_address as string,
+        address: recipient.address as string,
+      }));
+
+      if (!(await useHandleChangeStore.getState().confirm(changes))) {
+        const declined: HandleChangeDeclined = {
+          kind: 'cancelled',
+          reason:
+            'The user did not confirm the new address of a changed handle',
+          recipients,
+        };
+        throw declined;
+      }
+
+      confirmed = [
+        ...confirmed.filter(
+          (item) => !changes.some((change) => change.handle === item.handle),
+        ),
+        ...changes.map((change) => ({
+          handle: change.handle,
+          address: change.address,
+        })),
+      ];
+    }
   }
-
-  if (response.status === 400) throw new HandleError('invalid');
-  if (response.status === 404) throw new HandleError('not_found');
-  if (response.status === 410) throw new HandleError('expired');
-  if (!response.ok) throw new HandleError('unavailable');
-
-  let data: HandleResponse;
-  try {
-    data = await response.json();
-  } catch {
-    throw new HandleError('unavailable');
-  }
-
-  const singleton = data.resolved_singleton;
-  const puzzleHash = singleton?.nft?.p2_puzzle_hash;
-
-  if (data.handle !== handle) throw new HandleError('unavailable');
-  if (!singleton || singleton.melted || !puzzleHash) {
-    throw new HandleError('not_payable');
-  }
-  if (!/^[0-9a-f]{64}$/.test(puzzleHash)) throw new HandleError('unavailable');
-  if (data.slot.expiration * 1000 <= Date.now()) {
-    throw new HandleError('expired');
-  }
-
-  return {
-    handle,
-    address: toAddress(puzzleHash, prefix),
-    expiration: data.slot.expiration,
-    pendingTransfer: data.pending_transfer != null,
-  };
 }
