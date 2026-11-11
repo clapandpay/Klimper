@@ -43,8 +43,8 @@ function xchPrice(): number | null {
 
 async function currentFingerprint(): Promise<number | null> {
   try {
-    const { key } = await commands.getKey({});
-    return key?.fingerprint ?? null;
+    const { wallet } = await commands.getWallet({});
+    return wallet?.fingerprint ?? null;
   } catch {
     return null;
   }

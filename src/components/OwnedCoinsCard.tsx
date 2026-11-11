@@ -19,6 +19,10 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  COIN_PAGE_SIZE_OPTIONS,
+  useCoinPageSize,
+} from '@/hooks/useCoinPageSize';
 import { useErrors } from '@/hooks/useErrors';
 import { useNetwork } from '@/hooks/useNetwork';
 import { amount } from '@/lib/formTypes';
@@ -37,6 +41,7 @@ import { MergeIcon, SplitIcon, XIcon } from 'lucide-react';
 import {
   Dispatch,
   SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -82,7 +87,15 @@ export function OwnedCoinsCard({
   const [sortMode, setSortMode] = useState<CoinSortMode>('created_height');
   const [sortDirection, setSortDirection] = useState<boolean>(false); // false = descending, true = ascending
   const [includeSpentCoins, setIncludeSpentCoins] = useState<boolean>(false);
-  const pageSize = 10;
+  const { pageSize, setPageSize } = useCoinPageSize();
+
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      setPageSize(size);
+      setCurrentPage(0);
+    },
+    [setPageSize],
+  );
 
   // Use ref to track current page to avoid dependency issues
   const currentPageRef = useRef(currentPage);
@@ -496,6 +509,9 @@ export function OwnedCoinsCard({
           totalPages={pageCount}
           setCurrentPage={setCurrentPage}
           maxRows={totalCoins}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          pageSizeOptions={COIN_PAGE_SIZE_OPTIONS}
           sortMode={sortMode}
           sortDirection={sortDirection}
           includeSpentCoins={includeSpentCoins}

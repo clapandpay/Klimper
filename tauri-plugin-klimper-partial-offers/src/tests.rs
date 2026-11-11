@@ -4,6 +4,7 @@
 //! real spends, through the same functions the commands call.
 #![allow(clippy::unwrap_used)]
 
+use chia_partial_offer::PartialOffer;
 use chia_wallet_sdk::chia::protocol::Bytes32;
 
 use crate::{
@@ -210,6 +211,8 @@ async fn xch_for_a_cat_is_filled_once_and_the_rest_clawed_back() {
         maker.wallet.db.xch_balance().await.unwrap(),
         xch_before + 6_000 - 5
     );
+    let latest = PartialOffer::from_text(&stored.latest).unwrap();
+    maker.wait_until_spent(latest.coin.coin_id()).await;
     let listed = mine::list(&maker.ctx().await, &store, NOW).await.unwrap();
     assert_eq!(listed[0].view.status, Status::Cancelled);
 

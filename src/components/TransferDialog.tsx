@@ -1,19 +1,17 @@
-// Modified by Klimper (2026): see docs/UPSTREAM.md
-import { HandleResolution, recheckHandle } from '@/components/HandleResolution';
-import { useHandle } from '@/hooks/useHandle';
-import { useNetwork } from '@/hooks/useNetwork';
 import { useScannerOrClipboard } from '@/hooks/useScannerOrClipboard';
-import { handlesEnabled } from '@/lib/features';
-import { isHandleInput } from '@/lib/handles';
+import { xchandlesEnabled } from '@/lib/features';
 import { amount } from '@/lib/formTypes';
+import { isHandleInput, isValidHandle } from '@/lib/handles';
 import { useWalletState } from '@/state';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
-import { PropsWithChildren, useEffect, useRef } from 'react';
+import { PropsWithChildren } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { ContactPicker, RecipientContact } from './contacts/ContactPicker';
+import { HandleResolution } from './HandleResolution';
 import { PasteInput } from './PasteInput';
 import { WalletAddressPicker } from './WalletAddressPicker';
 import { Button } from './ui/button';
@@ -52,7 +50,13 @@ export function TransferDialog({
   const walletState = useWalletState();
 
   const schema = z.object({
-    address: z.string().min(1, t`Address is required`),
+    address: z
+      .string()
+      .min(1, t`Address is required`)
+      .refine(
+        (address) => !isHandleInput(address) || isValidHandle(address),
+        t`Invalid handle`,
+      ),
     fee: amount(walletState.sync.unit.precision).refine(
       (amount) =>
         BigNumber(walletState.sync.selectable_balance).gte(amount || 0),
@@ -73,32 +77,8 @@ export function TransferDialog({
     },
   );
 
-  // "@anna" instead of an address, as on the Send page. The registry lives on mainnet only.
-  const { network } = useNetwork();
-  const handlePrefix = handlesEnabled && network === 'mainnet' ? 'xch' : null;
-  const handleLookup = useHandle(form.watch('address') ?? '', handlePrefix);
-  const shown = useRef<string | null>(null);
-  shown.current =
-    handleLookup.status === 'resolved' ? handleLookup.resolved.address : null;
-  useEffect(() => {
-    if (handleLookup.status === 'resolved') form.clearErrors('address');
-  }, [handleLookup.status, form]);
-
-  const handler = async (values: z.infer<typeof schema>) => {
-    if (!handlePrefix && isHandleInput(values.address)) {
-      form.setError('address', { message: t`Handles work on mainnet only` });
-      return;
-    }
-    const checked = await recheckHandle(
-      values.address,
-      handlePrefix,
-      () => shown.current,
-    );
-    if ('error' in checked) {
-      form.setError('address', { message: checked.error });
-      return;
-    }
-    onSubmit(checked.address, values.fee);
+  const handler = (values: z.infer<typeof schema>) => {
+    onSubmit(values.address.trim(), values.fee);
   };
 
   return (
@@ -119,18 +99,26 @@ export function TransferDialog({
                     <FormLabel>
                       <Trans>Address</Trans>
                     </FormLabel>
-                    <WalletAddressPicker
-                      onSelect={(address) => form.setValue('address', address)}
-                    />
+                    <div className='flex items-center gap-1'>
+                      <ContactPicker
+                        onSelect={(recipient) =>
+                          form.setValue('address', recipient, {
+                            shouldValidate: true,
+                          })
+                        }
+                      />
+                      <WalletAddressPicker
+                        onSelect={(address) =>
+                          form.setValue('address', address)
+                        }
+                      />
+                    </div>
                   </div>
                   <FormControl>
                     <PasteInput
                       {...field}
-                      autoCorrect='off'
-                      autoCapitalize='off'
-                      autoComplete='off'
                       placeholder={
-                        handlePrefix
+                        xchandlesEnabled
                           ? t`Enter address or @handle`
                           : t`Enter address`
                       }
@@ -138,7 +126,8 @@ export function TransferDialog({
                       onScanImage={handleScanImage}
                     />
                   </FormControl>
-                  <HandleResolution lookup={handleLookup} />
+                  <RecipientContact value={field.value} />
+                  <HandleResolution value={field.value} />
                   <FormMessage />
                 </FormItem>
               )}

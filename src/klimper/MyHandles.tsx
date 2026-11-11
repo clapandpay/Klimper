@@ -4,7 +4,7 @@
 // registry is mainnet only) or with handles turned off.
 
 import { useNetwork } from '@/hooks/useNetwork';
-import { handlesEnabled } from '@/lib/features';
+import { xchandlesEnabled } from '@/lib/features';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -14,7 +14,7 @@ import { loadOwnedHandles, OwnedHandle } from './ownedHandles';
 
 export function MyHandles() {
   const { network } = useNetwork();
-  const on = handlesEnabled && network === 'mainnet';
+  const on = xchandlesEnabled && network === 'mainnet';
   const [handles, setHandles] = useState<OwnedHandle[]>([]);
 
   useEffect(() => {

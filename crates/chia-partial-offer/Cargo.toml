@@ -14,9 +14,9 @@ workspace = true
 [dependencies]
 # `action-layer` brings the CAT makers the partial puzzle is curried with.
 chia-wallet-sdk = { workspace = true, features = ["action-layer"] }
-clvm-traits = "0.36.1"
-clvm-utils = "0.36.1"
-clvmr = "0.16.4"
+clvm-traits = "0.52.1"
+clvm-utils = "0.52.1"
+clvmr = "0.21.0"
 hex-literal = { workspace = true }
 thiserror = { workspace = true }
 

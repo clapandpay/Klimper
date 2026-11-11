@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize, Serializer};
 use tauri::{
     AppHandle, Manager, Runtime, State, command,
     ipc::Channel,
-    webview::PageLoadEvent,
     plugin::{Builder, TauriPlugin},
+    webview::PageLoadEvent,
 };
 
 mod platform;
@@ -175,7 +175,9 @@ pub fn grains() -> [&'static [u8]; 8] {
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("klimper-jingle")
-        .invoke_handler(tauri::generate_handler![play, set_shake, feel, pouch, clink])
+        .invoke_handler(tauri::generate_handler![
+            play, set_shake, feel, pouch, clink
+        ])
         .setup(|app, api| {
             let native = platform::init(app, api)?;
             app.manage(native);

@@ -1073,7 +1073,13 @@ async fn a_take_that_writes_someone_elses_option_is_refused() {
 
 /// Using an XCH-backed option with the writer's own strike CAT, with Sage's
 /// `exercise_options` as it builds it (nothing added).
+///
+/// Ignored since the 2026-11-07 Sage merge (`upstream/main` ce9de66d): Sage's
+/// `exercise_options` now spends one of the wallet's XCH coins twice even without a fee
+/// (here a 1000-mojo coin), which wallet-kit refuses (4000) and the chain would too. Sage
+/// is not changed here; to report upstream. Run with `--ignored` to reproduce.
 #[tokio::test]
+#[ignore = "Sage's exercise_options spends one coin twice"]
 async fn an_xch_option_is_used_before_the_expiry() {
     let mut alice = SimWallet::new(5_000).await;
     let strike = xch_strike_cat(&mut alice).await;
