@@ -413,3 +413,5 @@ Klimper's only workflow is `.github/workflows/release.yml` ("Release"): it runs 
 `.env.desktop` (macOS universal, Linux and Windows x64 and ARM64), and attaches them to the
 release. macOS is signed with the Developer ID certificate and notarized; Linux and Windows are
 unsigned.
+
+Transaction list navigation: every confirmed transaction row opens its detail page, with a mempoolxch.space link beside the date. Pending transactions link by spend bundle id; confirmed transactions by block height. Interactive controls and text selection keep their own behavior. `TransactionColumns`, `TransactionListView` and `ui/data-table` contain the small hooks; `src/klimper/TransactionExplorer.tsx` owns the explorer behavior. First rows are marked in one pass.

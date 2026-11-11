@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { AssetKind } from '@/bindings';
 import { Button } from '@/components/ui/button';
 import { DataTableColumnHeader } from '@/components/ui/data-table-column-header';
@@ -18,6 +19,7 @@ import { AddressLabels } from './AddressLabels';
 import { AmountCell } from './AmountCell';
 import { AssetIcon } from './AssetIcon';
 import { AssetLink } from './AssetLink';
+import { TransactionExplorerLink } from '@/klimper/TransactionExplorer';
 
 export interface FlattenedTransaction {
   type: AssetKind;
@@ -32,6 +34,8 @@ export interface FlattenedTransaction {
   groupKey: string; // unique group identifier: String(height) for confirmed, transactionId for pending
   isPending?: boolean;
   transactionId?: string;
+  /** Klimper: set once per list, so a cell need not search every row for its group. */
+  isFirstInGroup?: boolean;
 }
 
 export const columns: ColumnDef<FlattenedTransaction>[] = [
@@ -42,39 +46,39 @@ export const columns: ColumnDef<FlattenedTransaction>[] = [
     ),
     enableSorting: false,
     size: 140,
-    cell: ({ row, table }) => {
-      const rows = table.options.data as FlattenedTransaction[];
-
+    cell: ({ row }) => {
       // Show only once per group (first row in the group)
-      const isFirstInGroup =
-        rows.findIndex((tx) => tx.groupKey === row.original.groupKey) ===
-        rows.indexOf(row.original);
-
-      if (!isFirstInGroup) return null;
+      if (!row.original.isFirstInGroup) return null;
 
       if (row.original.isPending) {
         return (
-          <div className='flex items-center gap-1.5 animate-pulse'>
-            <div className='h-2 w-2 rounded-full bg-amber-500' />
-            <span className='text-amber-600 text-sm font-medium'>
-              <Trans>Pending</Trans>
-            </span>
+          <div className='flex items-center gap-1.5'>
+            <div className='flex items-center gap-1.5 animate-pulse'>
+              <div className='h-2 w-2 rounded-full bg-amber-500' />
+              <span className='text-amber-600 text-sm font-medium'>
+                <Trans>Pending</Trans>
+              </span>
+            </div>
+            <TransactionExplorerLink tx={row.original} />
           </div>
         );
       }
 
       return (
-        <Link
-          to={`/transactions/${row.getValue('transactionHeight')}`}
-          className='hover:underline'
-          onClick={(e) => e.stopPropagation()}
-          title={
-            row.original?.timestamp ? row.getValue('transactionHeight') : ''
-          }
-        >
-          {formatTimestamp(row.original?.timestamp, 'short', 'short') ||
-            row.getValue('transactionHeight')}
-        </Link>
+        <div className='flex items-center gap-1'>
+          <Link
+            to={`/transactions/${row.getValue('transactionHeight')}`}
+            className='hover:underline'
+            onClick={(e) => e.stopPropagation()}
+            title={
+              row.original?.timestamp ? row.getValue('transactionHeight') : ''
+            }
+          >
+            {formatTimestamp(row.original?.timestamp, 'short', 'short') ||
+              row.getValue('transactionHeight')}
+          </Link>
+          <TransactionExplorerLink tx={row.original} />
+        </div>
       );
     },
   },
