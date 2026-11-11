@@ -4,6 +4,7 @@
 
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { Check } from 'lucide-react';
 import { ReactNode } from 'react';
@@ -16,14 +17,17 @@ export function SiteCoin({
   size = 'md',
 }: {
   readonly domain: string;
-  readonly size?: 'md' | 'lg';
+  readonly size?: 'sm' | 'md' | 'lg';
 }) {
   const letter = Array.from(domain.replace(/^www\./, ''))[0] ?? '?';
+  const box =
+    size === 'lg'
+      ? 'h-14 w-14 text-2xl'
+      : size === 'sm'
+        ? 'h-8 w-8 text-sm'
+        : 'h-10 w-10 text-lg';
   return (
-    <span
-      className={`xc-coin ${size === 'lg' ? 'h-14 w-14 text-2xl' : 'h-10 w-10 text-lg'}`}
-      aria-hidden='true'
-    >
+    <span className={`xc-coin ${box}`} aria-hidden='true'>
       {letter.toUpperCase()}
     </span>
   );
@@ -127,8 +131,35 @@ export function Fact({
   );
 }
 
-/** Whether a connection is listening right now. */
-export function LivePill({ live }: { readonly live: boolean }) {
+/**
+ * Whether a connection is listening right now. `compact` is the dot alone, for a list row:
+ * its words stay for a screen reader and show on hover.
+ */
+export function LivePill({
+  live,
+  compact = false,
+}: {
+  readonly live: boolean;
+  readonly compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <span
+        className='xc-pill xc-pill-compact'
+        data-live={live}
+        title={live ? t`listening for requests` : t`not listening`}
+      >
+        <span className='xc-pill-dot' aria-hidden='true' />
+        <span className='sr-only'>
+          {live ? (
+            <Trans>listening for requests</Trans>
+          ) : (
+            <Trans>not listening</Trans>
+          )}
+        </span>
+      </span>
+    );
+  }
   return (
     <span className='xc-pill' data-live={live}>
       <span className='xc-pill-dot' aria-hidden='true' />
@@ -161,25 +192,28 @@ export function OptionSwitch({
   readonly disabled?: boolean;
 }) {
   return (
-    <div className='space-y-1' data-testid='option-switch'>
-      <div className='flex items-center justify-between gap-3'>
+    <div
+      className='flex items-center justify-between gap-3'
+      data-testid='option-switch'
+    >
+      <div className='flex min-w-0 items-center gap-1'>
         <Label htmlFor='option-contracts' className='font-normal'>
           <Trans>Option contracts</Trans>
         </Label>
-        <Switch
-          id='option-contracts'
-          checked={on}
-          disabled={disabled}
-          onCheckedChange={onChange}
-        />
+        <Hint>
+          <Trans>
+            Let this website ask to write, use, claim back or send option
+            contracts, and to request or take loans. Each one still asks you
+            first; they lock funds until a date.
+          </Trans>
+        </Hint>
       </div>
-      <p className='text-xs text-muted-foreground'>
-        <Trans>
-          Let this website ask to write, use, claim back or send option
-          contracts, and to request or take loans. Each one still asks you
-          first; they lock funds until a date.
-        </Trans>
-      </p>
+      <Switch
+        id='option-contracts'
+        checked={on}
+        disabled={disabled}
+        onCheckedChange={onChange}
+      />
     </div>
   );
 }

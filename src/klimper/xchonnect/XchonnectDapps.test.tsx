@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The connected-websites list (clapandpay TASK-084).
 
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionSummary } from './xchonnect';
 
@@ -19,6 +25,9 @@ vi.mock('@/components/Header', () => ({
 }));
 vi.mock('@/hooks/useBiometric', () => ({
   useBiometric: () => ({ promptIfEnabled: () => Promise.resolve(true) }),
+}));
+vi.mock('theme-o-rama', () => ({
+  useTheme: () => ({ currentTheme: { mostLike: 'light' } }),
 }));
 vi.mock('@/lib/features', () => ({ xchonnectEnabled: true }));
 
@@ -92,6 +101,20 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+/** Opens the info dot inside `testId` and returns what it says. */
+async function hintText(testId: string): Promise<string> {
+  const dot = screen
+    .getByTestId(testId)
+    .querySelector<HTMLButtonElement>('button.klimper-hint');
+  if (dot === null) throw new Error(`no info dot in ${testId}`);
+  fireEvent.click(dot);
+  return waitFor(() => {
+    const open = document.body.querySelector('.klimper-hint-body');
+    if (open === null) throw new Error('the info dot did not open');
+    return open.textContent ?? '';
+  });
+}
+
 it('explains how to connect when nothing is connected', async () => {
   listSessions.mockResolvedValue([]);
   renderScreen(<XchonnectDapps />);
@@ -102,17 +125,38 @@ it('explains how to connect when nothing is connected', async () => {
   );
 });
 
-it('lists a session with its domain, what it may call and whether it is listening', async () => {
+it('lists a session as one row, with what it may call behind the info dot', async () => {
   listSessions.mockResolvedValue([session]);
   renderScreen(<XchonnectDapps />);
 
-  await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
-  const card = screen.getByTestId('dapp-card').textContent ?? '';
-  expect(card).toContain('pengui.xyz');
-  expect(card).toContain('chainId, connect, signCoinSpends');
-  expect(card).toContain('listening for requests');
-  expect(card).toContain('renewed 2 times');
-  expect(card).toContain('none set');
+  await waitFor(() => expect(screen.getByTestId('dapp-row')).toBeDefined());
+  const row = screen.getByTestId('dapp-row').textContent ?? '';
+  expect(row).toContain('pengui.xyz');
+  expect(row).toContain('listening for requests');
+  expect(row).toContain('keys renewed 2 times');
+  expect(row).toContain('no limits');
+  expect(row).toContain('3 permissions');
+  expect(row).not.toContain('chainId, connect, signCoinSpends');
+
+  const permissions = await hintText('dapp-row');
+  expect(permissions).toContain('chainId, connect, signCoinSpends');
+  expect(permissions).toContain('Sees one address of its own.');
+  expect(permissions).toContain('No option contracts or loans.');
+});
+
+it('keeps many connections compact: one list, one row each', async () => {
+  listSessions.mockResolvedValue(
+    Array.from({ length: 12 }, (_, index) => ({
+      ...session,
+      sessionId: `sess-${index}`,
+    })),
+  );
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() =>
+    expect(screen.getAllByTestId('dapp-row')).toHaveLength(12),
+  );
+  expect(screen.getAllByTestId('dapp-list')).toHaveLength(1);
 });
 
 it('shows both domain forms and every warning on the card', async () => {
@@ -144,6 +188,7 @@ it('marks a session that lost its state as unusable', async () => {
   expect(screen.getByTestId('needs-repair').textContent).toMatch(
     /cannot be used/,
   );
+  expect(await hintText('needs-repair')).toMatch(/restored from a backup/);
 });
 
 it('marks a session whose dangerous permissions are on', async () => {
@@ -156,11 +201,14 @@ it('marks a session whose dangerous permissions are on', async () => {
     expect(screen.getByTestId('dangerous-switch-warning')).toBeDefined(),
   );
   expect(screen.getByTestId('dangerous-switch-warning').textContent).toMatch(
+    /Unsafe signatures and unreadable contracts allowed/,
+  );
+  expect(await hintText('dangerous-switch-warning')).toMatch(
     /unsafe signatures and contracts Klimper cannot read/,
   );
 });
 
-it('ends a connection without asking twice', async () => {
+it('asks once before ending a connection, since its button is a small icon', async () => {
   listSessions.mockResolvedValue([session]);
   renderScreen(<XchonnectDapps />);
 
@@ -168,8 +216,46 @@ it('ends a connection without asking twice', async () => {
   listSessions.mockResolvedValue([]);
   fireEvent.click(screen.getByRole('button', { name: 'End connection' }));
 
+  const asked = await screen.findByTestId('end-confirm');
+  expect(asked.textContent).toContain('pengui.xyz');
+  expect(endSession).not.toHaveBeenCalled();
+  fireEvent.click(
+    within(asked).getByRole('button', { name: 'End connection' }),
+  );
+
   await waitFor(() => expect(endSession).toHaveBeenCalledWith('sess-1'));
   await waitFor(() => expect(screen.getByTestId('empty-state')).toBeDefined());
+});
+
+it('keeps the connection when the question is answered with no', async () => {
+  listSessions.mockResolvedValue([session]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => screen.getByRole('button', { name: 'End connection' }));
+  fireEvent.click(screen.getByRole('button', { name: 'End connection' }));
+  fireEvent.click(
+    within(await screen.findByTestId('end-confirm')).getByRole('button', {
+      name: 'Keep it',
+    }),
+  );
+
+  await waitFor(() => expect(screen.queryByTestId('end-confirm')).toBeNull());
+  expect(endSession).not.toHaveBeenCalled();
+  expect(screen.getByTestId('dapp-row')).toBeDefined();
+});
+
+it('says one permission and one limit in the singular', async () => {
+  listSessions.mockResolvedValue([
+    { ...session, methods: ['chainId'], limits: { xch: { perDay: '1' } } },
+  ]);
+  renderScreen(<XchonnectDapps />);
+
+  await waitFor(() => expect(screen.getByTestId('dapp-row')).toBeDefined());
+  const row = screen.getByTestId('dapp-row').textContent ?? '';
+  expect(row).toContain('1 permission');
+  expect(row).not.toContain('1 permissions');
+  expect(row).toContain('1 limit');
+  expect(row).not.toContain('1 limits');
 });
 
 it('renews the keys of a live connection', async () => {
@@ -181,7 +267,9 @@ it('renews the keys of a live connection', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Renew keys' }));
 
   await waitFor(() => expect(rotateSessionKeys).toHaveBeenCalledWith('sess-1'));
-  await waitFor(() => expect(screen.getByText('being renewed')).toBeDefined());
+  await waitFor(() =>
+    expect(screen.getByText('keys being renewed')).toBeDefined(),
+  );
   expect(
     (screen.getByRole('button', { name: 'Renew keys' }) as HTMLButtonElement)
       .disabled,
@@ -207,6 +295,9 @@ it('marks a revoked connection and only offers to remove it', async () => {
 
   await waitFor(() => expect(screen.getByTestId('revoked')).toBeDefined());
   expect(screen.getByTestId('revoked').textContent).toMatch(
+    /Klimper ended this connection/,
+  );
+  expect(await hintText('revoked')).toMatch(
     /withdrew the key this connection was made with/,
   );
   expect(screen.queryByRole('button', { name: 'Renew keys' })).toBeNull();
@@ -270,7 +361,7 @@ it('shows no banner for a connection that is not in the list', async () => {
   listSessions.mockResolvedValue([session]);
   renderScreen(<XchonnectDapps />, { state: { connected: 'someone-else' } });
 
-  await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
+  await waitFor(() => expect(screen.getByTestId('dapp-row')).toBeDefined());
   expect(screen.queryByTestId('connected-banner')).toBeNull();
 });
 
@@ -296,7 +387,7 @@ it.each([
     pushStatus.mockResolvedValue({ enabled, permission });
     renderScreen(<XchonnectDapps />);
 
-    await waitFor(() => expect(screen.getByTestId('dapp-card')).toBeDefined());
+    await waitFor(() => expect(screen.getByTestId('dapp-row')).toBeDefined());
     // A build without a gateway has no wake-ups to explain, whatever the phone says.
     expect(screen.queryByTestId('push-denied')).toBeNull();
   },

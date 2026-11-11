@@ -18,8 +18,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { t } from '@lingui/core/macro';
-import { Trans } from '@lingui/react/macro';
+import { Plural, Trans } from '@lingui/react/macro';
 import {
   AlertTriangle,
   BellOff,
@@ -27,17 +35,21 @@ import {
   KeyRound,
   Plus,
   Settings2,
+  Trash2,
+  Unplug,
   Wallet,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Hint } from '../Hint';
+import { allowsOptions } from './optionMethods';
 import { identityOfSession, XchonnectDomain } from './XchonnectDomain';
 import { SessionSummary, xchonnect } from './xchonnect';
 import { XCHONNECT_ROUTES } from './xchonnectLinkHandoff';
 import { useXchonnectApprovals } from './useXchonnectApprovals';
 import { useXchonnectPush } from './useXchonnectPush';
 import { useXchonnectSessions } from './useXchonnectSessions';
-import { Fact, LivePill, SiteCoin } from './XchonnectUi';
+import { LivePill, SiteCoin } from './XchonnectUi';
 
 /** Route state the connect screen leaves behind: the connection it just made. */
 export interface DappsState {
@@ -51,6 +63,89 @@ function limitCount(session: SessionSummary): number {
   ).length;
 }
 
+/** One line of trouble on a row: what is wrong in a few words, the why behind the dot. */
+function RowStatus({
+  testId,
+  tone,
+  title,
+  children,
+}: {
+  readonly testId: string;
+  readonly tone: 'danger' | 'note';
+  readonly title: React.ReactNode;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-xs ${tone === 'danger' ? 'text-destructive' : 'text-foreground'}`}
+      role={tone === 'danger' ? 'alert' : 'status'}
+      data-testid={testId}
+    >
+      <AlertTriangle className='h-3.5 w-3.5 shrink-0' aria-hidden='true' />
+      <span className='font-medium'>{title}</span>
+      <Hint>{children}</Hint>
+    </div>
+  );
+}
+
+/** What a website may do, for the permissions dot: its methods and its two switches. */
+function Permissions({ session }: { readonly session: SessionSummary }) {
+  return (
+    <div className='space-y-2' data-testid='permissions'>
+      <div>
+        <div className='xc-label'>
+          <Trans>May call</Trans>
+        </div>
+        <div className='font-mono text-xs break-words'>
+          {session.methods.join(', ')}
+        </div>
+      </div>
+      <div>
+        {session.allReceiveKeys ? (
+          <Trans>Sees your receive addresses.</Trans>
+        ) : (
+          <Trans>Sees one address of its own.</Trans>
+        )}{' '}
+        {allowsOptions(session.methods) ? (
+          <Trans>May ask for option contracts and loans.</Trans>
+        ) : (
+          <Trans>No option contracts or loans.</Trans>
+        )}
+      </div>
+      <div>
+        <Trans>Every request still asks you first.</Trans>
+      </div>
+    </div>
+  );
+}
+
+/** A small square button whose name is its label, shown on hover. */
+function RowAction({
+  label,
+  onClick,
+  disabled = false,
+  children,
+}: {
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly disabled?: boolean;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <Button
+      variant='ghost'
+      size='icon'
+      className='h-8 w-8'
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
 function Dapp({
   session,
   walletChainId,
@@ -62,7 +157,7 @@ function Dapp({
   /** The network the wallet is on now; `null` while unknown. */
   readonly walletChainId: string | null;
   readonly fresh: boolean;
-  readonly onEnd: (id: string) => void;
+  readonly onEnd: (session: SessionSummary) => void;
   readonly onRotate: (id: string) => void;
 }) {
   const navigate = useNavigate();
@@ -70,199 +165,190 @@ function Dapp({
   const connected = new Date(session.createdAt * 1000).toLocaleDateString();
   const sessionChain = session.chainId;
   const epoch = session.epoch;
+  const methodCount = session.methods.length;
   // Renewing needs the message loop to carry the offer and the dApp to answer it.
   const usable =
     session.sasConfirmed && !session.needsRepair && !session.revoked;
   const canRotate = usable && session.connected && !session.rotating;
   return (
-    <Card data-testid='dapp-card' className={fresh ? 'xc-fresh' : undefined}>
-      <CardHeader>
-        <div className='flex items-start gap-3'>
-          <SiteCoin domain={session.domainUnicode} />
-          <CardTitle className='min-w-0 flex-1 text-base'>
+    <li
+      data-testid='dapp-row'
+      className={`flex items-start gap-3 px-3 py-2.5 ${fresh ? 'xc-fresh rounded-lg' : ''}`}
+    >
+      <SiteCoin domain={session.domainUnicode} size='sm' />
+      <div className='min-w-0 flex-1 space-y-1'>
+        <div className='flex items-start gap-2'>
+          <div className='min-w-0 flex-1 text-sm'>
             <XchonnectDomain
               identity={identityOfSession(session)}
               size='inline'
               showName
             />
-          </CardTitle>
-          <LivePill live={session.connected} />
+          </div>
+          <LivePill live={session.connected} compact />
         </div>
-      </CardHeader>
-      <CardContent className='space-y-4 text-sm'>
-        {session.revoked && (
-          <div
-            className='rounded-lg border border-destructive p-3 text-destructive'
-            role='alert'
-            data-testid='revoked'
-          >
-            <div className='flex items-start gap-2 font-semibold'>
-              <AlertTriangle
-                className='h-4 w-4 mt-0.5 shrink-0'
-                aria-hidden='true'
-              />
-              <Trans>Klimper ended this connection</Trans>
-            </div>
-            <p className='pl-6 mt-1'>
-              <Trans>
-                The website withdrew the key this connection was made with,
-                which is what a website does when that key may have been stolen.
-                Nothing can be asked through it any more. Connect again if you
-                still use the website.
-              </Trans>
-            </p>
-          </div>
-        )}
 
-        {walletChainId !== null &&
-          session.chainId !== walletChainId &&
-          !session.revoked && (
-            <div
-              className='rounded-lg border p-3'
-              role='status'
-              data-testid='other-network'
-            >
-              <div className='flex items-start gap-2 font-semibold'>
-                <AlertTriangle
-                  className='h-4 w-4 mt-0.5 shrink-0'
-                  aria-hidden='true'
-                />
-                <Trans>Made on {sessionChain}</Trans>
-              </div>
-              <p className='pl-6 mt-1'>
-                <Trans>
-                  Klimper is on {walletChainId} now. The website sees which
-                  network Klimper is on, and can ask nothing else until you
-                  switch back. To use it on {walletChainId}, connect again.
-                </Trans>
-              </p>
-            </div>
-          )}
-
-        {session.needsRepair && !session.revoked && (
-          <div
-            className='rounded-lg border border-destructive p-3 text-destructive'
-            role='alert'
-            data-testid='needs-repair'
-          >
-            <div className='flex items-start gap-2 font-semibold'>
-              <AlertTriangle
-                className='h-4 w-4 mt-0.5 shrink-0'
-                aria-hidden='true'
-              />
-              <Trans>This connection cannot be used</Trans>
-            </div>
-            <p className='pl-6 mt-1'>
-              <Trans>
-                Its stored state was lost or restored from a backup. Klimper
-                will not reuse it. Connect to the website again.
-              </Trans>
-            </p>
-          </div>
-        )}
-
-        {!session.sasConfirmed && !session.needsRepair && !session.revoked && (
-          <div className='text-destructive' role='alert'>
-            <Trans>
-              The six digits were never confirmed, so this connection cannot be
-              used.
-            </Trans>
-          </div>
-        )}
-
-        {(session.allowAggSigUnsafe || session.allowUnknownContracts) && (
-          <div
-            className='flex items-start gap-2 text-destructive'
-            data-testid='dangerous-switch-warning'
-          >
-            <AlertTriangle
-              className='h-4 w-4 mt-0.5 shrink-0'
-              aria-hidden='true'
+        <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground'>
+          <span>{session.chainId}</span>
+          <span aria-hidden='true'>·</span>
+          <span className='inline-flex items-center gap-1'>
+            <Plural
+              value={methodCount}
+              one='# permission'
+              other='# permissions'
             />
-            <span>
-              {session.allowAggSigUnsafe && session.allowUnknownContracts ? (
-                <Trans>
-                  You allowed this website unsafe signatures and contracts
-                  Klimper cannot read.
-                </Trans>
-              ) : session.allowAggSigUnsafe ? (
-                <Trans>You allowed this website unsafe signatures.</Trans>
-              ) : (
-                <Trans>
-                  You allowed this website contracts Klimper cannot read.
-                </Trans>
-              )}
-            </span>
-          </div>
-        )}
-
-        <dl className='grid gap-4 rounded-2xl border border-border p-4 sm:grid-cols-3'>
-          <Fact label={<Trans>Connected</Trans>}>{connected}</Fact>
-          <Fact label={<Trans>Network</Trans>}>{session.chainId}</Fact>
-          <Fact label={<Trans>Limits</Trans>}>
+            <Hint label={t`What this website may do`}>
+              <Permissions session={session} />
+            </Hint>
+          </span>
+          <span aria-hidden='true'>·</span>
+          <span>
             {limits === 0 ? (
-              <Trans>none set</Trans>
+              <Trans>no limits</Trans>
             ) : (
-              <Trans>{limits} set</Trans>
+              <Plural value={limits} one='# limit' other='# limits' />
             )}
-          </Fact>
-          <div className='sm:col-span-2'>
-            <Fact label={<Trans>May call</Trans>}>
-              {session.methods.join(', ')}
-            </Fact>
-          </div>
+          </span>
+          <span aria-hidden='true'>·</span>
+          <span>
+            <Trans>since {connected}</Trans>
+          </span>
+          <span aria-hidden='true'>·</span>
           {/*
             Either side may renew the keys (spec 9.2.1); the epoch counts how often
             that has happened. "Being renewed" lasts until the website has answered
             and the old mailbox has been read to the end.
           */}
-          <Fact label={<Trans>Connection keys</Trans>}>
+          <span>
             {session.rotating ? (
-              <Trans>being renewed</Trans>
+              <Trans>keys being renewed</Trans>
             ) : (
-              <Trans>renewed {epoch} times</Trans>
+              <Trans>keys renewed {epoch} times</Trans>
             )}
-          </Fact>
-        </dl>
-
-        <div className='flex flex-wrap gap-2'>
-          {!session.revoked && (
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={() =>
-                navigate(`${XCHONNECT_ROUTES.dapp}/${session.sessionId}`)
-              }
-            >
-              <Settings2 className='h-4 w-4 mr-2' aria-hidden='true' />
-              <Trans>What it may do</Trans>
-            </Button>
-          )}
-          {usable && (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={!canRotate}
-              onClick={() => onRotate(session.sessionId)}
-            >
-              <KeyRound className='h-4 w-4 mr-2' aria-hidden='true' />
-              <Trans>Renew keys</Trans>
-            </Button>
-          )}
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() => onEnd(session.sessionId)}
-          >
-            {session.revoked ? (
-              <Trans>Remove</Trans>
-            ) : (
-              <Trans>End connection</Trans>
-            )}
-          </Button>
+          </span>
         </div>
-      </CardContent>
-    </Card>
+
+        {session.revoked && (
+          <RowStatus
+            testId='revoked'
+            tone='danger'
+            title={<Trans>Klimper ended this connection</Trans>}
+          >
+            <Trans>
+              The website withdrew the key this connection was made with, which
+              is what a website does when that key may have been stolen. Nothing
+              can be asked through it any more. Connect again if you still use
+              the website.
+            </Trans>
+          </RowStatus>
+        )}
+
+        {walletChainId !== null &&
+          session.chainId !== walletChainId &&
+          !session.revoked && (
+            <RowStatus
+              testId='other-network'
+              tone='note'
+              title={<Trans>Made on {sessionChain}</Trans>}
+            >
+              <Trans>
+                Klimper is on {walletChainId} now. The website sees which
+                network Klimper is on, and can ask nothing else until you switch
+                back. To use it on {walletChainId}, connect again.
+              </Trans>
+            </RowStatus>
+          )}
+
+        {session.needsRepair && !session.revoked && (
+          <RowStatus
+            testId='needs-repair'
+            tone='danger'
+            title={<Trans>This connection cannot be used</Trans>}
+          >
+            <Trans>
+              Its stored state was lost or restored from a backup. Klimper will
+              not reuse it. Connect to the website again.
+            </Trans>
+          </RowStatus>
+        )}
+
+        {!session.sasConfirmed && !session.needsRepair && !session.revoked && (
+          <RowStatus
+            testId='sas-unconfirmed'
+            tone='danger'
+            title={<Trans>Not confirmed</Trans>}
+          >
+            <Trans>
+              The six digits were never confirmed, so this connection cannot be
+              used.
+            </Trans>
+          </RowStatus>
+        )}
+
+        {(session.allowAggSigUnsafe || session.allowUnknownContracts) && (
+          <RowStatus
+            testId='dangerous-switch-warning'
+            tone='danger'
+            title={
+              session.allowAggSigUnsafe && session.allowUnknownContracts ? (
+                <Trans>
+                  Unsafe signatures and unreadable contracts allowed
+                </Trans>
+              ) : session.allowAggSigUnsafe ? (
+                <Trans>Unsafe signatures allowed</Trans>
+              ) : (
+                <Trans>Unreadable contracts allowed</Trans>
+              )
+            }
+          >
+            {session.allowAggSigUnsafe && session.allowUnknownContracts ? (
+              <Trans>
+                You allowed this website unsafe signatures and contracts Klimper
+                cannot read.
+              </Trans>
+            ) : session.allowAggSigUnsafe ? (
+              <Trans>You allowed this website unsafe signatures.</Trans>
+            ) : (
+              <Trans>
+                You allowed this website contracts Klimper cannot read.
+              </Trans>
+            )}
+          </RowStatus>
+        )}
+      </div>
+
+      <div className='flex shrink-0 items-center'>
+        {!session.revoked && (
+          <RowAction
+            label={t`What it may do`}
+            onClick={() =>
+              navigate(`${XCHONNECT_ROUTES.dapp}/${session.sessionId}`)
+            }
+          >
+            <Settings2 className='h-4 w-4' aria-hidden='true' />
+          </RowAction>
+        )}
+        {usable && (
+          <RowAction
+            label={t`Renew keys`}
+            disabled={!canRotate}
+            onClick={() => onRotate(session.sessionId)}
+          >
+            <KeyRound className='h-4 w-4' aria-hidden='true' />
+          </RowAction>
+        )}
+        <RowAction
+          label={session.revoked ? t`Remove` : t`End connection`}
+          onClick={() => onEnd(session)}
+        >
+          {session.revoked ? (
+            <Trash2 className='h-4 w-4' aria-hidden='true' />
+          ) : (
+            <Unplug className='h-4 w-4' aria-hidden='true' />
+          )}
+        </RowAction>
+      </div>
+    </li>
   );
 }
 
@@ -273,6 +359,11 @@ export default function XchonnectDapps() {
   const { status, sessions, loading, error, refresh } = useXchonnectSessions();
   const { approvals } = useXchonnectApprovals();
   const [problem, setProblem] = useState<string | null>(null);
+  // Ending a connection is asked about first: its button is a small icon beside two others,
+  // and the website has to be paired again afterwards. Removing an ended one is not.
+  const [ending, setEnding] = useState<SessionSummary | null>(null);
+
+  const endingDomain = ending?.domainUnicode ?? '';
 
   const end = async (sessionId: string) => {
     try {
@@ -400,16 +491,26 @@ export default function XchonnectDapps() {
           </Card>
         )}
 
-        {sessions.map((session) => (
-          <Dapp
-            key={session.sessionId}
-            session={session}
-            walletChainId={status?.chainId ?? null}
-            fresh={session.sessionId === justConnected}
-            onEnd={(id) => void end(id)}
-            onRotate={(id) => void rotate(id)}
-          />
-        ))}
+        {sessions.length > 0 && (
+          <Card>
+            <ul className='divide-y divide-border' data-testid='dapp-list'>
+              {sessions.map((session) => (
+                <Dapp
+                  key={session.sessionId}
+                  session={session}
+                  walletChainId={status?.chainId ?? null}
+                  fresh={session.sessionId === justConnected}
+                  onEnd={(target) =>
+                    target.revoked
+                      ? void end(target.sessionId)
+                      : setEnding(target)
+                  }
+                  onRotate={(id) => void rotate(id)}
+                />
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {status !== null && (
           <p className='text-xs text-muted-foreground'>
@@ -428,6 +529,40 @@ export default function XchonnectDapps() {
             )}
           </p>
         )}
+
+        <Dialog
+          open={ending !== null}
+          onOpenChange={(open) => !open && setEnding(null)}
+        >
+          <DialogContent data-testid='end-confirm'>
+            <DialogHeader>
+              <DialogTitle>
+                <Trans>End this connection?</Trans>
+              </DialogTitle>
+              <DialogDescription>
+                <Trans>
+                  {endingDomain} can no longer ask you to sign. To use it again
+                  you connect it anew.
+                </Trans>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setEnding(null)}>
+                <Trans>Keep it</Trans>
+              </Button>
+              <Button
+                variant='destructive'
+                onClick={() => {
+                  const target = ending;
+                  setEnding(null);
+                  if (target) void end(target.sessionId);
+                }}
+              >
+                <Trans>End connection</Trans>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Container>
     </Layout>
   );
