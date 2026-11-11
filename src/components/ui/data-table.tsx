@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import {
   Table,
   TableBody,
@@ -41,7 +42,7 @@ interface DataTableProps<TData, TValue> {
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
   getRowStyles?: (row: Row<TData>) => {
     className?: string;
-    onClick?: () => void;
+    onClick?: (event: React.MouseEvent<HTMLTableRowElement>) => void;
   };
   getRowId?: (originalRow: TData) => string;
   showTotalRows?: boolean;

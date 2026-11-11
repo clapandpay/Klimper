@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { DataTable } from '@/components/ui/data-table';
 import { getAssetDisplayName } from '@/lib/utils';
 import { t } from '@lingui/core/macro';
@@ -5,6 +6,12 @@ import { Row, SortingState } from '@tanstack/react-table';
 import BigNumber from 'bignumber.js';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useNetwork } from '@/hooks/useNetwork';
+import {
+  opensRow,
+  TransactionExplorerProvider,
+} from '@/klimper/TransactionExplorer';
 import { PendingTransactionRecord, TransactionRecord } from '../bindings';
 import { Loading } from './Loading';
 import { columns, FlattenedTransaction } from './TransactionColumns';
@@ -23,6 +30,8 @@ export function TransactionListView({
   summarized?: boolean;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const navigate = useNavigate();
+  const { network } = useNetwork();
 
   const flattenedPending: FlattenedTransaction[] = pendingTransactions.flatMap(
     (transaction) => {
@@ -160,27 +169,42 @@ export function TransactionListView({
     return [...summaryMap.values()];
   });
 
+  // Klimper: each group's first row is marked in one pass, not searched for per row.
   const allFlattenedTransactions = [
     ...flattenedPending,
     ...flattenedTransactions,
-  ];
+  ].map((tx, index, all) => ({
+    ...tx,
+    isFirstInGroup: index === 0 || all[index - 1].groupKey !== tx.groupKey,
+  }));
 
   // Function to determine if a row is the first in a transaction group
   const getRowStyles = (row: Row<FlattenedTransaction>) => {
     const currentKey = row.original.groupKey;
-    const rowIndex = allFlattenedTransactions.indexOf(row.original);
+    const rowIndex = row.index;
+    // Klimper: every row of a confirmed transaction opens it (a pending one has no page).
+    const open = row.original.isPending
+      ? {}
+      : {
+          onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
+            if (opensRow(event)) {
+              navigate(`/transactions/${row.original.transactionHeight}`);
+            }
+          },
+        };
+    const pointer = row.original.isPending ? '' : 'cursor-pointer';
 
     if (rowIndex > 0) {
       const prevKey = allFlattenedTransactions[rowIndex - 1].groupKey;
       if (currentKey !== prevKey) {
         return {
-          className:
-            'border-t-2 border-t-neutral-300 dark:border-t-neutral-700',
+          ...open,
+          className: `border-t-2 border-t-neutral-300 dark:border-t-neutral-700 ${pointer}`,
         };
       }
     }
 
-    return {};
+    return { ...open, className: pointer };
   };
 
   return (
@@ -196,26 +220,31 @@ export function TransactionListView({
           <Loading size={40} text={t`Loading transactions...`} />
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={allFlattenedTransactions}
-          getRowStyles={getRowStyles}
-          onSortingChange={(updatedSort) => {
-            setSorting(updatedSort);
-            if (typeof updatedSort === 'function') {
-              const newSort = updatedSort([]);
-              if (newSort.length > 0 && newSort[0].id === 'transactionHeight') {
-                onSortingChange?.(newSort[0].desc === false);
+        <TransactionExplorerProvider network={network}>
+          <DataTable
+            columns={columns}
+            data={allFlattenedTransactions}
+            getRowStyles={getRowStyles}
+            onSortingChange={(updatedSort) => {
+              setSorting(updatedSort);
+              if (typeof updatedSort === 'function') {
+                const newSort = updatedSort([]);
+                if (
+                  newSort.length > 0 &&
+                  newSort[0].id === 'transactionHeight'
+                ) {
+                  onSortingChange?.(newSort[0].desc === false);
+                }
+              } else if (
+                updatedSort.length > 0 &&
+                updatedSort[0].id === 'transactionHeight'
+              ) {
+                onSortingChange?.(updatedSort[0].desc === false);
               }
-            } else if (
-              updatedSort.length > 0 &&
-              updatedSort[0].id === 'transactionHeight'
-            ) {
-              onSortingChange?.(updatedSort[0].desc === false);
-            }
-          }}
-          state={{ sorting }}
-        />
+            }}
+            state={{ sorting }}
+          />
+        </TransactionExplorerProvider>
       )}
     </motion.div>
   );
