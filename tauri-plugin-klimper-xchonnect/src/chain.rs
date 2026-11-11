@@ -271,21 +271,15 @@ async fn read_unlocked(
     keys: &[PublicKey],
 ) -> Result<Vec<Bytes32>, ChainError> {
     let owners = owners(keys);
-    // Validated 32-byte ids, encoded here: Sage's queries splice these strings into SQL,
-    // so nothing the dApp sent reaches them as text.
-    let ids: Vec<String> = coin_ids.iter().map(hex::encode).collect();
-    let rows = db.coins_by_ids(&ids).await.map_err(unavailable)?;
+    // Validated 32-byte ids; Sage binds them as query parameters (upstream #986).
+    let rows = db.coins_by_ids(coin_ids).await.map_err(unavailable)?;
     let mut out = Vec::new();
     for row in rows {
         if !owners.contains_key(&row.p2_puzzle_hash) {
             continue;
         }
         let id = row.coin.coin_id();
-        if db
-            .are_coins_spendable(&[hex::encode(id)])
-            .await
-            .map_err(unavailable)?
-        {
+        if db.are_coins_spendable(&[id]).await.map_err(unavailable)? {
             out.push(id);
         }
     }

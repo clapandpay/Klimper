@@ -35,15 +35,17 @@ use rand_chacha::ChaCha8Rng;
 use rustls::crypto::aws_lc_rs::default_provider;
 use sage::Sage;
 use sage_api::{
-    Action as ApiAction, AddNftUri, Amount, BulkMintNfts, CreateDid, CreateTransaction, GetDids,
-    GetHandle, GetHandles, GetNft, GetNftMetadataUpdater, GetOffers, GetPeers, GetSyncStatus,
-    GetVersion, GetWallet, HandleFilterMode, HandleStatus, HandleVerification, Id as ApiId,
-    ImportOffer, ImportWallet, Login, LookupAddressHandles, MakeOffer, NewNftUri, NftUpdaterKind,
-    NftUriKind, OfferAmount, OfferAsset, ResolveHandle, SendXch, SignCoinSpends, UpdateNftAction,
-    ViewOffer,
+    Action as ApiAction, AddNftUri, Amount, BulkMintNfts, CancelOffer, CoinFilterMode,
+    CoinSortMode, CreateDid, CreateTransaction, GetAreCoinsSpendable, GetCats, GetCoins,
+    GetCoinsByIds, GetDids, GetHandle, GetHandles, GetNft, GetNftMetadataUpdater, GetOffer,
+    GetOffers, GetPeers, GetSyncStatus, GetVersion, GetWallet, HandleFilterMode, HandleStatus,
+    HandleVerification, Id as ApiId, ImportOffer, ImportWallet, IssueCat, Login,
+    LookupAddressHandles, MakeOffer, NewNftUri, NftUpdaterKind, NftUriKind, OfferAmount,
+    OfferAsset, OfferRecordStatus, ResolveHandle, SendXch, SignCoinSpends, UpdateNftAction,
+    ViewOffer, wallet_connect::FilterUnlockedCoins,
 };
 use sage_api_macro::impl_endpoints;
-use sage_database::{XchandleRow, XchandleStatus};
+use sage_database::{OfferStatus, XchandleRow, XchandleStatus};
 use sage_wallet::{SyncCommand, SyncEvent};
 use serde::{Serialize, de::DeserializeOwned};
 use tempfile::TempDir;
@@ -366,6 +368,85 @@ async fn test_send_xch() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_coin_id_lookups_reject_non_hex_input() -> Result<()> {
+    let mut app = TestApp::new().await?;
+
+    let alice = app.setup_bls(1000).await?;
+    app.login(Login { fingerprint: alice }).await?;
+    app.wait_for_coins().await;
+
+    let coin_id = app
+        .get_coins(GetCoins {
+            asset_id: None,
+            offset: 0,
+            limit: 10,
+            sort_mode: CoinSortMode::default(),
+            filter_mode: CoinFilterMode::default(),
+            ascending: false,
+        })
+        .await?
+        .coins
+        .into_iter()
+        .next()
+        .expect("should have a coin")
+        .coin_id;
+
+    let coins = app
+        .get_coins_by_ids(GetCoinsByIds {
+            coin_ids: vec![coin_id.clone(), format!("0x{coin_id}")],
+        })
+        .await?
+        .coins;
+    assert_eq!(coins.len(), 1);
+    assert_eq!(coins[0].coin_id, coin_id);
+
+    assert!(
+        app.get_are_coins_spendable(GetAreCoinsSpendable {
+            coin_ids: vec![coin_id.clone()],
+        })
+        .await?
+        .spendable
+    );
+
+    // These used to be spliced into the SQL as X'...' literals, so this payload
+    // matched every coin in the wallet.
+    let injection = "00') OR 1=1 OR coin_hash IN (X'00".to_string();
+
+    assert!(
+        app.get_coins_by_ids(GetCoinsByIds {
+            coin_ids: vec![injection.clone()],
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.get_are_coins_spendable(GetAreCoinsSpendable {
+            coin_ids: vec![injection.clone()],
+        })
+        .await
+        .is_err()
+    );
+
+    let sage = app.sage.lock().await;
+    let unlocked = sage
+        .filter_unlocked_coins(FilterUnlockedCoins {
+            coin_ids: vec![coin_id.clone()],
+        })
+        .await?
+        .coin_ids;
+    assert_eq!(unlocked, vec![coin_id]);
+    assert!(
+        sage.filter_unlocked_coins(FilterUnlockedCoins {
+            coin_ids: vec![injection],
+        })
+        .await
+        .is_err()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_send_xch_with_coin_ids() -> Result<()> {
     let mut app = TestApp::new().await?;
 
@@ -429,6 +510,7 @@ async fn test_send_xch_with_coin_ids() -> Result<()> {
         .expect("600 coin");
     app.make_offer(MakeOffer {
         confirmed_handles: Vec::new(),
+        pre_split_fee: None,
         requested_assets: vec![OfferAmount {
             asset_id: None,
             hidden_puzzle_hash: None,
@@ -455,6 +537,207 @@ async fn test_send_xch_with_coin_ids() -> Result<()> {
 
     app.send_xch(send(vec![free.coin_id().to_string()], own, 100))
         .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_pre_split_offer() -> Result<()> {
+    let mut app = TestApp::new().await?;
+
+    let alice = app.setup_bls(1000).await?;
+    app.login(Login { fingerprint: alice }).await?;
+    app.wait_for_coins().await;
+
+    let offer_amount = |amount: u64| OfferAmount {
+        asset_id: None,
+        hidden_puzzle_hash: None,
+        amount: Amount::u64(amount),
+    };
+
+    let response = app
+        .make_offer(MakeOffer {
+            confirmed_handles: Vec::new(),
+            requested_assets: vec![offer_amount(1)],
+            offered_assets: vec![offer_amount(300)],
+            fee: Amount::u64(50),
+            receive_address: None,
+            expires_at_second: None,
+            auto_import: false,
+            coin_ids: None,
+            pre_split_fee: Some(Amount::u64(10)),
+        })
+        .await?;
+
+    assert!(response.pre_split_transaction_id.is_some());
+
+    // The offer is imported even though auto_import is off, and is pending until the split
+    // is confirmed, so it isn't shared before its coins exist.
+    let status = async |app: &TestApp| -> Result<OfferRecordStatus> {
+        Ok(app
+            .get_offer(GetOffer {
+                offer_id: response.offer_id.clone(),
+            })
+            .await?
+            .offer
+            .status)
+    };
+    assert!(matches!(status(&app).await?, OfferRecordStatus::Pending));
+
+    let error = app
+        .cancel_offer(CancelOffer {
+            offer_id: response.offer_id.clone(),
+            fee: Amount::u64(0),
+            auto_submit: false,
+            coin_ids: None,
+        })
+        .await
+        .expect_err("a pending offer can't be cancelled on-chain");
+    assert!(error.to_string().contains("split"), "{error}");
+
+    app.consume_until(|event| {
+        matches!(
+            event,
+            SyncEvent::OfferUpdated {
+                status: OfferStatus::Active,
+                ..
+            }
+        )
+    })
+    .await;
+    assert!(matches!(status(&app).await?, OfferRecordStatus::Active));
+
+    // Only the offered amount and its fee are locked by the offer, and the rest is spendable
+    // once the wallet has synced the change.
+    let mut amounts = Vec::new();
+
+    for _ in 0..100 {
+        amounts = app
+            .sage
+            .lock()
+            .await
+            .wallet()?
+            .db
+            .selectable_xch_coins()
+            .await?
+            .iter()
+            .map(|coin| coin.amount)
+            .collect::<Vec<_>>();
+
+        if !amounts.is_empty() {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    assert_eq!(amounts, vec![640]);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_pre_split_cat_offer() -> Result<()> {
+    let mut app = TestApp::new().await?;
+
+    let alice = app.setup_bls(10_000).await?;
+    app.login(Login { fingerprint: alice }).await?;
+    app.wait_for_coins().await;
+
+    app.issue_cat(IssueCat {
+        name: "Split".to_string(),
+        ticker: "SPL".to_string(),
+        amount: Amount::u64(1000),
+        revocable: false,
+        fee: Amount::u64(0),
+        auto_submit: true,
+    })
+    .await?;
+    app.wait_for_coins().await;
+
+    let cat_id = app.get_cats(GetCats {}).await?.cats[0]
+        .asset_id
+        .clone()
+        .expect("the CAT has an asset id");
+    let asset_id = Bytes32::try_from(hex::decode(&cat_id)?)?;
+
+    let response = app
+        .make_offer(MakeOffer {
+            confirmed_handles: Vec::new(),
+            requested_assets: vec![OfferAmount {
+                asset_id: None,
+                hidden_puzzle_hash: None,
+                amount: Amount::u64(1),
+            }],
+            offered_assets: vec![OfferAmount {
+                asset_id: Some(cat_id),
+                hidden_puzzle_hash: None,
+                amount: Amount::u64(300),
+            }],
+            fee: Amount::u64(0),
+            receive_address: None,
+            expires_at_second: None,
+            auto_import: false,
+            coin_ids: None,
+            pre_split_fee: Some(Amount::u64(10)),
+        })
+        .await?;
+
+    assert!(response.pre_split_transaction_id.is_some());
+
+    let status = async |app: &TestApp| -> Result<OfferRecordStatus> {
+        Ok(app
+            .get_offer(GetOffer {
+                offer_id: response.offer_id.clone(),
+            })
+            .await?
+            .offer
+            .status)
+    };
+    assert!(matches!(status(&app).await?, OfferRecordStatus::Pending));
+
+    app.consume_until(|event| {
+        matches!(
+            event,
+            SyncEvent::OfferUpdated {
+                status: OfferStatus::Active,
+                ..
+            }
+        )
+    })
+    .await;
+    assert!(matches!(status(&app).await?, OfferRecordStatus::Active));
+
+    // Only the offered CAT amount is locked by the offer. The split fee comes out of the XCH
+    // left over from issuing the CAT, and the rest of both is spendable.
+    let mut amounts = (Vec::new(), Vec::new());
+
+    for _ in 0..100 {
+        let sage = app.sage.lock().await;
+        let db = &sage.wallet()?.db;
+
+        amounts = (
+            db.selectable_cat_coins(asset_id)
+                .await?
+                .iter()
+                .map(|cat| cat.coin.amount)
+                .collect::<Vec<_>>(),
+            db.selectable_xch_coins()
+                .await?
+                .iter()
+                .map(|coin| coin.amount)
+                .collect::<Vec<_>>(),
+        );
+
+        if !amounts.0.is_empty() && !amounts.1.is_empty() {
+            break;
+        }
+
+        drop(sage);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    assert_eq!(amounts, (vec![700], vec![8990]));
 
     Ok(())
 }
@@ -1070,6 +1353,7 @@ async fn test_mutable_nft() -> Result<()> {
     let offer = app
         .make_offer(MakeOffer {
             confirmed_handles: Vec::new(),
+            pre_split_fee: None,
             requested_assets: vec![xch.clone()],
             offered_assets: vec![nft_amount.clone()],
             fee: Amount::u64(0),
@@ -1102,6 +1386,7 @@ async fn test_mutable_nft() -> Result<()> {
     let offer = app
         .make_offer(MakeOffer {
             confirmed_handles: Vec::new(),
+            pre_split_fee: None,
             requested_assets: vec![nft_amount],
             offered_assets: vec![xch],
             fee: Amount::u64(0),
@@ -1189,6 +1474,7 @@ async fn test_requested_mutable_nft() -> Result<()> {
     let offer = app
         .make_offer(MakeOffer {
             confirmed_handles: Vec::new(),
+            pre_split_fee: None,
             requested_assets: vec![OfferAmount {
                 asset_id: Some(nft_id.clone()),
                 hidden_puzzle_hash: None,

@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNetwork } from '@/hooks/useNetwork';
 import { mempoolCoinUrl } from '@/klimper/explorer';
 import { offersEnabled } from '@/lib/features';
-import { formatTimestamp, getOfferStatus } from '@/lib/utils';
+import { formatTimestamp } from '@/lib/utils';
+import { offerStatusLabel } from '@/components/OfferStatusBadge';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -221,7 +222,7 @@ export default function Option() {
               <CardContent>
                 <div className='grid gap-2'>
                   {offersForAsset.map((localOffer) => {
-                    const offerStatus = getOfferStatus(localOffer.status);
+                    const offerStatus = offerStatusLabel(localOffer.status);
                     const createdAt = localOffer.creation_timestamp
                       ? formatTimestamp(
                           localOffer.creation_timestamp,

@@ -1548,8 +1548,7 @@ async fn a_sealed_bundles_signatures_are_recorded_and_never_made_again() {
     // which the database does not hold, stay (no peer is asked).
     settle(&mut alice, &first).await;
     let coins = record.coins().unwrap();
-    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
-    let rows = alice.wallet.db.coins_by_ids(&ids).await.unwrap();
+    let rows = alice.wallet.db.coins_by_ids(&coins).await.unwrap();
     let known: Vec<Bytes32> = rows.iter().map(|row| row.coin.coin_id()).collect();
     assert!(!known.is_empty());
     let spent_at = rows

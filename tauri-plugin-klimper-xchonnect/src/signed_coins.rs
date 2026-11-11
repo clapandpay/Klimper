@@ -548,8 +548,7 @@ pub async fn spent_coins(wallet: &sage_wallet::Wallet, coins: &[Bytes32]) -> Has
     if coins.is_empty() {
         return HashSet::new();
     }
-    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
-    let rows = match wallet.db.coins_by_ids(&ids).await {
+    let rows = match wallet.db.coins_by_ids(coins).await {
         Ok(rows) => rows,
         Err(error) => {
             tracing::warn!("xchonnect: could not read coin states: {error}");
@@ -632,7 +631,7 @@ pub async fn signed_by_sage(wallet: &sage_wallet::Wallet) -> Result<Vec<Bytes32>
     if coins.is_empty() {
         return Ok(Vec::new());
     }
-    let ids: Vec<String> = coins.iter().map(hex::encode).collect();
+    let ids: Vec<Bytes32> = coins.into_iter().collect();
     Ok(wallet
         .db
         .coins_by_ids(&ids)
