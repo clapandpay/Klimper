@@ -18,8 +18,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { t } from '@lingui/core/macro';
-import { Trans } from '@lingui/react/macro';
+import { Plural, Trans } from '@lingui/react/macro';
 import {
   AlertTriangle,
   BellOff,
@@ -149,7 +157,7 @@ function Dapp({
   /** The network the wallet is on now; `null` while unknown. */
   readonly walletChainId: string | null;
   readonly fresh: boolean;
-  readonly onEnd: (id: string) => void;
+  readonly onEnd: (session: SessionSummary) => void;
   readonly onRotate: (id: string) => void;
 }) {
   const navigate = useNavigate();
@@ -184,7 +192,11 @@ function Dapp({
           <span>{session.chainId}</span>
           <span aria-hidden='true'>·</span>
           <span className='inline-flex items-center gap-1'>
-            <Trans>{methodCount} permissions</Trans>
+            <Plural
+              value={methodCount}
+              one='# permission'
+              other='# permissions'
+            />
             <Hint label={t`What this website may do`}>
               <Permissions session={session} />
             </Hint>
@@ -194,7 +206,7 @@ function Dapp({
             {limits === 0 ? (
               <Trans>no limits</Trans>
             ) : (
-              <Trans>{limits} limits</Trans>
+              <Plural value={limits} one='# limit' other='# limits' />
             )}
           </span>
           <span aria-hidden='true'>·</span>
@@ -327,7 +339,7 @@ function Dapp({
         )}
         <RowAction
           label={session.revoked ? t`Remove` : t`End connection`}
-          onClick={() => onEnd(session.sessionId)}
+          onClick={() => onEnd(session)}
         >
           {session.revoked ? (
             <Trash2 className='h-4 w-4' aria-hidden='true' />
@@ -347,6 +359,11 @@ export default function XchonnectDapps() {
   const { status, sessions, loading, error, refresh } = useXchonnectSessions();
   const { approvals } = useXchonnectApprovals();
   const [problem, setProblem] = useState<string | null>(null);
+  // Ending a connection is asked about first: its button is a small icon beside two others,
+  // and the website has to be paired again afterwards. Removing an ended one is not.
+  const [ending, setEnding] = useState<SessionSummary | null>(null);
+
+  const endingDomain = ending?.domainUnicode ?? '';
 
   const end = async (sessionId: string) => {
     try {
@@ -483,7 +500,11 @@ export default function XchonnectDapps() {
                   session={session}
                   walletChainId={status?.chainId ?? null}
                   fresh={session.sessionId === justConnected}
-                  onEnd={(id) => void end(id)}
+                  onEnd={(target) =>
+                    target.revoked
+                      ? void end(target.sessionId)
+                      : setEnding(target)
+                  }
                   onRotate={(id) => void rotate(id)}
                 />
               ))}
@@ -508,6 +529,40 @@ export default function XchonnectDapps() {
             )}
           </p>
         )}
+
+        <Dialog
+          open={ending !== null}
+          onOpenChange={(open) => !open && setEnding(null)}
+        >
+          <DialogContent data-testid='end-confirm'>
+            <DialogHeader>
+              <DialogTitle>
+                <Trans>End this connection?</Trans>
+              </DialogTitle>
+              <DialogDescription>
+                <Trans>
+                  {endingDomain} can no longer ask you to sign. To use it again
+                  you connect it anew.
+                </Trans>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setEnding(null)}>
+                <Trans>Keep it</Trans>
+              </Button>
+              <Button
+                variant='destructive'
+                onClick={() => {
+                  const target = ending;
+                  setEnding(null);
+                  if (target) void end(target.sessionId);
+                }}
+              >
+                <Trans>End connection</Trans>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Container>
     </Layout>
   );
