@@ -2,31 +2,29 @@
 //! `chia_createPartialOffer` (TASK-165): the wallet makes a partial offer (CHIP-0052,
 //! `partial1…`) for a website, and answers only its text. Nothing is broadcast.
 //!
-//! A partial offer starts from a one-sided offer: the offered asset and one mojo of XCH, for
-//! nothing. Handed to a website, that offer could be taken by anyone, so it never leaves the
-//! wallet: Klimper makes it, signs it and turns it into the first partial coin here
-//! (`chia_partial_offer::make_partial_offer`), and only the partial offer goes back. Its
-//! security coin's spend asserts that the settlement coins pay into the partial coin, and its
-//! signature is summed with the user's, so the user's spends in the text cannot be used any
-//! other way (docs/partial-offers.md).
+//! A partial offer starts with the maker's own spends: the offered amount sent to the partial
+//! puzzle (with the creation memos CHIP-0052 asks for), change back to the wallet, signed by
+//! the user. They are not broadcast; the first taker sends them with the first fill. As
+//! chia-wallet-sdk's maker builds it (`PartialOfferBundle::from_maker_spend_bundle`, which
+//! refuses a coin a settlement coin makes, siblings that share a payment, or wrong memos), so
+//! the user's spends in the text can only make that coin (docs/partial-offers.md).
 //!
-//! The path is `chia_createOffer`'s (`create_offer.rs`): the one-sided offer is built from
-//! the wallet's own coins with Sage's offer code (`make_offer`, as Klimper's own Make partial
-//! offer screen builds it, `tauri-plugin-klimper-partial-offers`), key-free; then the sign
-//! guard, Sage's summary against wallet-kit's simulation, wallet-kit's submit (released: the
-//! user's signatures leave the wallet inside the text), one approval showing the partial
-//! terms, one signature. The made offer is kept in the wallet's own partial offers, so My
-//! partial offers lists it and can cancel it.
+//! The path is `chia_createOffer`'s (`create_offer.rs`): the spends are built from the
+//! wallet's own coins with Sage's spend code (as Klimper's own Make partial offer builds them,
+//! `tauri-plugin-klimper-partial-offers`), key-free; then the sign guard, Sage's summary
+//! against wallet-kit's simulation, wallet-kit's submit (released: the user's signatures leave
+//! the wallet inside the text), one approval showing the partial terms, one signature. The made
+//! offer is kept in the wallet's own partial offers, so My partial offers lists it and can
+//! cancel it.
 //!
 //! A new method rather than a flag on `chia_createOffer`, so a Klimper without it refuses
 //! the request as an unknown method instead of making a whole offer.
 
-use chia_partial_offer::{PartialOffer, PartialOfferTerms, make_partial_offer};
-use chia_wallet_sdk::signer::AggSigConstants;
-use sage_wallet::{Offered, Requested};
+use chia_sdk_next::PartialOfferAsset;
 use serde::Serialize;
 use tauri_plugin_klimper_partial_offers::{
-    Error as PartialError, mine, records::MakeRequest, store::Store, wallet as partial_wallet,
+    Error as PartialError, PartialOffer, Terms, mine, records::MakeRequest, store::Store,
+    wallet as partial_wallet,
 };
 
 use super::create_offer::{Named, OfferView, named, offer_intent, unsupported};
@@ -75,10 +73,13 @@ fn refused_terms(key: &str, message: &str) -> RpcError {
     error(codes::INVALID_PARAMS, message, Some(key))
 }
 
-fn partial_asset(part: Part) -> chia_partial_offer::PartialAsset {
+fn partial_asset(part: Part) -> PartialOfferAsset {
     match part.asset {
-        AssetId::Cat(asset_id) => chia_partial_offer::PartialAsset::cat(asset_id, None),
-        _ => chia_partial_offer::PartialAsset::xch(),
+        AssetId::Cat(asset_id) => PartialOfferAsset::Cat {
+            asset_id,
+            hidden_puzzle_hash: None,
+        },
+        _ => PartialOfferAsset::Xch,
     }
 }
 
@@ -107,8 +108,8 @@ pub fn partial_params(params_json: &str, now: u64) -> Result<PartialParams, RpcE
         at => at,
     };
     let fee = wallet_fee(&params)?;
-    // The driver's own check (the maker comes from the wallet later; it is not checked here).
-    PartialOfferTerms {
+    // The wallet's own check (the maker comes from the wallet later; it is not checked here).
+    Terms {
         offered: partial_asset(offered),
         offered_amount: offered.amount,
         requested: partial_asset(requested),
@@ -157,15 +158,12 @@ fn leg(asset: AssetId, amount: u64) -> crate::trade::Leg {
 // The build
 // ---------------------------------------------------------------------------------------
 
-/// The one-sided offer, built and not yet signed, and the terms it becomes a partial offer
-/// with.
+/// The maker's spends, built and not yet signed, and the terms they make a partial offer with.
 #[derive(Debug, Clone)]
 pub struct BuiltPartial {
-    /// The user's spends of the one-sided offer: what the user signs.
+    /// The user's spends: what the user signs.
     pub spends: Vec<CoinSpend>,
-    pub terms: PartialOfferTerms,
-    /// The network's signature constants, for the security coin's signature.
-    pub agg_sig: AggSigConstants,
+    pub terms: Terms,
     pub view: OfferView,
 }
 
@@ -186,10 +184,10 @@ fn make_request(params: &PartialParams) -> MakeRequest {
     }
 }
 
-/// Make the one-sided offer from the wallet's own coins, key-free: the terms as Klimper's
+/// Build the maker's spends from the wallet's own coins, key-free: the terms as Klimper's
 /// own Make partial offer reads them (the maker is the wallet's change puzzle, refused
-/// unless standard; a CAT's revocation from the wallet), and Sage's `make_offer` of the
-/// offered asset plus one mojo of XCH for nothing, with Klimper's own fee.
+/// unless standard; a CAT's revocation from the wallet), and the offered amount sent to the
+/// partial puzzle with Klimper's own fee.
 ///
 /// The terms refused by the partial driver come back as a refusal (`Ok(Err(…))`); Sage's
 /// coin selection failing (more than the wallet holds) as an error, answered `build_failed`.
@@ -207,30 +205,18 @@ pub async fn build_partial_offer(
         }
         Err(e) => return Err(e),
     };
-    let (xch, cat) = terms.one_sided_offer();
-    let offered = Offered {
-        xch,
-        cats: cat.into_iter().collect(),
-        fee: params.fee,
-        ..Default::default()
-    };
-    let unsigned = ctx
-        .wallet
-        .make_offer(offered, Requested::default(), None)
-        .await?;
+    let unsigned = partial_wallet::maker_spends(ctx, &terms, params.fee).await?;
 
-    let min_fill_offered = terms.price_data().quote(params.min_fill_requested);
+    let min_fill_offered = terms
+        .info()?
+        .offered_amount(params.min_fill_requested)
+        .unwrap_or(0);
     Ok(Ok(BuiltPartial {
         spends: unsigned.coin_spends,
         terms,
-        agg_sig: ctx.agg_sig,
         view: OfferView {
-            // What leaves for the settlement puzzle: the offered amount, and the mojo of XCH
-            // that funds the security coin.
-            gives: vec![
-                leg(params.offered.asset, params.offered.amount),
-                leg(AssetId::Xch, 1),
-            ],
+            // What leaves the wallet into the partial coin.
+            gives: vec![leg(params.offered.asset, params.offered.amount)],
             options: Vec::new(),
             asks: vec![leg(params.requested.asset, params.requested.amount)],
             expires_at: params.expires_at,
@@ -248,8 +234,7 @@ pub async fn build_partial_offer(
 // ---------------------------------------------------------------------------------------
 
 /// `chia_createPartialOffer`: build, check, ask once, sign once, make the partial offer; the
-/// website receives `{ offer: "partial1…", id, coinId, expiresAt? }`. Nothing is broadcast,
-/// and the one-sided offer never leaves the wallet.
+/// website receives `{ offer: "partial1…", id, coinId, expiresAt? }`. Nothing is broadcast.
 pub fn create_partial_offer(
     state: &AppState,
     ctx: &RequestContext<'_>,
@@ -285,7 +270,7 @@ pub(super) fn keep_partial_offer(store: &Store, offer: &PartialOffer, now: u64) 
 }
 
 /// After the build: the guard on the signed conditions, the cross-check, wallet-kit's submit
-/// with released signatures, and the signed one-sided offer turned into the partial offer.
+/// with released signatures, and the signed spends made into the partial offer.
 /// Answers the website's JSON and the offer, for the wallet to keep.
 pub fn submit_partial_offer(
     ctx: &RequestContext<'_>,
@@ -309,10 +294,14 @@ pub fn submit_partial_offer(
         built.spends,
         &offer_intent(false, fee),
         // The user's signatures leave the wallet inside the partial offer: released (spec
-        // 11.2). The one-sided offer itself does not.
+        // 11.2).
         true,
     )?;
-    let offer = make_partial_offer(&submitted.bundle, &built.terms, &built.agg_sig)
+    let info = built
+        .terms
+        .info()
+        .map_err(|e| refused_terms("partial_offer", &e.to_string()))?;
+    let offer = PartialOffer::from_maker_spend_bundle(submitted.bundle, info)
         .map_err(|e| refused_terms("partial_offer", &e.to_string()))?;
     let text = offer
         .to_text()
@@ -326,7 +315,7 @@ pub fn submit_partial_offer(
     let mut answer = serde_json::json!({
         "offer": text,
         "id": hex::encode(sage_wallet::sort_offer(bundle).name()),
-        "coinId": hex0x(offer.coin.coin_id()),
+        "coinId": hex0x(offer.coin().coin_id()),
     });
     if let Some(at) = expires_at {
         answer["expiresAt"] = serde_json::json!(at);

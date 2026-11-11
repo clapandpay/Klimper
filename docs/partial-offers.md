@@ -3,15 +3,17 @@
 Partial offers (CHIP-0052, Final) sell one asset for another at a fixed price, and takers fill
 them in parts. The text is bech32m with the prefix `partial` (`partial1…`), compressed like an
 offer. Splash relays them since 0.3.0 (2026-10-23). nodexch decodes and lists them, and after each
-fill it rebuilds the next offer with what is left (nodexch TASK-231). Upstream Sage does not
-handle them (no branch or PR), nor does chia-wallet-sdk (no partial driver); Klimper does, behind
-`VITE_ENABLE_PARTIAL_OFFERS`, in three parts made to be replaced by upstream's (below). The
-reference implementation is [Yakuhito/partial](https://github.com/Yakuhito/partial).
+fill it rebuilds the next offer with what is left (nodexch TASK-231). chia-wallet-sdk has had a
+driver since 2026-10-27 (xch-dev/chia-wallet-sdk #505, #506), on its main branch only; upstream
+Sage has no screens or endpoints. Klimper uses the SDK's driver (part 1 below), behind
+`VITE_ENABLE_PARTIAL_OFFERS`, in three parts made to be replaced by upstream's. The reference
+implementation is [Yakuhito/partial](https://github.com/Yakuhito/partial).
 
 ## How a partial offer works
 
 - The decoded spend bundle holds the maker's spends (only before the first fill: they create the
-  first partial coin, memo `(maker_ph, requested_asset_info)`). It also holds exactly one
+  first partial coin, memos `(maker_ph requested_asset_info)` as CHIP-0052 asks; offers made by
+  Klimper 1.1 and 1.2 have none, so they can only be found through their text). It also holds exactly one
   placeholder spend whose coin has the puzzle hash `0101…01`.
 - The placeholder's puzzle is the hint: lineage proof, offered and requested asset (asset id;
   hidden puzzle hash for a revocable CAT), price `(initial offered . initial requested)`, maker
@@ -32,44 +34,45 @@ deleted or swapped on its own, and the merge has nothing to conflict with.
 
 | Part                   | Where                                       | Depends on                                     | Replaced by                               | The seam                     |
 | ---------------------- | ------------------------------------------- | ---------------------------------------------- | ----------------------------------------- | ---------------------------- |
-| 1. Driver              | `crates/chia-partial-offer` (new)           | chia-wallet-sdk only                           | a partial driver in chia-wallet-sdk       | its public functions (below) |
+| 1. Driver              | `crates/chia-sdk-next` (the SDK's, copied)  | chia-wallet-sdk 0.37.1 only                    | chia-wallet-sdk's own, once Sage has it   | the SDK's public API         |
 | 2. Wallet and commands | `tauri-plugin-klimper-partial-offers` (new) | part 1, `sage`, `sage-wallet`, `sage-database` | Sage's own endpoints                      | the plugin's commands        |
 | 3. UI                  | `src/klimper/partial/` (new)                | the plugin's commands, through `api.ts` only   | Sage's pages, or kept with a new `api.ts` | `src/klimper/partial/api.ts` |
 
-Xchonnect (Klimper-only for good) uses part 1 directly.
+Xchonnect (Klimper-only for good) uses part 1 and part 2's `partial.rs` and `wallet.rs`.
 
-### 1. Driver: `crates/chia-partial-offer`
+### 1. Driver: chia-wallet-sdk's, in `crates/chia-sdk-next`
 
-A plain library with no Sage types (Apache-2.0, like chia-wallet-sdk), shaped so it can be
-proposed to the SDK as it is. Ported from the reference (MIT, `NOTICE.md`), with nodexch's
-stricter decoding (`indexer/src/offers/partial.rs`). It enables chia-wallet-sdk's `action-layer`
-feature for the CAT makers.
+Since 2026-11-07 (owner decision), chia-wallet-sdk's driver: `PartialOfferInfo`,
+`PartialOffer`, `PartialOfferBundle`, `PartialOfferFill`, `encode_partial_offer` /
+`decode_partial_offer`. It is on the SDK's main branch only, which needs chia 0.53 while Sage is
+on chia-wallet-sdk 0.37.1 / chia 0.52.1, so its files are copied onto 0.37.1 in
+`crates/chia-sdk-next` (`README.md` there maps each file to its upstream path at `c803295c`; the
+changes are import paths, a local `DriverError`, five error conversions). The SDK's own 30 tests
+pass there.
 
-- `PartialOffer`: `from_text` / `to_text`, `from_spend_bundle` / `to_spend_bundle`,
-  `accept_offer` (a fill from the taker's ordinary offer), `child` (the next offer after a
-  fill), `follow` (what a spend of the coin did: a fill with the rest, or a claw back),
-  `claw_back`.
-- `PartialOfferInfo`: the terms and the puzzle hashes. `from_hint` refuses a hint whose
-  conditions are anything but an expiry and a fee (the reference hashes those two alone, so
-  anything else would point at a coin that is not there).
-- `make_partial_offer(one_sided_offer, terms, agg_sig)`: turns the wallet's signed one-sided
-  offer (the offered asset plus one mojo of XCH, for nothing) into the first partial coin and a
-  security coin, as the reference CLI does, with one difference that matters: the security
-  coin's spend asserts each settlement coin's announcement of the payments into the partial
-  coin. The reference spends it to a bare remark, which lets anyone who reads a first partial
-  offer pay the maker's settlement coins to themselves before the first fill (found in review,
-  2026-10-26; worth reporting to the reference and to whoever ports it).
-- `encode_partial_offer` / `decode_partial_offer` / `is_partial_offer`.
+Swap-out: when Sage depends on a chia-wallet-sdk release with the driver, delete
+`crates/chia-sdk-next` and import from `chia_wallet_sdk::driver`; nothing else changes.
 
-Tests (`tests/simulator.rs`, chia-wallet-sdk's simulator): every pairing of XCH, a CAT and a
-revocable CAT, with and without a required fee and an expiry, made from a one-sided offer, read
-back from its text and filled in two parts, each fill followed from the chain; claw back of a
-CAT and a revocable CAT; a claw back with another key fails; the maker's coins cannot be taken
-before the first fill (and could with the reference's remark); a fill below the minimum or above
-what is left is refused; an expired offer cannot be filled.
+Klimper's own driver (`crates/chia-partial-offer`, 1.1 and 1.2) is gone. Its offers stay
+readable: the puzzle, hint, price and text are the same, and
+`crates/chia-sdk-next/src/partial_offer/compat_tests.rs` decodes, fills, follows and claws back
+texts it made (`tests/fixtures/klimper-1.2/`, every pairing, with and without a fee per fill and
+an expiry). Its maker made the first coin from a one-sided offer's settlement coins and a
+security coin; the SDK refuses to make one that way (a settlement coin's spend can be changed by
+anyone), and makes it from the maker's own signed send instead (below).
 
-Swap-out: when chia-wallet-sdk has a partial driver, delete the crate and change the imports in
-the plugin; nothing else names it.
+What the SDK leaves to a wallet, `tauri-plugin-klimper-partial-offers/src/partial.rs` adds:
+
+- On a text from someone else (`check_info`): the same asset on both sides, a least fill that
+  buys nothing, a lineage proof that does not match the asset.
+- On the maker's terms (`Terms::check`): both amounts, the least fill between 1 and the
+  requested amount and buying something. The price is the maker's own amounts (`PartialOfferInfo::new`,
+  not `from_amounts`, which reduces it by the greatest common divisor: the screens and nodexch
+  read the price as the amounts the offer was made with). A fee per fill of 0 is none (a
+  `RESERVE_FEE 0` would be another puzzle).
+- Following a spend: `PartialOffer::parse` tells a fill (and what it paid) from a claw back or a
+  revocation; `parse_child` alone reads a fill that took everything as a claw back.
+- `trim_payment`: a payment cut to the least that buys as much (the SDK's `fill` takes any).
 
 ### 2. Wallet and commands: `tauri-plugin-klimper-partial-offers`
 
@@ -80,9 +83,13 @@ changed.
 - `wallet.rs`: `follow` (an offer along the chain to its newest coin, through every fill, to
   the last fill or the claw back; before the first fill, a spent input means cancelled; the
   expiry counts), `view`, `take` (checks the chain right before signing: an offer someone filled
-  first is `offer_changed`, and nothing is signed), `terms` and `make` (the maker is the wallet's
-  change puzzle, refused unless standard), `cancel` (before the first fill by spending one of the
-  coins it is made from, after it by claw back, with a network fee). Written over
+  first is `offer_changed`, and nothing is signed; built as Sage's `take_offer` is: the SDK's
+  fill taken with the wallet's coins, never the coins the fill spends, the fill's fee per fill
+  left for the partial coin to reserve), `terms`, `maker_spends` and `make` (the maker is the
+  wallet's change puzzle, refused unless standard; the offered amount sent to the partial puzzle
+  with the creation memos, signed, made into the offer by the SDK), `cancel` (before the first
+  fill by spending one of the wallet's own coins it is made from, which for a 1.1/1.2 offer skips
+  its settlement and security coins; after it by claw back, with a network fee). Written over
   `sage_wallet::Wallet` so they can become `sage-wallet/src/wallet/offer/partial.rs` in a pull
   request to Sage.
 - `store.rs`, `mine.rs`: the wallet's own partial offers, in
@@ -94,16 +101,14 @@ changed.
   `cancel_partial_offer`, `get_partial_offers`, `delete_partial_offer`. Errors come as
   `{code, message}`. Records are named after nodexch's `partial` fields; amounts are mojos as
   strings.
-- Making does not import the one-sided offer into Sage: Sage would list it as an ordinary offer
-  of the asset for nothing, and anyone given that text could take it. So its coins are not
-  locked; if the wallet spends one before the first fill, the partial offer reads as
-  cancelled and nothing is lost.
+- Making sends nothing, so Sage does not know the maker's coins are promised; if the wallet
+  spends one before the first fill, the partial offer reads as cancelled and nothing is lost.
 
 Tests (`src/tests.rs`): two Sage wallets on a simulated chain (`src/sage_sim.rs`, copied from
 the Xchonnect plugin): CAT for XCH filled in two parts (the second with a network fee),
 followed from the first text and listed; XCH for a CAT filled once and clawed back with a fee;
 a cancel before any fill; a required fee on top; expiry; a stale text refused; only the maker
-cancels.
+cancels; a maker filling its own first offer spends each coin once.
 
 Shared files touched: one `.plugin(...)` line in `src-tauri/src/lib.rs`, the dependency and the
 workspace member; `klimper-partial-offers:default` in `src-tauri/capabilities/klimper.json`,
@@ -117,9 +122,10 @@ offers once, and point `api.ts` at Sage's commands.
 
 **Make: done** (TASK-165). `chia_createPartialOffer { offerAssets, requestAssets,
 minFillRequested, requiredFee?, expiresAt?, fee? }` in `execute/partial_offer.rs`: the wallet
-reads the terms with this plugin's `wallet::terms`, builds and signs the one-sided offer through
-Xchonnect's one approval, makes the partial offer with part 1 and answers only
-`{ offer: "partial1…", id, coinId, expiresAt? }`; the one-sided offer never leaves the wallet.
+reads the terms with this plugin's `wallet::terms`, builds the maker's spends with
+`wallet::maker_spends` (with Klimper's own fee), signs them through Xchonnect's one approval
+(wallet-kit's cross-check accepts the send), makes the partial offer with the SDK and answers
+only `{ offer: "partial1…", id, coinId, expiresAt? }`.
 The offer is kept in this plugin's store (`mine::remember`), so My partial offers lists and
 cancels it. `docs/xchonnect.md` has the details.
 
@@ -150,7 +156,8 @@ with those, as the reference CLI does. Offer methods for apps wait for Sage.
   `Offers.tsx` paste and scan code, `QrScanner.tsx` and `offerData.ts` need no change. It also
   adds `/offers/make-partial`. The pages load lazily.
 - Flag: `partialOffersEnabled` (needs `offersEnabled` and `VITE_ENABLE_PARTIAL_OFFERS=true`),
-  off in `.env.production` and `.env.desktop` (tested in `releaseFlags.test.ts`). Off, the routes
+  on in `.env.production` (the phones, since 1.2.0) and off in `.env.desktop` (tested in
+  `releaseFlags.test.ts`). Off, the routes
   are Sage's and the two elements render nothing.
 - Make: `<PartialFillsOption />` in Sage's `MakeOffer.tsx` opens `MakePartialOffer`, which takes
   the assets, amounts and expiry from Sage's offer state (exactly one token for one token) and

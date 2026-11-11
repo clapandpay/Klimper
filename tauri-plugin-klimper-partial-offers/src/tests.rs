@@ -4,11 +4,10 @@
 //! real spends, through the same functions the commands call.
 #![allow(clippy::unwrap_used)]
 
-use chia_partial_offer::PartialOffer;
 use chia_wallet_sdk::chia::protocol::Bytes32;
 
 use crate::{
-    Error, mine,
+    Error, PartialOffer, mine,
     records::{MakeRequest, Status},
     sage_sim::SimWallet,
     store::Store,
@@ -71,7 +70,7 @@ fn request(
 async fn make(maker: &SimWallet, store: &Store, req: &MakeRequest) -> (String, String) {
     let ctx = maker.ctx().await;
     let terms = wallet::terms(&ctx, req).await.unwrap();
-    let (offer, _one_sided) = wallet::make(&ctx, &terms).await.unwrap();
+    let offer = wallet::make(&ctx, &terms).await.unwrap();
     let id = mine::remember(store, &offer, NOW).unwrap();
     (offer.to_text().unwrap(), id)
 }
@@ -212,7 +211,7 @@ async fn xch_for_a_cat_is_filled_once_and_the_rest_clawed_back() {
         xch_before + 6_000 - 5
     );
     let latest = PartialOffer::from_text(&stored.latest).unwrap();
-    maker.wait_until_spent(latest.coin.coin_id()).await;
+    maker.wait_until_spent(latest.coin().coin_id()).await;
     let listed = mine::list(&maker.ctx().await, &store, NOW).await.unwrap();
     assert_eq!(listed[0].view.status, Status::Cancelled);
 
@@ -350,4 +349,36 @@ async fn a_required_fee_is_paid_on_top_and_an_expired_offer_is_refused() {
         xch_before - 1_000 - 100
     );
     assert_eq!(taker.wallet.db.cat_balance(cat).await.unwrap(), 200);
+}
+
+/// A wallet can fill its own first offer: the coins the maker's spends use are never picked
+/// again to pay for the fill, so the bundle spends each coin once and the chain takes it.
+#[tokio::test]
+async fn a_maker_fills_its_own_first_offer() {
+    let mut maker = SimWallet::new(20_000).await;
+    let cat = issue(&mut maker, 1_000).await;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("partial.json"));
+    let (text, id) = make(&maker, &store, &request(Some(cat), 1_000, None, 5_000)).await;
+
+    let ctx = maker.ctx().await;
+    let (result, bundle) = wallet::take(&ctx, &text, 1_250, 0, NOW).await.unwrap();
+    let mut spent: Vec<Bytes32> = bundle
+        .coin_spends
+        .iter()
+        .map(|spend| spend.coin.coin_id())
+        .collect();
+    let all = spent.len();
+    spent.sort();
+    spent.dedup();
+    assert_eq!(spent.len(), all, "a coin is spent twice");
+    ctx.submit(bundle).await.unwrap();
+    let first = PartialOffer::from_text(&text).unwrap();
+    maker.wait_until_spent(first.coin().coin_id()).await;
+    assert_eq!(result.bought, "250");
+
+    let listed = mine::list(&maker.ctx().await, &store, NOW).await.unwrap();
+    assert_eq!(listed[0].id, id);
+    assert_eq!(listed[0].view.status, Status::PartlyFilled);
+    assert_eq!(listed[0].view.remaining_offered, "750");
 }

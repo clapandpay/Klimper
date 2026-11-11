@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The partial offers this wallet made: kept in the store, followed on the chain when listed.
 
-use chia_partial_offer::PartialOffer;
 use tracing::warn;
 
 use crate::{
-    Error,
+    Error, PartialOffer,
     records::{MyPartialOffer, PartialOfferView, PendingCancel, Status, hex0x},
     store::{Store, StoredOffer},
     wallet::{WalletCtx, follow},
@@ -13,7 +12,7 @@ use crate::{
 
 /// Records a partial offer the wallet just made.
 pub fn remember(store: &Store, offer: &PartialOffer, now: u64) -> Result<String, Error> {
-    let id = hex0x(offer.coin.coin_id());
+    let id = hex0x(offer.coin().coin_id());
     store.put(StoredOffer {
         id: id.clone(),
         created_at: now,
@@ -96,7 +95,7 @@ pub async fn list(ctx: &WalletCtx, store: &Store, now: u64) -> Result<Vec<MyPart
                     let changed = !followed.fills.is_empty() || ended;
                     // Past the coin the cancel spends, a fill confirmed first and the cancel
                     // failed: the offer is live again.
-                    let coin_id = hex0x(followed.offer.coin.coin_id());
+                    let coin_id = hex0x(followed.offer.coin().coin_id());
                     if ended
                         || stored
                             .cancel

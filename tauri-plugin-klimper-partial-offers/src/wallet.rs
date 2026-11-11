@@ -1,34 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Partial offers on a Sage wallet: following one on the chain, taking an amount of it, making
-//! one, and cancelling it. Everything here goes through `sage-wallet`'s public API (coin
-//! selection, offers, signing, sending), so these functions are shaped to become
-//! `sage-wallet/src/wallet/offer/partial.rs` in a pull request to Sage without rewriting.
+//! one, and cancelling it. The puzzles are chia-wallet-sdk's (through `crate::partial`);
+//! everything else goes through `sage-wallet`'s public API (coin selection, spends, signing,
+//! sending), so these functions are shaped to become `sage-wallet/src/wallet/offer/partial.rs`
+//! in a pull request to Sage without rewriting.
 
 use std::sync::Arc;
 
-use chia_partial_offer::{
-    PartialAsset, PartialOffer, PartialOfferTerms, PartialSpend, make_partial_offer,
-};
-use chia_wallet_sdk::clvm_traits::clvm_quote;
-use chia_wallet_sdk::clvmr::NodePtr;
+use chia_sdk_next::PartialOfferAsset;
 use chia_wallet_sdk::{
     chia::{
         bls::{SecretKey, Signature},
         protocol::{Bytes32, SpendBundle},
         puzzle_types::standard::StandardArgs,
     },
-    driver::{Action, Offer, Spend, SpendContext, StandardLayer},
+    driver::{Action, Id, SpendContext, SpendWithConditions, Spends, StandardLayer},
     signer::AggSigConstants,
+    types::Conditions,
 };
-use indexmap::IndexMap;
-use sage_wallet::{
-    Offered, Requested, RequestedCat, SyncCommand, Transaction, Wallet, WalletPeer,
-    insert_transaction,
-};
+use sage_wallet::{SyncCommand, Transaction, Wallet, WalletPeer, insert_transaction};
 use tokio::sync::mpsc;
 
 use crate::{
-    Error,
+    Error, PartialOffer, PartialSpend, Terms,
     records::{
         Fill, MakeRequest, PartialOfferView, Status, TakeResult, hex0x, parse_amount, parse_hash,
     },
@@ -102,22 +96,11 @@ pub struct Followed {
     pub fills: Vec<Fill>,
 }
 
-fn fill(offer: &PartialOffer, bought: u64) -> Fill {
+fn fill(offer: &PartialOffer, paid: u64, bought: u64) -> Fill {
     Fill {
-        coin_id: hex0x(offer.coin.coin_id()),
+        coin_id: hex0x(offer.coin().coin_id()),
         bought: bought.to_string(),
-        // What `bought` cost at least, rounded up (the puzzle rounds what a payment buys down).
-        paid: least_payment(&offer.info, bought).to_string(),
-    }
-}
-
-/// The least payment that buys `bought` of the offered asset.
-fn least_payment(info: &chia_partial_offer::PartialOfferInfo, bought: u64) -> u64 {
-    let down = info.price_data.reverse_quote(bought);
-    if info.price_data.quote(down) >= bought {
-        down
-    } else {
-        down + 1
+        paid: paid.to_string(),
     }
 }
 
@@ -135,10 +118,10 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
     let genesis = ctx.wallet.genesis_challenge;
     let mut fills = Vec::new();
     loop {
-        let coin_id = offer.coin.coin_id();
+        let coin_id = offer.coin().coin_id();
         let Some(state) = peer.fetch_optional_coin(coin_id, genesis).await? else {
             // Not on the chain. Before the first fill that is expected, unless the maker has
-            // spent the coins it was made from (a cancel before any fill).
+            // spent a coin it was made from (a cancel before any fill).
             let mut status = Status::Unknown;
             if offer.is_first() {
                 status = Status::Open;
@@ -166,9 +149,9 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
             });
         };
         // On the chain: the maker's spends are done, and a taker must not repeat them.
-        offer.spend_bundle = SpendBundle::new(Vec::new(), Signature::default());
+        offer = offer.on_chain();
         if state.spent_height.is_none() {
-            let status = if offer.coin.amount < offer.info.initial_offered() {
+            let status = if offer.coin().amount < offer.initial_amounts().0 {
                 Status::PartlyFilled
             } else {
                 Status::Open
@@ -181,8 +164,8 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
         }
         let spend = peer.fetch_coin_spend(coin_id, genesis).await?;
         match offer.follow(&spend)? {
-            PartialSpend::Filled { bought, next } => {
-                fills.push(fill(&offer, bought));
+            PartialSpend::Filled { paid, bought, next } => {
+                fills.push(fill(&offer, paid, bought));
                 match next {
                     Some(next) => offer = *next,
                     None => {
@@ -206,7 +189,7 @@ pub async fn follow(ctx: &WalletCtx, mut offer: PartialOffer, now: u64) -> Resul
 }
 
 fn expired(offer: &PartialOffer, status: Status, now: u64) -> Status {
-    match offer.info.expiration {
+    match offer.info().expiration {
         Some(expiration) if status.is_live() && now >= expiration => Status::Expired,
         _ => status,
     }
@@ -216,7 +199,7 @@ fn expired(offer: &PartialOffer, status: Status, now: u64) -> Status {
 pub async fn view(ctx: &WalletCtx, text: &str, now: u64) -> Result<PartialOfferView, Error> {
     let offer = PartialOffer::from_text(text)?;
     let followed = follow(ctx, offer, now).await?;
-    let is_mine = ctx.owns(followed.offer.info.maker_puzzle_hash).await?;
+    let is_mine = ctx.owns(followed.offer.info().maker_puzzle_hash).await?;
     PartialOfferView::new(
         &followed.offer,
         followed.status,
@@ -229,6 +212,12 @@ pub async fn view(ctx: &WalletCtx, text: &str, now: u64) -> Result<PartialOfferV
 /// Takes `paid` of the requested asset's worth of `text`, plus the required fee and `fee` as
 /// the network fee. The offer is checked against the chain right before signing: if someone
 /// filled it first, the answer is [`Error::OfferChanged`] and nothing is signed.
+///
+/// Built as Sage's `take_offer` builds a take: the fill (the SDK's, an offer of what the coin
+/// releases for the payment to the maker) is taken with the wallet's coins, never the coins the
+/// fill itself spends, and every spend of the wallet asserts the others. The fill's required fee
+/// is left to the partial coin to reserve (the SDK's unreserved fee), so it is not counted
+/// twice; `fee` is reserved by the wallet as usual.
 pub async fn take(
     ctx: &WalletCtx,
     text: &str,
@@ -238,7 +227,7 @@ pub async fn take(
 ) -> Result<(TakeResult, SpendBundle), Error> {
     let read = PartialOffer::from_text(text)?;
     let followed = follow(ctx, read.clone(), now).await?;
-    if followed.offer.coin != read.coin {
+    if followed.offer.coin() != read.coin() {
         return Err(Error::OfferChanged);
     }
     match followed.status {
@@ -247,67 +236,63 @@ pub async fn take(
         status => return Err(Error::Closed(status)),
     }
     let offer = followed.offer;
-    let info = offer.info.clone();
 
-    let paid = info.trim_payment(paid);
-    let max = info.max_fill_requested(offer.coin.amount);
-    if paid < info.min_fill_requested() {
+    let paid = offer.trim_payment(paid);
+    let max = offer.max_fill_requested();
+    if paid < offer.min_fill_requested() {
         return Err(Error::Invalid(format!(
             "the least one fill pays is {}",
-            info.min_fill_requested()
+            offer.min_fill_requested()
         )));
     }
     if paid > max {
         return Err(Error::Invalid(format!("the most one fill pays is {max}")));
     }
-    let bought = info.price_data.quote(paid);
-    let required_fee = info.required_fee.unwrap_or(0);
 
-    // The taker's own offer: what this fill pays, for what it buys.
-    let mut offered = Offered {
-        fee,
-        ..Default::default()
-    };
-    match info.requested_asset_info.asset_id {
-        None => offered.xch = paid + required_fee,
-        Some(asset_id) => {
-            offered.cats = IndexMap::from([(asset_id, paid)]);
-            offered.xch = required_fee;
-        }
-    }
-    let mut requested = Requested::default();
-    match info.offered_asset_info.asset_id {
-        None => requested.xch = bought,
-        Some(asset_id) => {
-            requested.cats.insert(
-                asset_id,
-                RequestedCat {
-                    amount: bought,
-                    hidden_puzzle_hash: info.offered_asset_info.hidden_puzzle_hash,
-                },
-            );
-        }
-    }
-    let unsigned = ctx.wallet.make_offer(offered, requested, None).await?;
-    let signed = ctx.sign(unsigned).await?;
     let mut spend_ctx = SpendContext::new();
-    let taker = Offer::from_spend_bundle(&mut spend_ctx, &signed)?;
-    let next = (offer.coin.amount > bought).then(|| offer.child(offer.coin.amount - bought));
-    let bundle = offer.accept_offer(&mut spend_ctx, taker)?;
+    let filled = offer.bundle().fill(&mut spend_ctx, paid)?;
+    let mut actions = filled.actions();
+    if fee > 0 {
+        actions.push(Action::fee(fee));
+    }
+    let mut spends = Spends::new(ctx.wallet.change_p2_puzzle_hash().await?);
+    spends.add(filled.offer.offered_coins().clone());
+    let excluded: Vec<Bytes32> = filled
+        .offer
+        .spend_bundle()
+        .coin_spends
+        .iter()
+        .map(|spend| spend.coin.coin_id())
+        .collect();
+    ctx.wallet
+        .select_spends_excluding(&mut spend_ctx, &mut spends, &actions, &excluded)
+        .await?;
+    let deltas = spends.apply(&mut spend_ctx, &actions)?;
+    ctx.wallet
+        .complete_spends(&mut spend_ctx, &deltas, spends)
+        .await?;
+    let signed = ctx
+        .sign(SpendBundle::new(spend_ctx.take(), Signature::default()))
+        .await?;
+    let next = filled
+        .child
+        .map(|child| PartialOffer::from_coin(child)?.to_text())
+        .transpose()?;
+    let bundle = filled.offer.take(signed);
 
     Ok((
         TakeResult {
             transaction_id: hex0x(bundle.name()),
-            bought: bought.to_string(),
-            paid: paid.to_string(),
-            next_offer: next.map(|next| next.to_text()).transpose()?,
+            bought: filled.offered_amount.to_string(),
+            paid: filled.requested_amount.to_string(),
+            next_offer: next,
         },
         bundle,
     ))
 }
 
 /// The maker's terms from a request, with this wallet's receive puzzle as the maker.
-pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<PartialOfferTerms, Error> {
+pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<Terms, Error> {
     let asset = |id: &Option<String>| -> Result<Option<Bytes32>, Error> {
         match id.as_deref() {
             None | Some("xch") => Ok(None),
@@ -315,15 +300,16 @@ pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<PartialOfferTer
             Some(id) => parse_hash(id).map(Some),
         }
     };
-    let side = async |id: Option<Bytes32>| -> Result<PartialAsset, Error> {
+    let side = async |id: Option<Bytes32>| -> Result<PartialOfferAsset, Error> {
         Ok(match id {
-            None => PartialAsset::xch(),
-            Some(asset_id) => PartialAsset::cat(
+            None => PartialOfferAsset::Xch,
+            Some(asset_id) => PartialOfferAsset::Cat {
                 asset_id,
-                ctx.wallet
+                hidden_puzzle_hash: ctx
+                    .wallet
                     .fetch_offer_cat_hidden_puzzle_hash(asset_id)
                     .await?,
-            ),
+            },
         })
     };
     let offered = side(asset(&req.offered_asset_id)?).await?;
@@ -342,7 +328,7 @@ pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<PartialOfferTer
         ));
     }
 
-    let terms = PartialOfferTerms {
+    let terms = Terms {
         offered,
         offered_amount: parse_amount(&req.offered_amount)?,
         requested,
@@ -361,31 +347,46 @@ pub async fn terms(ctx: &WalletCtx, req: &MakeRequest) -> Result<PartialOfferTer
     Ok(terms)
 }
 
-/// Makes a partial offer: the wallet's one-sided offer of the offered asset, signed, turned
-/// into the first partial coin. Nothing is sent: the first taker sends the maker's spends.
-/// Returns the offer and the one-sided offer (for the wallet to lock its coins with).
-pub async fn make(
-    ctx: &WalletCtx,
-    terms: &PartialOfferTerms,
-) -> Result<(PartialOffer, SpendBundle), Error> {
-    let (xch, cat) = terms.one_sided_offer();
-    let offered = Offered {
-        xch,
-        cats: cat.into_iter().collect(),
-        ..Default::default()
+/// The maker's spends for `terms`, unsigned: the offered amount sent to the partial puzzle with
+/// the creation memos CHIP-0052 asks for (so the coin can be found on the chain), from the
+/// wallet's own coins, change back to the wallet, and `fee` as the network fee (paid when the
+/// first taker sends these spends). What chia-wallet-sdk's maker does.
+pub async fn maker_spends(ctx: &WalletCtx, terms: &Terms, fee: u64) -> Result<SpendBundle, Error> {
+    let info = terms.info()?;
+    let mut spend_ctx = SpendContext::new();
+    let memos = info.creation_memos(&mut spend_ctx)?;
+    let id = match terms.offered {
+        PartialOfferAsset::Xch => Id::Xch,
+        PartialOfferAsset::Cat { asset_id, .. } => Id::Existing(asset_id),
     };
-    let unsigned = ctx
-        .wallet
-        .make_offer(offered, Requested::default(), None)
+    let mut actions = vec![Action::send(
+        id,
+        info.p2_puzzle_hash(),
+        terms.offered_amount,
+        memos,
+    )];
+    if fee > 0 {
+        actions.push(Action::fee(fee));
+    }
+    ctx.wallet
+        .spend(&mut spend_ctx, Vec::new(), &actions)
         .await?;
-    let one_sided = ctx.sign(unsigned).await?;
-    let partial = make_partial_offer(&one_sided, terms, &ctx.agg_sig)?;
-    Ok((partial, one_sided))
+    Ok(SpendBundle::new(spend_ctx.take(), Signature::default()))
+}
+
+/// Makes a partial offer: the maker's spends, signed, and the offer they make. Nothing is
+/// sent: the first taker sends the maker's spends with the first fill.
+pub async fn make(ctx: &WalletCtx, terms: &Terms) -> Result<PartialOffer, Error> {
+    let signed = ctx.sign(maker_spends(ctx, terms, 0).await?).await?;
+    Ok(PartialOffer::from_maker_spend_bundle(
+        signed,
+        terms.info()?,
+    )?)
 }
 
 /// Cancels a partial offer this wallet made: before the first fill by spending one of the
-/// coins it was made from, after it by clawing the rest back. Costs `fee` as the network fee.
-/// Answers the signed cancel and the partial coin it spends (`0x` hex).
+/// wallet's own coins it was made from, after it by clawing the rest back. Costs `fee` as the
+/// network fee. Answers the signed cancel and the partial coin it spends (`0x` hex).
 pub async fn cancel(
     ctx: &WalletCtx,
     text: &str,
@@ -399,8 +400,8 @@ pub async fn cancel(
         status => return Err(Error::Closed(status)),
     }
     let offer = followed.offer;
-    let coin_id = hex0x(offer.coin.coin_id());
-    let maker = offer.info.maker_puzzle_hash;
+    let coin_id = hex0x(offer.coin().coin_id());
+    let maker = offer.info().maker_puzzle_hash;
     let Some(public_key) = ctx.wallet.db.public_key(maker).await? else {
         return Err(Error::NotMine);
     };
@@ -408,6 +409,8 @@ pub async fn cancel(
     let mut spend_ctx = SpendContext::new();
     if offer.is_first() {
         // The partial coin does not exist yet: spending any coin it is made from cancels it.
+        // Only one the wallet holds on the chain will do (an offer made by Klimper 1.1 or 1.2
+        // also spends settlement and security coins that never reach the chain).
         let mut own = None;
         for coin_id in offer.input_coin_ids() {
             if ctx.wallet.db.coin_kind(coin_id).await?.is_some() {
@@ -425,11 +428,12 @@ pub async fn cancel(
                 .spend(&mut spend_ctx, Vec::new(), &[Action::fee(fee)])
                 .await?;
         }
-        let conditions = offer.claw_back_conditions(&mut spend_ctx)?;
-        let delegated = Spend::new(spend_ctx.alloc(&clvm_quote!(conditions))?, NodePtr::NIL);
-        let inner =
-            StandardLayer::new(public_key).delegated_inner_spend(&mut spend_ctx, delegated)?;
-        offer.claw_back(&mut spend_ctx, inner)?;
+        let hint = spend_ctx.hint(maker)?;
+        let inner = StandardLayer::new(public_key).spend_with_conditions(
+            &mut spend_ctx,
+            Conditions::new().create_coin(maker, offer.coin().amount, hint),
+        )?;
+        offer.offer().claw_back(&mut spend_ctx, inner)?;
     }
     let bundle = ctx
         .sign(SpendBundle::new(spend_ctx.take(), Signature::default()))

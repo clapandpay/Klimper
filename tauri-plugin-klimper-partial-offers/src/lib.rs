@@ -2,8 +2,9 @@
 //! Partial offers (CHIP-0052) for Klimper (TASK-164): view one, take an amount of it, make one,
 //! list and cancel the wallet's own.
 //!
-//! One of three replaceable parts (docs/partial-offers.md): the driver is
-//! `crates/chia-partial-offer`, this plugin puts it on Sage's wallet, and the screens in
+//! One of three replaceable parts (docs/partial-offers.md): the driver is chia-wallet-sdk's
+//! (`crates/chia-sdk-next` until Sage's SDK release has it), this plugin puts it on Sage's
+//! wallet (`partial.rs` adds what a wallet checks on top), and the screens in
 //! `src/klimper/partial/` reach it only through `api.ts`. Sage's own crates are not changed:
 //! the plugin takes Sage's state as the Xchonnect plugin does and uses its public API. When
 //! Sage ships partial offers itself, this plugin goes and `api.ts` points at Sage's commands.
@@ -13,7 +14,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use chia_partial_offer::PartialOfferError;
 use chia_wallet_sdk::signer::AggSigConstants;
 use sage::Sage;
 use sage_wallet::WalletError;
@@ -25,6 +25,7 @@ use tauri::{
 use tokio::sync::Mutex;
 
 pub mod mine;
+mod partial;
 pub mod records;
 pub mod store;
 pub mod wallet;
@@ -33,6 +34,8 @@ pub mod wallet;
 mod sage_sim;
 #[cfg(test)]
 mod tests;
+
+pub use partial::*;
 
 use records::{
     CancelResult, MakeRequest, MakeResult, MyPartialOffer, PartialOfferView, Status, TakeResult,
@@ -70,6 +73,12 @@ pub enum Error {
     Store(String),
     #[error("{0}")]
     Sage(String),
+}
+
+impl From<chia_sdk_next::DriverError> for Error {
+    fn from(error: chia_sdk_next::DriverError) -> Self {
+        Self::Partial(error.into())
+    }
 }
 
 impl Error {
@@ -187,14 +196,13 @@ pub mod ops {
 
     /// Makes a partial offer. Nothing is sent: the first taker sends the maker's spends.
     ///
-    /// The one-sided offer it is made from is not imported into Sage: Sage would list it as an
-    /// ordinary offer of the asset for nothing, and anyone given that text could take it. So
-    /// its coins are not locked either. If the wallet spends one of them before the first fill,
-    /// the partial offer reads as cancelled; nothing is lost.
+    /// The maker's spends are not sent, so Sage does not know their coins are promised: if the
+    /// wallet spends one of them before the first fill, the partial offer reads as cancelled;
+    /// nothing is lost.
     pub async fn make(state: &AppState, request: &MakeRequest) -> Result<MakeResult> {
         let (ctx, store) = sage_ctx(state, true).await?;
         let terms = wallet::terms(&ctx, request).await?;
-        let (offer, _one_sided) = wallet::make(&ctx, &terms).await?;
+        let offer = wallet::make(&ctx, &terms).await?;
         let id = mine::remember(&store, &offer, now())?;
         Ok(MakeResult {
             id,

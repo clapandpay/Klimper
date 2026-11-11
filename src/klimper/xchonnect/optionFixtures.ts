@@ -340,32 +340,24 @@ export function openLoanOffer(extra: Record<string, unknown> = {}) {
 }
 
 /**
- * A partial offer the wallet makes (`chia_createPartialOffer`, TASK-165): 300 wUSDC (and the
- * mojo of the security coin) for 100 XCH, any part from 10 XCH up, 5 mojos per fill, until
- * the expiry; signed, not sent.
+ * A partial offer the wallet makes (`chia_createPartialOffer`, TASK-165): 300 wUSDC, sent into
+ * the partial coin, for 100 XCH, any part from 10 XCH up, 5 mojos per fill, until the expiry;
+ * signed, not sent.
  */
+/** The partial coin's puzzle hash (the CHIP-0052 puzzle inside P2_1_OF_N). */
+const PARTIAL_COIN = 'cd'.repeat(32);
+
 export function partialOffer(extra: Record<string, unknown> = {}) {
   return optionPrompt({
     method: 'chia_createPartialOffer',
     options: [],
-    assets: [
-      [USDC, 300 * ONE_CAT, 0],
-      [XCH, 1, 0],
-    ],
+    assets: [[USDC, 300 * ONE_CAT, 0]],
     outputs: [
       {
         asset: USDC,
         amount: String(300 * ONE_CAT),
-        puzzle_hash: SETTLEMENT,
-        recipient: SETTLEMENT,
-        to_user: false,
-        option: null,
-      },
-      {
-        asset: XCH,
-        amount: '1',
-        puzzle_hash: SETTLEMENT,
-        recipient: SETTLEMENT,
+        puzzle_hash: PARTIAL_COIN,
+        recipient: PARTIAL_COIN,
         to_user: false,
         option: null,
       },
@@ -383,7 +375,7 @@ export function partialOffer(extra: Record<string, unknown> = {}) {
         recipients_complete: false,
       },
       offer: {
-        gives: [leg(USDC, 300 * ONE_CAT), leg(XCH, 1)],
+        gives: [leg(USDC, 300 * ONE_CAT)],
         options: [],
         asks: [leg(XCH, 100 * ONE_XCH)],
         expires_at: EXPIRY,

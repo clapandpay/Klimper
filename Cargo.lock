@@ -1168,19 +1168,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chia-partial-offer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chia-wallet-sdk",
- "clvm-traits 0.52.1",
- "clvm-utils",
- "clvmr",
- "hex-literal 0.4.1",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "chia-pos2"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1331,6 +1318,26 @@ dependencies = [
  "num-bigint",
  "serde",
  "thiserror 2.0.17",
+]
+
+[[package]]
+name = "chia-sdk-next"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia-bls 0.52.1",
+ "chia-protocol",
+ "chia-puzzle-types",
+ "chia-puzzles",
+ "chia-sdk-test",
+ "chia-wallet-sdk",
+ "clvm-traits 0.52.1",
+ "clvm-utils",
+ "clvmr",
+ "hex-literal 0.4.1",
+ "indexmap 2.12.1",
+ "rstest",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -8630,7 +8637,7 @@ name = "tauri-plugin-klimper-partial-offers"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chia-partial-offer",
+ "chia-sdk-next",
  "chia-wallet-sdk",
  "hex",
  "indexmap 2.12.1",
@@ -8667,11 +8674,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chia-bls 0.52.1",
- "chia-partial-offer",
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
  "chia-sdk-driver",
+ "chia-sdk-next",
  "chia-sdk-test",
  "chia-sdk-types",
  "chia-wallet-sdk",

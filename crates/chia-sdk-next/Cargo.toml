@@ -1,0 +1,35 @@
+[package]
+name = "chia-sdk-next"
+version = "0.1.0"
+edition = "2024"
+# Code copied from chia-wallet-sdk (Apache-2.0, xch-dev/chia-wallet-sdk), see README.md.
+license = "Apache-2.0"
+description = "chia-wallet-sdk's unreleased partial offer driver, on chia-wallet-sdk 0.37.1."
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+# Upstream's feature name, so the copied tests are unchanged; always on here.
+default = ["offer-compression"]
+offer-compression = []
+
+[dependencies]
+# `action-layer` brings the CAT makers the partial offer puzzle is curried with.
+chia-wallet-sdk = { workspace = true, features = ["action-layer"] }
+chia-protocol = "0.52.1"
+chia-bls = "0.52.1"
+chia-puzzle-types = "0.52.1"
+chia-puzzles = "0.20"
+clvm-traits = "0.52.1"
+clvm-utils = "0.52.1"
+clvmr = "0.21.0"
+hex-literal = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+chia-sdk-test = "0.37.1"
+indexmap = { workspace = true }
+rstest = "0.26"

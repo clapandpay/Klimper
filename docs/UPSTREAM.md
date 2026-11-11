@@ -256,14 +256,14 @@ behaviour.
 ### Partial offers (TASK-164)
 
 Three parts, each replaceable on its own once Sage or chia-wallet-sdk ships partial offers
-(`docs/partial-offers.md`): the driver `crates/chia-partial-offer` (new, Apache-2.0, meant for
-chia-wallet-sdk), the plugin `tauri-plugin-klimper-partial-offers` (new) and the screens in
+(`docs/partial-offers.md`): the driver, chia-wallet-sdk's own, copied in `crates/chia-sdk-next`
+(new, Apache-2.0) until Sage's SDK release has it, the plugin `tauri-plugin-klimper-partial-offers` (new) and the screens in
 `src/klimper/partial/` (new). Sage's crates are not changed. Off unless
 `VITE_ENABLE_PARTIAL_OFFERS=true`; on for the phones (`.env.production`, since 1.2.0), off on the desktop.
 
 | File                                                         | Ours                                          | Note                                                                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | workspace member, dep, one plugin             | three lines; `crates/chia-partial-offer` is a member through `crates/*`                                                                                                                                                                                                                      |
+| `Cargo.toml`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs` | workspace member, dep, one plugin             | three lines; `crates/chia-sdk-next` is a member through `crates/*`                                                                                                                                                                                                                           |
 | `src/pages/Offers.tsx`                                       | one import, a hook, two headings, one element | Two groups under Sage's filters: "Offers" (Sage's paged list, its heading with the total only with the flag on) and `<MyPartialOffers />` under it, matched to Sage's status filter; the intro card ("No offers yet") hides while partial offers exist. _Propose upstream_ as a hiding point |
 | `src/pages/MakeOffer.tsx`                                    | one import, one element                       | `<PartialFillsOption />`: opens `/offers/make-partial` with Sage's offer state. _Propose upstream_ as a hiding point                                                                                                                                                                         |
 | `src/lib/features.ts`, `src/vite-env.d.ts`                   | one flag                                      | `VITE_ENABLE_PARTIAL_OFFERS`. `/offers/view/:offer` and `/offers/make-partial` are switched in `src/klimper/partial/routes.tsx`                                                                                                                                                              |

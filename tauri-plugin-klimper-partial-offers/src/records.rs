@@ -3,9 +3,11 @@
 //! reads a partial offer from the wallet and from nodexch the same way. Amounts are mojos, as
 //! strings: an XCH amount can exceed what a JavaScript number holds exactly.
 
-use chia_partial_offer::{PartialAsset, PartialOffer};
+use chia_sdk_next::PartialOfferAsset;
 use chia_wallet_sdk::{chia::protocol::Bytes32, utils::Address};
 use serde::{Deserialize, Serialize};
+
+use crate::{PartialOffer, asset_id, hidden_puzzle_hash};
 
 /// One side's asset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,12 +19,12 @@ pub struct Side {
     pub revocable: bool,
 }
 
-impl From<PartialAsset> for Side {
-    fn from(asset: PartialAsset) -> Self {
+impl From<PartialOfferAsset> for Side {
+    fn from(asset: PartialOfferAsset) -> Self {
         Self {
-            asset_id: asset.asset_id.map(hex::encode),
-            hidden_puzzle_hash: asset.hidden_puzzle_hash.map(hex::encode),
-            revocable: asset.is_revocable(),
+            asset_id: asset_id(asset).map(hex::encode),
+            hidden_puzzle_hash: hidden_puzzle_hash(asset).map(hex::encode),
+            revocable: hidden_puzzle_hash(asset).is_some(),
         }
     }
 }
@@ -104,30 +106,31 @@ impl PartialOfferView {
         is_mine: bool,
         prefix: &str,
     ) -> Result<Self, crate::Error> {
-        let info = &offer.info;
+        let info = offer.info();
         // A filled offer has nothing left; a cancelled one shows what was left when the maker
         // took it back, so it does not read as sold.
-        let remaining = if status == Status::Filled {
-            0
+        let (remaining, remaining_requested) = if status == Status::Filled {
+            (0, 0)
         } else {
-            offer.coin.amount
+            (offer.coin().amount, offer.max_fill_requested())
         };
+        let (initial_offered, initial_requested) = offer.initial_amounts();
         Ok(Self {
             offer: offer.to_text()?,
-            offered: info.offered_asset_info.into(),
-            requested: info.requested_asset_info.into(),
-            initial_offered: info.initial_offered().to_string(),
-            initial_requested: info.initial_requested().to_string(),
+            offered: info.offered_asset.into(),
+            requested: info.requested_asset.into(),
+            initial_offered: initial_offered.to_string(),
+            initial_requested: initial_requested.to_string(),
             remaining_offered: remaining.to_string(),
-            remaining_requested: info.max_fill_requested(remaining).to_string(),
-            min_fill_requested: info.min_fill_requested().to_string(),
-            min_fill_offered: info.price_data.quote(info.min_fill_requested()).to_string(),
+            remaining_requested: remaining_requested.to_string(),
+            min_fill_requested: offer.min_fill_requested().to_string(),
+            min_fill_offered: offer.quote(offer.min_fill_requested()).to_string(),
             required_fee: info.required_fee.map(|fee| fee.to_string()),
             expires_at: info.expiration,
             maker_address: Address::new(info.maker_puzzle_hash, prefix.to_string())
                 .encode()
                 .map_err(|error| crate::Error::Invalid(error.to_string()))?,
-            coin_id: hex0x(offer.coin.coin_id()),
+            coin_id: hex0x(offer.coin().coin_id()),
             first: offer.is_first(),
             status,
             fills,

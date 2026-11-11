@@ -11,7 +11,7 @@ links = "tauri-plugin-klimper-partial-offers"
 workspace = true
 
 [dependencies]
-chia-partial-offer = { path = "../crates/chia-partial-offer" }
+chia-sdk-next = { path = "../crates/chia-sdk-next" }
 chia-wallet-sdk = { workspace = true }
 sage = { workspace = true }
 sage-wallet = { workspace = true }
