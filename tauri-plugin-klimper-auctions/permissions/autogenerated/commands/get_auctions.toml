@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-auctions"
+description = "Enables the get_auctions command without any pre-configured scope."
+commands.allow = ["get_auctions"]
+
+[[permission]]
+identifier = "deny-get-auctions"
+description = "Denies the get_auctions command without any pre-configured scope."
+commands.deny = ["get_auctions"]

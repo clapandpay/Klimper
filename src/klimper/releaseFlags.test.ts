@@ -50,6 +50,12 @@ describe('release flags', () => {
     }
   });
 
+  it('keep auctions off until they have been tried on testnet', () => {
+    for (const mode of ['desktop', 'production']) {
+      expect(flags(mode).VITE_ENABLE_AUCTIONS, mode).toBe('false');
+    }
+  });
+
   it('turn partial offers on for the phones only', () => {
     expect(flags('production').VITE_ENABLE_PARTIAL_OFFERS).toBe('true');
     expect(flags('desktop').VITE_ENABLE_PARTIAL_OFFERS).toBe('false');

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 # Code copied from chia-wallet-sdk (Apache-2.0, xch-dev/chia-wallet-sdk), see README.md.
 license = "Apache-2.0"
-description = "chia-wallet-sdk's unreleased partial offer driver, on chia-wallet-sdk 0.37.1."
+description = "chia-wallet-sdk's unreleased partial offer and auction drivers, on chia-wallet-sdk 0.37.1."
 publish = false
 
 [lints]
@@ -30,6 +30,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+chia-consensus = "0.52.1"
 chia-sdk-test = "0.37.1"
 indexmap = { workspace = true }
+rand = "0.10.3"
+rand_chacha = "0.10.0"
 rstest = "0.26"

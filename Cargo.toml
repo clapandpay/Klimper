@@ -4,7 +4,7 @@ keywords = ["chia", "wallet", "blockchain", "crypto"]
 categories = ["cryptography::cryptocurrencies"]
 
 [workspace]
-members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-xchonnect", "tauri-plugin-klimper-jingle", "tauri-plugin-klimper-storage", "tauri-plugin-klimper-partial-offers"]
+members = ["src-tauri", "crates/*", "crates/sage-api/macro", "tauri-plugin-sage", "tauri-plugin-klimper-xchonnect", "tauri-plugin-klimper-jingle", "tauri-plugin-klimper-storage", "tauri-plugin-klimper-partial-offers", "tauri-plugin-klimper-auctions"]
 resolver = "2"
 
 [workspace.lints.rust]
@@ -84,6 +84,7 @@ tauri-plugin-klimper-xchonnect = { path = "./tauri-plugin-klimper-xchonnect" }
 tauri-plugin-klimper-jingle = { path = "./tauri-plugin-klimper-jingle" }
 tauri-plugin-klimper-storage = { path = "./tauri-plugin-klimper-storage" }
 tauri-plugin-klimper-partial-offers = { path = "./tauri-plugin-klimper-partial-offers" }
+tauri-plugin-klimper-auctions = { path = "./tauri-plugin-klimper-auctions" }
 tauri-build = "2.5.5"
 tauri-plugin = "2.5.3"
 

@@ -1,11 +1,14 @@
-//! chia-wallet-sdk's partial offer driver (CHIP-0052), copied from its unreleased main branch
+//! chia-wallet-sdk's partial offer (CHIP-0052) and auction drivers, copied from its unreleased main branch
 //! onto chia-wallet-sdk 0.37.1. See README.md; delete once Sage's SDK release has it.
 
+mod auction;
 mod error;
 mod partial_offer;
 pub(crate) mod sdk;
 mod text;
 
+pub use auction::puzzles::*;
+pub use auction::*;
 pub use error::*;
 pub use partial_offer::*;
 pub use text::*;

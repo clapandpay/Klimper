@@ -48,11 +48,11 @@ impl WalletCtx {
         self.master_sk.clone().ok_or(Error::NoSigningKey)
     }
 
-    fn peer(&self) -> Result<&WalletPeer, Error> {
+    pub fn peer(&self) -> Result<&WalletPeer, Error> {
         self.peer.as_ref().ok_or(Error::NoPeer)
     }
 
-    async fn sign(&self, spend_bundle: SpendBundle) -> Result<SpendBundle, Error> {
+    pub async fn sign(&self, spend_bundle: SpendBundle) -> Result<SpendBundle, Error> {
         Ok(self
             .wallet
             .sign_transaction(spend_bundle, &self.agg_sig, self.master_sk()?, false)

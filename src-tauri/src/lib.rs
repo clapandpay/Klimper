@@ -257,6 +257,9 @@ pub fn run() {
         // Klimper: partial offers (CHIP-0052, TASK-164). Every entry point in the webview is
         // behind VITE_ENABLE_PARTIAL_OFFERS.
         .plugin(tauri_plugin_klimper_partial_offers::init())
+        // Klimper: NFT auctions (chia-wallet-sdk's auction). Every entry point in the webview is
+        // behind VITE_ENABLE_AUCTIONS.
+        .plugin(tauri_plugin_klimper_auctions::init())
         // Klimper: `xchonnect:` and clapandpay.com links reach the webview as
         // `deep-link://new-url` (docs/xchonnect-links.md). The OS registration is
         // hand-maintained in Info.ios.plist and the entitlements, not plugin config.

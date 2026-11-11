@@ -1,0 +1,11 @@
+[default]
+description = "NFT auctions: view one, start one for an NFT of the wallet, bid in XCH, end it, cancel the wallet's own before a bid, list them."
+permissions = [
+  "allow-view-auction",
+  "allow-start-auction",
+  "allow-bid-auction",
+  "allow-end-auction",
+  "allow-cancel-auction",
+  "allow-get-auctions",
+  "allow-delete-auction",
+]

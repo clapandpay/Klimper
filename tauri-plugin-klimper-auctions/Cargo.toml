@@ -1,0 +1,38 @@
+[package]
+name = "tauri-plugin-klimper-auctions"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Klimper: NFT auctions on chia-wallet-sdk's auction driver: start, view, bid, end and cancel, on Sage's wallet."
+publish = false
+links = "tauri-plugin-klimper-auctions"
+
+[lints]
+workspace = true
+
+[dependencies]
+chia-sdk-next = { path = "../crates/chia-sdk-next" }
+chia-wallet-sdk = { workspace = true, features = ["action-layer"] }
+sage = { workspace = true }
+sage-wallet = { workspace = true }
+sage-database = { workspace = true }
+# The wallet context, signing and sending, shared with partial offers.
+tauri-plugin-klimper-partial-offers = { workspace = true }
+tauri = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+hex = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Sage wallets on a simulated chain (src/sage_sim.rs).
+anyhow = { workspace = true }
+sage-config = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }

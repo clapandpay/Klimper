@@ -18,6 +18,7 @@ import { parseXchonnectLink } from './xchonnect/xchonnectLink';
 export type ScanTarget =
   | { kind: 'xchonnect' }
   | { kind: 'offer'; offer: string }
+  | { kind: 'auction'; id: string }
   | { kind: 'address'; address: string }
   | { kind: 'unknown'; text: string };
 
@@ -26,6 +27,8 @@ export interface ScanFeatures {
   offers: boolean;
   /** Partial offers (`partial1…`, TASK-164); they open on the same offer route. */
   partialOffers?: boolean;
+  /** NFT auctions, shared as `auction:0x<id>`. */
+  auctions?: boolean;
 }
 
 const XCHONNECT_SCHEME = 'xchonnect:';
@@ -52,6 +55,11 @@ export function classifyScan(raw: string, features: ScanFeatures): ScanTarget {
   }
   if (features.partialOffers && isPartialOffer(text)) {
     return { kind: 'offer', offer: text.toLowerCase() };
+  }
+
+  const auction = /^auction:(?:0x)?([0-9a-f]{64})$/i.exec(text);
+  if (features.auctions && auction) {
+    return { kind: 'auction', id: `0x${auction[1].toLowerCase()}` };
   }
 
   return { kind: 'unknown', text };

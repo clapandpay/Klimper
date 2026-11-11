@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-delete-auction"
+description = "Enables the delete_auction command without any pre-configured scope."
+commands.allow = ["delete_auction"]
+
+[[permission]]
+identifier = "deny-delete-auction"
+description = "Denies the delete_auction command without any pre-configured scope."
+commands.deny = ["delete_auction"]
