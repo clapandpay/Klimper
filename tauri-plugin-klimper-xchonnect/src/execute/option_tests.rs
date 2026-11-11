@@ -2062,3 +2062,31 @@ fn the_committed_loan_offers_still_hold() {
         );
     }
 }
+
+/// Sage binds one query parameter per coin id (upstream #986) and `SQLite` takes 32,766 at
+/// most. The record's coins and the coins of every offer Sage made have no bound, so they are
+/// read in parts: a list longer than one query takes still finds the wallet's coin.
+#[tokio::test]
+async fn more_coin_ids_than_one_query_takes_are_read_in_parts() {
+    let alice = SimWallet::new(5_000).await;
+    let own = alice.wallet.db.selectable_xch_coins().await.unwrap()[0].coin_id();
+    let mut ids: Vec<Bytes32> = (0..40_000u32)
+        .map(|n| {
+            let mut id = [0xee; 32];
+            id[..4].copy_from_slice(&n.to_be_bytes());
+            Bytes32::new(id)
+        })
+        .collect();
+    ids.push(own);
+
+    // What an unsplit query does with this list: the reason for the parts.
+    assert!(alice.wallet.db.coins_by_ids(&ids).await.is_err());
+
+    let rows = crate::signed_coins::coins_by_ids(&alice.wallet.db, &ids)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].coin.coin_id(), own);
+    // Unspent, so nothing to forget, and no failure that would read as "nothing is spent".
+    assert!(spent_coins(&alice.wallet, &ids).await.is_empty());
+}

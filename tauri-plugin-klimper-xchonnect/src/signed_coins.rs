@@ -540,6 +540,24 @@ pub fn confirmed_spent(
         .collect()
 }
 
+/// How many coin ids one query of Sage's database is asked for. Sage binds each id as a query
+/// parameter (upstream #986) and `SQLite` takes 32,766 parameters at most, while the lists read
+/// here (every coin of every offer Sage made, every coin in the record) have no bound.
+pub const IDS_PER_QUERY: usize = 10_000;
+
+/// Sage's rows of `ids`, read [`IDS_PER_QUERY`] at a time. An id the database does not hold
+/// has no row.
+pub async fn coins_by_ids(
+    db: &sage_database::Database,
+    ids: &[Bytes32],
+) -> std::result::Result<Vec<sage_database::CoinRow>, sage_database::DatabaseError> {
+    let mut rows = Vec::new();
+    for part in ids.chunks(IDS_PER_QUERY) {
+        rows.extend(db.coins_by_ids(part).await?);
+    }
+    Ok(rows)
+}
+
 /// Which of `coins` are spent on chain deeply enough to forget: from the wallet's own synced
 /// database only (Sage's coin states and its peak), [`CONFIRMATIONS`] blocks deep. A coin
 /// the database does not hold (another party's, or created inside a bundle) is never
@@ -548,7 +566,7 @@ pub async fn spent_coins(wallet: &sage_wallet::Wallet, coins: &[Bytes32]) -> Has
     if coins.is_empty() {
         return HashSet::new();
     }
-    let rows = match wallet.db.coins_by_ids(coins).await {
+    let rows = match coins_by_ids(&wallet.db, coins).await {
         Ok(rows) => rows,
         Err(error) => {
             tracing::warn!("xchonnect: could not read coin states: {error}");
@@ -632,9 +650,7 @@ pub async fn signed_by_sage(wallet: &sage_wallet::Wallet) -> Result<Vec<Bytes32>
         return Ok(Vec::new());
     }
     let ids: Vec<Bytes32> = coins.into_iter().collect();
-    Ok(wallet
-        .db
-        .coins_by_ids(&ids)
+    Ok(coins_by_ids(&wallet.db, &ids)
         .await
         .map_err(Error::internal)?
         .into_iter()

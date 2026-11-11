@@ -271,8 +271,11 @@ async fn read_unlocked(
     keys: &[PublicKey],
 ) -> Result<Vec<Bytes32>, ChainError> {
     let owners = owners(keys);
-    // Validated 32-byte ids; Sage binds them as query parameters (upstream #986).
-    let rows = db.coins_by_ids(coin_ids).await.map_err(unavailable)?;
+    // Validated 32-byte ids; Sage binds them as query parameters (upstream #986), so a long
+    // list is read in parts.
+    let rows = crate::signed_coins::coins_by_ids(db, coin_ids)
+        .await
+        .map_err(unavailable)?;
     let mut out = Vec::new();
     for row in rows {
         if !owners.contains_key(&row.p2_puzzle_hash) {
