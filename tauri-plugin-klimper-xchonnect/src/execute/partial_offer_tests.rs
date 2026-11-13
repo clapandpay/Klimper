@@ -445,5 +445,4 @@ fn create_partial_offer_is_wallet_built_and_granted_like_create_offer() {
             .iter()
             .any(|m| m == CHIA_CREATE_PARTIAL_OFFER)
     );
-    assert_eq!(METHODS_REVISION, 3);
 }

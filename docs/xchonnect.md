@@ -363,6 +363,87 @@ and is gone.
      the driver refuses (two assets, the same asset, least fill 0, above the requested amount
      or buying nothing, a bad expiry).
 
+     **Taking a route** (TASK-168, `src/execute/take_route.rs`): whole offers and fills of
+     partial offers taken in one bundle, with one approval, all or nothing. For a website's
+     best-price route (Pengui's Market tab) and for agents. Klimper's own method, not a
+     parameter of `chia_takeOffer`: a Klimper without it answers method-not-found instead of
+     taking only the whole offers.
+
+   | Method           | Params                                                                                                                                                             | Answer                                                                                             |
+   | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+   | `chia_takeRoute` | `offers?: ["offer1…"]`, `fills?: [{ offer: "partial1…", amount }]` (`amount`: mojos of the asset the partial offer asks for, that the user pays), `fee?` (ignored) | `{ transactionId, status, expiresAt, fills: [{ paid, bought, nextOffer? }] }` (amounts as strings) |
+   - **Params**: at least one leg, at most 10 (`MAX_LEGS`) together; each list holds its own
+     kind of text, every amount is positive (a number or a decimal string). Malformed: `4000`
+     with `offers`, `fills`, `too_many_legs`, `fee` or `json` as reason.
+   - **Whole offers**: each is decoded and checked on its own exactly as `chia_takeOffer`
+     checks an offer (size, no coin twice, asks for something, known puzzles, the maker's
+     signature), and held to plain spends: standard coins and CATs that are not revocable.
+   - **Fills**: the wallet reads the text with the SDK's driver and looks its coin up on the
+     chain once. The coin must be unspent, or not made yet with every coin it is made from
+     unspent (a first fill, which carries the maker's signed spends; they are checked like an
+     offer's: no coin twice, plain puzzles, the maker's signature). The partial coin's own
+     spend is built by the wallet from the terms in the text; the terms fix the coin's puzzle
+     hash, so a text cannot describe another coin, and the website never writes that spend.
+     The amount is trimmed to the least that buys as much. Refusals that are news of the
+     chain, not of the wallet, and are **not** counted as failed builds: `offer_changed`
+     (taken from or clawed back since the website read it: read the newest text and ask
+     again), `offer_expired` (it expires before the route would), `below_min_fill`,
+     `above_max_fill`, all `4000`; `chain_unavailable` when the wallet has no connection.
+   - **Scope**: XCH and CATs only. A leg with an NFT, an option, a royalty or a revocable CAT,
+     or a website's leg that spends a settlement coin: `4101` `unsupported_asset`. The same
+     leg twice, or two legs that share a coin: `4000` `leg_twice`.
+   - **Build**: every leg joined into one offer (`Offer::extend`; never re-read from the
+     joined spends), the user's side from the wallet's own coins as Sage's code builds a take,
+     key-free, with the legs' payments, each fill's required fee, Klimper's own fee, and an
+     expiry: the user's spends assert `ASSERT_BEFORE_SECONDS_ABSOLUTE` of the request's time
+     plus 300 s (`EXPIRES_AFTER`, the answer's `expiresAt`). A route that does not confirm
+     (a leg was taken first) can therefore not be completed later by whoever saw the bundle.
+     More than the wallet holds is `4003` `build_failed` and counts towards the failed-build
+     limit, as does a whole offer the wallet refuses.
+   - **Fees**: a partial offer may require a network fee for each fill (`requiredFee`). The
+     user's coins fund it; it is inside what the route pays or receives, and the approval
+     shows the route's total as its own line. More than 0.001 XCH for a route together
+     (`MAX_FILL_FEES`): `4000` `fill_fee_too_high`. Klimper's own fee is the user's default,
+     as for a take.
+   - **The one unknown contract**: wallet-kit 0.1.0 reads a partial coin inside a CAT as
+     another party's CAT, and a bare one (a partial offer that offers XCH) as an unknown
+     contract. For this request only, exactly the bare partial coins of the route's own
+     fills are let through, matched by coin and by the bytes of the spend the wallet built
+     (`allowed_unknown`); the website's "unknown contracts" setting is not read, and any other
+     unknown puzzle is `4101` `unknown_contract` as for a take. The approval does not warn
+     about those coins (`route.verified_partial_puzzles`). This departs from xchonnect spec
+     11.1 item 3 (unknown contracts only with the user's setting) for a coin Klimper verifies
+     itself, until wallet-kit knows the partial coin (a `SpendKind` there). The binding does
+     not depend on that coin: every one of the user's spends is tied to the settlement
+     payments, as in any take, and the legs' signature is always handed to wallet-kit (the
+     identity when no leg has one), so the request is always read as one with another party.
+   - **Own offers**: a first fill of a partial offer the user made would have the wallet sign
+     the maker's side with nothing binding it: refused, `4001` `unbound_partial`.
+   - **Answer**: sealed, as a take: only the transaction id leaves the wallet, with what each
+     fill paid and bought and `nextOffer`, the partial offer that is left. Its coin exists
+     only once the route has confirmed: a website must not publish it before.
+   - **Permissions**: in a new connection's default grant. A connection paired before it
+     existed is given it once (`METHODS_REVISION` 4) only if it may still use
+     `chia_takeOffer`: a take the user turned off is not handed back under another name. The
+     limits count what the route pays (the fill, not the whole partial offer), a required fee
+     included. Splitting a route over several requests stays under a per-request limit, as
+     with takes; the per-day limit is what holds. Klimper has no agent rules yet
+     (TASK-143.01); when it has, a route needs a price check for each leg, since a net price
+     hides a bad one.
+   - **Approval**: the trade card as for a take (pays, receives, Klimper's fee, the number of
+     legs) and Klimper's `route` key: `offers`, `fills`, `fill_fees` (mojos, a string),
+     `expires_at`, `verified_partial_puzzles`. The screen adds the fills and whole offers,
+     "Fees the partial offers require" and "Goes through by".
+   - **Tests**: `src/execute/route_tests.rs`, on the simulated chain through the request's own
+     functions: a whole offer with a first fill of a CAT partial offer and of an XCH one with a
+     fee per fill, settling with exact balances; a later fill from `nextOffer`; a route sent
+     after its expiry refused by the chain; a rejection; and each refusal before the user is
+     asked (changed, under the least, over what is left, a leg twice, the fee cap, an early
+     expiry, forged signatures on a whole offer and on a first fill, a settlement spend in a
+     website's leg, a limit, no permission, an unknown puzzle that is not the wallet's own
+     fill, a first fill of one's own offer). `src/klimper/xchonnect/XchonnectTrade.test.tsx`
+     covers the screen.
+
 4. **Sealed and released** (xchonnect spec 11.2, `src/signed_coins.rs`). Whether one of the
    user's spends could be taken out of a bundle and used without the others depends on who
    holds the user's signatures:
