@@ -553,3 +553,91 @@ describe('a CAT name that reads as the network coin (TASK-140)', () => {
     expect(screen.queryByTestId('trade-unnamed')).toBeNull();
   });
 });
+
+describe('a route (chia_takeRoute, TASK-168)', () => {
+  const PARTIAL = 'd2'.repeat(32);
+  const OTHER = 'e3'.repeat(32);
+  /** A take with Klimper's `route` key and the puzzles wallet-kit could not read. */
+  const route = (
+    unknown: string[],
+    extra: Record<string, unknown> = {},
+    patch: Record<string, unknown> = {},
+  ) => {
+    const prompt = take(
+      [
+        [XCH, 360],
+        [cat('be'), 600],
+      ],
+      [
+        [cat('a2'), 1_000],
+        [cat('b5'), 500],
+      ],
+      3,
+      7,
+    );
+    return {
+      ...prompt,
+      method: 'chia_takeRoute',
+      summary: { ...prompt.summary, unknown_puzzles: unknown },
+      route: {
+        offers: 1,
+        fills: 2,
+        fill_fees: '10',
+        expires_at: 1_800_000_300,
+        verified_partial_puzzles: [PARTIAL],
+        ...extra,
+      },
+      ...patch,
+    };
+  };
+
+  it('shows the fills, the fees they require and the deadline', () => {
+    const view = show(route([PARTIAL]));
+    expect(view.kind === 'spend' && view.route).toEqual({
+      offers: 1,
+      fills: 2,
+      fillFees: BigNumber(10),
+      expiresAt: 1_800_000_300,
+    });
+    expect(text(screen.getByTestId('trade-route'))).toContain(
+      '2 partial offers filled in part, 1 whole offer',
+    );
+    expect(text(screen.getByTestId('trade-fill-fees'))).toContain(
+      '0.00000000001 XCH',
+    );
+    expect(screen.getByTestId('trade-route-expires')).toBeTruthy();
+    // Klimper's own fee stays its own line.
+    expect(screen.getByTestId('trade-fee')).toBeTruthy();
+  });
+
+  it('does not warn about the partial coins Klimper verified', () => {
+    const view = show(route([PARTIAL]));
+    expect(view.kind === 'spend' && view.unknownPuzzles).toEqual([]);
+  });
+
+  it('still warns about any other unknown contract', () => {
+    const view = show(route([PARTIAL, OTHER]));
+    expect(view.kind === 'spend' && view.unknownPuzzles).toEqual([OTHER]);
+  });
+
+  it('takes nothing about a route from a request Klimper did not build', () => {
+    const view = readPrompt(route([PARTIAL], {}, { wallet_built: false }));
+    expect(view.kind === 'spend' && view.route).toBeNull();
+    expect(view.kind === 'spend' && view.unknownPuzzles).toEqual([PARTIAL]);
+  });
+
+  it('cannot be read when its route is malformed', () => {
+    expect(readPrompt(route([], { fill_fees: 10 })).kind).toBe('unreadable');
+    expect(readPrompt(route([], { expires_at: '1' })).kind).toBe('unreadable');
+    expect(readPrompt(route([], { fills: -1 })).kind).toBe('unreadable');
+    expect(
+      readPrompt(route([], { verified_partial_puzzles: ['zz'] })).kind,
+    ).toBe('unreadable');
+  });
+
+  it('shows no route rows on an ordinary take', () => {
+    show(take([[XCH, 500]], [[cat('5b'), 5_000]], 1, 0));
+    expect(screen.queryByTestId('trade-route')).toBeNull();
+    expect(screen.queryByTestId('trade-route-expires')).toBeNull();
+  });
+});

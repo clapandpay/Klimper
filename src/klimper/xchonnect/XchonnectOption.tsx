@@ -34,6 +34,7 @@ import {
   PartialTermsView,
   SpendPromptView,
   TradeLegView,
+  whenText,
 } from './xchonnectPrompt';
 
 type Facts = ReadonlyMap<string, AssetFacts>;
@@ -56,22 +57,7 @@ export function amountText(
   )}`;
 }
 
-const MONTH = new Intl.DateTimeFormat(undefined, { month: 'short' });
-
-/** `13 Nov 14:00`, the year added when it is not this one. Local time, as the phone shows it. */
-export function whenText(seconds: number, withTime = true): string {
-  const date = new Date(seconds * 1000);
-  const day = `${date.getDate()} ${MONTH.format(date)}`;
-  const year =
-    date.getFullYear() === new Date().getFullYear()
-      ? ''
-      : ` ${date.getFullYear()}`;
-  if (!withTime) return `${day}${year}`;
-  const time = `${String(date.getHours()).padStart(2, '0')}:${String(
-    date.getMinutes(),
-  ).padStart(2, '0')}`;
-  return `${day}${year} ${time}`;
-}
+export { whenText };
 
 function Addr({
   puzzleHash,

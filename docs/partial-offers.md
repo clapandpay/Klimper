@@ -129,15 +129,16 @@ only `{ offer: "partial1…", id, coinId, expiresAt? }`.
 The offer is kept in this plugin's store (`mine::remember`), so My partial offers lists and
 cancels it. `docs/xchonnect.md` has the details.
 
-**Take: still to do**, in the same file, using part 1:
-
-- `execute.rs:586` `decode_offer_bundle` takes only `offer1`. `check_offer` (:607) refuses a
-  partial offer: wallet-kit's `simulate` marks the P2_1_OF_N coin `SpendKind::Unknown`, and the
-  hint spend is not a placeholder by its parent. Recognise the partial coin in a pre-check.
-- `chia_takePartialOffer {offer, requestedAmount, fee}`; add it to `WALLET_BUILT_METHODS` and
-  raise `METHODS_REVISION` (3 since the make). No cancel method yet.
-- The limits (`AssetLimit`, `DailySpend`) apply to the fill `x`, not the whole offer. The price
-  shown on approval is `initial_requested / initial_offered`.
+**Take: done** (TASK-168). `chia_takeRoute { offers?, fills?: [{ offer, amount }], fee? }` in
+`execute/take_route.rs`: whole offers and fills of partial offers in one bundle, one approval,
+all or nothing. One fill alone is a route with one leg; there is no separate
+`chia_takePartialOffer`. The wallet reads each text with part 1, looks its coin up once
+(`read_fill`, not `follow`: a text with many fills behind it must not hold the signing lock),
+builds the fill itself and joins it with the other legs (`Offer::extend`). wallet-kit reads a
+bare partial coin (a partial offer that offers XCH) as an unknown contract; Klimper lets
+exactly the coins of its own fills through, by coin and by the bytes of its own spend. The
+user's spends carry an expiry of 300 s. The limits (`AssetLimit`, `DailySpend`) count the
+fill, not the whole offer. `docs/xchonnect.md` has the details. No cancel method yet.
 
 ### In-app bridge (`crates/sage-apps`, `packages/sage-app-sdk`)
 

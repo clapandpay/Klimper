@@ -9,7 +9,7 @@
 // name, and a ticker that reads as the network's coin is not used at all, nor its icon
 // (`ticker.ts`). A CAT has no dollar value here: its market price is the maker's to set.
 
-import { Trans } from '@lingui/react/macro';
+import { Plural, Trans } from '@lingui/react/macro';
 import { t } from '@lingui/core/macro';
 import BigNumber from 'bignumber.js';
 import { ArrowDown, ArrowLeftRight, Layers } from 'lucide-react';
@@ -29,8 +29,10 @@ import {
   formatAmount,
   optionLabel,
   PricedAssetView,
+  RouteView,
   TradeLegView,
   TradeView,
+  whenText,
   XCH_PRECISION,
 } from './xchonnectPrompt';
 
@@ -379,10 +381,13 @@ export function TradeCard({
   trade,
   facts,
   xchLabel,
+  route = null,
 }: {
   readonly trade: TradeView;
   readonly facts: ReadonlyMap<string, AssetFacts>;
   readonly xchLabel: string;
+  /** A route (`chia_takeRoute`): its fills, the fees they require and its deadline. */
+  readonly route?: RouteView | null;
 }) {
   const offers = trade.offers ?? 1;
   const feeUsd = trade.fee.isGreaterThan(0) ? xchUsd(trade.fee) : null;
@@ -431,6 +436,66 @@ export function TradeCard({
                   </Trans>
                 </Hint>
               </span>
+            </span>
+          </div>
+        )}
+        {route !== null && route.fills > 0 && (
+          <div className='xc-trade-row' data-testid='trade-route'>
+            <span>
+              <Plural
+                value={route.fills}
+                one='# partial offer filled in part'
+                other='# partial offers filled in part'
+              />
+              {route.offers > 0 && (
+                <>
+                  {', '}
+                  <Plural
+                    value={route.offers}
+                    one='# whole offer'
+                    other='# whole offers'
+                  />
+                </>
+              )}{' '}
+              <Hint>
+                <Trans>
+                  A partial offer sells at a fixed price and can be taken in
+                  parts. Klimper read each one from the network and built its
+                  part of this transaction itself.
+                </Trans>
+              </Hint>
+            </span>
+          </div>
+        )}
+        {route !== null && route.fillFees.isGreaterThan(0) && (
+          <div className='xc-trade-row' data-testid='trade-fill-fees'>
+            <span className='text-muted-foreground'>
+              <Trans>Fees the partial offers require</Trans>{' '}
+              <Hint>
+                <Trans>
+                  A partial offer can ask every taker for a network fee. You pay
+                  it; it is already inside what you pay or receive above.
+                </Trans>
+              </Hint>
+            </span>
+            <span className='text-right tabular-nums'>
+              {formatAmount(route.fillFees, XCH_PRECISION)} {xchLabel}
+            </span>
+          </div>
+        )}
+        {route !== null && (
+          <div className='xc-trade-row' data-testid='trade-route-expires'>
+            <span className='text-muted-foreground'>
+              <Trans>Goes through by</Trans>{' '}
+              <Hint>
+                <Trans>
+                  If the network has not confirmed this trade by then, it can no
+                  longer happen and you pay nothing.
+                </Trans>
+              </Hint>
+            </span>
+            <span className='text-right tabular-nums'>
+              {whenText(route.expiresAt)}
             </span>
           </div>
         )}

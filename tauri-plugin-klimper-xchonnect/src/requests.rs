@@ -144,6 +144,10 @@ pub struct UiApprover {
     /// For an offer the wallet makes (`chia_createOffer`, TASK-142): what it gives, options
     /// with their terms, and what it asks. Computed by the wallet from its own build.
     offer: std::sync::Mutex<Option<Value>>,
+    /// For a route (`chia_takeRoute`, TASK-168): how many whole offers and fills, the fees
+    /// the fills require, the expiry and the partial coins Klimper verified. Computed by the
+    /// wallet from its own build.
+    route: std::sync::Mutex<Option<Value>>,
     /// For a `chia_send` with a website's fee (`execute::fee_hint`): the suggestion, the fee
     /// the send on screen was built with, and whether the suggestion could not be afforded.
     fee: std::sync::Mutex<(Option<u64>, FeeChoice, bool)>,
@@ -168,6 +172,7 @@ impl UiApprover {
             offers: AtomicUsize::new(0),
             loan: std::sync::Mutex::new(None),
             offer: std::sync::Mutex::new(None),
+            route: std::sync::Mutex::new(None),
             fee: std::sync::Mutex::new((None, FeeChoice::Default, false)),
             refee: std::sync::Mutex::new(None),
         }
@@ -184,6 +189,14 @@ impl UiApprover {
     pub fn mark_loan(&self, loan: &execute::options::LoanView, makes_offer: bool) {
         if let (Ok(value), Ok(mut slot)) = (serde_json::to_value(loan), self.loan.lock()) {
             *slot = Some((value, makes_offer));
+        }
+    }
+
+    /// Record the route on screen, and its legs as the offers taken together.
+    pub fn mark_route(&self, route: &execute::take_route::RouteView) {
+        self.mark_offers(route.offers + route.fills);
+        if let (Ok(value), Ok(mut slot)) = (serde_json::to_value(route), self.route.lock()) {
+            *slot = Some(value);
         }
     }
 
@@ -256,6 +269,14 @@ impl Approver for UiApprover {
         {
             fields.insert("offer".to_owned(), offer.clone());
             fields.insert("makes_offer".to_owned(), Value::Bool(true));
+        }
+        // A route (TASK-168), Klimper's own key like `offer`: its legs, the fees its fills
+        // require, when it expires and the partial coins Klimper verified.
+        if let Ok(slot) = self.route.lock()
+            && let Some(route) = slot.as_ref()
+            && let Some(fields) = payload.as_object_mut()
+        {
+            fields.insert("route".to_owned(), route.clone());
         }
         let answer = self.bridge.ask_with(
             Approval {
@@ -525,6 +546,15 @@ fn run(
                         &|count| approver.mark_offers(count),
                         &on_loan,
                     ),
+                    execute::CHIA_TAKE_ROUTE => execute::take_route::take_route(
+                        state,
+                        &context,
+                        &signer,
+                        &approver,
+                        &broadcaster,
+                        params,
+                        &|route| approver.mark_route(route),
+                    ),
                     execute::CHIA_CREATE_OFFER => execute::create_offer::create_offer(
                         state,
                         &context,
@@ -611,7 +641,10 @@ fn run(
     if let Ok(result) = &outcome
         && matches!(
             canonical_method(&meta.method),
-            execute::CHIA_SEND | execute::CHIA_TAKE_OFFER | kit::SUBMIT_COIN_SPENDS
+            execute::CHIA_SEND
+                | execute::CHIA_TAKE_OFFER
+                | execute::CHIA_TAKE_ROUTE
+                | kit::SUBMIT_COIN_SPENDS
         )
         && let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(result)
         && let Some(Value::String(transaction_id)) = fields.get("transactionId")
@@ -873,7 +906,8 @@ mod tests {
                 CHIA_SEND,
                 CHIA_TAKE_OFFER,
                 crate::execute::CHIA_CREATE_OFFER,
-                crate::execute::CHIA_CREATE_PARTIAL_OFFER
+                crate::execute::CHIA_CREATE_PARTIAL_OFFER,
+                crate::execute::CHIA_TAKE_ROUTE
             ]
         );
         assert!(!upgrade_methods(&mut old), "only once");
@@ -909,6 +943,43 @@ mod tests {
         assert!(!old.permissions.methods.iter().any(|m| m == CHIA_TAKE_OFFER));
         assert!(!upgrade_methods(&mut old), "only once");
         assert!(crate::execute::is_wallet_built(CHIA_CREATE_OFFER));
+    }
+
+    /// A connection of revision 3 is given `chia_takeRoute` once, and only if it may still
+    /// take offers: a route is offers taken together, so a take the user turned off is not
+    /// handed back under another name (TASK-168).
+    #[test]
+    fn a_revision_three_connection_may_take_routes_only_if_it_may_take_offers() {
+        use crate::execute::{
+            CHIA_SEND, CHIA_TAKE_OFFER, CHIA_TAKE_ROUTE, METHODS_REVISION, upgrade_methods,
+        };
+        let mut takes = record();
+        takes.methods_revision = 3;
+        takes.permissions.methods = vec![CHIA_SEND.to_owned(), CHIA_TAKE_OFFER.to_owned()];
+        assert!(upgrade_methods(&mut takes));
+        assert_eq!(
+            takes.permissions.methods,
+            [CHIA_SEND, CHIA_TAKE_OFFER, CHIA_TAKE_ROUTE]
+        );
+        assert_eq!(takes.methods_revision, METHODS_REVISION);
+        assert!(!upgrade_methods(&mut takes), "only once");
+        // Turned off afterwards, it stays off.
+        takes.permissions.methods.retain(|m| m != CHIA_TAKE_ROUTE);
+        assert!(!upgrade_methods(&mut takes));
+        assert!(
+            !takes
+                .permissions
+                .methods
+                .iter()
+                .any(|m| m == CHIA_TAKE_ROUTE)
+        );
+
+        let mut turned_off = record();
+        turned_off.methods_revision = 3;
+        turned_off.permissions.methods = vec![CHIA_SEND.to_owned()];
+        assert!(!upgrade_methods(&mut turned_off));
+        assert_eq!(turned_off.permissions.methods, [CHIA_SEND]);
+        assert_eq!(turned_off.methods_revision, METHODS_REVISION);
     }
 
     /// A connection that already had `chia_createOffer` (revision 2) is given
