@@ -158,15 +158,16 @@ fn plain_spends(spends: &[CoinSpend], ctx: &RequestContext<'_>) -> Result<(), Rp
         kit::simulate::DEFAULT_MAX_COST,
     )
     .map_err(|_| invalid("offer"))?;
-    let plain = executed.iter().all(|spend| {
-        matches!(
-            spend.kind,
-            kit::SpendKind::Standard
-                | kit::SpendKind::Cat {
-                    hidden_puzzle_hash: None,
-                    ..
-                }
-        )
+    let settlement = Bytes32::from(chia_wallet_sdk::puzzles::SETTLEMENT_PAYMENT_HASH);
+    let plain = executed.iter().all(|spend| match spend.kind {
+        kit::SpendKind::Standard => true,
+        // Not a CAT held by the settlement puzzle: that is a settlement coin too.
+        kit::SpendKind::Cat {
+            hidden_puzzle_hash: None,
+            p2_puzzle_hash,
+            ..
+        } => p2_puzzle_hash != settlement,
+        _ => false,
     });
     if plain {
         Ok(())
@@ -577,7 +578,7 @@ pub async fn build_route(
 /// coin, never by puzzle hash alone. `Ok(true)`: there is at least one, so wallet-kit's
 /// submit must be told to let unknown contracts through for this request; `Ok(false)`:
 /// none. Any other unknown puzzle refuses, whatever the website's setting, as for a take.
-fn allowed_unknown(built: &BuiltRoute, summary: &Summary) -> Result<bool, RpcError> {
+pub(super) fn allowed_unknown(built: &BuiltRoute, summary: &Summary) -> Result<bool, RpcError> {
     let unknown = || {
         error(
             codes::UNSUPPORTED_CONTENT,
@@ -707,13 +708,39 @@ pub fn submit_route(
 // The request
 // ---------------------------------------------------------------------------------------
 
+/// The reasons of refusals that are news of the chain or of someone else's partial offer,
+/// not of the wallet and not of anything the website got wrong on purpose: the offer was
+/// taken from or clawed back, it expires too soon, the amount is outside what one fill can
+/// pay right now, its maker asks more fee than a route may pay, or the wallet has no
+/// connection. A busy partial offer changes under every taker, so these never count
+/// towards the failed-build door ([`failed_builds`]).
+const CHAIN_NEWS: [&str; 6] = [
+    "offer_changed",
+    "offer_expired",
+    "below_min_fill",
+    "above_max_fill",
+    "fill_fee_too_high",
+    "chain_unavailable",
+];
+
+/// Whether a refusal of a route's legs or of its build counts as a failed build: every one
+/// does (a whole offer the wallet refuses, a leg twice, a forged signature, an asset this
+/// path does not trade, a build Sage could not fund), except [`CHAIN_NEWS`].
+pub fn counts_as_failed_build(refusal: &RpcError) -> bool {
+    let reason = refusal
+        .data
+        .as_deref()
+        .and_then(|data| serde_json::from_str::<Value>(data).ok())
+        .and_then(|data| data.get("reason")?.as_str().map(str::to_owned));
+    !reason.is_some_and(|reason| CHAIN_NEWS.contains(&reason.as_str()))
+}
+
 /// `chia_takeRoute`: read and check every leg, build, check, ask once, sign once, broadcast.
 ///
 /// What counts as a failed build (the door that closes on a website probing the balance,
-/// `failed_builds`): a whole offer the wallet refuses, as for `chia_takeOffer`, and a build
-/// Sage could not fund. What a partial offer is on the chain right now (changed, expired,
-/// the least and the most one fill pays) is the chain's news, not the wallet's, and is not
-/// counted: a busy partial offer changes under every taker.
+/// `failed_builds`) is decided in one place, [`counts_as_failed_build`], for every refusal
+/// from the legs' checks to the build: all of them, as for `chia_takeOffer`, except the
+/// chain's news about a partial offer. Malformed parameters are not counted, as for a take.
 pub fn take_route(
     state: &AppState,
     ctx: &RequestContext<'_>,
@@ -726,8 +753,13 @@ pub fn take_route(
     too_many_failed(ctx)?;
     let params = route_params(params_json)?;
     let fee = params.fee;
-    let offers = checked_offers(&params.offers, ctx)
-        .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
+    let counted = |refusal: RpcError| {
+        if counts_as_failed_build(&refusal) {
+            failed_builds::record(ctx.dapp, ctx.now);
+        }
+        refusal
+    };
+    let offers = checked_offers(&params.offers, ctx).map_err(counted)?;
 
     let now = ctx.now;
     let sage = state.clone();
@@ -752,15 +784,15 @@ pub fn take_route(
             "chain_unavailable",
         )
     })?;
-    let fills = fills?;
-    check_fills(&fills, ctx).inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
+    let fills = fills.map_err(counted)?;
+    check_fills(&fills, ctx).map_err(counted)?;
 
     let expires_at = now.saturating_add(EXPIRES_AFTER);
     let built = tauri::async_runtime::block_on(async move {
         build_route(&wallet.wallet, &offers, &fills, fee, expires_at).await
     })
     .map_err(|e| build_failed(CHIA_TAKE_ROUTE, ctx, &e.to_string()))?
-    .inspect_err(|_| failed_builds::record(ctx.dapp, ctx.now))?;
+    .map_err(counted)?;
 
     let summary = sage_view(state, &built.spends)?;
     submit_route(

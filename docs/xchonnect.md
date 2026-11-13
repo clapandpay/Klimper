@@ -384,14 +384,22 @@ and is gone.
      offer's: no coin twice, plain puzzles, the maker's signature). The partial coin's own
      spend is built by the wallet from the terms in the text; the terms fix the coin's puzzle
      hash, so a text cannot describe another coin, and the website never writes that spend.
-     The amount is trimmed to the least that buys as much. Refusals that are news of the
-     chain, not of the wallet, and are **not** counted as failed builds: `offer_changed`
-     (taken from or clawed back since the website read it: read the newest text and ask
-     again), `offer_expired` (it expires before the route would), `below_min_fill`,
-     `above_max_fill`, all `4000`; `chain_unavailable` when the wallet has no connection.
-   - **Scope**: XCH and CATs only. A leg with an NFT, an option, a royalty or a revocable CAT,
-     or a website's leg that spends a settlement coin: `4101` `unsupported_asset`. The same
-     leg twice, or two legs that share a coin: `4000` `leg_twice`.
+     A first text whose coin is on the chain already is filled without the maker's spends:
+     they, and whatever signature the text carries, are dropped, not sent again. A CAT coin's
+     lineage proof (from the text) must be its parent's, or the fill could never confirm:
+     `4000` `fills`. The amount is trimmed to the least that buys as much. Refusals that are
+     news of the chain or of someone else's offer, not of the wallet, are **not** counted as
+     failed builds (`counts_as_failed_build`): `offer_changed` (taken from or clawed back
+     since the website read it: read the newest text and ask again), `offer_expired` (it
+     expires before the route would), `below_min_fill`, `above_max_fill`, `fill_fee_too_high`,
+     all `4000`, and `chain_unavailable` when the wallet has no connection. Every other
+     refusal of a leg counts, as a whole offer's does for a take: a leg twice, a forged
+     signature, an asset this path does not trade.
+   - **Scope**: XCH and CATs only. A leg with an NFT, an option, a royalty or a revocable CAT, or a website's leg that spends a
+     settlement coin: `4101` `unsupported_asset` (a settlement coin inside a CAT does not run
+     without its ring and is refused as `4000` `offer`). The same leg twice, or two legs that
+     share a coin: `4000` `leg_twice`. All legs together hold at most 64 spends, as one offer
+     may: `4000` `offer_too_large`.
    - **Build**: every leg joined into one offer (`Offer::extend`; never re-read from the
      joined spends), the user's side from the wallet's own coins as Sage's code builds a take,
      key-free, with the legs' payments, each fill's required fee, Klimper's own fee, and an
@@ -418,7 +426,11 @@ and is gone.
      payments, as in any take, and the legs' signature is always handed to wallet-kit (the
      identity when no leg has one), so the request is always read as one with another party.
    - **Own offers**: a first fill of a partial offer the user made would have the wallet sign
-     the maker's side with nothing binding it: refused, `4001` `unbound_partial`.
+     the maker's side with nothing binding it: refused, `4001` `unbound_partial`, and so is a
+     whole offer of the user's own. A later
+     part of the user's own partial offer can be filled: the payment goes back to the user,
+     so nothing is paid for something else and the approval shows the plain list of what
+     changes instead of the trade card.
    - **Answer**: sealed, as a take: only the transaction id leaves the wallet, with what each
      fill paid and bought and `nextOffer`, the partial offer that is left. Its coin exists
      only once the route has confirmed: a website must not publish it before.
@@ -436,13 +448,19 @@ and is gone.
      "Fees the partial offers require" and "Goes through by".
    - **Tests**: `src/execute/route_tests.rs`, on the simulated chain through the request's own
      functions: a whole offer with a first fill of a CAT partial offer and of an XCH one with a
-     fee per fill, settling with exact balances; a later fill from `nextOffer`; a route sent
-     after its expiry refused by the chain; a rejection; and each refusal before the user is
-     asked (changed, under the least, over what is left, a leg twice, the fee cap, an early
-     expiry, forged signatures on a whole offer and on a first fill, a settlement spend in a
-     website's leg, a limit, no permission, an unknown puzzle that is not the wallet's own
-     fill, a first fill of one's own offer). `src/klimper/xchonnect/XchonnectTrade.test.tsx`
-     covers the screen.
+     fee per fill, settling with exact balances; a later fill from `nextOffer`; a first text
+     whose coin is on the chain; a later part of the user's own offer; a route sent after its
+     expiry refused by the chain; a rejection; and each refusal before the user is asked
+     (changed, the maker spent its coins, a wrong lineage proof, under the least, over what
+     is left, a leg twice, the fee cap, an early expiry, forged signatures on a whole offer and
+     on a first fill, a maker's coin twice and too many spends in a first fill, a revocable
+     CAT asked for or given, a settlement spend in a website's leg, a limit, no permission, an
+     unknown puzzle that is not the wallet's own fill, a first fill and a whole offer of one's
+     own). `allowed_unknown` and `counts_as_failed_build` are tested on their own.
+     `src/klimper/xchonnect/XchonnectTrade.test.tsx` covers the screen. Not pinned by a test,
+     because the checks before them already refuse every case that could reach them: the
+     refusal of a route that touches an option (`kit_summary.options`) and the 64-spend cap
+     on the joined legs.
 
 4. **Sealed and released** (xchonnect spec 11.2, `src/signed_coins.rs`). Whether one of the
    user's spends could be taken out of a bundle and used without the others depends on who

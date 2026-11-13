@@ -18,8 +18,9 @@ use xchonnect_wallet_kit::permissions::{AssetLimit, DappPermissions};
 use super::option_tests::{chain_time, pass_time};
 use super::sage_sim::SimWallet;
 use super::take_route::{
-    BuiltRoute, CHIA_TAKE_ROUTE, EXPIRES_AFTER, MAX_FILL_FEES, MAX_LEGS, RouteView, build_route,
-    check_fills, checked_offers, read_fill, route_params, submit_route,
+    BuiltRoute, CHIA_TAKE_ROUTE, EXPIRES_AFTER, MAX_FILL_FEES, MAX_LEGS, RouteView,
+    allowed_unknown, build_route, check_fills, checked_offers, counts_as_failed_build, read_fill,
+    route_params, submit_route,
 };
 use super::take_tests::{Kept, Limits, issue_amount, know_cats, reason, sage_summary, wallet_keys};
 use super::*;
@@ -150,6 +151,19 @@ fn request(offers: &[&SpendBundle], fills: &[(&PartialOffer, u64)]) -> String {
     let fills: Vec<Value> = fills
         .iter()
         .map(|(offer, amount)| json!({ "offer": offer.to_text().unwrap(), "amount": amount }))
+        .collect();
+    json!({ "offers": offers, "fills": fills }).to_string()
+}
+
+/// The same with the fills' texts given as they are, for texts the driver would not write.
+fn request_texts(offers: &[&SpendBundle], fills: &[(String, u64)]) -> String {
+    let offers: Vec<String> = offers
+        .iter()
+        .map(|offer| encode_offer(offer).unwrap())
+        .collect();
+    let fills: Vec<Value> = fills
+        .iter()
+        .map(|(offer, amount)| json!({ "offer": offer, "amount": amount }))
         .collect();
     json!({ "offers": offers, "fills": fills }).to_string()
 }
@@ -443,6 +457,11 @@ async fn what_a_fill_leaves_is_filled_from_the_next_offer() {
         .as_str()
         .unwrap()
         .to_owned();
+    // One asset for one asset: the screen shows the price of the fill.
+    let trade = first.trade.clone().unwrap();
+    assert_eq!(trade.pays, vec![leg(AssetId::Xch, 250)]);
+    assert_eq!(trade.receives, vec![leg(AssetId::Cat(m.b), 500)]);
+    assert!(trade.price.is_some());
     settle(&mut m.taker, &first).await;
 
     let next = PartialOffer::from_text(&next).unwrap();
@@ -456,6 +475,69 @@ async fn what_a_fill_leaves_is_filled_from_the_next_offer() {
     settle(&mut m.taker, &second).await;
     assert_eq!(m.taker.wallet.db.cat_balance(m.b).await.unwrap(), 1_000);
     drop(m.second);
+}
+
+/// A first text whose coin is on the chain already (the maker sent their spends without a
+/// fill): the maker's spends and signature in the text are dropped, not sent again.
+#[tokio::test]
+async fn a_first_text_whose_coin_is_on_the_chain_is_filled_without_the_makers_spends() {
+    let mut m = Box::pin(market()).await;
+    let cats = m.cats();
+    let makers = m.cat_partial.maker_spends().clone();
+    let inputs = m.cat_partial.input_coin_ids();
+    m.second.push_bundle(makers).await.unwrap();
+    m.second.wait_for_coins().await;
+
+    let done = run(&m.taker, &cats, &request(&[], &[(&m.cat_partial, 250)]), 0).await;
+    let sent = done.sent.clone().expect("nothing was sent");
+    assert!(
+        sent.coin_spends
+            .iter()
+            .all(|spend| !inputs.contains(&spend.coin.coin_id())),
+        "the maker's spends were sent again"
+    );
+    settle(&mut m.taker, &done).await;
+    assert_eq!(m.taker.wallet.db.cat_balance(m.b).await.unwrap(), 500);
+}
+
+/// A later part of a partial offer the user made themselves: the payment goes to the user,
+/// the route is bound and settles. Nothing is paid for something else, so there is no trade
+/// to show: the screen falls back to the plain list of what changes.
+#[tokio::test]
+async fn a_later_fill_of_the_users_own_partial_offer_settles() {
+    let mut m = Box::pin(market()).await;
+    let cats = m.cats();
+    let now = chain_time(&m.taker).await;
+    // 1000 of T for 500 mojos, made by the taker; the second wallet takes the first half.
+    let own = cat_for_xch(&m.taker, m.t, None).await;
+    know_cats(&m.second, &[m.t]).await;
+    let ctx = m.second.partial_ctx().await;
+    let (first, bundle) = partial_wallet::take(&ctx, &own.to_text().unwrap(), 250, 0, now)
+        .await
+        .expect("the first fill was refused");
+    let spent: Vec<Bytes32> = bundle
+        .coin_spends
+        .iter()
+        .map(|spend| spend.coin.coin_id())
+        .collect();
+    ctx.submit(bundle)
+        .await
+        .expect("the chain refused the fill");
+    m.second.wait_for_coins().await;
+    m.taker.watch_coins(spent).await;
+    m.taker.wait_for_coins().await;
+
+    let next = PartialOffer::from_text(&first.next_offer.unwrap()).unwrap();
+    let done = run(&m.taker, &cats, &request(&[], &[(&next, 250)]), 0).await;
+    assert!(done.asked, "{:?}", done.result);
+    assert_eq!(done.linking.as_deref(), Some("sealed"));
+    assert!(done.trade.is_none(), "paying oneself is not a trade");
+    settle(&mut m.taker, &done).await;
+    let (xch_after, held_after) = balances(&m.taker, &cats).await;
+    // 4000 mojos after issuing T, 250 from the second wallet's fill; the user's own 250 go
+    // out and come straight back. Of the 2000 T, the 500 the second wallet bought are gone.
+    assert_eq!(xch_after, 4_250);
+    assert_eq!(held_after[2], 1_500);
 }
 
 /// A route the user approved that reaches the chain after its expiry is refused there: who
@@ -602,6 +684,209 @@ async fn a_whole_offer_that_spends_a_settlement_coin_is_refused() {
     assert!(reason.contains("unsupported_asset"), "{reason}");
 }
 
+/// A first offer the maker cancelled before any fill, by spending a coin it is made from:
+/// its coin will never exist.
+#[tokio::test]
+async fn a_first_offer_whose_maker_spent_its_coins_is_refused_as_changed() {
+    let mut m = Box::pin(market()).await;
+    let home = m.second.wallet.change_p2_puzzle_hash().await.unwrap();
+    let moved = m
+        .second
+        .wallet
+        .send_cat(m.b, vec![(home, 1_000)], 0, true, vec![], None)
+        .await
+        .unwrap();
+    m.second.transact(moved).await;
+    m.second.wait_for_coins().await;
+    let reason = refused(&m, &request(&[], &[(&m.cat_partial, 250)])).await;
+    assert!(reason.contains("offer_changed"), "{reason}");
+}
+
+/// The lineage proof comes from the text: one that is not the coin's parent's is refused,
+/// since the fill could never confirm.
+#[tokio::test]
+async fn a_text_with_a_wrong_lineage_proof_is_refused() {
+    let mut m = Box::pin(market()).await;
+    let cats = m.cats();
+    let first = run(&m.taker, &cats, &request(&[], &[(&m.cat_partial, 250)]), 0).await;
+    let next = first.result.as_ref().unwrap()["fills"][0]["nextOffer"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    settle(&mut m.taker, &first).await;
+
+    let mut coin = *PartialOffer::from_text(&next).unwrap().offer();
+    coin.lineage_proof.as_mut().unwrap().parent_amount += 1;
+    let wrong = PartialOffer::from_coin(coin).unwrap();
+    let reason = refused(&m, &request(&[], &[(&wrong, 250)])).await;
+    assert!(reason.contains("fills"), "{reason}");
+}
+
+/// The maker's spends a first fill carries are the website's: held to what an offer's are.
+#[tokio::test]
+async fn a_first_fill_with_a_makers_coin_twice_or_too_many_spends_is_refused() {
+    let m = Box::pin(market()).await;
+    let bundle = m.cat_partial.to_spend_bundle().unwrap();
+    let maker = bundle
+        .coin_spends
+        .iter()
+        .find(|spend| {
+            m.cat_partial
+                .input_coin_ids()
+                .contains(&spend.coin.coin_id())
+        })
+        .cloned()
+        .unwrap();
+
+    let mut twice = bundle.clone();
+    twice.coin_spends.push(maker.clone());
+    let text = chia_sdk_next::encode_partial_offer(&twice).unwrap();
+    let reason = refused(&m, &request_texts(&[], &[(text, 250)])).await;
+    assert!(reason.contains("offer_duplicate_coin"), "{reason}");
+
+    let mut many = bundle;
+    many.coin_spends
+        .extend(std::iter::repeat_n(maker, MAX_OFFER_SPENDS));
+    let text = chia_sdk_next::encode_partial_offer(&many).unwrap();
+    let reason = refused(&m, &request_texts(&[], &[(text, 250)])).await;
+    assert!(reason.contains("offer_too_large"), "{reason}");
+}
+
+/// A route trades XCH and CATs that are not revocable: a revocable CAT on either side of a
+/// fill or of a whole offer is refused by name (wallet-kit cannot bind a payout inside one).
+#[tokio::test]
+async fn a_revocable_cat_in_a_leg_is_refused() {
+    let mut m = Box::pin(market()).await;
+    let issuer = Bytes32::new([5; 32]);
+    let third_home = m.third.wallet.change_p2_puzzle_hash().await.unwrap();
+
+    // A fill that asks for a revocable CAT.
+    let asks_revocable = partial(
+        &m.third,
+        Terms {
+            offered: PartialOfferAsset::Xch,
+            offered_amount: 600,
+            requested: PartialOfferAsset::Cat {
+                asset_id: m.t,
+                hidden_puzzle_hash: Some(issuer),
+            },
+            requested_amount: 1_200,
+            min_fill_requested: 100,
+            expiration: None,
+            required_fee: None,
+            maker_puzzle_hash: third_home,
+        },
+    )
+    .await;
+    let reason = refused(&m, &request(&[], &[(&asks_revocable, 600)])).await;
+    assert!(reason.contains("unsupported_asset"), "{reason}");
+
+    // A whole offer that asks for one.
+    let asks = m
+        .third
+        .wallet
+        .make_offer(
+            Offered {
+                xch: 100,
+                ..Default::default()
+            },
+            Requested {
+                cats: indexmap::indexmap! {
+                    m.t => sage_wallet::RequestedCat { amount: 200, hidden_puzzle_hash: Some(issuer) }
+                },
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let asks = m
+        .third
+        .wallet
+        .sign_transaction(asks, &m.third.agg_sig, m.third.master_sk.clone(), true)
+        .await
+        .unwrap();
+    let reason = refused(&m, &request(&[&asks], &[])).await;
+    assert!(reason.contains("unsupported_asset"), "{reason}");
+
+    // A whole offer and a fill that give one.
+    let (spends, revocable) = m
+        .third
+        .wallet
+        .issue_cat_with_hidden_puzzle_hash(1_000, 0, None, Some(issuer))
+        .await
+        .unwrap();
+    m.third.transact(spends).await;
+    m.third.wait_for_coins().await;
+    let gives = m
+        .third
+        .wallet
+        .make_offer(
+            Offered {
+                cats: indexmap::indexmap! { revocable => 1_000 },
+                ..Default::default()
+            },
+            Requested {
+                xch: 100,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let gives = m
+        .third
+        .wallet
+        .sign_transaction(gives, &m.third.agg_sig, m.third.master_sk.clone(), true)
+        .await
+        .unwrap();
+    let reason = refused(&m, &request(&[&gives], &[])).await;
+    assert!(reason.contains("unsupported_asset"), "{reason}");
+}
+
+/// A website's leg may not spend a settlement coin inside a CAT either.
+#[tokio::test]
+async fn a_whole_offer_that_spends_a_cat_settlement_coin_is_refused() {
+    let m = Box::pin(market()).await;
+    // An offer that asks for a CAT has a placeholder inside that CAT.
+    let asks = m
+        .third
+        .wallet
+        .make_offer(
+            Offered {
+                xch: 100,
+                ..Default::default()
+            },
+            Requested {
+                cats: indexmap::indexmap! {
+                    m.t => sage_wallet::RequestedCat { amount: 200, hidden_puzzle_hash: None }
+                },
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let mut asks = m
+        .third
+        .wallet
+        .sign_transaction(asks, &m.third.agg_sig, m.third.master_sk.clone(), true)
+        .await
+        .unwrap();
+    let mut claim = asks
+        .coin_spends
+        .iter()
+        .find(|spend| spend.coin.parent_coin_info == Bytes32::default())
+        .cloned()
+        .unwrap();
+    claim.coin.parent_coin_info = Bytes32::new([7; 32]);
+    asks.coin_spends.push(claim);
+    let done = run(&m.taker, &m.cats(), &request(&[&asks], &[]), 0).await;
+    assert!(!done.asked);
+    assert!(done.result.is_err());
+    assert!(done.sent.is_none());
+}
+
 #[tokio::test]
 async fn a_route_over_the_websites_limit_is_refused() {
     let m = Box::pin(market()).await;
@@ -734,6 +1019,194 @@ async fn a_first_fill_of_the_users_own_partial_offer_is_refused() {
         done.reason()
     );
     assert!(done.sent.is_none());
+}
+
+/// A whole offer the user made themselves is the same: the wallet would sign both sides.
+#[tokio::test]
+async fn a_whole_offer_of_the_users_own_is_refused() {
+    let m = Box::pin(market()).await;
+    let own = m
+        .taker
+        .wallet
+        .make_offer(
+            Offered {
+                cats: indexmap::indexmap! { m.t => 100 },
+                ..Default::default()
+            },
+            Requested {
+                xch: 50,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let own = m
+        .taker
+        .wallet
+        .sign_transaction(own, &m.taker.agg_sig, m.taker.master_sk.clone(), true)
+        .await
+        .unwrap();
+    let done = run(&m.taker, &m.cats(), &request(&[&own], &[]), 0).await;
+    assert!(!done.asked, "{:?}", done.result);
+    assert!(
+        done.reason().contains("unbound_partial"),
+        "{}",
+        done.reason()
+    );
+    assert!(done.sent.is_none());
+}
+
+// ---------------------------------------------------------------------------------------
+// The one unknown puzzle, on its own
+// ---------------------------------------------------------------------------------------
+
+fn spend_of(byte: u8) -> CoinSpend {
+    CoinSpend::new(
+        Coin::new(Bytes32::new([byte; 32]), Bytes32::new([byte; 32]), 1),
+        Program::default(),
+        Program::default(),
+    )
+}
+
+fn info_of(spend: &CoinSpend, kind: kit::SpendKind, owned: bool) -> kit::simulate::SpendInfo {
+    kit::simulate::SpendInfo {
+        coin_id: hex::encode(spend.coin.coin_id()),
+        puzzle_hash: hex::encode(spend.coin.puzzle_hash),
+        amount: spend.coin.amount,
+        kind,
+        owned,
+        agg_sigs: vec![],
+        cost: 0,
+    }
+}
+
+/// A route of the user's spend (`1`) and the partial coins `bare` (flagged) and `wrapped`.
+fn route_of(bare: &[u8], wrapped: &[u8], others: &[u8]) -> BuiltRoute {
+    let partial_spends: Vec<(CoinSpend, bool)> = bare
+        .iter()
+        .map(|byte| (spend_of(*byte), true))
+        .chain(wrapped.iter().map(|byte| (spend_of(*byte), false)))
+        .collect();
+    let mut spends: Vec<CoinSpend> = partial_spends.iter().map(|(s, _)| s.clone()).collect();
+    spends.extend(others.iter().map(|byte| spend_of(*byte)));
+    BuiltRoute {
+        spends,
+        legs_signature: Signature::default(),
+        leg_coins: HashSet::new(),
+        partial_spends,
+        fills: Vec::new(),
+        view: RouteView {
+            offers: 0,
+            fills: bare.len() + wrapped.len(),
+            fill_fees: 0,
+            expires_at: 1,
+            verified_partial_puzzles: Vec::new(),
+        },
+    }
+}
+
+fn summary_of(spends: Vec<kit::simulate::SpendInfo>, unknown: &[u8]) -> Summary {
+    let mut summary = Summary::default();
+    summary.spends = spends;
+    summary.unknown_puzzles = unknown
+        .iter()
+        .map(|byte| hex::encode([*byte; 32]))
+        .collect();
+    summary
+}
+
+#[test]
+fn only_the_routes_own_bare_partial_coins_may_be_unknown() {
+    use kit::SpendKind::{Standard, Unknown};
+    let refused = |built: &BuiltRoute, summary: &Summary| {
+        reason(&allowed_unknown(built, summary).unwrap_err()).contains("unknown_contract")
+    };
+
+    // Nothing unknown: wallet-kit is not told to let anything through.
+    let plain = route_of(&[], &[3], &[1]);
+    let summary = summary_of(vec![info_of(&spend_of(1), Standard, true)], &[]);
+    assert_eq!(allowed_unknown(&plain, &summary).ok(), Some(false));
+
+    // Two bare partial coins of the route, both unknown: let through.
+    let two = route_of(&[2, 4], &[], &[1]);
+    let both = summary_of(
+        vec![
+            info_of(&spend_of(2), Unknown, false),
+            info_of(&spend_of(4), Unknown, false),
+            info_of(&spend_of(1), Standard, true),
+        ],
+        &[2, 4],
+    );
+    assert_eq!(allowed_unknown(&two, &both).ok(), Some(true));
+
+    // An unknown spend that is no partial coin of the route.
+    let stranger = summary_of(
+        vec![
+            info_of(&spend_of(2), Unknown, false),
+            info_of(&spend_of(9), Unknown, false),
+        ],
+        &[2, 9],
+    );
+    assert!(refused(&route_of(&[2], &[], &[9]), &stranger));
+
+    // A partial coin of the route the wallet did not build as a bare one.
+    let wrapped = summary_of(vec![info_of(&spend_of(3), Unknown, false)], &[3]);
+    assert!(refused(&route_of(&[2], &[3], &[]), &wrapped));
+
+    // A bare partial coin that is the user's own coin.
+    let owned = summary_of(vec![info_of(&spend_of(2), Unknown, true)], &[2]);
+    assert!(refused(&route_of(&[2], &[], &[]), &owned));
+
+    // A puzzle wallet-kit lists as unknown that no allowed spend has (a spend the user signs
+    // without wallet-kit recognising it is listed there too).
+    let listed = summary_of(vec![info_of(&spend_of(2), Unknown, false)], &[2, 8]);
+    assert!(refused(&route_of(&[2], &[], &[]), &listed));
+
+    // The spend in the route twice.
+    let mut twice = route_of(&[2], &[], &[]);
+    twice.spends.push(spend_of(2));
+    let once = summary_of(vec![info_of(&spend_of(2), Unknown, false)], &[2]);
+    assert!(refused(&twice, &once));
+}
+
+// ---------------------------------------------------------------------------------------
+// What counts as a failed build
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn the_chains_news_about_a_partial_offer_is_not_a_failed_build() {
+    let with = |reason: &str| error(codes::INVALID_PARAMS, "refused", Some(reason));
+    for news in [
+        "offer_changed",
+        "offer_expired",
+        "below_min_fill",
+        "above_max_fill",
+        "fill_fee_too_high",
+        "chain_unavailable",
+    ] {
+        assert!(!counts_as_failed_build(&with(news)), "{news}");
+    }
+    for failed in [
+        "offer",
+        "offer_signature",
+        "offer_duplicate_coin",
+        "offer_too_large",
+        "nothing_requested",
+        "unknown_contract",
+        "unsupported_asset",
+        "leg_twice",
+        "fills",
+        "build_failed",
+    ] {
+        assert!(counts_as_failed_build(&with(failed)), "{failed}");
+    }
+    // A refusal without a reason counts: nothing is let through by leaving it out.
+    assert!(counts_as_failed_build(&error(
+        codes::INVALID_PARAMS,
+        "refused",
+        None
+    )));
 }
 
 // ---------------------------------------------------------------------------------------
