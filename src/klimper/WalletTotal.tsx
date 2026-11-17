@@ -9,10 +9,17 @@ import { lastPrices } from './price';
 import { useMaskAmounts } from './privacy';
 import { Hint } from './Hint';
 
-export function WalletTotal({ usd }: { readonly usd: number }) {
+export function WalletTotal({
+  value,
+  currency,
+}: {
+  /** In `currency`, Sage's display currency (Settings, General). */
+  readonly value: number;
+  readonly currency: string;
+}) {
   const masked = useMaskAmounts();
-  const xchUsd = lastPrices()?.xchUsd ?? 0;
-  const inXch = xchUsd > 0 ? usd / xchUsd : null;
+  const xchFiat = lastPrices()?.xchFiat ?? 0;
+  const inXch = xchFiat > 0 ? value / xchFiat : null;
   return (
     <section className='klimper-total' data-testid='wallet-total'>
       <div className='flex items-center gap-1 text-sm font-medium opacity-80'>
@@ -25,9 +32,9 @@ export function WalletTotal({ usd }: { readonly usd: number }) {
       </div>
       <div className='klimper-total-amount'>
         <NumberFormat
-          value={usd}
+          value={value}
           style='currency'
-          currency='USD'
+          currency={currency}
           maximumFractionDigits={2}
         />
       </div>

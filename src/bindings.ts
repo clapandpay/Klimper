@@ -314,6 +314,9 @@ async networkConfig() : Promise<NetworkConfig> {
 async setDiscoverPeers(req: SetDiscoverPeers) : Promise<EmptyResponse> {
     return await TAURI_INVOKE("set_discover_peers", { req });
 },
+async setMempoolDiscovery(req: SetMempoolDiscovery) : Promise<EmptyResponse> {
+    return await TAURI_INVOKE("set_mempool_discovery", { req });
+},
 async setTargetPeers(req: SetTargetPeers) : Promise<EmptyResponse> {
     return await TAURI_INVOKE("set_target_peers", { req });
 },
@@ -343,6 +346,9 @@ async setDeltaSyncOverride(req: SetDeltaSyncOverride) : Promise<EmptyResponse> {
 },
 async setChangeAddress(req: SetChangeAddress) : Promise<EmptyResponse> {
     return await TAURI_INVOKE("set_change_address", { req });
+},
+async setTransactionExpiration(req: SetTransactionExpiration) : Promise<EmptyResponse> {
+    return await TAURI_INVOKE("set_transaction_expiration", { req });
 },
 async updateCat(req: UpdateCat) : Promise<UpdateCatResponse> {
     return await TAURI_INVOKE("update_cat", { req });
@@ -424,6 +430,18 @@ async getRpcRunOnStartup() : Promise<boolean> {
 },
 async setRpcRunOnStartup(runOnStartup: boolean) : Promise<null> {
     return await TAURI_INVOKE("set_rpc_run_on_startup", { runOnStartup });
+},
+async getRpcPort() : Promise<number> {
+    return await TAURI_INVOKE("get_rpc_port");
+},
+async setRpcPort(port: number) : Promise<null> {
+    return await TAURI_INVOKE("set_rpc_port", { port });
+},
+async getLogLevel() : Promise<string> {
+    return await TAURI_INVOKE("get_log_level");
+},
+async setLogLevel(level: string) : Promise<null> {
+    return await TAURI_INVOKE("set_log_level", { level });
 },
 async switchWallet() : Promise<null> {
     return await TAURI_INVOKE("switch_wallet");
@@ -591,7 +609,7 @@ auto_submit?: boolean }
  */
 export type AddPeer = { 
 /**
- * IP address or hostname with port
+ * IP address of the peer, which is connected to on the network's default port
  */
 ip: string }
 /**
@@ -1157,7 +1175,12 @@ fingerprint: number;
 /**
  * Network name
  */
-network: string }
+network: string; 
+/**
+ * Whether to also delete the database shared by the wallets on the wallet's network, which
+ * holds the address book and handle mappings
+ */
+shared?: boolean }
 /**
  * Response for database deletion
  */
@@ -1225,7 +1248,12 @@ handle_error_code?: HandleErrorCode | null;
  * The recipients which couldn't be used, if that's why the request failed.
  */
 recipients?: RecipientError[] | null }
-export type ErrorKind = "wallet" | "api" | "not_found" | "unauthorized" | "internal" | "database_migration" | "nfc" | 
+export type ErrorKind = "wallet" | "api" | "not_found" | "unauthorized" | "internal" | "database_migration" | 
+/**
+ * The database shared by the wallets on a network, which holds the address book and handle
+ * mappings, couldn't be migrated. Deleting the wallet's own database doesn't fix this.
+ */
+"shared_database_migration" | "nfc" | 
 /**
  * One or more recipients couldn't be used. See the attached recipient errors.
  */
@@ -2040,7 +2068,8 @@ fingerprint: number }
  */
 export type GetSecretKeyResponse = { 
 /**
- * Secret key information if authorized
+ * Secret key information, or null if the key isn't in the keychain or only its public key is
+ * stored
  */
 secrets: SecretKeyInfo | null }
 /**
@@ -2206,7 +2235,7 @@ theme: string | null }
 export type GetUserThemes = Record<string, never>
 export type GetUserThemesResponse = { 
 /**
- * List of theme NFT IDs
+ * The JSON of each saved theme
  */
 themes: string[] }
 /**
@@ -2566,15 +2595,15 @@ name: string;
  */
 key: string; 
 /**
- * Starting derivation index
+ * Number of addresses of each enabled kind to derive up front
  */
 derivation_index?: number; 
 /**
- * Optional hardened derivation count
+ * Whether to derive hardened addresses (defaults to true). Needs a secret key
  */
 hardened?: boolean | null; 
 /**
- * Optional unhardened derivation count
+ * Whether to derive unhardened addresses (defaults to true)
  */
 unhardened?: boolean | null; 
 /**
@@ -2940,7 +2969,14 @@ xchandles?: XchandlesConfig | null;
  * quiet for a long time.
  */
 drop_silent_peers: boolean }
-export type NetworkConfig = { default_network: string; target_peers: number; discover_peers: boolean }
+export type NetworkConfig = { default_network: string; target_peers: number; discover_peers: boolean; 
+/**
+ * Whether to look up the mempool transactions that full nodes announce for the wallet
+ * with the network's Coinset API, so that incoming and pending transactions show up
+ * before they're confirmed, including after a resync. This tells Coinset which mempool
+ * transactions involve the wallet.
+ */
+mempool_discovery: boolean }
 export type NetworkKind = "mainnet" | "testnet" | "unknown"
 export type NetworkList = { networks: Network[] }
 export type NewNftUri = { 
@@ -3314,7 +3350,7 @@ export type RedownloadNftResponse = Record<string, never>
  */
 export type RemovePeer = { 
 /**
- * IP address or hostname of the peer
+ * IP address of the peer
  */
 ip: string; 
 /**
@@ -3643,6 +3679,14 @@ export type SetDiscoverPeers = {
  */
 discover_peers: boolean }
 /**
+ * Enable or disable looking up announced mempool transactions with Coinset
+ */
+export type SetMempoolDiscovery = { 
+/**
+ * Whether to look up mempool transactions with Coinset
+ */
+mempool_discovery: boolean }
+/**
  * Set the active network
  */
 export type SetNetwork = { 
@@ -3678,6 +3722,14 @@ export type SetTargetPeers = {
  * Target number of peer connections
  */
 target_peers: number }
+/**
+ * Set how long every wallet's transactions can be confirmed for after they're created
+ */
+export type SetTransactionExpiration = { 
+/**
+ * Seconds a transaction can be confirmed for, at least 300, or 0 for no limit
+ */
+seconds: number }
 /**
  * Set wallet emoji
  */
@@ -3911,7 +3963,20 @@ summary: TransactionSummary;
  * Coin spends in the transaction
  */
 coin_spends: CoinSpendJson[] }
-export type TransactionSummary = { fee: Amount; inputs: TransactionInput[]; 
+export type TransactionSummary = { 
+/**
+ * The fee the transaction actually pays: the value of the coins it spends minus the
+ * value of the coins it creates. If that's less than the declared fee, so the
+ * transaction isn't complete on its own, this is the declared fee instead. It's only the fee paid
+ * if the transaction is submitted as is: when only signatures are returned, spends that
+ * don't need them could be left out.
+ */
+fee: Amount; 
+/**
+ * The sum of the transaction's `RESERVE_FEE` conditions. When this differs from `fee`,
+ * some of the fee isn't declared.
+ */
+declared_fee?: Amount; inputs: TransactionInput[]; 
 /**
  * The handle recipients of the transaction, and the verified addresses they were
  * resolved to
@@ -4171,7 +4236,12 @@ export type Wallet =
  * The p2 puzzle hashes being watched. The first one is the wallet's receive address.
  */
 { type: "watch"; p2_puzzle_hashes: string[] }) & { name: string; fingerprint: number; network?: string | null; delta_sync: boolean | null; emoji?: string | null; change_address?: string | null }
-export type WalletDefaults = { delta_sync: boolean }
+export type WalletDefaults = { delta_sync: boolean; 
+/**
+ * How many seconds after a transaction is created that it can no longer be confirmed, or 0
+ * for no limit. This doesn't apply to offers, which have their own expiration.
+ */
+transaction_expiration: number }
 export type WalletInfo = { name: string; fingerprint: number; kind: WalletKind; network_id: string; emoji: string | null }
 /**
  * The kind of wallet, which determines how its addresses are found and whether it can sign

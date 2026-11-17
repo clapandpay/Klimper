@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 # Code copied from chia-wallet-sdk (Apache-2.0, xch-dev/chia-wallet-sdk), see README.md.
 license = "Apache-2.0"
-description = "chia-wallet-sdk's unreleased partial offer and auction drivers, on chia-wallet-sdk 0.37.1."
+description = "chia-wallet-sdk's unreleased partial offer and auction drivers, on chia-wallet-sdk 0.38.0."
 publish = false
 
 [lints]
@@ -18,20 +18,20 @@ offer-compression = []
 [dependencies]
 # `action-layer` brings the CAT makers the partial offer puzzle is curried with.
 chia-wallet-sdk = { workspace = true, features = ["action-layer"] }
-chia-protocol = "0.52.1"
-chia-bls = "0.52.1"
-chia-puzzle-types = "0.52.1"
+chia-protocol = "0.53.0"
+chia-bls = "0.53.0"
+chia-puzzle-types = "0.53.0"
 chia-puzzles = "0.20"
-clvm-traits = "0.52.1"
-clvm-utils = "0.52.1"
+clvm-traits = "0.53.0"
+clvm-utils = "0.53.0"
 clvmr = "0.21.0"
 hex-literal = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-chia-consensus = "0.52.1"
-chia-sdk-test = "0.37.1"
+chia-consensus = "0.53.0"
+chia-sdk-test = "0.38.0"
 indexmap = { workspace = true }
 rand = "0.10.3"
 rand_chacha = "0.10.0"

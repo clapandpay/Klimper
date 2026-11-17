@@ -1,7 +1,6 @@
-// Modified by Klimper (2026): see docs/UPSTREAM.md
 import { Amount, AssetKind } from '@/bindings';
 import { fromMojos } from '@/lib/utils';
-import { useMaskAmounts } from '@/klimper/privacy';
+import { Trans } from '@lingui/react/macro';
 import BigNumber from 'bignumber.js';
 import { NumberFormat } from './NumberFormat';
 
@@ -13,7 +12,6 @@ interface AmountCellProps {
 
 export function AmountCell({ amount, assetKind, precision }: AmountCellProps) {
   const amountNum = BigNumber(amount);
-  const masked = useMaskAmounts();
 
   return (
     <div className='whitespace-nowrap'>
@@ -25,19 +23,16 @@ export function AmountCell({ amount, assetKind, precision }: AmountCellProps) {
               ? 'text-green-600'
               : 'text-red-600'
         }
-        aria-label={
-          masked ? undefined : `${fromMojos(amount, precision)} ${assetKind}`
-        }
       >
         {assetKind === 'nft' ||
         assetKind === 'did' ||
         assetKind === 'option' ? (
           amountNum.eq(0) ? (
-            'Edited'
+            <Trans>Edited</Trans>
           ) : amountNum.gt(0) ? (
-            'Received'
+            <Trans>Received</Trans>
           ) : (
-            'Sent'
+            <Trans>Sent</Trans>
           )
         ) : (
           <NumberFormat

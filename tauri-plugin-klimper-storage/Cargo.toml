@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 tauri = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+# Only the iPhone code logs (keeping the wallet folder out of backups).
+[target.'cfg(target_os = "ios")'.dependencies]
 tracing = { workspace = true }
 
 [build-dependencies]

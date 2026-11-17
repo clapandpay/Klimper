@@ -12,7 +12,7 @@ use tauri::Manager;
 #[cfg(all(not(mobile), not(debug_assertions)))]
 use tauri::path::BaseDirectory;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 mod app_state;
 mod commands;
@@ -134,6 +134,7 @@ macro_rules! sage_commands {
             commands::cancel_offers,
             commands::network_config,
             commands::set_discover_peers,
+            commands::set_mempool_discovery,
             commands::set_target_peers,
             commands::set_network,
             commands::set_network_override,
@@ -144,6 +145,7 @@ macro_rules! sage_commands {
             commands::set_delta_sync,
             commands::set_delta_sync_override,
             commands::set_change_address,
+            commands::set_transaction_expiration,
             commands::update_cat,
             commands::resync_cat,
             commands::update_did,
@@ -171,6 +173,10 @@ macro_rules! sage_commands {
             commands::stop_rpc_server,
             commands::get_rpc_run_on_startup,
             commands::set_rpc_run_on_startup,
+            commands::get_rpc_port,
+            commands::set_rpc_port,
+            commands::get_log_level,
+            commands::set_log_level,
             commands::switch_wallet,
             commands::move_key,
             commands::download_cni_offercode,
@@ -362,7 +368,7 @@ pub fn run() {
             )?;
 
             let path = root_override.unwrap_or(default_root);
-            let app_state = AppState::new(Mutex::new(Sage::new(&path, false)));
+            let app_state = AppState::new(RwLock::new(Sage::new(&path, false)));
 
             app.manage(Initialized(Mutex::new(None)));
             app.manage(RpcTask(Mutex::new(None)));

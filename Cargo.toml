@@ -44,6 +44,7 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 cast_lossless = "allow"
 result_large_err = "allow"
+assert_is_empty = "allow"
 
 [workspace.dependencies]
 sage = { path = "./crates/sage" }
@@ -97,10 +98,10 @@ tauri-specta = "2.0.0-rc.21"
 utoipa = "5.2.0"
 
 # Chia
-chia-wallet-sdk = { version = "0.37.1", features = ["rustls", "offer-compression", "peer-simulator", "action-layer"] }
-chia_streamable_macro = "0.52.1"
-chia-traits = "0.52.1"
-chia-sha2 = "0.52.1"
+chia-wallet-sdk = { version = "0.38.0", features = ["rustls", "offer-compression", "peer-simulator", "action-layer"] }
+chia_streamable_macro = "0.53.0"
+chia-traits = "0.53.0"
+chia-sha2 = "0.53.0"
 bip39 = "2.0.0"
 bech32 = "0.9.1"
 rand = "0.8.5"
@@ -158,11 +159,18 @@ clap = "4.5.21"
 tempfile = "3.25.0"
 tower = "0.5.3"
 
+[profile.dev]
+# Line tables are enough for backtraces and panic locations, and full debuginfo makes the
+# target directory roughly 40% larger. Set `CARGO_PROFILE_DEV_DEBUG=true` to get full
+# debuginfo back when you need to inspect variables in a debugger.
+debug = "line-tables-only"
+
 [patch.crates-io]
-# Ours: xchonnect-wallet-kit 0.1.0 on crates.io is built on chia 0.36; this commit moves it to
-# chia 0.52 / chia-wallet-sdk 0.37, Sage's line (docs/UPSTREAM.md). Drop once a release has it.
-xchonnect-wallet-kit = { git = "https://github.com/xchonnect/xchonnect.git", rev = "4b1d1ad38d260e55bbbe63f721945c929a0b3c1b" }
-xchonnect-core = { git = "https://github.com/xchonnect/xchonnect.git", rev = "4b1d1ad38d260e55bbbe63f721945c929a0b3c1b" }
+# Ours: xchonnect-wallet-kit 0.1.0 on crates.io is built on chia 0.36; this commit (branch
+# chore/wallet-kit-chia-0-53) moves it to chia 0.53 / chia-wallet-sdk 0.38, Sage's line
+# (docs/UPSTREAM.md). Drop once a release has it.
+xchonnect-wallet-kit = { git = "https://github.com/xchonnect/xchonnect.git", rev = "1e0c421e812033ba8035e71bc93180c43dc21586" }
+xchonnect-core = { git = "https://github.com/xchonnect/xchonnect.git", rev = "1e0c421e812033ba8035e71bc93180c43dc21586" }
 tauri-runtime = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb844bd56b4ee027905d1b068553d867ebe" }
 tauri-runtime-wry = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb844bd56b4ee027905d1b068553d867ebe" }
 tauri-utils = { git = "https://github.com/Rigidity/tauri.git", rev = "8b205bb844bd56b4ee027905d1b068553d867ebe" }
@@ -170,9 +178,7 @@ wry = { git = "https://github.com/Rigidity/wry.git", rev = "997ce01862c23b0220b9
 # Ours: Xcode 27 iOS link, see vendor/swift-rs and docs/UPSTREAM.md.
 swift-rs = { path = "vendor/swift-rs" }
 
-# Keep dev builds small: line tables for our code, no debug info for dependencies.
-[profile.dev]
-debug = "line-tables-only"
-
+# Ours: no debug info for dependencies keeps dev builds small (Sage's [profile.dev] above has
+# line tables for our code).
 [profile.dev.package."*"]
 debug = false

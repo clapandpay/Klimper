@@ -305,30 +305,25 @@ impl ApprovalBridge {
     pub fn outstanding(&self) -> Vec<Approval> {
         self.registry
             .lock()
-            .map(|r| r.waiting.values().map(|x| x.approval.clone()).collect())
-            .unwrap_or_default()
+            .map_or_default(|r| r.waiting.values().map(|x| x.approval.clone()).collect())
     }
 
     /// Withdraw one request (`rpc.cancel`, or the user cancelling it): a prompt on screen
     /// is answered "no", and a prompt not yet shown never will be. Returns whether a prompt
     /// was waiting.
     pub fn withdraw_request(&self, session_id: &str, request_id: &str, by: Withdrawn) -> bool {
-        let senders: Vec<mpsc::Sender<Answer>> = self
-            .registry
-            .lock()
-            .map(|mut r| {
-                r.withdrawn
-                    .entry((session_id.to_owned(), request_id.to_owned()))
-                    .or_insert(by);
-                r.waiting
-                    .values()
-                    .filter(|x| {
-                        x.approval.session_id == session_id && x.approval.request_id == request_id
-                    })
-                    .map(|x| x.answer.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let senders: Vec<mpsc::Sender<Answer>> = self.registry.lock().map_or_default(|mut r| {
+            r.withdrawn
+                .entry((session_id.to_owned(), request_id.to_owned()))
+                .or_insert(by);
+            r.waiting
+                .values()
+                .filter(|x| {
+                    x.approval.session_id == session_id && x.approval.request_id == request_id
+                })
+                .map(|x| x.answer.clone())
+                .collect()
+        });
         let waiting = !senders.is_empty();
         for sender in senders {
             let _ = sender.send(Answer::Rejected);
@@ -374,26 +369,22 @@ impl ApprovalBridge {
     /// The user changed this website's settings: whatever it is waiting on was checked
     /// against the old ones, so it is withdrawn (the website is told, and may ask again).
     pub fn withdraw_waiting(&self, session_id: &str) {
-        let senders: Vec<mpsc::Sender<Answer>> = self
-            .registry
-            .lock()
-            .map(|mut r| {
-                let keys: Vec<(String, String)> = r
-                    .waiting
-                    .values()
-                    .filter(|x| x.approval.session_id == session_id)
-                    .map(|x| (x.approval.session_id.clone(), x.approval.request_id.clone()))
-                    .collect();
-                for key in keys {
-                    r.withdrawn.entry(key).or_insert(Withdrawn::ByUser);
-                }
-                r.waiting
-                    .values()
-                    .filter(|x| x.approval.session_id == session_id)
-                    .map(|x| x.answer.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let senders: Vec<mpsc::Sender<Answer>> = self.registry.lock().map_or_default(|mut r| {
+            let keys: Vec<(String, String)> = r
+                .waiting
+                .values()
+                .filter(|x| x.approval.session_id == session_id)
+                .map(|x| (x.approval.session_id.clone(), x.approval.request_id.clone()))
+                .collect();
+            for key in keys {
+                r.withdrawn.entry(key).or_insert(Withdrawn::ByUser);
+            }
+            r.waiting
+                .values()
+                .filter(|x| x.approval.session_id == session_id)
+                .map(|x| x.answer.clone())
+                .collect()
+        });
         for sender in senders {
             let _ = sender.send(Answer::Rejected);
         }
@@ -403,18 +394,14 @@ impl ApprovalBridge {
     /// ask, so a request that was mid-simulation when the user disconnected cannot open a
     /// prompt for a connection that no longer exists.
     pub fn withdraw_session(&self, session_id: &str) {
-        let senders: Vec<mpsc::Sender<Answer>> = self
-            .registry
-            .lock()
-            .map(|mut r| {
-                r.closed.insert(session_id.to_owned());
-                r.waiting
-                    .values()
-                    .filter(|x| x.approval.session_id == session_id)
-                    .map(|x| x.answer.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let senders: Vec<mpsc::Sender<Answer>> = self.registry.lock().map_or_default(|mut r| {
+            r.closed.insert(session_id.to_owned());
+            r.waiting
+                .values()
+                .filter(|x| x.approval.session_id == session_id)
+                .map(|x| x.answer.clone())
+                .collect()
+        });
         for sender in senders {
             let _ = sender.send(Answer::Rejected);
         }

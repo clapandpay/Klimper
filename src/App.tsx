@@ -25,6 +25,7 @@ import {
 import { PeerProvider } from './contexts/PeerContext';
 import { PriceProvider } from './contexts/PriceContext';
 import { SafeAreaProvider } from './contexts/SafeAreaContext';
+import { UpdateProvider } from './contexts/UpdateContext';
 import { WalletConnectProvider } from './contexts/WalletConnectContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { StartupError } from './components/StartupError';
@@ -155,6 +156,7 @@ const router = klimperRouter(createHashRouter)(
         />
       </Route>
       <Route path='/settings' element={<Settings />} />
+      <Route path='/settings/:section' element={<Settings />} />
       <Route path='/scan' element={<QRScanner />} />
       <Route path='/peers' element={<PeerList />} />
       <Route path='/themes' element={<Themes />} />
@@ -224,7 +226,9 @@ function AppInner() {
             <AppsProvider>
               <WalletConnectProvider>
                 <PriceProvider>
-                  <RouterProvider router={router} />
+                  <UpdateProvider>
+                    <RouterProvider router={router} />
+                  </UpdateProvider>
                 </PriceProvider>
               </WalletConnectProvider>
             </AppsProvider>

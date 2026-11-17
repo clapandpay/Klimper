@@ -46,3 +46,7 @@ export const auctionsEnabled =
 // Sage's own: XCHandles ("@anna") in every recipient field, verified by the backend.
 export const xchandlesEnabled =
   import.meta.env.VITE_DISABLE_XCHANDLES !== 'true';
+// Opt-in: Sage's desktop update check. It asks GitHub for Sage's latest release and offers to
+// download it, which is the wrong app for Klimper, so it stays off unless set to true.
+export const updateChecksEnabled =
+  import.meta.env.VITE_ENABLE_UPDATE_CHECKS === 'true';

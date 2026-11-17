@@ -804,13 +804,16 @@ impl Sage {
 
         let nft_id = parse_nft_id(req.nft_id)?;
 
-        let Some(nft) = wallet.db.nft(nft_id).await? else {
-            return Ok(GetNftThumbnailResponse { thumbnail: None });
-        };
+        // Any NFT the wallet knows, not only ones it holds: an NFT looked up for an offer is
+        // saved too, and its data is downloaded and thumbnailed like any other.
+        let data_hash = wallet
+            .db
+            .offer_nft_info(nft_id)
+            .await?
+            .and_then(|info| info.parsed_metadata())
+            .and_then(|metadata| metadata.data_hash);
 
-        let metadata = nft.info.parsed_metadata();
-
-        let Some(data_hash) = metadata.as_ref().and_then(|m| m.data_hash) else {
+        let Some(data_hash) = data_hash else {
             return Ok(GetNftThumbnailResponse { thumbnail: None });
         };
 
@@ -873,20 +876,13 @@ impl Sage {
             )
             .encode()?,
             royalty_ten_thousandths: row.nft_info.royalty_basis_points,
-            data_uris: metadata
-                .as_ref()
-                .map(|m| m.data_uris.clone())
-                .unwrap_or_default(),
+            data_uris: metadata.as_ref().map_or_default(|m| m.data_uris.clone()),
             data_hash: data_hash.map(hex::encode),
             metadata_uris: metadata
                 .as_ref()
-                .map(|m| m.metadata_uris.clone())
-                .unwrap_or_default(),
+                .map_or_default(|m| m.metadata_uris.clone()),
             metadata_hash: metadata_hash.map(hex::encode),
-            license_uris: metadata
-                .as_ref()
-                .map(|m| m.license_uris.clone())
-                .unwrap_or_default(),
+            license_uris: metadata.as_ref().map_or_default(|m| m.license_uris.clone()),
             license_hash: license_hash.map(hex::encode),
             edition_number: metadata
                 .as_ref()

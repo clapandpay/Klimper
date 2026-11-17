@@ -328,7 +328,8 @@ impl ChainData for KlimperChain {
                 .await
                 .map_err(unavailable)?
             {
-                Status::Pending => {
+                // As Sage answers it: the node's ack, 1 (in the mempool) or 2 (held by the node).
+                Status::Pending(status) => {
                     // Recording it locks again, and only for the wallet it was sent from: if
                     // the user switched wallet or network meanwhile, the new wallet's database
                     // and subscriptions must not get the old one's coins.
@@ -339,7 +340,7 @@ impl ChainData for KlimperChain {
                     });
                     if !same {
                         return Ok(TxStatus {
-                            status: 1,
+                            status,
                             error: None,
                         });
                     }
@@ -367,7 +368,7 @@ impl ChainData for KlimperChain {
                         .map_err(unavailable)?;
                     drop(sage);
                     Ok(TxStatus {
-                        status: 1,
+                        status,
                         error: None,
                     })
                 }

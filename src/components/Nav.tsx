@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useUpdates } from '@/contexts/UpdateContext';
 import { usePeers } from '@/hooks/usePeers';
 import {
   nftsEnabled,
@@ -13,10 +14,11 @@ import {
 } from '@/lib/features';
 import { logoutAndUpdateState, useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
-import { Trans } from '@lingui/react/macro';
+import { Plural, Trans } from '@lingui/react/macro';
 import { platform } from '@tauri-apps/plugin-os';
 import {
   ArrowDownUp,
+  CircleArrowUp,
   Blocks,
   BookUser,
   Cog,
@@ -132,6 +134,8 @@ export function TopNav({ isCollapsed }: NavProps) {
 
 export function BottomNav({ isCollapsed }: NavProps) {
   const navigate = useNavigate();
+  const { update, openRelease } = useUpdates();
+  const updateVersion = update?.version ?? '';
 
   const { peers } = usePeers();
   const peerCount = peers?.length || 0;
@@ -174,7 +178,11 @@ export function BottomNav({ isCollapsed }: NavProps) {
           isSynced ? (
             <>
               {peerMaxHeight ? (
-                <Trans>{peerCount} peers synced</Trans>
+                <Plural
+                  value={peerCount}
+                  one='# peer synced'
+                  other='# peers synced'
+                />
               ) : (
                 <Trans>Connecting...</Trans>
               )}
@@ -218,6 +226,25 @@ export function BottomNav({ isCollapsed }: NavProps) {
           />
         )}
       </NavLink>
+
+      {update && (
+        <NavLink
+          url={openRelease}
+          isCollapsed={isCollapsed}
+          message={t`Update Available`}
+          customTooltip={
+            <Trans>
+              Sage {updateVersion} is available. Open its release page to
+              download it.
+            </Trans>
+          }
+        >
+          <CircleArrowUp
+            className={`${className} text-primary`}
+            aria-hidden='true'
+          />
+        </NavLink>
+      )}
 
       <NavLink
         url={'/settings'}
