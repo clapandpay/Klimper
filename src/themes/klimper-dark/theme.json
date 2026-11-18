@@ -56,33 +56,33 @@
     "border": "none"
   },
   "tables": {
-    "background": "#1A1C22",
-    "border": "1px solid #2C2F37",
+    "background": "#161C15",
+    "border": "1px solid #2A3127",
     "header": {
       "background": "transparent",
-      "color": "#A8ACB5",
-      "border": "1px solid #2C2F37"
+      "color": "#A9A397",
+      "border": "1px solid #2A3127"
     },
     "row": {
       "background": "transparent",
-      "color": "#FFF4E6",
-      "border": "1px solid #2C2F37",
+      "color": "#EFEAE1",
+      "border": "1px solid #2A3127",
       "hover": {
-        "background": "#2A2420"
+        "background": "#1D241C"
       },
       "selected": {
-        "background": "#2A2420",
-        "color": "#FFF4E6"
+        "background": "#1E2740",
+        "color": "#EFEAE1"
       }
     }
   },
   "switches": {
     "checked": {
-      "background": "#FF5A1F",
+      "background": "#3B5BA9",
       "thumbColor": "#FFFFFF"
     },
     "unchecked": {
-      "background": "#2C2F37",
+      "background": "#2A3127",
       "thumbColor": "#FFFFFF"
     }
   }

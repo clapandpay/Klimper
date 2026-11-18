@@ -30,7 +30,7 @@ const params = new URLSearchParams(location.search);
 
 // Prices as nodexch would answer, so the dollar figures show (`?usd=0` leaves them out).
 if (params.get('usd') !== '0') {
-  await fetchPrices(false, {
+  await fetchPrices(false, 'USD', {
     fetch: () =>
       Promise.resolve(
         new Response(

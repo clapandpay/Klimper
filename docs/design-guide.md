@@ -28,24 +28,26 @@ the recoloured vector (beidwerk-studio `brand/logos/svg/klimper-beidwerk.svg`).
 
 ## 1. Colour
 
-| Role        | Light     | Dark      | Use                                                        |
-| ----------- | --------- | --------- | ---------------------------------------------------------- |
-| Canvas      | `#F4F0E8` | `#0E130C` | page background: Beidwerk paper, the Beidwerk stage        |
-| Surface     | `#FFFDF8` | `#161C15` | cards, dialogs, inputs                                     |
-| Ink         | `#1C1B19` | `#EFEAE1` | text; the sidebar is ink in both themes                    |
-| Muted       | `#5E5A52` | `#A9A397` | secondary text                                             |
-| Hairline    | `#E3DACB` | `#2A3127` | borders                                                    |
-| Coin blue   | `#3B5BA9` | same      | the primary action, coins, the total balance; white text   |
-| Coin yellow | `#E9B23A` | same      | the second action (Receive), rims and highlights; ink text |
-| Coin red    | `#E75839` | same      | small marks only (dots, badges)                            |
-| Primary     | `#3B5BA9` | `#7D9BE8` | text links and `text-primary`, readable on the canvas      |
-| Ring        | `#3B5BA9` | `#7D9BE8` | focus                                                      |
-| Destructive | `#B42318` | `#F04438` | functional only, never branding                            |
+| Role        | Light     | Dark      | Use                                                           |
+| ----------- | --------- | --------- | ------------------------------------------------------------- |
+| Canvas      | `#F4F0E8` | `#0E130C` | page background: Beidwerk paper, the Beidwerk stage           |
+| Surface     | `#FFFDF8` | `#161C15` | cards, dialogs, inputs                                        |
+| Ink         | `#1C1B19` | `#EFEAE1` | text; the sidebar is ink in both themes                       |
+| Muted       | `#5E5A52` | `#A9A397` | secondary text                                                |
+| Hairline    | `#E3DACB` | `#2A3127` | borders                                                       |
+| Coin blue   | `#3B5BA9` | same      | the primary action, coins, the total balance; white text      |
+| Coin yellow | `#E9B23A` | same      | the second action (Receive), rims and highlights; ink text    |
+| Coin red    | `#E75839` | same      | small marks only (dots, badges)                               |
+| Primary     | `#3B5BA9` | `#7D9BE8` | text links and `text-primary`, readable on the canvas         |
+| Ring        | `#3B5BA9` | `#7D9BE8` | focus                                                         |
+| Destructive | `#B42318` | `#F04438` | functional only, never branding                               |
+| Row hover   | `#F4F0E8` | `#1D241C` | table rows under the pointer: the canvas, one step up in dark |
+| Row picked  | `#E7ECF7` | `#1E2740` | selected table rows: a faint coin blue                        |
 
 Rules:
 
 - **Blue is the one loud thing.** Use it for the primary action, coins and one anchor per screen
-  (on the assets screen, the total balance band). Never as a page or card background.
+  (on the assets screen, the home card). Never as a page or card background.
 - **Text on blue is white; text on yellow is ink.** Both hold contrast.
 - **Yellow is the counterweight:** the second action next to a blue button, rims, highlights.
 - **Red is a mark, not a surface:** dots and badges only, so it never reads as an error.
@@ -75,6 +77,12 @@ The coin is Klimper's shape.
 - **Inputs:** at least 44px high, paper, hairline border, blue focus ring.
 - **Tables:** mono uppercase column labels in muted grey, thin row rules.
 - **Money:** balances in the display face, heavy, tabular figures.
+- **Home card** (top of the assets screen, `WalletTotal.tsx`): the blue coin with the total, its
+  XCH value, and the three things people come to do: **Send** (white pill), **Receive** (yellow
+  pill) and **Scan** (outline pill), in one row on a phone. Without prices (testnet, lookups off)
+  the headline is the spendable XCH. Two flat coin rims in the corner, no gradient.
+- **Dialogs:** plain card surfaces. The backdrop never shows inside one.
+- **Switches:** blue when on.
 
 ## 4. Type
 
@@ -115,14 +123,16 @@ default. Sage's other themes remain selectable and are untouched by `klimper.css
 | Logo                                                                             | `src/icon-{dark,light}.png` in the app; every app icon from `scripts/update-logo.sh` |
 
 `klimper.css` finds Sage's elements by structure and by Sage's own class hooks (`btn-variant-*`,
-`bg-card`, `shadow-card`), never by translated text. Three rules depend on a particular upstream
+`bg-card`, `shadow-card`), never by translated text. These rules depend on a particular upstream
 layout and are the first to check after an upstream merge: the sidebar
-(`[style*='--sidebar-background']`), the total balance band (`.mt-6.pt-4.border-t` on the assets
-screen) and Send/Receive (the first two outline buttons in the token card's action row).
+(`[style*='--sidebar-background']`), Send/Receive (the first two outline buttons in the token
+card's action row), the Settings list (`nav.flex-col.gap-6`), dialogs painted by theme-o-rama
+(`[role='dialog'][style*='background-image']`) and Issue Token after the home card. Check them in
+`pnpm sandbox` (docs/sandbox.md), which shows every screen in a browser.
 
 Not done yet (TASK-004, TASK-008): a bundled display typeface (the rounded face is the system's
-where it has one); the onboarding illustration; a Klimper home screen of our own, which needs a
-screen rather than more CSS.
+where it has one); the onboarding illustration. The home card (2026-11-17) is the start of a
+Klimper home screen: the token list under it is still Sage's.
 
 ### Changing the logo
 

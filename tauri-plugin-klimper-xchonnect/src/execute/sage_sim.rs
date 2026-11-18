@@ -264,6 +264,8 @@ fn options() -> SyncOptions {
     SyncOptions {
         target_peers: 0,
         discover_peers: false,
+        // The flows here don't wait on pending transactions found in the mempool.
+        mempool_discovery: false,
         dns_batch_size: 0,
         connection_batch_size: 0,
         max_peer_age_seconds: 0,

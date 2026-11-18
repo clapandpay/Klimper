@@ -26,11 +26,12 @@ import { usePageValue } from '@/klimper/pageValue';
 import { MyHandles } from '@/klimper/MyHandles';
 import { TestnetFaucet } from '@/klimper/TestnetFaucet';
 import { WalletTotal } from '@/klimper/WalletTotal';
+import { fiatToUsd } from '@/klimper/price';
 
 export function TokenList() {
   const navigate = useNavigate();
   const walletState = useWalletState();
-  const { getBalanceInUsd, getPriceInUsd } = usePrices();
+  const { getBalanceInFiat, getPriceInFiat, fiatCurrency } = usePrices();
   const { addError } = useErrors();
   const [params, setParams] = useTokenParams();
   const { viewMode, sortMode, showZeroBalanceTokens, showHiddenCats } = params;
@@ -40,18 +41,18 @@ export function TokenList() {
     () =>
       tokens.map((token): PricedTokenRecord & { sortValue: number } => {
         const balance = Number(toDecimal(token.balance, token.precision));
-        const usdValue = parseFloat(
-          getBalanceInUsd(token.asset_id, balance.toString()),
+        const fiatValue = parseFloat(
+          getBalanceInFiat(token.asset_id, balance.toString()),
         );
 
         return {
           ...token,
-          balanceInUsd: usdValue,
-          sortValue: usdValue,
-          priceInUsd: getPriceInUsd(token.asset_id),
+          balanceInFiat: fiatValue,
+          sortValue: fiatValue,
+          priceInFiat: getPriceInFiat(token.asset_id),
         };
       }),
-    [tokens, getBalanceInUsd, getPriceInUsd],
+    [tokens, getBalanceInFiat, getPriceInFiat],
   )
     .sort((a, b) => {
       if (!a.asset_id && b.asset_id) return -1;
@@ -61,8 +62,8 @@ export function TokenList() {
       if (!a.visible && b.visible) return 1;
 
       if (sortMode === TokenSortMode.Balance) {
-        if (a.balanceInUsd !== b.balanceInUsd) {
-          return b.balanceInUsd - a.balanceInUsd;
+        if (a.balanceInFiat !== b.balanceInFiat) {
+          return b.balanceInFiat - a.balanceInFiat;
         }
         return (
           Number(toDecimal(b.balance, 3)) - Number(toDecimal(a.balance, 3))
@@ -102,13 +103,13 @@ export function TokenList() {
       return true;
     });
 
-  const totalUsdBalance = useMemo(() => {
+  const totalFiatBalance = useMemo(() => {
     // Use the filtered pricedTokens array which already respects all filters including search
     return pricedTokens.reduce((total, token) => {
-      return total + (token.balanceInUsd || 0);
+      return total + (token.balanceInFiat || 0);
     }, 0);
   }, [pricedTokens]);
-  usePageValue(totalUsdBalance); // Klimper: the shake weighs what the page shows
+  usePageValue(fiatToUsd(totalFiatBalance)); // Klimper: the shake weighs what the page shows, in dollars
 
   const updateCats = useCallback(
     () =>
@@ -177,7 +178,7 @@ export function TokenList() {
         </div>
       </Header>
       <Container>
-        {pricedTokens.length > 0 && <WalletTotal usd={totalUsdBalance} />}
+        <WalletTotal value={totalFiatBalance} currency={fiatCurrency} />
         <MyHandles />
         <TestnetFaucet />
         {tokenIssuingEnabled && (
@@ -208,7 +209,7 @@ export function TokenList() {
             setParams({ search: value });
           }}
           className='mb-4'
-          onExport={() => exportTokens(pricedTokens)}
+          onExport={() => exportTokens(pricedTokens, fiatCurrency)}
         />
 
         {walletState.sync.synced_coins < walletState.sync.total_coins && (

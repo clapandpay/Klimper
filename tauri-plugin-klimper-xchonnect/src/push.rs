@@ -138,8 +138,7 @@ pub fn token_tag(kind: Kind, device_token: &str) -> String {
         Kind::Fcm => b"fcm",
     };
     hmac_sha256(b"klimper push token tag", &[kind, device_token.as_bytes()])
-        .map(|mac| hex::encode(&mac[..8]))
-        .unwrap_or_default()
+        .map_or_default(|mac| hex::encode(&mac[..8]))
 }
 
 /// The phone's push token and which service issued it.

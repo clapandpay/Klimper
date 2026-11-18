@@ -8,6 +8,7 @@ import { NftPageTitle } from '@/components/NftPageTitle';
 import { Pagination } from '@/components/Pagination';
 import { ReceiveAddress } from '@/components/ReceiveAddress';
 import { ReadOnlyButton } from '@/components/ReadOnlyButton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useErrors } from '@/hooks/useErrors';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
@@ -17,7 +18,7 @@ import { exportNfts } from '@/lib/exportNfts';
 import { nftMintingEnabled } from '@/lib/features';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { ImagePlusIcon } from 'lucide-react';
+import { ImageIcon, ImagePlusIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -47,6 +48,7 @@ export function NftList() {
     owner,
     collection,
     isLoading,
+    loaded,
     updateNfts,
     total,
   } = useNftData({
@@ -60,6 +62,15 @@ export function NftList() {
     minterDid,
     page: params.page,
   });
+
+  // Groups list their own cards, so only a flat list of NFTs can be empty.
+  const showEmpty =
+    loaded &&
+    nfts.length === 0 &&
+    (!!collectionId ||
+      !!ownerDid ||
+      !!minterDid ||
+      group === NftGroupMode.None);
 
   const optionsRef = useRef<HTMLDivElement>(null);
   const [isOptionsVisible, setIsOptionsVisible] = useState(true);
@@ -166,6 +177,29 @@ export function NftList() {
             }
           />
         </div>
+
+        {showEmpty && (
+          <Alert className='mt-4'>
+            <ImageIcon className='h-4 w-4' />
+            {query ? (
+              <AlertTitle>
+                <Trans>No NFTs match your search.</Trans>
+              </AlertTitle>
+            ) : (
+              <>
+                <AlertTitle>
+                  <Trans>Mint an NFT?</Trans>
+                </AlertTitle>
+                <AlertDescription>
+                  <Trans>
+                    You do not currently have any NFTs. Would you like to mint
+                    one?
+                  </Trans>
+                </AlertDescription>
+              </>
+            )}
+          </Alert>
+        )}
 
         <main aria-label={t`NFT Collection`}>
           <NftCardList

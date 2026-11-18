@@ -5,6 +5,9 @@
 // storage file. It shadows jsdom's, so every test that touches storage fails before it starts
 // ("Cannot read properties of undefined (reading 'clear')"). The test workers run without it.
 //
+// Sage's update check is off in Klimper builds (VITE_ENABLE_UPDATE_CHECKS) and on in tests, so
+// Sage's own tests of it still run.
+//
 // The app SDK's manifest test is a `node --test` file (its package's `pnpm test`), not Vitest's.
 import { configDefaults, defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config';
@@ -16,6 +19,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       execArgv: nodeMajor >= 25 ? ['--no-experimental-webstorage'] : [],
+      // Sage's update-check tests run Sage's check; Klimper builds turn it off.
+      env: { VITE_ENABLE_UPDATE_CHECKS: 'true' },
       exclude: [...configDefaults.exclude, 'packages/sage-app-sdk/test/**'],
     },
   }),

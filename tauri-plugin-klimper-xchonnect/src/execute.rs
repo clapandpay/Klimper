@@ -617,13 +617,12 @@ pub fn send(
     let memos: Vec<String> = params
         .get("memos")
         .and_then(Value::as_array)
-        .map(|items| {
+        .map_or_default(|items| {
             items
                 .iter()
                 .filter_map(|m| m.as_str().map(str::to_owned))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     let asset = match params.get("assetId").and_then(Value::as_str) {
         None | Some("" | "xch") => AssetId::Xch,
         Some(id) => AssetId::Cat(
@@ -1276,6 +1275,7 @@ mod tests {
         };
         TransactionSummary {
             fee: Amount::u64(fee),
+            declared_fee: Amount::u64(fee),
             inputs: vec![TransactionInput {
                 coin_id: format!("0x{}", COIN.repeat(32)),
                 amount: Amount::u64(input),

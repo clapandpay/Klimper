@@ -17,6 +17,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_PARTIAL_OFFERS?: string;
   readonly VITE_ENABLE_AUCTIONS?: string;
   readonly VITE_DISABLE_XCHANDLES?: string;
+  readonly VITE_ENABLE_UPDATE_CHECKS?: string;
 }
 
 interface ImportMeta {

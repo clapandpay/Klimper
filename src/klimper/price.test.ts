@@ -46,7 +46,7 @@ describe('prices on mainnet', () => {
 
   it('come from nodexch, and nothing else is asked', async () => {
     const { deps, calls } = answers({ 'nodexch.com': nodexch });
-    const prices = await fetchPrices(false, deps);
+    const prices = await fetchPrices(false, 'USD', deps);
     expect(prices.source).toBe('nodexch');
     expect(prices.xchUsd).toBe(10);
     expect(prices.cats[CAT]).toEqual({ lastPrice: 0.5, askPrice: 0.6 });
@@ -61,12 +61,12 @@ describe('prices on mainnet', () => {
       coingecko: coingecko,
       'dexie.space': dexie,
     });
-    const prices = await fetchPrices(false, deps);
+    const prices = await fetchPrices(false, 'USD', deps);
     expect(prices.source).toBe('fallback');
     expect(prices.xchUsd).toBe(12);
     expect(prices.cats[CAT]).toEqual({ lastPrice: 0.25, askPrice: 0.3 });
     expect(calls.some((u) => u.includes('api.dexie.space'))).toBe(true);
-    await fetchPrices(false, deps);
+    await fetchPrices(false, 'USD', deps);
     expect(console.warn).toHaveBeenCalledTimes(1);
   });
 
@@ -76,7 +76,7 @@ describe('prices on mainnet', () => {
       coingecko: coingecko,
       'dexie.space': dexie,
     });
-    expect((await fetchPrices(false, deps)).source).toBe('fallback');
+    expect((await fetchPrices(false, 'USD', deps)).source).toBe('fallback');
     expect(parseNodexch({ xch: { usd: -1 }, cats: {} })).toBeNull();
     expect(parseNodexch(null)).toBeNull();
     // Odd asset ids are skipped, not fatal.
@@ -87,15 +87,15 @@ describe('prices on mainnet', () => {
 
   it('keep the last prices when everything fails', async () => {
     const good = answers({ 'nodexch.com': nodexch });
-    await fetchPrices(false, good.deps);
+    await fetchPrices(false, 'USD', good.deps);
     const bad = answers({});
-    const prices = await fetchPrices(false, bad.deps);
+    const prices = await fetchPrices(false, 'USD', bad.deps);
     expect(prices.xchUsd).toBe(10);
     expect(prices.source).toBe('nodexch');
   });
 
   it('are zeros when nothing was ever known', async () => {
-    const prices = await fetchPrices(false, answers({}).deps);
+    const prices = await fetchPrices(false, 'USD', answers({}).deps);
     expect(prices.xchUsd).toBe(0);
     expect(prices.cats).toEqual({});
   });
@@ -106,11 +106,58 @@ describe('prices on testnet', () => {
 
   it('are zero dollars, with dexie-testnet tickers for the ask prices', async () => {
     const { deps, calls } = answers({ 'api-testnet.dexie.space': dexie });
-    const prices = await fetchPrices(true, deps);
+    const prices = await fetchPrices(true, 'USD', deps);
     expect(prices.source).toBe('testnet');
     expect(prices.xchUsd).toBe(0);
     expect(prices.cats[CAT]?.askPrice).toBe(0.3);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain('api-testnet.dexie.space');
+  });
+});
+
+describe('prices in the display currency', () => {
+  beforeEach(() => {
+    resetPrices();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  it('take a currency nodexch quotes from nodexch alone', async () => {
+    const { deps, calls } = answers({ 'nodexch.com': nodexch });
+    const prices = await fetchPrices(false, 'EUR', deps);
+    expect(prices).toMatchObject({ xchUsd: 10, xchFiat: 9, currency: 'EUR' });
+    expect(calls).toEqual([NODEXCH_PRICES_URL]);
+  });
+
+  it('ask CoinGecko for XCH in a currency nodexch lacks', async () => {
+    const { deps, calls } = answers({
+      'nodexch.com': nodexch,
+      coingecko: { chia: { jpy: 1500 } },
+    });
+    const prices = await fetchPrices(false, 'JPY', deps);
+    expect(prices).toMatchObject({
+      xchUsd: 10,
+      xchFiat: 1500,
+      currency: 'JPY',
+    });
+    expect(calls[1]).toContain('vs_currencies=jpy');
+  });
+
+  it('fall back to CoinGecko for both dollars and the currency', async () => {
+    const { deps } = answers({
+      coingecko: { chia: { usd: 12, gbp: 9.5 } },
+      dexie,
+    });
+    const prices = await fetchPrices(false, 'GBP', deps);
+    expect(prices).toMatchObject({
+      xchUsd: 12,
+      xchFiat: 9.5,
+      source: 'fallback',
+    });
+  });
+
+  it('never show the last prices of another currency', async () => {
+    await fetchPrices(false, 'USD', answers({ 'nodexch.com': nodexch }).deps);
+    const prices = await fetchPrices(false, 'EUR', answers({}).deps);
+    expect(prices).toMatchObject({ xchFiat: 0, currency: 'EUR', xchUsd: 10 });
   });
 });
