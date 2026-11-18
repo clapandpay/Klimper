@@ -74,6 +74,7 @@ export const DEFAULT_METHODS = [
   'chia_takeOffer',
   'chia_createOffer',
   'chia_createPartialOffer',
+  'chia_takeRoute',
 ] as const;
 
 /** Methods that cannot be taken away: without them a session cannot even say hello. */

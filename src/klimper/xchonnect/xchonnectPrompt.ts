@@ -276,6 +276,24 @@ export interface PartialTermsView {
   readonly feePerFill: TradeLegView | null;
 }
 
+/**
+ * A route (`chia_takeRoute`, TASK-168): whole offers and fills of partial offers taken in one
+ * transaction. Computed by Klimper from its own build, never from the website.
+ */
+export interface RouteView {
+  /** Whole offers taken. */
+  readonly offers: number;
+  /** Partial offers filled in part. */
+  readonly fills: number;
+  /**
+   * The network fees the filled partial offers require together, in mojos: paid by the user
+   * on top of Klimper's own fee, and already inside what the trade pays or receives.
+   */
+  readonly fillFees: BigNumber;
+  /** Unix seconds from which the route can no longer confirm. */
+  readonly expiresAt: number;
+}
+
 export interface SpendPromptView {
   readonly kind: 'spend';
   /** Klimper signs **and sends** this (`submit_coin_spends`); otherwise it only signs. */
@@ -326,6 +344,8 @@ export interface SpendPromptView {
   readonly offer: OfferView | null;
   /** The website suggested a fee for a send the wallet built; `null` otherwise. */
   readonly feeHint: FeeHintView | null;
+  /** A route the wallet takes, when the request is one; `null` otherwise. */
+  readonly route: RouteView | null;
 }
 
 /**
@@ -1068,10 +1088,17 @@ function readPromptStrict(
     });
   }
 
+  // A route's partial coins that Klimper verified itself (it built their spends from the
+  // partial offer's terms) are not unknown contracts to warn about: only for a request
+  // Klimper built, and only the puzzles its own `route` key names.
+  const routeRead =
+    broadcasts && boolOf(prompt.wallet_built) ? routeOf(prompt.route) : null;
   const unknownPuzzles: string[] = [];
   for (const entry of arrayOf(summary.unknown_puzzles)) {
     const hash = exactHex(entry, 32);
-    if (hash !== null) unknownPuzzles.push(hash);
+    if (hash !== null && !(routeRead?.verified.has(hash) ?? false)) {
+      unknownPuzzles.push(hash);
+    }
   }
 
   const unaccountedSpends = unaccountedSpendsOf(summary.unaccounted_spends);
@@ -1131,6 +1158,49 @@ function readPromptStrict(
     makesOffer,
     offer: makesOffer ? offerOf(prompt.offer, options, xchLabel) : null,
     feeHint: feeHintOf(prompt.fee_hint),
+    route: routeRead?.view ?? null,
+  };
+}
+
+/** `route`: absent is none; a malformed one makes the whole prompt unreadable. */
+function routeOf(
+  value: unknown,
+): { view: RouteView; verified: ReadonlySet<string> } | null {
+  if (value === undefined || value === null) return null;
+  const count = (entry: unknown): number => {
+    if (
+      typeof entry !== 'number' ||
+      !Number.isSafeInteger(entry) ||
+      entry < 0 ||
+      entry > 10_000
+    ) {
+      throw new UnreadableAmount();
+    }
+    return entry;
+  };
+  if (!isRecord(value)) throw new UnreadableAmount();
+  const expiresAt = value.expires_at;
+  if (
+    typeof expiresAt !== 'number' ||
+    !Number.isSafeInteger(expiresAt) ||
+    expiresAt <= 0
+  ) {
+    throw new UnreadableAmount();
+  }
+  const verified = new Set<string>();
+  for (const entry of arrayOf(value.verified_partial_puzzles)) {
+    const hash = exactHex(entry, 32);
+    if (hash === null) throw new UnreadableAmount();
+    verified.add(hash);
+  }
+  return {
+    view: {
+      offers: count(value.offers),
+      fills: count(value.fills),
+      fillFees: mojosOf(value.fill_fees),
+      expiresAt,
+    },
+    verified,
   };
 }
 
@@ -1158,6 +1228,23 @@ function mojosOf(value: unknown): BigNumber {
     throw new UnreadableAmount();
   }
   return BigNumber(value);
+}
+
+const MONTH = new Intl.DateTimeFormat(undefined, { month: 'short' });
+
+/** `13 Nov 14:00`, the year added when it is not this one. Local time, as the phone shows it. */
+export function whenText(seconds: number, withTime = true): string {
+  const date = new Date(seconds * 1000);
+  const day = `${date.getDate()} ${MONTH.format(date)}`;
+  const year =
+    date.getFullYear() === new Date().getFullYear()
+      ? ''
+      : ` ${date.getFullYear()}`;
+  if (!withTime) return `${day}${year}`;
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(
+    date.getMinutes(),
+  ).padStart(2, '0')}`;
+  return `${day}${year} ${time}`;
 }
 
 /** Format an amount in the smallest unit for display. Exact, never rounded up. */

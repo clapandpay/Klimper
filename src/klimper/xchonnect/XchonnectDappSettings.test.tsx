@@ -109,6 +109,7 @@ describe('the defaults of a new connection', () => {
       'chia_takeOffer',
       'chia_createOffer',
       'chia_createPartialOffer',
+      'chia_takeRoute',
     ]);
     for (const method of DEFAULT_METHODS) {
       expect(screen.getByLabelText(method).getAttribute('data-state')).toBe(

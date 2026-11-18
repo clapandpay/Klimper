@@ -48,14 +48,16 @@ pub const CHIA_TAKE_OFFER: &str = "chia_takeOffer";
 
 pub use create_offer::CHIA_CREATE_OFFER;
 pub use partial_offer::CHIA_CREATE_PARTIAL_OFFER;
+pub use take_route::CHIA_TAKE_ROUTE;
 
 /// Methods Klimper builds itself, granted at pairing next to wallet-kit's defaults. Each
 /// still asks the user before anything is signed.
-pub const WALLET_BUILT_METHODS: [&str; 4] = [
+pub const WALLET_BUILT_METHODS: [&str; 5] = [
     CHIA_SEND,
     CHIA_TAKE_OFFER,
     CHIA_CREATE_OFFER,
     CHIA_CREATE_PARTIAL_OFFER,
+    CHIA_TAKE_ROUTE,
 ];
 
 /// Whether Klimper builds this request from the wallet's own coins (and so signs it with
@@ -68,10 +70,12 @@ pub fn is_wallet_built(method: &str) -> bool {
 pub mod create_offer;
 pub mod options;
 pub mod partial_offer;
+pub mod take_route;
 
 /// The revision of [`WALLET_BUILT_METHODS`] a new pairing is granted. 1: `chia_takeOffer`;
-/// 2: `chia_createOffer` (TASK-142); 3: `chia_createPartialOffer` (TASK-165).
-pub const METHODS_REVISION: u32 = 3;
+/// 2: `chia_createOffer` (TASK-142); 3: `chia_createPartialOffer` (TASK-165);
+/// 4: `chia_takeRoute` (TASK-168).
+pub const METHODS_REVISION: u32 = 4;
 
 /// Bring a connection paired under an older revision up to date, once per revision: a
 /// connection that may use `chia_send` may also take offers (revision 1, TASK-137), make
@@ -79,7 +83,9 @@ pub const METHODS_REVISION: u32 = 3;
 /// user the same way. Without this such a request
 /// from it is refused as `not_granted` until the user pairs again. A connection whose
 /// `chia_send` the user turned off gets nothing, and a method the user turned off after its
-/// revision stays off. Returns whether the methods changed, so the website can be told.
+/// revision stays off. Taking a route (revision 4, TASK-168) is taking offers: it goes only
+/// to a connection that may still take them, so turning `chia_takeOffer` off is not undone
+/// by an update. Returns whether the methods changed, so the website can be told.
 pub fn upgrade_methods(record: &mut crate::store::SessionRecord) -> bool {
     if record.methods_revision >= METHODS_REVISION {
         return false;
@@ -100,6 +106,13 @@ pub fn upgrade_methods(record: &mut crate::store::SessionRecord) -> bool {
             methods.push(method.to_owned());
             changed = true;
         }
+    }
+    if from < 4
+        && methods.iter().any(|m| m == CHIA_TAKE_OFFER)
+        && !methods.iter().any(|m| m == CHIA_TAKE_ROUTE)
+    {
+        methods.push(CHIA_TAKE_ROUTE.to_owned());
+        changed = true;
     }
     changed
 }
@@ -1176,6 +1189,14 @@ mod option_tests;
     clippy::indexing_slicing
 )]
 mod partial_offer_tests;
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod route_tests;
 #[cfg(test)]
 mod sage_sim;
 #[cfg(test)]

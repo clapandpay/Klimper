@@ -919,7 +919,12 @@ function SpendPrompt({ view }: { readonly view: SpendPromptView }) {
       {cardOnTop && (
         <>
           {trade !== null && (
-            <TradeCard trade={trade} facts={facts} xchLabel={view.xchLabel} />
+            <TradeCard
+              trade={trade}
+              facts={facts}
+              xchLabel={view.xchLabel}
+              route={view.route}
+            />
           )}
           <OptionCards view={view} facts={facts} />
           <Binding
