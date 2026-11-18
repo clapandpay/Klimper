@@ -56,29 +56,29 @@
     "border": "none"
   },
   "tables": {
-    "background": "#FFFFFF",
+    "background": "#FFFDF8",
     "border": "1px solid #E3DACB",
     "header": {
       "background": "transparent",
-      "color": "#5C606B",
+      "color": "#5E5A52",
       "border": "1px solid #E3DACB"
     },
     "row": {
       "background": "transparent",
-      "color": "#111217",
+      "color": "#1C1B19",
       "border": "1px solid #E3DACB",
       "hover": {
-        "background": "#FFEBD6"
+        "background": "#F4F0E8"
       },
       "selected": {
-        "background": "#FFEBD6",
-        "color": "#111217"
+        "background": "#E7ECF7",
+        "color": "#1C1B19"
       }
     }
   },
   "switches": {
     "checked": {
-      "background": "#FF5A1F",
+      "background": "#3B5BA9",
       "thumbColor": "#FFFFFF"
     },
     "unchecked": {

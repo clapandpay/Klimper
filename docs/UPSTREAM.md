@@ -425,12 +425,18 @@ Sage changed several places Klimper builds on. What we did with each:
 | `crates/chia-sdk-next/Cargo.toml`, `tauri-plugin-klimper-xchonnect/Cargo.toml`                                                      | version requirements                                  | chia 0.53 and chia-wallet-sdk 0.38, Sage's line; no code changed                                                                                                                                                                                                                            |
 | `tauri-plugin-klimper-xchonnect/src/chain.rs`                                                                                       | the ack status passed on                              | `Status::Pending` now carries the node's status (1 in the mempool, 2 held), as Sage's `send_transaction_immediately` returns it                                                                                                                                                             |
 | `tauri-plugin-klimper-{storage,jingle}/Cargo.toml`                                                                                  | `tracing` iOS-only or removed                         | Rust 1.100 warns on unused dependencies                                                                                                                                                                                                                                                     |
+| `scripts/sandbox.mjs`                                                                                                               | the binary's folder from `cargo metadata`             | Sage's sandbox assumed `target/`; this Mac builds into `../klimper-target` (`../.cargo/config.toml`). Worth proposing upstream                                                                                                                                                              |
+| `src/pages/TokenList.tsx`                                                                                                           | the home card always shown                            | `WalletTotal` carries Send, Receive and Scan, so it shows without prices too                                                                                                                                                                                                                |
 
 **Follow-up (not done in the merge): Sage's spend lock.** Sage now holds a per-wallet lock
 (`Wallet::lock_spends`) from coin selection until a transaction or offer is recorded, so two of
-its requests never pick the same coin. Klimper's own paths that select coins (Xchonnect's take
-and create offer, partial offers, auctions) do not take it yet, and they ask the user in between,
-so holding it for that long needs a decision first. Until then a Klimper approval and a Sage
+its requests never pick the same coin. No Klimper plugin calls it yet: Xchonnect's take
+(`execute.rs` `build_take`), create offer (`execute/create_offer.rs`) and option methods
+(`execute/options.rs`, `select_spends_excluding`); Xchonnect's send, which Sage builds with the
+lock but which `chain.rs` `send_transaction` records later without it (Sage's own
+`send_transaction_immediately` holds it across submit and record); partial offers (`wallet.rs`,
+selection and `insert_transaction`) and auctions (`wallet.rs`). They ask the user between
+selection and recording, so holding the lock for that long needs a decision first. Until then a Klimper approval and a Sage
 action at the same moment can still pick the same coin, as before the merge.
 
 ## Conflict playbook

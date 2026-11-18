@@ -1,3 +1,4 @@
+// Modified by Klimper (2026): see docs/UPSTREAM.md
 // Starts a throwaway Sage sandbox for this worktree: two wallets on a simulated chain, served to the
 // UI running in a normal browser. See docs/sandbox.md.
 
@@ -31,6 +32,16 @@ const paths = {
 const isWindows = process.platform === 'win32';
 const children = [];
 let stopping = false;
+
+/** Where cargo builds, which a `.cargo/config.toml` above the repository can move. */
+function cargoTargetDir() {
+  const metadata = execFileSync(
+    'cargo',
+    ['metadata', '--format-version', '1', '--no-deps'],
+    { cwd: repoRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  );
+  return JSON.parse(metadata).target_directory;
+}
 
 function log(message) {
   console.log(`[sandbox] ${message}`);
@@ -258,8 +269,7 @@ async function main() {
 
   const ports = await pickPorts();
   const binary = join(
-    repoRoot,
-    'target',
+    cargoTargetDir(),
     'debug',
     isWindows ? 'sage-sandbox.exe' : 'sage-sandbox',
   );

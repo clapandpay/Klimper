@@ -177,9 +177,7 @@ export function TokenList() {
         </div>
       </Header>
       <Container>
-        {fiatCurrency && pricedTokens.length > 0 && (
-          <WalletTotal value={totalFiatBalance} currency={fiatCurrency} />
-        )}
+        <WalletTotal value={totalFiatBalance} currency={fiatCurrency} />
         <MyHandles />
         {tokenIssuingEnabled && (
           <ReadOnlyButton
